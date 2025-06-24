@@ -29,7 +29,7 @@ var searchData=
   ['time_5fprec_26',['time_prec',['../group__prec.html#ga43b06cf25b6e6e04e1439c46c163f5aa',1,'tinker']]],
   ['timescaleconfig_27',['TimeScaleConfig',['../group__egv.html#ga2249f998a319d77befb2de65413c9e48',1,'tinker']]],
   ['tinker_28',['tinker',['../namespacetinker.html',1,'']]],
-  ['tinker9_3a_20next_20generation_20of_20tinker_20with_20gpu_20support_29',['Tinker9: Next Generation of Tinker with GPU Support',['../index.html',1,'']]],
+  ['tinker_2dgpu_3a_20next_20generation_20of_20tinker_20with_20gpu_20support_29',['Tinker-GPU: Next Generation of Tinker with GPU Support',['../index.html',1,'']]],
   ['tinker9_5fdir_30',['TINKER9_DIR',['../group__cpp__syntax.html#ga70ef08c60f0f2b7f4bb4f98e6a3ee82e',1,'macro.h']]],
   ['tinker9_5fversion_5fmajor_31',['TINKER9_VERSION_MAJOR',['../group__general.html#ga66ebec061bbca318747f57e67ac63bd5',1,'tinker9.h']]],
   ['tinker9_5fversion_5fminor_32',['TINKER9_VERSION_MINOR',['../group__general.html#gaa4aff6915be98d3ebed0929e75383f44',1,'tinker9.h']]],
