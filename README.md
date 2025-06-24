@@ -1,16 +1,16 @@
-Tinker9: Next Generation of Tinker with GPU Support
+Tinker-GPU: Next Generation of Tinker with GPU Support
 ===================================================
 [//]: # (Badges)
 [![Docs Status](https://readthedocs.org/projects/tinker9-manual/badge/?version=latest&style=flat)](https://tinker9-manual.readthedocs.io)
-[![Doxygen Page Status](https://github.com/tinkertools/tinker9/actions/workflows/doxygen_gh_pages.yaml/badge.svg)](https://tinkertools.github.io/tinker9/)
+[![Doxygen Page Status](https://github.com/tinkertools/tinker-gpu/actions/workflows/doxygen_gh_pages.yaml/badge.svg)](https://tinkertools.github.io/tinker-gpu/)
 
 
 <h2>Introduction</h2>
 
-Tinker9 is a complete rewrite and extension of the canonical Tinker software, currently Tinker8. Tinker9 is implemented as C++ code with OpenACC directives and CUDA kernels providing excellent performance on GPUs. At present, Tinker9 builds against the object library from Tinker8, and provides GPU versions of the Tinker ANALYZE, BAR, DYNAMIC, MINIMIZE and TESTGRAD programs. Existing Tinker file formats and force field parameter files are fully compatible with Tinker9, and nearly all Tinker8 keywords function identically in Tinker9. Over time we plan to port much or all of the remaining portions of Fortran Tinker8 to the C++ Tinker9 code base.
+Tinker-GPU is a complete rewrite and extension of the canonical Tinker software. Tinker-GPU is implemented as C++ code with OpenACC directives and CUDA kernels providing excellent performance on GPUs. At present, Tinker-GPU builds against the object library from Tinker, and provides GPU versions of the Tinker ANALYZE, BAR, DYNAMIC, MINIMIZE and TESTGRAD programs. Existing Tinker file formats and force field parameter files are fully compatible with Tinker-GPU, and nearly all Tinker keywords function identically in Tinker-GPU. Over time we plan to port much or all of the remaining portions of Fortran Tinker to the C++ Tinker-GPU code base.
 
 
-<h2><a href="https://github.com/TinkerTools/tinker9/releases">
+<h2><a href="https://github.com/TinkerTools/tinker-gpu/releases">
 Release Notes
 </a></h2>
 
@@ -46,5 +46,5 @@ We are trying to merge this documentation into [tinkerdoc.](https://tinkerdoc.re
 
 <h2>Issues and Discussions</h2>
 
-Please use [GitHub Issues](https://github.com/TinkerTools/tinker9/issues) for bug tracking and
-[GitHub Discussions](https://github.com/TinkerTools/tinker9/discussions) for general discussions.
+Please use [GitHub Issues](https://github.com/TinkerTools/tinker-gpu/issues) for bug tracking and
+[GitHub Discussions](https://github.com/TinkerTools/tinker-gpu/discussions) for general discussions.
