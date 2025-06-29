@@ -1,5 +1,5 @@
-Build Tinker9 with CMake
-========================
+Build Tinker-GPU with CMake
+===========================
 
 Quick Start
 -----------
@@ -9,7 +9,7 @@ an example to compile the GPU code without OpenACC:
 
 .. code-block:: bash
 
-   cd tinker9 && mkdir build
+   cd tinker-gpu && mkdir build
    FC=gfortran compute_capability=70 gpu_lang=cuda cmake ..
    make
    make test
@@ -19,7 +19,7 @@ another example to compile the GPU code with both OpenACC and CUDA:
 
 .. code-block:: bash
 
-   cd tinker9 && mkdir build
+   cd tinker-gpu && mkdir build
    cmake -DCMAKE_Fortran_COMPILER=gfortran -DCOMPUTE_CAPABILITY=70 ..
    make
    make test
@@ -31,9 +31,9 @@ Configure CMake
 ---------------
 You can skip this section if you are familar with CMake.
 
-Suppose the current working directory is */home/tinker9* and we
+Suppose the current working directory is */home/tinker-gpu* and we
 want to create a build directory called *build* in
-*/home/tinker9*. We can do *mkdir build* then *cd build*.
+*/home/tinker-gpu*. We can do *mkdir build* then *cd build*.
 Because the top-level CMakeLists.txt file is in the parent directory,
 if there was nothing else to configure, command *cmake ..* would generate
 the Makefile. The alternative way is to specify the build and source
@@ -41,7 +41,7 @@ directories to CMake, e.g.,
 
 .. code-block:: bash
 
-   cmake -B /home/tinker9/build -S /home/tinker9
+   cmake -B /home/tinker9/build -S /home/tinker-gpu
 
 Some CMake installations also provide a command line gui *ccmake* and a
 simple gui program *cmake-gui* that can replace *cmake* in the commands
@@ -63,13 +63,13 @@ If not set, the building script will take a guess at the OpenACC compiler.
 *ACC* will also be used as the C++ compiler. The value of *CXX* (if set)
 will be neglected.
 
-The only place where a C compiler may be used in Tinker9 is on the old Mac
+The only place where a C compiler may be used in Tinker-gpu is on the old Mac
 computers that had Nvidia support. clang is hardwired in the cmake scripts
 to compile the Objective-C and C source files. Thus, *CC=...* is not worth
 setting in the cmake configuration.
 
-Configure Tinker9
------------------
+Configure Tinker-GPU
+--------------------
 The following options are passed to CMake program with their default
 values (if there is one). **-D** is prefixed to the options. CMake provides
 two standard ways to let users customize the values:
