@@ -40,7 +40,7 @@ The HTML version is hosted on [readthedocs](https://tinker9-manual.readthedocs.i
 and the [PDF](https://tinker9-manual.readthedocs.io/_/downloads/en/latest/pdf/)
 version is accessible from the same webpage.
 
-We are trying to merge this documentation into [tinkerdoc.](https://tinkerdoc.readthedocs.io)
+We are working to merge this documentation into [tinkerdoc.](https://tinkerdoc.readthedocs.io)
 
 [C++ and CUDA Code Documentation (Doxygen)](https://tinkertools.github.io/tinker9/)
 
