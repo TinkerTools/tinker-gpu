@@ -42,7 +42,7 @@ version is accessible from the same webpage.
 
 We are working to merge this documentation into [tinkerdoc.](https://tinkerdoc.readthedocs.io)
 
-[C++ and CUDA Code Documentation (Doxygen)](https://tinkertools.github.io/tinker9/)
+[C++ and CUDA Code Documentation (Doxygen)](https://tinkertools.github.io/tinker-gpu/)
 
 <h2>Issues and Discussions</h2>
 
