@@ -1,7 +1,7 @@
 #include "ff/elec.h"
-#include "ff/modamoeba.h"
 #include "ff/echarge.h"
 #include "ff/energy.h"
+#include "ff/modamoeba.h"
 #include "ff/modhippo.h"
 #include "ff/potent.h"
 #include "tool/iofortstr.h"
@@ -9,6 +9,7 @@
 #include <tinker/detail/chgpen.hh>
 #include <tinker/detail/chgpot.hh>
 #include <tinker/detail/couple.hh>
+#include <tinker/detail/extfld.hh>
 #include <tinker/detail/kchrge.hh>
 #include <tinker/detail/limits.hh>
 #include <tinker/detail/mplpot.hh>
@@ -20,11 +21,16 @@
 namespace tinker {
 static void pchgData(RcOp op)
 {
-   if (not use(Potent::CHARGE)) return;
+   if (not use(Potent::CHARGE))
+      return;
 
-   if (op & RcOp::DEALLOC) { darray::deallocate(pchg); }
+   if (op & RcOp::DEALLOC) {
+      darray::deallocate(pchg);
+   }
 
-   if (op & RcOp::ALLOC) { darray::allocate(n, &pchg); }
+   if (op & RcOp::ALLOC) {
+      darray::allocate(n, &pchg);
+   }
 
    if (op & RcOp::INIT) {
       std::vector<real> pchgbuf(n);
@@ -46,8 +52,7 @@ static void pchgData(RcOp op)
 TINKER_FVOID2(cpp0, cu1, mpoleDataBinding, RcOp);
 static void mpoleData(RcOp op)
 {
-   if (not use(Potent::MPOLE) and not use(Potent::POLAR)
-      and not use(Potent::REPULS))
+   if (not use(Potent::MPOLE) and not use(Potent::POLAR) and not use(Potent::REPULS))
       return;
 
    if (op & RcOp::DEALLOC) {
@@ -140,7 +145,8 @@ static void mpoleData(RcOp op)
 
 static void mdpuscaleData(RcOp op)
 {
-   if (not use(Potent::MPOLE) and not use(Potent::POLAR)) return;
+   if (not use(Potent::MPOLE) and not use(Potent::POLAR))
+      return;
 
    if (op & RcOp::DEALLOC) {
       nmexclude = 0;
@@ -156,8 +162,7 @@ static void mdpuscaleData(RcOp op)
          real m;
       };
       std::map<key_t, m> ikm;
-      auto insert_m = [](std::map<key_t, m>& a, int i, int k, real val,
-                         char ch) {
+      auto insert_m = [](std::map<key_t, m>& a, int i, int k, real val, char ch) {
          key_t key;
          key.first = i;
          key.second = k;
@@ -165,10 +170,12 @@ static void mdpuscaleData(RcOp op)
          if (it == a.end()) {
             m x;
             x.m = 1;
-            if (ch == 'm') x.m = val;
+            if (ch == 'm')
+               x.m = val;
             a[key] = x;
          } else {
-            if (ch == 'm') it->second.m = val;
+            if (ch == 'm')
+               it->second.m = val;
          }
       };
       struct mdpu
@@ -176,8 +183,7 @@ static void mdpuscaleData(RcOp op)
          real m, d, p, u;
       };
       std::map<key_t, mdpu> ik_scale;
-      auto insert_mdpu = [](std::map<key_t, mdpu>& a, int i, int k, real val,
-                            char ch) {
+      auto insert_mdpu = [](std::map<key_t, mdpu>& a, int i, int k, real val, char ch) {
          key_t key;
          key.first = i;
          key.second = k;
@@ -310,10 +316,13 @@ static void mdpuscaleData(RcOp op)
                int k = couple_i12[bask + j];
                real val = p2scale;
                for (int jj = 0; jj < polgrp::np11[i]; ++jj) {
-                  if (k == polgrp::ip11[i * maxp11 + jj]) val = p2iscale;
+                  if (k == polgrp::ip11[i * maxp11 + jj])
+                     val = p2iscale;
                }
                k -= 1;
-               if (k > i) { insert_mdpu(ik_scale, i, k, val, 'p'); }
+               if (k > i) {
+                  insert_mdpu(ik_scale, i, k, val, 'p');
+               }
             }
          }
 
@@ -324,10 +333,13 @@ static void mdpuscaleData(RcOp op)
                int k = couple_i13[bask + j];
                real val = p3scale;
                for (int jj = 0; jj < polgrp::np11[i]; ++jj) {
-                  if (k == polgrp::ip11[i * maxp11 + jj]) val = p3iscale;
+                  if (k == polgrp::ip11[i * maxp11 + jj])
+                     val = p3iscale;
                }
                k -= 1;
-               if (k > i) { insert_mdpu(ik_scale, i, k, val, 'p'); }
+               if (k > i) {
+                  insert_mdpu(ik_scale, i, k, val, 'p');
+               }
             }
          }
 
@@ -338,10 +350,13 @@ static void mdpuscaleData(RcOp op)
                int k = couple_i14[bask + j];
                real val = p4scale;
                for (int jj = 0; jj < polgrp::np11[i]; ++jj) {
-                  if (k == polgrp::ip11[i * maxp11 + jj]) val = p4iscale;
+                  if (k == polgrp::ip11[i * maxp11 + jj])
+                     val = p4iscale;
                }
                k -= 1;
-               if (k > i) { insert_mdpu(ik_scale, i, k, val, 'p'); }
+               if (k > i) {
+                  insert_mdpu(ik_scale, i, k, val, 'p');
+               }
             }
          }
 
@@ -352,10 +367,13 @@ static void mdpuscaleData(RcOp op)
                int k = couple_i15[bask + j];
                real val = p5scale;
                for (int jj = 0; jj < polgrp::np11[i]; ++jj) {
-                  if (k == polgrp::ip11[i * maxp11 + jj]) val = p5iscale;
+                  if (k == polgrp::ip11[i * maxp11 + jj])
+                     val = p5iscale;
                }
                k -= 1;
-               if (k > i) { insert_mdpu(ik_scale, i, k, val, 'p'); }
+               if (k > i) {
+                  insert_mdpu(ik_scale, i, k, val, 'p');
+               }
             }
          }
 
@@ -365,7 +383,9 @@ static void mdpuscaleData(RcOp op)
             bask = i * maxp11;
             for (int j = 0; j < nn; ++j) {
                int k = polgrp::ip11[bask + j] - 1;
-               if (k > i) { insert_mdpu(ik_scale, i, k, d1scale, 'd'); }
+               if (k > i) {
+                  insert_mdpu(ik_scale, i, k, d1scale, 'd');
+               }
             }
          }
 
@@ -374,7 +394,9 @@ static void mdpuscaleData(RcOp op)
             bask = i * maxp12;
             for (int j = 0; j < nn; ++j) {
                int k = polgrp::ip12[bask + j] - 1;
-               if (k > i) { insert_mdpu(ik_scale, i, k, d2scale, 'd'); }
+               if (k > i) {
+                  insert_mdpu(ik_scale, i, k, d2scale, 'd');
+               }
             }
          }
 
@@ -383,7 +405,9 @@ static void mdpuscaleData(RcOp op)
             bask = i * maxp13;
             for (int j = 0; j < nn; ++j) {
                int k = polgrp::ip13[bask + j] - 1;
-               if (k > i) { insert_mdpu(ik_scale, i, k, d3scale, 'd'); }
+               if (k > i) {
+                  insert_mdpu(ik_scale, i, k, d3scale, 'd');
+               }
             }
          }
 
@@ -392,7 +416,9 @@ static void mdpuscaleData(RcOp op)
             bask = i * maxp14;
             for (int j = 0; j < nn; ++j) {
                int k = polgrp::ip14[bask + j] - 1;
-               if (k > i) { insert_mdpu(ik_scale, i, k, d4scale, 'd'); }
+               if (k > i) {
+                  insert_mdpu(ik_scale, i, k, d4scale, 'd');
+               }
             }
          }
 
@@ -402,7 +428,9 @@ static void mdpuscaleData(RcOp op)
             bask = i * maxp11;
             for (int j = 0; j < nn; ++j) {
                int k = polgrp::ip11[bask + j] - 1;
-               if (k > i) { insert_mdpu(ik_scale, i, k, u1scale, 'u'); }
+               if (k > i) {
+                  insert_mdpu(ik_scale, i, k, u1scale, 'u');
+               }
             }
          }
 
@@ -411,7 +439,9 @@ static void mdpuscaleData(RcOp op)
             bask = i * maxp12;
             for (int j = 0; j < nn; ++j) {
                int k = polgrp::ip12[bask + j] - 1;
-               if (k > i) { insert_mdpu(ik_scale, i, k, u2scale, 'u'); }
+               if (k > i) {
+                  insert_mdpu(ik_scale, i, k, u2scale, 'u');
+               }
             }
          }
 
@@ -420,7 +450,9 @@ static void mdpuscaleData(RcOp op)
             bask = i * maxp13;
             for (int j = 0; j < nn; ++j) {
                int k = polgrp::ip13[bask + j] - 1;
-               if (k > i) { insert_mdpu(ik_scale, i, k, u3scale, 'u'); }
+               if (k > i) {
+                  insert_mdpu(ik_scale, i, k, u3scale, 'u');
+               }
             }
          }
 
@@ -429,7 +461,9 @@ static void mdpuscaleData(RcOp op)
             bask = i * maxp14;
             for (int j = 0; j < nn; ++j) {
                int k = polgrp::ip14[bask + j] - 1;
-               if (k > i) { insert_mdpu(ik_scale, i, k, u4scale, 'u'); }
+               if (k > i) {
+                  insert_mdpu(ik_scale, i, k, u4scale, 'u');
+               }
             }
          }
       }
@@ -497,8 +531,7 @@ static void chgpenData(RcOp op)
       };
 
       // mdw excl list
-      auto insert_mdw = [](std::map<std::pair<int, int>, mdw>& a, int i, int k,
-                           real val, char ch) {
+      auto insert_mdw = [](std::map<std::pair<int, int>, mdw>& a, int i, int k, real val, char ch) {
          std::pair<int, int> key;
          key.first = i;
          key.second = k;
@@ -540,7 +573,8 @@ static void chgpenData(RcOp op)
             nn = couple::n12[i];
             for (int j = 0; j < nn; ++j) {
                int k = couple::i12[i][j] - 1;
-               if (k > i) insert_mdw(ik_mdw, i, k, m2scale, 'm');
+               if (k > i)
+                  insert_mdw(ik_mdw, i, k, m2scale, 'm');
             }
          }
 
@@ -549,7 +583,8 @@ static void chgpenData(RcOp op)
             bask = i * maxn13;
             for (int j = 0; j < nn; ++j) {
                int k = couple::i13[bask + j] - 1;
-               if (k > i) insert_mdw(ik_mdw, i, k, m3scale, 'm');
+               if (k > i)
+                  insert_mdw(ik_mdw, i, k, m3scale, 'm');
             }
          }
 
@@ -558,7 +593,8 @@ static void chgpenData(RcOp op)
             bask = i * maxn14;
             for (int j = 0; j < nn; ++j) {
                int k = couple::i14[bask + j] - 1;
-               if (k > i) insert_mdw(ik_mdw, i, k, m4scale, 'm');
+               if (k > i)
+                  insert_mdw(ik_mdw, i, k, m4scale, 'm');
             }
          }
 
@@ -567,7 +603,8 @@ static void chgpenData(RcOp op)
             bask = i * maxn15;
             for (int j = 0; j < nn; ++j) {
                int k = couple::i15[bask + j] - 1;
-               if (k > i) insert_mdw(ik_mdw, i, k, m5scale, 'm');
+               if (k > i)
+                  insert_mdw(ik_mdw, i, k, m5scale, 'm');
             }
          }
       }
@@ -591,10 +628,13 @@ static void chgpenData(RcOp op)
                int k = couple_i12[bask + j];
                real val = p2scale;
                for (int jj = 0; jj < polgrp::np11[i]; ++jj) {
-                  if (k == polgrp::ip11[i * maxp11 + jj]) val = p2iscale;
+                  if (k == polgrp::ip11[i * maxp11 + jj])
+                     val = p2iscale;
                }
                k -= 1;
-               if (k > i) { insert_mdw(ik_mdw, i, k, val, 'd'); }
+               if (k > i) {
+                  insert_mdw(ik_mdw, i, k, val, 'd');
+               }
             }
          }
 
@@ -605,10 +645,13 @@ static void chgpenData(RcOp op)
                int k = couple_i13[bask + j];
                real val = p3scale;
                for (int jj = 0; jj < polgrp::np11[i]; ++jj) {
-                  if (k == polgrp::ip11[i * maxp11 + jj]) val = p3iscale;
+                  if (k == polgrp::ip11[i * maxp11 + jj])
+                     val = p3iscale;
                }
                k -= 1;
-               if (k > i) { insert_mdw(ik_mdw, i, k, val, 'd'); }
+               if (k > i) {
+                  insert_mdw(ik_mdw, i, k, val, 'd');
+               }
             }
          }
 
@@ -619,10 +662,13 @@ static void chgpenData(RcOp op)
                int k = couple_i14[bask + j];
                real val = p4scale;
                for (int jj = 0; jj < polgrp::np11[i]; ++jj) {
-                  if (k == polgrp::ip11[i * maxp11 + jj]) val = p4iscale;
+                  if (k == polgrp::ip11[i * maxp11 + jj])
+                     val = p4iscale;
                }
                k -= 1;
-               if (k > i) { insert_mdw(ik_mdw, i, k, val, 'd'); }
+               if (k > i) {
+                  insert_mdw(ik_mdw, i, k, val, 'd');
+               }
             }
          }
 
@@ -633,10 +679,13 @@ static void chgpenData(RcOp op)
                int k = couple_i15[bask + j];
                real val = p5scale;
                for (int jj = 0; jj < polgrp::np11[i]; ++jj) {
-                  if (k == polgrp::ip11[i * maxp11 + jj]) val = p5iscale;
+                  if (k == polgrp::ip11[i * maxp11 + jj])
+                     val = p5iscale;
                }
                k -= 1;
-               if (k > i) { insert_mdw(ik_mdw, i, k, val, 'd'); }
+               if (k > i) {
+                  insert_mdw(ik_mdw, i, k, val, 'd');
+               }
             }
          }
       }
@@ -764,5 +813,27 @@ void elecData(RcOp op)
    RcMan pole42{mpoleData, op};
    RcMan mdpuscale42{mdpuscaleData, op};
    RcMan chgpen42{chgpenData, op};
+}
+
+TINKER_FVOID2(acc1, cu1, exfieldCharge, int);
+TINKER_FVOID2(acc1, cu1, exfieldDipole, int);
+void exfield(int vers, int useDipole)
+{
+   if (not extfld::use_exfld)
+      return;
+
+   if (useDipole)
+      TINKER_FCALL2(acc1, cu1, exfieldDipole, vers);
+   else
+      TINKER_FCALL2(acc1, cu1, exfieldCharge, vers);
+}
+
+TINKER_FVOID2(acc1, cu1, extfieldModifyDField, real (*)[3], real (*)[3]);
+void extfieldModifyDField(real (*field)[3], real (*fieldp)[3])
+{
+   if (not extfld::use_exfld)
+      return;
+
+   TINKER_FCALL2(acc1, cu1, extfieldModifyDField, field, fieldp);
 }
 }
