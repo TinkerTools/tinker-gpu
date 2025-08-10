@@ -4,7 +4,7 @@ Prerequisites
 **Hardware**
 
 A relatively recent NVIDIA GPU is mandatory for the GPU code.
-The oldest NVIDIA GPU Tinker9 has been tested on is GeForce GTX 675MX (compute capability 3.0).
+The oldest NVIDIA GPU that Tinker-GPU has been tested on is GeForce GTX 675MX (compute capability 3.0).
 
 **Operating Systems and Compilers**
 
@@ -22,7 +22,7 @@ OpenACC/NVHPC/PGI  [c]
 - [a] Recent C++ compiler that supports C++11 syntax.
 - [b] GPU code only. Version >= 9.0.
 - [c] Optional for the GPU code. A recent `NVIDIA HPC SDK <https://www.developer.nvidia.com/hpc-sdk>`_ is preferred.
-- [d] We have successfully built Tinker9 on Windows WSL2 Ubuntu with CUDA 11.0 and NVHPC 20.9. Please `check this link <https://docs.nvidia.com/cuda/wsl-user-guide/index.html>`_ for more details.
+- [d] We have successfully built Tinker-GPU on Windows WSL2 Ubuntu with CUDA 11.0 and NVHPC 20.9. Please `check this link <https://docs.nvidia.com/cuda/wsl-user-guide/index.html>`_ for more details.
 
 **Using NVIDIA HPC SDK on Clusters**
 
@@ -65,7 +65,7 @@ then add *export NVLOCALRC=/dir_for_new_config/localrc* to the shell resource fi
 
 Canonical Tinker requires FFTW libraries because by default it is compiled with OpenMP.
 Otherwise, Tinker will use *FFTPACK*.
-In Tinker9, the underlying *libtinker.a* will be compiled without OpenMP,
+In Tinker-GPU, the underlying *libtinker.a* will be compiled without OpenMP,
 therefore FFTW libraries are no longer mandatory for GPU code.
 
 However, FFTW libraries are required by CPU code.
