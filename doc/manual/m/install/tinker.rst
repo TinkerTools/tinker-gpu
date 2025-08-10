@@ -14,17 +14,17 @@ For versions prior to this commit, please refer to the following.
    .. code-block:: bash
 
       # checkout Tinker
-      cd tinker9
+      cd tinker-gpu
       git submodule update --init
 
-   Alternatively, remove the directory *tinker9/tinker* and clone
+   Alternatively, remove the directory *tinker-gpu/tinker* and clone
    `Tinker from GitHub <https://github.com/tinkertools/tinker>`_
    to replace the deleted directory,
    then checkout the required version **b92eacc8**.
 
    .. code-block:: bash
 
-      cd tinker9
+      cd tinker-gpu
       rm -rf tinker
       git clone https://github.com/tinkertools/tinker
       cd tinker
