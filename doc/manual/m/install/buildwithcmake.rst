@@ -31,9 +31,9 @@ Configure CMake
 ---------------
 You can skip this section if you are familar with CMake.
 
-Suppose the current working directory is */home/tinker-gpu* and we
+Suppose the current working directory is *$HOME/tinker-gpu* and we
 want to create a build directory called *build* in
-*/home/tinker-gpu*. We can do *mkdir build* then *cd build*.
+*$HOME/tinker-gpu*. We can do *mkdir build* then *cd build*.
 Because the top-level CMakeLists.txt file is in the parent directory,
 if there was nothing else to configure, command *cmake ..* would generate
 the Makefile. The alternative way is to specify the build and source
@@ -41,7 +41,7 @@ directories to CMake, e.g.,
 
 .. code-block:: bash
 
-   cmake -B /home/tinker9/build -S /home/tinker-gpu
+   cmake -B $HOME/tinker-gpu/build -S $HOME/tinker-gpu
 
 Some CMake installations also provide a command line gui *ccmake* and a
 simple gui program *cmake-gui* that can replace *cmake* in the commands
