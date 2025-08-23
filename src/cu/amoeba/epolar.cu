@@ -1,6 +1,6 @@
-#include "ff/modamoeba.h"
 #include "ff/cumodamoeba.h"
 #include "ff/image.h"
+#include "ff/modamoeba.h"
 #include "ff/pme.h"
 #include "ff/spatial.h"
 #include "ff/switch.h"
@@ -8,10 +8,11 @@
 #include "seq/launch.h"
 #include "seq/pair_polar.h"
 #include "seq/triangle.h"
+#include <tinker/detail/extfld.hh>
 
 namespace tinker {
 __global__
-void epolar0DotProd_cu1(int n, real f, EnergyBuffer restrict ep, const real (*restrict gpu_uind)[3],
+static void epolar0DotProd_cu1(int n, real f, EnergyBuffer restrict ep, const real (*restrict gpu_uind)[3],
    const real (*restrict gpu_udirp)[3], const real* restrict polarity_inv)
 {
    int ithread = ITHREAD;
@@ -26,6 +27,26 @@ void epolar0DotProd_cu(const real (*gpu_uind)[3], const real (*gpu_udirp)[3])
 {
    const real f = -0.5 * electric / dielec;
    launch_k1b(g::s0, n, epolar0DotProd_cu1, n, f, ep, gpu_uind, gpu_udirp, polarity_inv);
+}
+
+__global__
+static void epolarPairwiseExtfield_cu1(EnergyBuffer restrict ep, const real (*uind)[3], int n, real f, real ex1,
+   real ex2, real ex3)
+{
+   int ithread = ITHREAD;
+   for (int i = ithread; i < n; i += STRIDE) {
+      real e = uind[i][0] * ex1 + uind[i][1] * ex2 + uind[i][2] * ex3;
+      atomic_add(f * e, ep, ithread);
+   }
+}
+
+void epolarPairwiseExtfield_cu(const real (*uind)[3])
+{
+   const real f = -0.5 * electric / dielec;
+   real ex1 = extfld::exfld[0];
+   real ex2 = extfld::exfld[1];
+   real ex3 = extfld::exfld[2];
+   launch_k1b(g::s0, n, epolarPairwiseExtfield_cu1, ep, uind, n, f, ex1, ex2, ex3);
 }
 }
 
