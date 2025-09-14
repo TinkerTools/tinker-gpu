@@ -31,7 +31,7 @@ static int jcount;
 
 void vdwSoftcoreData(RcOp op)
 {
-   if ((not use(Potent::VDW)) and (not use(Potent::REPULS)) and (not use(Potent::DISP)))
+   if ((not use(Potent::VDW)) and (not use(Potent::REPULS)) and (not use(Potent::DISP)) and (not use(Potent::CHGTRN)))
       return;
 
    if (op & RcOp::DEALLOC)
