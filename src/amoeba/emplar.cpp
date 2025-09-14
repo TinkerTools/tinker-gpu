@@ -1,6 +1,7 @@
 #include "ff/amoeba/empole.h"
-#include "ff/modamoeba.h"
+#include "ff/elec.h"
 #include "ff/energy.h"
+#include "ff/modamoeba.h"
 #include "math/zero.h"
 #include "tool/externfunc.h"
 
@@ -14,6 +15,8 @@ void emplar(int vers)
 
    mpoleInit(vers);
    TINKER_FCALL2(acc0, cu1, emplar, vers);
+   exfield(vers, 1);
+   // epolarPairwiseExtfield(vers, uind); // emplar uses the dot product version
    torque(vers, demx, demy, demz);
    if (do_v) {
       VirialBuffer u2 = vir_trq;

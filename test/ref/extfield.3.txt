@@ -1,0 +1,24 @@
+ extfield.cpp -- multipole and polarization terms
+
+ Total Potential Energy :               -102.7678 Kcal/mole
+
+ Internal Virial Tensor :                  -7.074        7.510        9.659
+                                            7.510      -39.433        8.033
+                                            9.659        8.033        8.435
+
+ Cartesian Gradient Breakdown over Individual Atoms :
+
+  Type      Atom              dE/dX       dE/dY       dE/dZ          Norm
+
+ Anlyt         1            19.7575    -47.9454     55.8221       76.1920
+ Anlyt         2           -10.9650     26.7534    -38.8351       48.4163
+ Anlyt         3            -8.7928     21.1632    -17.0576       28.5685
+ Anlyt         4            25.6949    -50.1250     65.2482       86.1979
+ Anlyt         5           -11.6542     20.2577    -22.7140       32.5902
+ Anlyt         6           -14.1073     29.8788    -42.5682       53.8870
+ Anlyt         7            17.9770    -28.2471     52.8354       62.5512
+ Anlyt         8           -14.3286     23.4592    -37.4297       46.4394
+ Anlyt         9            -3.6242      4.7548    -15.3262       16.4510
+ Anlyt        10            14.6701    -43.2256     66.9730       81.0497
+ Anlyt        11            -4.2175     15.1449    -32.8006       36.3735
+ Anlyt        12           -10.4539     28.0708    -34.2267       45.4832
