@@ -101,7 +101,7 @@ static void getDeviceAttribute(DeviceAttribute& a, int device = 0)
    bool found_cc = true;
 
    // Maximum number of resident blocks per multiprocessor
-   if (a.cc > 90)
+   if (a.cc > 120)
       found_cc = false;
    else if (a.cc >= 90)
       a.max_blocks_per_multiprocessor = 32;
@@ -122,6 +122,7 @@ static void getDeviceAttribute(DeviceAttribute& a, int device = 0)
 
    // Number of CUDA cores (FP32) per multiprocessor, not tabulated;
    // documented in "Compute Capability - architecture"
+   // 12.0: 128
    // 9.0: 128
    // 8.6, 8.7, 8.9: 128
    // 7.0 7.2 7.5 8.0: 64
@@ -129,9 +130,9 @@ static void getDeviceAttribute(DeviceAttribute& a, int device = 0)
    // 6.0: 64
    // 5.0 5.2: 128
    // 3.0 3.5 3.7: 192
-   if (a.cc > 90)
+   if (a.cc > 120)
       found_cc = false;
-   else if (a.cc >= 90)
+   else if (a.cc >= 86)
       a.cores_per_multiprocessor = 128;
    else if (a.cc >= 80)
       a.cores_per_multiprocessor = 64;
