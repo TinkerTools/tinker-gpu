@@ -7,7 +7,7 @@ Tinker-GPU: Next Generation of Tinker with GPU Support
 
 <h2>Introduction</h2>
 
-Tinker-GPU is a complete rewrite and extension of the canonical Tinker software. Tinker-GPU is implemented as C++ code with OpenACC directives and CUDA kernels providing excellent performance on GPUs. At present, Tinker-GPU builds against the object library from Tinker, and provides GPU versions of the Tinker ANALYZE, BAR, DYNAMIC, MINIMIZE and TESTGRAD programs. Existing Tinker file formats and force field parameter files are fully compatible with Tinker-GPU, and nearly all Tinker keywords function identically in Tinker-GPU. Over time we plan to port much or all of the remaining portions of Fortran Tinker to the C++ Tinker-GPU code base.
+Tinker-GPU is a comprehensive rewrite and GPU-enabled extension of the canonical CPU-based Tinker software. Tinker-GPU is implemented as C++ code with OpenACC directives and CUDA kernels providing excellent performance on NVIDIA GPUs. At present, Tinker-GPU builds against the object library from Tinker, and provides GPU versions of the Tinker ANALYZE, BAR, DYNAMIC, MINIMIZE and TESTGRAD programs. Existing Tinker file formats and force field parameter files are compatible with Tinker-GPU, and nearly all Tinker keywords function identically in Tinker and Tinker-GPU.
 
 
 <h2><a href="https://github.com/TinkerTools/tinker-gpu/releases">
