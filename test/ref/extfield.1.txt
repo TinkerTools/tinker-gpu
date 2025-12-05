@@ -1,0 +1,25 @@
+ extfield.cpp -- multipole term
+
+ Energy Component Breakdown :           Kcal/mole        Interactions
+ Atomic Multipoles                        39.7407               33
+
+ Internal Virial Tensor :                   8.034       -0.430       19.176
+                                           -0.430      -20.769       -6.245
+                                           19.176       -6.245       43.938
+
+ Cartesian Gradient Breakdown over Individual Atoms :
+
+  Type      Atom              dE/dX       dE/dY       dE/dZ          Norm
+
+ Anlyt         1            23.8380    -46.8453     61.6292       80.9993
+ Anlyt         2           -12.7966     22.2736    -32.6743       41.5629
+ Anlyt         3           -11.0559     24.5926    -28.9025       39.5270
+ Anlyt         4            18.2390    -42.3533     59.5494       75.3167
+ Anlyt         5           -12.0590     23.7001    -30.8210       40.7068
+ Anlyt         6            -6.1755     18.6394    -28.7569       34.8213
+ Anlyt         7            19.5687    -37.7986     62.2519       75.4120
+ Anlyt         8           -10.3750     21.5653    -33.2617       40.9761
+ Anlyt         9            -9.1377     16.2887    -29.0281       34.5174
+ Anlyt        10            19.7605    -44.4330     68.7687       84.2253
+ Anlyt        11            -8.6191     21.7018    -34.8026       41.9104
+ Anlyt        12           -11.2502     22.6736    -33.9490       42.3461

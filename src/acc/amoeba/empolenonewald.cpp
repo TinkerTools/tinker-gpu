@@ -1,10 +1,11 @@
-#include "ff/modamoeba.h"
 #include "ff/energy.h"
 #include "ff/image.h"
+#include "ff/modamoeba.h"
 #include "ff/nblist.h"
 #include "ff/switch.h"
 #include "seq/pair_mpole.h"
 #include "tool/gpucard.h"
+#include <tinker/detail/extfld.hh>
 
 namespace tinker {
 #define DEVICE_PTRS x, y, z, demx, demy, demz, rpole, nem, em, vir_em, trqx, trqy, trqz
@@ -65,9 +66,8 @@ void empoleNonEwald_acc1()
             pair_mpole<do_e, do_g, NON_EWALD>(                        //
                r2, xr, yr, zr, 1,                                     //
                ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, //
-               rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z],
-               rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ],
-               rpole[k][MPL_PME_YY], rpole[k][MPL_PME_YZ],
+               rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], rpole[k][MPL_PME_XX],
+               rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY], rpole[k][MPL_PME_YZ],
                rpole[k][MPL_PME_ZZ], //
                f, 0, e, pgrad);
 
@@ -151,9 +151,8 @@ void empoleNonEwald_acc1()
          pair_mpole<do_e, do_g, NON_EWALD>(                        //
             r2, xr, yr, zr, mscale,                                //
             ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, //
-            rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z],
-            rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY],
-            rpole[k][MPL_PME_YZ],
+            rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], rpole[k][MPL_PME_XX],
+            rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY], rpole[k][MPL_PME_YZ],
             rpole[k][MPL_PME_ZZ], //
             f, 0, e, pgrad);
 
@@ -208,5 +207,84 @@ void empoleNonEwald_acc(int vers)
       empoleNonEwald_acc1<calc::V5>();
    else if (vers == calc::v6)
       empoleNonEwald_acc1<calc::V6>();
+}
+
+void exfieldDipole_acc(int vers)
+{
+   bool do_e = vers & calc::energy;
+   bool do_a = vers & calc::analyz;
+   bool do_g = vers & calc::grad;
+   bool do_v = vers & calc::virial;
+
+   auto bufsize = bufferSize();
+   real f = electric / dielec;
+   real ef1 = extfld::exfld[0], ef2 = extfld::exfld[1], ef3 = extfld::exfld[2];
+
+   #pragma acc parallel async deviceptr(rpole,nem,em,vir_em,x,y,z,demx,demy,demz,trqx,trqy,trqz)
+   #pragma acc loop independent
+   for (int ii = 0; ii < n; ++ii) {
+      int offset = ii & (bufsize - 1);
+      real xi = x[ii], yi = y[ii], zi = z[ii];
+      real ci = rpole[ii][0], dix = rpole[ii][1], diy = rpole[ii][2], diz = rpole[ii][3];
+
+      if (do_e) {
+         real phi = xi * ef1 + yi * ef2 + zi * ef3; // negative potential
+         real e = -f * (ci * phi + dix * ef1 + diy * ef2 + diz * ef3);
+         atomic_add(e, em, offset);
+         if (do_a)
+            atomic_add(1, nem, offset);
+      }
+      if (do_g) {
+         // torque due to the dipole
+         real tx = f * (diy * ef3 - diz * ef2);
+         real ty = f * (diz * ef1 - dix * ef3);
+         real tz = f * (dix * ef2 - diy * ef1);
+         atomic_add(tx, trqx, ii);
+         atomic_add(ty, trqy, ii);
+         atomic_add(tz, trqz, ii);
+         // gradient and virial due to the monopole
+         real frx = -f * ef1 * ci;
+         real fry = -f * ef2 * ci;
+         real frz = -f * ef3 * ci;
+         atomic_add(frx, demx, ii);
+         atomic_add(fry, demy, ii);
+         atomic_add(frz, demz, ii);
+         if (do_v) {
+            real vxx = xi * frx;
+            real vyy = yi * fry;
+            real vzz = zi * frz;
+            real vxy = (yi * frx + xi * fry) / 2;
+            real vxz = (zi * frx + xi * frz) / 2;
+            real vyz = (zi * fry + yi * frz) / 2;
+            atomic_add(vxx, vxy, vxz, vyy, vyz, vzz, vir_em, offset);
+         }
+      }
+   }
+}
+
+void extfieldModifyDField_acc(real (*field)[3], real (*fieldp)[3])
+{
+   real ex1 = extfld::exfld[0];
+   real ex2 = extfld::exfld[1];
+   real ex3 = extfld::exfld[2];
+
+   if (fieldp) {
+      #pragma acc parallel loop independent async deviceptr(field,fieldp)
+      for (int i = 0; i < n; ++i) {
+         field[i][0] += ex1;
+         field[i][1] += ex2;
+         field[i][2] += ex3;
+         fieldp[i][0] += ex1;
+         fieldp[i][1] += ex2;
+         fieldp[i][2] += ex3;
+      }
+   } else {
+      #pragma acc parallel loop independent async deviceptr(field)
+      for (int i = 0; i < n; ++i) {
+         field[i][0] += ex1;
+         field[i][1] += ex2;
+         field[i][2] += ex3;
+      }
+   }
 }
 }

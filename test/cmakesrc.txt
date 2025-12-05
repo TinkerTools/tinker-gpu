@@ -14,6 +14,7 @@ disp.cpp
 emhippo.cpp
 ephippo.cpp
 expol.cpp
+extfield.cpp
 geom.cpp
 improp.cpp
 imptor.cpp

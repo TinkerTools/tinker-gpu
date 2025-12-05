@@ -288,6 +288,7 @@ void echglj(int vers)
    } else {
       TINKER_FCALL2(acc0, cu1, echgljRadArithEpsGeomNonEwald, vers);
    }
+   exfield(vers, 0);
 
    if (do_e) {
       if (elrc_vol != 0) {

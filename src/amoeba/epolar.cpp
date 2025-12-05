@@ -13,6 +13,7 @@
 #include "tool/iofortstr.h"
 #include "tool/ioprint.h"
 #include <tinker/detail/couple.hh>
+#include <tinker/detail/extfld.hh>
 #include <tinker/detail/mplpot.hh>
 #include <tinker/detail/polar.hh>
 #include <tinker/detail/polgrp.hh>
@@ -616,6 +617,7 @@ void epolar(int vers)
       else
          epolarNonEwald(vers);
    }
+   epolarPairwiseExtfield(vers, uind);
    torque(vers, depx, depy, depz);
    if (use_cfgrad) dcflux(vers, depx, depy, depz, vir_ep);
    if (do_v) {
@@ -652,5 +654,12 @@ TINKER_FVOID2(acc1, cu1, epolar0DotProd, const real (*)[3], const real (*)[3]);
 void epolar0DotProd(const real (*uind)[3], const real (*udirp)[3])
 {
    TINKER_FCALL2(acc1, cu1, epolar0DotProd, uind, udirp);
+}
+
+TINKER_FVOID2(acc1, cu1, epolarPairwiseExtfield, const real (*)[3]);
+void epolarPairwiseExtfield(int vers, const real (*uind)[3]) {
+   if (extfld::use_exfld and (vers & calc::analyz)) {
+      TINKER_FCALL2(acc1, cu1, epolarPairwiseExtfield, uind);
+   }
 }
 }

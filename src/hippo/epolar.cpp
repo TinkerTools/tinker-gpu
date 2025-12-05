@@ -228,6 +228,7 @@ void epolarChgpen(int vers)
       epolarChgpenEwald(vers, use_cfgrad);
    else
       epolarChgpenNonEwald(vers, use_cfgrad);
+   epolarPairwiseExtfield(vers, uind);
    torque(vers, depx, depy, depz);
    if (use_cfgrad)
       dcflux(vers, depx, depy, depz, vir_ep);

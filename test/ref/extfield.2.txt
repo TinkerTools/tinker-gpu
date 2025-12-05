@@ -1,0 +1,25 @@
+ extfield.cpp -- polarizeterm term
+
+ Energy Component Breakdown :           Kcal/mole        Interactions
+ Polarization                           -142.5085               21
+
+ Internal Virial Tensor :                 -15.107        7.941       -9.516
+                                            7.941      -18.664       14.278
+                                           -9.516       14.278      -35.502
+
+ Cartesian Gradient Breakdown over Individual Atoms :
+
+  Type      Atom              dE/dX       dE/dY       dE/dZ          Norm
+
+ Anlyt         1            -4.0805     -1.1001     -5.8071        7.1821
+ Anlyt         2             1.8315      4.4798     -6.1608        7.8344
+ Anlyt         3             2.2631     -3.4294     11.8448       12.5372
+ Anlyt         4             7.4558     -7.7717      5.6988       12.1846
+ Anlyt         5             0.4048     -3.4424      8.1070        8.8168
+ Anlyt         6            -7.9318     11.2394    -13.8113       19.4933
+ Anlyt         7            -1.5917      9.5515     -9.4165       13.5068
+ Anlyt         8            -3.9535      1.8939     -4.1680        6.0489
+ Anlyt         9             5.5135    -11.5339     13.7019       18.7396
+ Anlyt        10            -5.0904      1.2074     -1.7957        5.5312
+ Anlyt        11             4.4017     -6.5569      2.0021        8.1471
+ Anlyt        12             0.7963      5.3972     -0.2778        5.4627

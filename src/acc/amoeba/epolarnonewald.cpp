@@ -5,6 +5,7 @@
 #include "ff/switch.h"
 #include "seq/pair_polar.h"
 #include "tool/gpucard.h"
+#include <tinker/detail/extfld.hh>
 
 #define TINKER9_POLPAIR 2
 
@@ -22,6 +23,23 @@ void epolar0DotProd_acc(const real (*gpu_uind)[3], const real (*gpu_udirp)[3])
       real e = polarity_inv[i]
          * (gpu_uind[i][0] * gpu_udirp[i][0] + gpu_uind[i][1] * gpu_udirp[i][1]
             + gpu_uind[i][2] * gpu_udirp[i][2]);
+      atomic_add(f * e, ep, offset);
+   }
+}
+
+void epolarPairwiseExtfield_acc(const real (*uind)[3]) {
+   const real f = -0.5 * electric / dielec;
+
+   auto bufsize = bufferSize();
+
+   real ex1 = extfld::exfld[0];
+   real ex2 = extfld::exfld[1];
+   real ex3 = extfld::exfld[2];
+
+   #pragma acc parallel loop independent async deviceptr(ep,uind)
+   for (int i = 0; i < n; ++i) {
+      int offset = i & (bufsize - 1);
+      real e = uind[i][0] * ex1 + uind[i][1] * ex2 + uind[i][2] * ex3;
       atomic_add(f * e, ep, offset);
    }
 }

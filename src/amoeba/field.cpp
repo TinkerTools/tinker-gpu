@@ -59,6 +59,7 @@ void dfield(real (*field)[3], real (*fieldp)[3])
       dfieldEwald(field, fieldp);
    else
       dfieldNonEwald(field, fieldp);
+   extfieldModifyDField(field, fieldp);
 }
 }
 

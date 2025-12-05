@@ -1,5 +1,5 @@
-#include "ff/echarge.h"
 #include "ff/atom.h"
+#include "ff/echarge.h"
 #include "ff/image.h"
 #include "ff/nblist.h"
 #include "ff/pme.h"
@@ -8,6 +8,7 @@
 #include "seq/bsplgen.h"
 #include "seq/pair_charge.h"
 #include "tool/gpucard.h"
+#include <tinker/detail/extfld.hh>
 
 namespace tinker {
 #define DEVICE_PTRS x, y, z, decx, decy, decz, pchg, nec, ec, vir_ec
@@ -366,5 +367,49 @@ void echargeEwaldFphiSelf_acc(int vers)
       echarge_acc3<calc::V5, 5>();
    else if (vers == calc::v6)
       echarge_acc3<calc::V6, 5>();
+}
+
+void exfieldCharge_acc(int vers)
+{
+   bool do_e = vers & calc::energy;
+   bool do_a = vers & calc::analyz;
+   bool do_g = vers & calc::grad;
+   bool do_v = vers & calc::virial;
+
+   auto bufsize = bufferSize();
+   real f = electric / dielec;
+   real ef1 = extfld::exfld[0], ef2 = extfld::exfld[1], ef3 = extfld::exfld[2];
+
+   #pragma acc parallel async deviceptr(pchg,nec,ec,vir_ec,x,y,z,decx,decy,decz)
+   #pragma acc loop independent
+   for (int ii = 0; ii < n; ++ii) {
+      int offset = ii & (bufsize - 1);
+      real xi = x[ii], yi = y[ii], zi = z[ii], ci = pchg[ii];
+
+      if (do_e) {
+         real phi = xi * ef1 + yi * ef2 + zi * ef3; // negative potential
+         real e = -f * ci * phi;
+         atomic_add(e, ec, offset);
+         if (do_a)
+            atomic_add(1, nec, offset);
+      }
+      if (do_g) {
+         real frx = -f * ef1 * ci;
+         real fry = -f * ef2 * ci;
+         real frz = -f * ef3 * ci;
+         atomic_add(frx, decx, ii);
+         atomic_add(fry, decy, ii);
+         atomic_add(frz, decz, ii);
+         if (do_v) {
+            real vxx = xi * frx;
+            real vyy = yi * fry;
+            real vzz = zi * frz;
+            real vxy = (yi * frx + xi * fry) / 2;
+            real vxz = (zi * frx + xi * frz) / 2;
+            real vyz = (zi * fry + yi * frz) / 2;
+            atomic_add(vxx, vxy, vxz, vyy, vyz, vzz, vir_ec, offset);
+         }
+      }
+   }
 }
 }

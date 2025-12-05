@@ -104,6 +104,7 @@ void empole(int vers)
       empoleEwald(vers);
    else
       empoleNonEwald(vers);
+   exfield(vers, 1);
    torque(vers, demx, demy, demz);
    if (do_v) {
       VirialBuffer u2 = vir_trq;
