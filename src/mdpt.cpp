@@ -44,7 +44,7 @@ void bussiThermostat(time_prec dt_prec, T_prec temp_prec)
    double tautemp = bath::tautemp;
    double kelvin = bath::kelvin;
    int nfree = mdstuf::nfree;
-   double& eta = bath::eta;
+   // double& eta = bath::eta;
 
    if (temp == 0)
       temp = 0.1;
@@ -57,7 +57,7 @@ void bussiThermostat(time_prec dt_prec, T_prec temp_prec)
    scale = std::sqrt(scale);
    if (r + std::sqrt(c / d) < 0)
       scale = -scale;
-   eta *= scale;
+   // eta *= scale;
 
    vel_prec sc = scale;
    mdVelScale(sc, n, vx, vy, vz);
@@ -146,9 +146,9 @@ void monteCarloBarostat(energy_prec epot, T_prec temp)
    }
 }
 
-TINKER_FVOID2(acc1, cu0, berendsenBarostat, time_prec);
-void berendsenBarostat(time_prec dt)
+TINKER_FVOID2(acc1, cu0, berendsenBarostat, time_prec, bool);
+void berendsenBarostat(time_prec dt, bool aniso)
 {
-   TINKER_FCALL2(acc1, cu0, berendsenBarostat, dt);
+   TINKER_FCALL2(acc1, cu0, berendsenBarostat, dt, aniso);
 }
 }

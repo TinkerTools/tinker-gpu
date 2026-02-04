@@ -45,7 +45,7 @@ void monteCarloBarostat(energy_prec epot, T_prec temp);
 ///    "Molecular dynamics with coupling to an external bath",
 ///    J. Chem. Phys., 81, 3684-3690 (1984).
 ///    </a>
-void berendsenBarostat(time_prec dt);
+void berendsenBarostat(time_prec dt, bool aniso);
 }
 
 namespace tinker {

@@ -5,7 +5,7 @@
 
 using namespace tinker;
 
-static const char* verlet_intg = "integrator  verlet\n";
+static const char* verlet_intg = "integrator  verlet\nbarostat  berendsen\n";
 static int usage_ = calc::xyz | calc::vel | calc::mass | calc::vmask | calc::md;
 
 TEST_CASE("Kinetic-ArBox", "[ff][kinetic][arbox]")

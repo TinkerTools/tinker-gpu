@@ -20,7 +20,7 @@ For versions prior to this commit, please refer to the following.
    Alternatively, remove the directory *tinker-gpu/tinker* and clone
    `Tinker from GitHub <https://github.com/tinkertools/tinker>`_
    to replace the deleted directory,
-   then checkout the required version **b92eacc8**.
+   then checkout the required version **4f11c0d4**.
 
    .. code-block:: bash
 

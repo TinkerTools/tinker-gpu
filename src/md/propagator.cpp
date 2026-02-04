@@ -30,11 +30,11 @@ BasicPropagator::BasicPropagator(int nrspa)
 {
    nrespa = nrspa;
 
-   getKV("SEMIISO-PRESSURE", semiiso, false);
-   if (semiiso)
-      aniso = true;
-   else
-      aniso = static_cast<bool>(bath::anisotrop);
+   std::string pressure_mode;
+   getKV("PRESSURE", pressure_mode, "ISOTROPIC");
+
+   semiiso = (pressure_mode == "SEMIISO");
+   aniso = semiiso || (pressure_mode == "ANISO");
 
    if (aniso) {
       indexArray = semiiso ? SemiArray : AnisoArray;

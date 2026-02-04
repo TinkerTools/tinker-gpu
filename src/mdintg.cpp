@@ -80,7 +80,7 @@ void mdIntegrateData(RcOp op)
          integrator = IntegratorEnum::NHC1996;
 
       FstrView itg = mdstuf::integrate;
-      if (itg == "RESPA") {
+      if (itg == "BRESPA" or itg == "SRESPA" or itg == "VRESPA") {
          integrator = IntegratorEnum::RESPA;
       } else if (itg == "VERLET") {
          integrator = IntegratorEnum::VERLET;

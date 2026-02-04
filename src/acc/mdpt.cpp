@@ -40,7 +40,7 @@ void kineticEnergy_acc(energy_prec& eksum_out, energy_prec (&ekin_out)[3][3], in
 
 //====================================================================//
 
-void berendsenBarostat_acc(time_prec dt)
+void berendsenBarostat_acc(time_prec dt, bool aniso)
 {
    if (not bound::use_bounds)
       return;
@@ -57,7 +57,7 @@ void berendsenBarostat_acc(time_prec dt)
    const double third = 1.0 / 3;
    double pres = (stress[0][0] + stress[1][1] + stress[2][2]) * third;
 
-   if (bath::anisotrop) {
+   if (aniso) {
       double scale = third * dt * bath::compress / bath::taupres;
       double ascale[3][3];
       for (int i = 0; i < 3; ++i) {

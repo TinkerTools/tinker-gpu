@@ -175,7 +175,7 @@ static std::map<int, size_t> hc_dict;
 namespace tinker {
 bool useRattle()
 {
-   return static_cast<bool>(freeze::use_rattle);
+   return static_cast<bool>(freeze::use_freeze);
 }
 
 void rattleData(RcOp op)
@@ -216,15 +216,46 @@ void rattleData(RcOp op)
    }
 
    if (op & RcOp::ALLOC) {
+      // patch to obtain Tinker 2023 (b92eacc)
+      // parameters from Tinker 2026 (4f11c0d)
+      std::vector<int> irat_copy(2 * (freeze::nrat + 3 * freeze::nwat));
+      std::vector<double> krat_copy(freeze::nrat + 3 * freeze::nwat);
+
+      for (int i = 0; i < freeze::nrat; ++i) {
+         irat_copy[2 * i + 0] = freeze::irat[2 * i + 0];
+         irat_copy[2 * i + 1] = freeze::irat[2 * i + 1];
+         krat_copy[i] = freeze::krat[i];
+      }
+
+      for (int i = 0; i < freeze::nwat; ++i) {
+         int index = freeze::nrat + 3 * i;
+         int i_O  = freeze::iwat[3 * i + 0];
+         int i_H1 = freeze::iwat[3 * i + 1];
+         int i_H2 = freeze::iwat[3 * i + 2];
+         double OH = freeze::kwat[3 * i + 0];
+         double HH = freeze::kwat[3 * i + 1];
+         irat_copy[2 * index + 0] = i_O;
+         irat_copy[2 * index + 1] = i_H1;
+         irat_copy[2 * index + 2] = i_O;
+         irat_copy[2 * index + 3] = i_H2;
+         irat_copy[2 * index + 4] = i_H1;
+         irat_copy[2 * index + 5] = i_H2;
+         krat_copy[index + 0] = OH;
+         krat_copy[index + 1] = OH;
+         krat_copy[index + 2] = HH;
+      }
+
+      int nrat_copy = freeze::nrat + 3 * freeze::nwat;
+
       // save data from Fortran library
-      for (int ir = 0; ir < freeze::nrat; ++ir) {
-         int i0 = freeze::irat[ir * 2 + 0] - 1;
-         int k0 = freeze::irat[ir * 2 + 1] - 1;
+      for (int ir = 0; ir < nrat_copy; ++ir) {
+         int i0 = irat_copy[ir * 2 + 0] - 1;
+         int k0 = irat_copy[ir * 2 + 1] - 1;
          HCInfo hc;
          hc.i = std::min(i0, k0);
          hc.k = std::max(i0, k0);
          hc.ir = ir;
-         hc.dist = freeze::krat[ir];
+         hc.dist = krat_copy[ir];
 
          // check if atoms i or k are already recorded
          auto iloc = hc_dict.find(hc.i);

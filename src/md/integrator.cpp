@@ -436,7 +436,7 @@ Nhc06Integrator::Nhc06Integrator(int nrspa)
    if (useRattle())
       TINKER_THROW("Constraints under NH-NPT require the ROLL algorithm.");
 
-   if (bath::anisotrop)
+   if (aniso)
       TINKER_THROW("Cannot use ANISO-PRESSURE in Nhc06Integrator.");
 
    this->kickoff();
