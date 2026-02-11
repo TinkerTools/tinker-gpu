@@ -34,7 +34,7 @@ Do not download the zip or tarball file from the release page.
 
 Examples of other successful builds are shown [here](https://github.com/TinkerTools/tinker9/discussions/121).
 
-<h2>User Manual (in progress)</h2>
+<h2>User Manual</h2>
 
 The HTML version is hosted on [readthedocs](https://tinker9-manual.readthedocs.io)
 and the [PDF](https://tinker9-manual.readthedocs.io/_/downloads/en/latest/pdf/)
