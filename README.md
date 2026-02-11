@@ -47,4 +47,4 @@ Release Notes
 Docker Images
 </a></h2>
 
-The executables included in these Docker images were compiled for a prior version of Tinker-GPU. It is known that they will not run on the machines with very old CPUs. If this is a problem for you, please write a new issue and provide us with more details.
+The executables included in these Docker images were compiled for a prior version of Tinker-GPU, previously called Tinker9. It is known that they will not run on the machines with very old CPUs. If this is a problem for you, please write a new issue and provide us with more details.
