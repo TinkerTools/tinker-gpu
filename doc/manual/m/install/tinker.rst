@@ -1,12 +1,9 @@
 Download the Canonical Tinker
 =============================
 
-Using the incorrect Tinker version, the executables are likely to fail with segfault.
-Since **d71f4793** (`Dec. 6, 2021 <https://github.com/TinkerTools/tinker9/commit/d71f4793>`_),
-downloading the required Tinker version is automated in the CMake script.
+Using the incorrect Tinker version, may result in the Tinker-GPU executables failing with a segfault.
+Ddownloading of the required Tinker version is automated in the CMake script.
 For versions prior to this commit, please refer to the following.
-
-   **Deprecated**
 
    If this source code was cloned by Git, you can
    checkout Tinker from the *tinker* Git submodule:
@@ -19,8 +16,8 @@ For versions prior to this commit, please refer to the following.
 
    Alternatively, remove the directory *tinker-gpu/tinker* and clone
    `Tinker from GitHub <https://github.com/tinkertools/tinker>`_
-   to replace the deleted directory,
-   then checkout the required version **4f11c0d4**.
+   to replace the deleted directory, then checkout the
+   required version, currently Tinker commit 4f11c0d4.
 
    .. code-block:: bash
 
@@ -28,4 +25,4 @@ For versions prior to this commit, please refer to the following.
       rm -rf tinker
       git clone https://github.com/tinkertools/tinker
       cd tinker
-      git checkout <TheRequiredVersion>
+      git checkout <TheRequiredVersion commit tag>
