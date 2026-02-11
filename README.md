@@ -28,8 +28,8 @@ Use `Git` to retrieve the source code. If you want to specify a release version,
 use command `git clone --depth 1 --branch $VERSION https://github.com/TinkerTools/tinker-gpu`.
 Do not download the zip or tarball file from the release page.
 
-   1. [Prerequisites](doc/manual/m/install/preq.rst)
-   2. [Download the Canonical Tinker (important to get the REQUIRED version)](doc/manual/m/install/tinker.rst)
+   1. [Prerequisites for Tinker-GPU](doc/manual/m/install/preq.rst)
+   2. [Download Recommended CPU Tinker Version)](doc/manual/m/install/tinker.rst)
    3. [Build Tinker-GPU with CMake](doc/manual/m/install/buildwithcmake.rst)
 
 Examples of other successful builds are shown [here](https://github.com/TinkerTools/tinker9/discussions/121).
