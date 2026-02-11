@@ -1,9 +1,9 @@
 Download the Canonical Tinker
 =============================
 
-Using the incorrect Tinker version, may result in the Tinker-GPU executables failing with a segfault.
-Downloading of the required Tinker version is automated in the CMake script.
-For versions prior to this commit, please refer to the following.
+Using an incorrect Tinker version, may result in the Tinker-GPU executables failing with a segfault.
+Downloading of the required Tinker version is automated in the CMake script, or Tinker can be obtained
+directly from the Tinker GitHub repository. Use one of the following procedures to get the correct Tinker.
 
    If this source code was cloned by Git, you can
    checkout Tinker from the *tinker* Git submodule:
