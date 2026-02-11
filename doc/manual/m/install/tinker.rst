@@ -25,4 +25,4 @@ For versions prior to this commit, please refer to the following.
       rm -rf tinker
       git clone https://github.com/tinkertools/tinker
       cd tinker
-      git checkout <TheRequiredVersion commit tag>
+      git checkout <required version commit tag>
