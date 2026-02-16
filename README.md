@@ -20,7 +20,7 @@ Do not download the zip or tarball file from the release page.
    2. [Download Recommended CPU Tinker Version](doc/manual/m/install/tinker.rst)
    3. [Build Tinker-GPU with CMake](doc/manual/m/install/buildwithcmake.rst)
 
-Examples of other successful builds are shown [here](https://github.com/TinkerTools/tinker9/discussions/121).
+Examples of other successful builds are shown [here](https://github.com/TinkerTools/tinker-gpu/discussions/121).
 
 <h2>User Manual</h2>
 
