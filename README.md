@@ -4,11 +4,9 @@ Tinker-GPU: Next Generation of Tinker with GPU Support
 [![Docs Status](https://readthedocs.org/projects/tinker9-manual/badge/?version=latest&style=flat)](https://tinker9-manual.readthedocs.io)
 [![Doxygen Page Status](https://github.com/tinkertools/tinker-gpu/actions/workflows/doxygen_gh_pages.yaml/badge.svg)](https://tinkertools.github.io/tinker-gpu/)
 
-
 <h2>Introduction</h2>
 
 Tinker-GPU is a comprehensive rewrite and GPU-enabled extension of the canonical CPU-based Tinker software. Tinker-GPU is implemented as C++ code with OpenACC directives and CUDA kernels providing excellent performance on NVIDIA GPUs. At present, Tinker-GPU builds against the object library from the CPU version of Tinker, and provides GPU versions of the Tinker ANALYZE, BAR, DYNAMIC, MINIMIZE and TESTGRAD programs. Existing Tinker file formats and force field parameter files are compatible with Tinker-GPU, and nearly all Tinker keywords function identically in Tinker and Tinker-GPU.
-
 
 <h2>Installation Steps</h2>
 
@@ -37,14 +35,12 @@ We are working to merge this documentation into [tinkerdoc.](https://tinkerdoc.r
 Please use [GitHub Issues](https://github.com/TinkerTools/tinker-gpu/issues) for bug tracking and
 [GitHub Discussions](https://github.com/TinkerTools/tinker-gpu/discussions) for general discussions.
 
-
 <h2><a href="https://github.com/TinkerTools/tinker-gpu/releases">
 Release Notes
 </a></h2>
-
 
 <h2><a href="https://hub.docker.com/r/tinkertools/tinker9">
 Docker Images
 </a></h2>
 
-The executables included in these Docker images were compiled for a prior version of Tinker-GPU, previously called Tinker9. It is known that they will not run on the machines with very old CPUs. If this is a problem for you, please write a new issue and provide us with more details.
+The executables included in the current Docker images were compiled from a prior version of Tinker-GPU, previously called Tinker9. It is known that they will not run on the machines with very old CPUs. If this is a problem for you, please write a new issue and provide us with more details.
