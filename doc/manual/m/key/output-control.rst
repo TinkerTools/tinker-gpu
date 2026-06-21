@@ -1,6 +1,8 @@
 Output Control
 ==============
 
+.. include:: ../replace.rst
+
 **DCD-ARCHIVE**
 
 .. index:: DCD-ARCHIVE
