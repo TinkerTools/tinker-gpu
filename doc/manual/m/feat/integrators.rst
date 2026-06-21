@@ -6,10 +6,31 @@ Integrators and Ensembles
 Monte Carlo Barostat
 --------------------
 
+The Monte Carlo barostat proposes trial changes to the periodic box and
+accepts or rejects them using the Metropolis criterion.
+
+**Supported pressure modes:** ``ISO``, ``SEMI``, and ``ANISO``.
+
 .. _label-berendsen-barostat:
 
 Berendsen Barostat
 ------------------
+
+The Berendsen barostat :cite:`berendsen-barostat` couples the periodic box to
+an external pressure bath by rescaling the box and coordinates.
+
+**Supported pressure modes:** ``ISO``, ``SEMI``, and ``ANISO``.
+
+.. _label-bussi-barostat:
+
+Bussi Barostat
+--------------
+
+The Bussi barostat implements the Bernetti--Bussi stochastic cell-rescaling
+method :cite:`bussi-barostat`. It rescales the periodic box, coordinates, and
+velocities to control pressure.
+
+**Supported pressure modes:** ``ISO``, ``SEMI``, and ``ANISO``.
 
 .. _label-verlet:
 
@@ -25,6 +46,8 @@ RESPA Integrator
 
 Extended Nosé-Hoover Chain
 --------------------------
+
+**Supported pressure mode:** ``ISO`` only.
 
 Authors of paper :cite:`mtk-nhc` (MTK) discussed several methods for NVT and
 NPT ensembles.
@@ -66,6 +89,8 @@ NPT-XO (#2a-4a).
 
 Langevin Piston
 ---------------
+
+**Supported pressure mode:** ``ISO`` only.
 
 The Langevin piston method for constant pressure :cite:`lpiston` is
 integrated in the Leapfrog framework.

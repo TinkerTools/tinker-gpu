@@ -235,7 +235,7 @@ enum class BarostatEnum
 {
    NONE,
    BERENDSEN,
-   BUSSI, // empty
+   BUSSI,
    LP2022,
    MONTECARLO,
    NHC2006,

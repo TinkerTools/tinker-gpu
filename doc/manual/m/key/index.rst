@@ -44,11 +44,13 @@ modifiers, and usage examples.
 
 .. toctree::
 
-   potent
-   restrain
-   hippo
-   dynamic
-   fep
-   parallel
-   math
-   nn
+   constraints-restraints
+   external-electric-field
+   free-energy
+   hippo-force-field
+   mathematical-algorithms
+   molecular-dynamics-ensembles
+   neural-network-potential
+   output-control
+   parallelization
+   valence-potentials
