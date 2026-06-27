@@ -9,23 +9,35 @@ namespace tinker {
 #pragma acc routine seq
 template <class Ver>
 SEQ_CUDA
-void dk_improp(real& restrict e, real& restrict vxx, real& restrict vyx,
-   real& restrict vzx, real& restrict vyy, real& restrict vzy,
-   real& restrict vzz,
+void dk_improp(real& restrict e,
+               real& restrict vxx,
+               real& restrict vyx,
+               real& restrict vzx,
+               real& restrict vyy,
+               real& restrict vzy,
+               real& restrict vzz,
 
-   grad_prec* restrict deidx, grad_prec* restrict deidy,
-   grad_prec* restrict deidz,
+               grad_prec* restrict deidx,
+               grad_prec* restrict deidy,
+               grad_prec* restrict deidz,
 
-   real idihunit, int i, const int (*restrict iiprop)[4],
-   const real* restrict kprop, const real* restrict vprop,
+               real idihunit,
+               int i,
+               const int (*restrict iiprop)[4],
+               const real* restrict kprop,
+               const real* restrict vprop,
 
-   const real* restrict x, const real* restrict y, const real* restrict z)
+               const real* restrict x,
+               const real* restrict y,
+               const real* restrict z)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_g = Ver::g;
    constexpr bool do_v = Ver::v;
-   if CONSTEXPR (do_e) e = 0;
-   if CONSTEXPR (do_v) vxx = 0, vyx = 0, vzx = 0, vyy = 0, vzy = 0, vzz = 0;
+   if CONSTEXPR (do_e)
+      e = 0;
+   if CONSTEXPR (do_v)
+      vxx = 0, vyx = 0, vzx = 0, vyy = 0, vzy = 0, vzz = 0;
 
    const int ia = iiprop[i][0];
    const int ib = iiprop[i][1];
@@ -74,12 +86,16 @@ void dk_improp(real& restrict e, real& restrict vxx, real& restrict vyx,
       real sine = (xcb * xtu + ycb * ytu + zcb * ztu) * REAL_RECIP(rcb * rtru);
       real angle = radian * REAL_ASIN(sine);
 
-      if (REAL_ABS(angle + ideal) < REAL_ABS(angle - ideal)) ideal = -ideal;
+      if (REAL_ABS(angle + ideal) < REAL_ABS(angle - ideal))
+         ideal = -ideal;
       real dt = angle - ideal;
-      if (dt > 180) dt -= 360;
-      if (dt < -180) dt += 360;
+      if (dt > 180)
+         dt -= 360;
+      if (dt < -180)
+         dt += 360;
 
-      if CONSTEXPR (do_e) e = idihunit * force * dt * dt;
+      if CONSTEXPR (do_e)
+         e = idihunit * force * dt * dt;
 
       if CONSTEXPR (do_g) {
          real dedphi = 2 * idihunit * force * dt * radian;

@@ -216,4 +216,62 @@ void testMdInit(double t, double atm)
    double dt = 0.001;
    tinker_f_mdinit(&dt);
 }
+
+bool fileExistsAndDelete(const std::string& fname)
+{
+   std::ifstream f(fname);
+   if (f.good()) {
+      f.close();
+      std::remove(fname.c_str());
+      return true;
+   }
+   return false;
+}
+}
+
+namespace tinker {
+
+using ModelFrame = std::vector<AtomData>;
+
+std::vector<ModelFrame> readAmoebaCoordinateFile(const std::string& fname)
+{
+   std::ifstream fin(fname);
+   if (!fin)
+      TINKER_THROW(format("Cannot open coordinate file %s", fname));
+
+   std::vector<ModelFrame> all_frames;
+   std::string line;
+
+   while (std::getline(fin, line)) {
+      std::istringstream header_stream(line);
+      int natom;
+      std::string dummy;
+      header_stream >> natom >> dummy; // "9 AMOEBA Water"
+      if (!header_stream)
+         break;
+
+      std::getline(fin, line); // skip box dimensions
+
+      ModelFrame atoms;
+      atoms.reserve(natom);
+
+      for (int i = 0; i < natom; ++i) {
+         std::getline(fin, line);
+         std::istringstream iss(line);
+         int index;
+         std::string atom_name;
+         double x, y, z;
+         int atom_type;
+
+         // Only extract first 4 fields: index, name, x, y, z
+         iss >> index >> atom_name >> x >> y >> z >> atom_type;
+         AtomData atom{atom_type, x, y, z};
+         atoms.push_back(atom);
+      }
+
+      all_frames.push_back(std::move(atoms));
+   }
+
+   return all_frames;
+}
 }

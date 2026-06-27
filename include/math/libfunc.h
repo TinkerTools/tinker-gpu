@@ -14,12 +14,7 @@ extern "C"
    inline float tinkerErfcfHastings2Args(float x, float ex2)
    {
       float t = 1.0f / (1.0f + 0.3275911f * x);
-      return (0.254829592f
-                + (-0.284496736f
-                     + (1.421413741f + (-1.453152027f + 1.061405429f * t) * t)
-                        * t)
-                   * t)
-         * t * ex2;
+      return (0.254829592f + (-0.284496736f + (1.421413741f + (-1.453152027f + 1.061405429f * t) * t) * t) * t) * t * ex2;
    }
 
    // The complementary error function.
@@ -35,77 +30,79 @@ extern "C"
 
 // abs functions
 #if TINKER_CUDART
-#   define INT_ABS abs
+#define INT_ABS abs
 
-#   if TINKER_REAL_SIZE == 8
-#      define REAL_ABS fabs
-#   endif
+#if TINKER_REAL_SIZE == 8
+#define REAL_ABS fabs
+#endif
 
-#   if TINKER_REAL_SIZE == 4
-#      define REAL_ABS fabsf
-#   endif
+#if TINKER_REAL_SIZE == 4
+#define REAL_ABS fabsf
+#endif
 #else
-#   define INT_ABS std::abs
+#define INT_ABS std::abs
 
-#   if TINKER_REAL_SIZE == 8
-#      define REAL_ABS std::fabs
-#   endif
+#if TINKER_REAL_SIZE == 8
+#define REAL_ABS std::fabs
+#endif
 
-#   if TINKER_REAL_SIZE == 4
+#if TINKER_REAL_SIZE == 4
 // Bug. Cannot use std::fabsf. See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=79700
-#      define REAL_ABS ::fabsf
-#   endif
+#define REAL_ABS ::fabsf
+#endif
 #endif
 
 // double
 #if TINKER_REAL_SIZE == 8
-#   define REAL_SQRT     sqrt
-#   define REAL_EXP      exp
-#   define REAL_FLOOR    floor
-#   define REAL_POW      pow
-#   define REAL_RECIP(x) (1 / static_cast<double>(x))
-#   define REAL_RSQRT(x) (1 / sqrt(x))
-#   define REAL_COS      cos
-#   define REAL_SIN      sin
-#   define REAL_ACOS     acos
-#   define REAL_ASIN     asin
-#   define REAL_SINH     sinh
-#   define REAL_COSH     cosh
-#   define REAL_ERF      erf
-#   define REAL_ERFC(x)  (1 - erf(x))
-#   define REAL_MIN      fmin
-#   define REAL_MAX      fmax
-#   define REAL_SIGN     copysign
+#define REAL_SQRT     sqrt
+#define REAL_EXP      exp
+#define REAL_FLOOR    floor
+#define REAL_POW      pow
+#define REAL_RECIP(x) (1 / static_cast<double>(x))
+#define REAL_RSQRT(x) (1 / sqrt(x))
+#define REAL_COS      cos
+#define REAL_SIN      sin
+#define REAL_ACOS     acos
+#define REAL_ASIN     asin
+#define REAL_SINH     sinh
+#define REAL_COSH     cosh
+#define REAL_ERF      erf
+#define REAL_ERFC(x)  (1 - erf(x))
+#define REAL_MIN      fmin
+#define REAL_MAX      fmax
+#define REAL_SIGN     copysign
 // #   define REAL_ERFC     erfc
-#   define REAL_ERFC_V2(x, expterm) (1 - erf(x))
+#define REAL_ERFC_V2(x, expterm) (1 - erf(x))
+#define REAL_LOG                 log
 #endif
 
 // float
 #if TINKER_REAL_SIZE == 4
-#   define REAL_SQRT     sqrtf
-#   define REAL_EXP      expf
-#   define REAL_FLOOR    floorf
-#   define REAL_POW      powf
-#   define REAL_RECIP(x) (1 / static_cast<float>(x))
-#   define REAL_RSQRT(x) (1 / sqrtf(x))
-#   define REAL_COS      cosf
-#   define REAL_SIN      sinf
-#   define REAL_ACOS     acosf
-#   define REAL_ASIN     asinf
-#   define REAL_SINH     sinhf
-#   define REAL_COSH     coshf
-#   define REAL_ERF      erff
-#   define REAL_ERFC     tinkerErfcfHastings
-#   define REAL_MIN      fminf
-#   define REAL_MAX      fmaxf
-#   define REAL_SIGN     copysignf
+#define REAL_SQRT     sqrtf
+#define REAL_EXP      expf
+#define REAL_FLOOR    floorf
+#define REAL_POW      powf
+#define REAL_RECIP(x) (1 / static_cast<float>(x))
+#define REAL_RSQRT(x) (1 / sqrtf(x))
+#define REAL_COS      cosf
+#define REAL_SIN      sinf
+#define REAL_ACOS     acosf
+#define REAL_ASIN     asinf
+#define REAL_SINH     sinhf
+#define REAL_COSH     coshf
+#define REAL_ERF      erff
+#define REAL_ERFC     tinkerErfcfHastings
+#define REAL_MIN      fminf
+#define REAL_MAX      fmaxf
+#define REAL_SIGN     copysignf
 // #   define REAL_ERFC     erfcf
 // #   define REAL_ERFC(x)  (1 - erff(x))
-#   define REAL_ERFC_V2(x, expterm) tinkerErfcfHastings2Args((x), (expterm))
+#define REAL_ERFC_V2(x, expterm) tinkerErfcfHastings2Args((x), (expterm))
+#define REAL_LOG                 logf
 #endif
 
 #ifdef _OPENACC
-#   include <accelmath.h>
+#include <accelmath.h>
 
 #pragma acc routine(abs) seq
 

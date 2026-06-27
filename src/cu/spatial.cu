@@ -1,22 +1,27 @@
 #include "ff/box.h"
+#include "ff/evalence.h"
 #include "ff/image.h"
+#include "ff/molecule.h"
 #include "ff/spatial.h"
+#include "seq/add.h"
 #include "seq/copysign.h"
 #include "seq/imagefc.h"
 #include "seq/launch.h"
 #include "seq/triangle.h"
 #include "tool/error.h"
 #include "tool/thrustcache.h"
+#include <numeric>
 // Eventually thrust will drop c++11 support.
 #define THRUST_IGNORE_DEPRECATED_CPP_DIALECT
+#include <thrust/gather.h>
 #include <thrust/sort.h>
 
 // step 1 2
 namespace tinker {
 // \note Fractional coordinates have to be taken care of by the image routine first.
 __device__
-inline void fracToIxyz(int& restrict ix, int& restrict iy, int& restrict iz, int px, int py, int pz,
-   real fx, real fy, real fz)
+inline void fracToIxyz(int& restrict ix, int& restrict iy, int& restrict iz, int px, int py, int pz, real fx, real fy,
+   real fz)
 {
    // cannot use iw = fw * (1 << pw) + (1 << pw) / 2;
    // with the implicit cast rules of C,
@@ -51,8 +56,7 @@ inline int minByAbs(int a, int b)
 // innear-most vertex is outside of the space defined by surfaces
 // `|x| + |y| + |z| = 3/4`, it is considered to be outside and needs updating.
 __device__
-inline void ixyzOctahedron(int& restrict ix, int& restrict iy, int& restrict iz, int px, int py,
-   int pz)
+inline void ixyzOctahedron(int& restrict ix, int& restrict iy, int& restrict iz, int px, int py, int pz)
 {
    int qx = (1 << px);
    int qy = (1 << py);
@@ -144,8 +148,8 @@ inline int TransposeToIndex(coord_t (&x)[n], int b)
 
 __global__
 void spatialStep1(int n, int pz, int2* restrict b2num, //
-   const real* restrict x, const real* restrict y, const real* restrict z, TINKER_IMAGE_PARAMS,
-   int nakpk, int* restrict akpf)
+   const real* restrict x, const real* restrict y, const real* restrict z, TINKER_IMAGE_PARAMS, int nakpk,
+   int* restrict akpf)
 {
    // i = unsorted atom number
    // b2num[i] = [box number][unsorted atom number]
@@ -185,9 +189,9 @@ void spatialStep1(int n, int pz, int2* restrict b2num, //
 }
 
 __global__
-void spatialStep2(int n, Spatial::SortedAtom* restrict sorted, int* restrict bnum,
-   int2* restrict b2num, const real* restrict x, const real* restrict y, const real* restrict z,
-   int ZERO_LBUF, real* restrict xold, real* restrict yold, real* restrict zold, //
+void spatialStep2(int n, Spatial::SortedAtom* restrict sorted, int* restrict bnum, int2* restrict b2num,
+   const real* restrict x, const real* restrict y, const real* restrict z, int ZERO_LBUF, real* restrict xold,
+   real* restrict yold, real* restrict zold, //
    TINKER_IMAGE_PARAMS, real cutbuf, Spatial::Center* restrict akc, Spatial::Center* restrict half)
 {
    real xbox, ybox, zbox;
@@ -347,12 +351,10 @@ void spatialStep3(int nak, int* restrict akpf, int* nakpl_ptr0, //
 }
 
 __global__
-void spatialStep4(int nakpk, int* restrict nakpl_ptr1, const int* restrict akpf,
-   int* restrict iakpl,
+void spatialStep4(int nakpk, int* restrict nakpl_ptr1, const int* restrict akpf, int* restrict iakpl,
    int* restrict iakpl_rev,   //
    int cap_nakpl, int nstype, //
-   unsigned int* restrict s1b0, unsigned int* restrict s2b0, unsigned int* restrict s3b0,
-   unsigned int* restrict s4b0)
+   unsigned int* restrict s1b0, unsigned int* restrict s2b0, unsigned int* restrict s3b0, unsigned int* restrict s4b0)
 {
    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < nakpk; i += blockDim.x * gridDim.x) {
       int flag = akpf[i];
@@ -370,8 +372,7 @@ void spatialStep4(int nakpk, int* restrict nakpl_ptr1, const int* restrict akpf,
    }
 
    // zero out bit0 and bit1
-   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < WARP_SIZE * cap_nakpl;
-        i += blockDim.x * gridDim.x) {
+   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < WARP_SIZE * cap_nakpl; i += blockDim.x * gridDim.x) {
       if (nstype >= 1) {
          s1b0[i] = 0;
       }
@@ -423,11 +424,12 @@ void spatialStep5Bits(int x0, int y0, unsigned int* bit0, const int* iakpl_rev)
 
 template <class IMG>
 __global__
-void spatialStep5(const int* restrict bnum, const int* restrict iakpl_rev, int nstype,
-   Spatial::ScaleInfo si1, Spatial::ScaleInfo si2, Spatial::ScaleInfo si3, Spatial::ScaleInfo si4,
-   int* restrict dev_niak, int* restrict iak, int* restrict lst, int n, int nak, real cutbuf,
-   TINKER_IMAGE_PARAMS, const int* restrict akpf, const Spatial::SortedAtom* restrict sorted,
-   const Spatial::Center* restrict akc, const Spatial::Center* restrict half)
+void spatialStep5(const int* restrict bnum, const int* restrict iakpl_rev, int nstype, Spatial::ScaleInfo si1,
+   Spatial::ScaleInfo si2, Spatial::ScaleInfo si3, Spatial::ScaleInfo si4, int* restrict dev_niak, int* restrict iak,
+   int* restrict lst, int n, int nak, real cutbuf, TINKER_IMAGE_PARAMS, const int* restrict akpf,
+   const Spatial::SortedAtom* restrict sorted, const Spatial::Center* restrict akc,
+   const Spatial::Center* restrict half, bool nblist4nn, int ngrps_nn, const int* restrict grps_nn,
+   const int* restrict grplist)
 {
    int maxns = -1;
    maxns = max(maxns, si1.ns);
@@ -480,7 +482,9 @@ void spatialStep5(const int* restrict bnum, const int* restrict iakpl_rev, int n
    // Every warp loads a block of atoms as "i-block", denoted by "wy".
    // All threads in this warp cache the same "center" info.
    // Each thread holds the position of a unique atom.
-   for (int wy = iwarp; wy < nak - 1; wy += nwarp) {
+   // `nblist4nn` is for controlling whether to create arrays of neighbors for NN terms or list of pairs for
+   // tranditional AMOEBA terms.
+   for (int wy = iwarp; wy < (nblist4nn ? nak : nak - 1); wy += nwarp) {
       int atomi = wy * WARP_SIZE + ilane;
       real xi = sorted[atomi].x;
       real yi = sorted[atomi].y;
@@ -516,14 +520,17 @@ void spatialStep5(const int* restrict bnum, const int* restrict iakpl_rev, int n
       //
       //    Collecting the bits of wx from every thread in this warp, a 32-bit integer is obtained.
       //    All threads in this warp will then work on these atom blocks together, one at a time.
-      for (int wx0 = wy + 1; wx0 < nak; wx0 += WARP_SIZE) {
+      for (int wx0 = nblist4nn ? 0 : wy + 1; wx0 < nak; wx0 += WARP_SIZE) {
          int wx = wx0 + ilane;
          bool calcwx = wx < nak; // wx cannot exceed nak-1.
 
          // Check if this block pair has been recorded
          if (calcwx) {
             int iw, iwa, iwb;
-            iw = xy_to_tri(wx, wy);
+            if (!nblist4nn)
+               iw = xy_to_tri(wx, wy);
+            else
+               iw = xy_to_tri(max(wx, wy), min(wx, wy));
             iwa = iw / WARP_SIZE;
             iwb = iw & (WARP_SIZE - 1);
             if (akpf[iwa] & (1 << iwb))
@@ -675,7 +682,8 @@ void spatialStep5(const int* restrict bnum, const int* restrict iakpl_rev, int n
                int bufp = i * WARP_SIZE + ilane;
                int val = buffer[bufp];
                __syncwarp();
-               int num = bufp < nknb ? val : 0;
+               int num = nblist4nn ? -1 : 0; // use different padding values for nblist for NN and non-NN terms
+               num = bufp < nknb ? val : num;
                lst[(pos + i) * WARP_SIZE + ilane] = num;
             }
          }
@@ -694,7 +702,7 @@ void Spatial::RunStep5(SpatialUnit u)
       u->si4,                                  //
       dev_niak, u->iak, u->lst,                //
       u->n, u->nak, cutbuf, TINKER_IMAGE_ARGS, //
-      u->akpf, u->sorted, u->akc, u->half);
+      u->akpf, u->sorted, u->akc, u->half, u->nblist4nn, ngrps_nnvalence, grps_nnvalence, grp.grplist);
    darray::copyout(g::q0, 1, &u->niak, dev_niak);
    waitFor(g::q0);
    if (u->niak > u->nak * Spatial::LSTCAP) {
@@ -710,6 +718,13 @@ void Spatial::RunStep5(SpatialUnit u)
 }
 
 namespace tinker {
+
+struct alignas(128) intx32
+{
+   int a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24,
+      a25, a26, a27, a28, a29, a30, a31, a32;
+};
+
 void spatialDataInit_cu(SpatialUnit u)
 {
    u->fresh = -1; // 0xFFFFFFFF;
@@ -788,6 +803,17 @@ void spatialDataInit_cu(SpatialUnit u)
       Spatial::RunStep5<PbcUnbound>(u);
    } else {
       assert(false);
+   }
+
+   // TODO sort iak and lst
+   if (u->nblist4nn) {
+      std::vector<int> idmap_host(u->niak);
+      std::iota(idmap_host.begin(), idmap_host.end(), 0);
+      darray::copyin(g::q0, u->niak, u->iak_idmap, idmap_host.data());
+      waitFor(g::q0);
+      thrust::stable_sort_by_key(policy, u->iak, u->iak + u->niak, u->iak_idmap);
+      darray::copy(g::q0, u->niak * 32, u->lst_tmp, u->lst);
+      thrust::gather(policy, u->iak_idmap, u->iak_idmap + u->niak, (intx32*)u->lst_tmp, (intx32*)u->lst);
    }
 }
 
@@ -891,9 +917,9 @@ void spatialDataUpdateSorted_cu(SpatialUnit u)
 namespace tinker {
 // 0: do not rebuild; 1: rebuild
 __global__
-void spatialCheck_cu1(int n, real lbuf2, int* restrict update, const real* restrict x,
-   const real* restrict y, const real* restrict z, const real* restrict xold,
-   const real* restrict yold, const real* restrict zold, TINKER_IMAGE_PARAMS)
+void spatialCheck_cu1(int n, real lbuf2, int* restrict update, const real* restrict x, const real* restrict y,
+   const real* restrict z, const real* restrict xold, const real* restrict yold, const real* restrict zold,
+   TINKER_IMAGE_PARAMS)
 {
    for (int i = ITHREAD; i < n; i += STRIDE) {
       auto xr = x[i] - xold[i];
@@ -914,8 +940,8 @@ void spatialCheck_cu2(int n, int* restrict update)
    }
 }
 
-void spatialCheck_cu(int& result, int n, real lbuf, int* update, const real* x, const real* y,
-   const real* z, real* xold, real* yold, real* zold)
+void spatialCheck_cu(int& result, int n, real lbuf, int* update, const real* x, const real* y, const real* z,
+   real* xold, real* yold, real* zold)
 {
    if (lbuf == 0) {
       result = 1;

@@ -18,8 +18,8 @@ namespace tinker {
 bool PME::Params::operator==(const Params& st) const
 {
    const double eps = 1.0e-6;
-   bool ans = std::fabs(aewald - st.aewald) < eps && nfft1 == st.nfft1 && nfft2 == st.nfft2 &&
-      nfft3 == st.nfft3 && bsorder == st.bsorder;
+   bool ans = std::fabs(aewald - st.aewald) < eps && nfft1 == st.nfft1 && nfft2 == st.nfft2 && nfft3 == st.nfft3
+      && bsorder == st.bsorder;
    return ans;
 }
 
@@ -337,10 +337,8 @@ void cmpToFmp(PMEUnit pme_u, const real (*cmp)[10], real (*fmp)[10])
    TINKER_FCALL2(acc1, cu1, cmpToFmp, pme_u, cmp, fmp);
 }
 
-TINKER_FVOID2(acc1, cu1, cuindToFuind, PMEUnit, const real (*)[3], const real (*)[3], real (*)[3],
-   real (*)[3]);
-void cuindToFuind(
-   PMEUnit pme_u, const real (*cind)[3], const real (*cinp)[3], real (*fuind)[3], real (*fuinp)[3])
+TINKER_FVOID2(acc1, cu1, cuindToFuind, PMEUnit, const real (*)[3], const real (*)[3], real (*)[3], real (*)[3]);
+void cuindToFuind(PMEUnit pme_u, const real (*cind)[3], const real (*cinp)[3], real (*fuind)[3], real (*fuinp)[3])
 {
    TINKER_FCALL2(acc1, cu1, cuindToFuind, pme_u, cind, cinp, fuind, fuinp);
 }

@@ -13,20 +13,40 @@ void zeroEGV(int vers = rc_flag);
 void scaleGradient(double scale, grad_prec* g0x, grad_prec* g0y, grad_prec* g0z);
 
 /// `g0 += g1`.
-void sumGradient(grad_prec* g0x, grad_prec* g0y, grad_prec* g0z, //
-   const grad_prec* g1x, const grad_prec* g1y, const grad_prec* g1z);
+void sumGradient(grad_prec* g0x,
+                 grad_prec* g0y,
+                 grad_prec* g0z, //
+                 const grad_prec* g1x,
+                 const grad_prec* g1y,
+                 const grad_prec* g1z);
 
 /// `g0 += scale*g1`.
-void sumGradient(double scale, grad_prec* g0x, grad_prec* g0y, grad_prec* g0z, //
-   const grad_prec* g1x, const grad_prec* g1y, const grad_prec* g1z);
+void sumGradient(double scale,
+                 grad_prec* g0x,
+                 grad_prec* g0y,
+                 grad_prec* g0z, //
+                 const grad_prec* g1x,
+                 const grad_prec* g1y,
+                 const grad_prec* g1z);
 
 /// Copies the energy gradients from device to host.
-void copyGradientSync(int vers, double* grdx, double* grdy, double* grdz, //
-   const grad_prec* gx_src, const grad_prec* gy_src, const grad_prec* gz_src, int queue);
+void copyGradientSync(int vers,
+                      double* grdx,
+                      double* grdy,
+                      double* grdz, //
+                      const grad_prec* gx_src,
+                      const grad_prec* gy_src,
+                      const grad_prec* gz_src,
+                      int queue);
 
 /// Copies the energy gradients from device to host.
-void copyGradient(int vers, double* grdx, double* grdy, double* grdz, //
-   const grad_prec* gx_src, const grad_prec* gy_src, const grad_prec* gz_src);
+void copyGradient(int vers,
+                  double* grdx,
+                  double* grdy,
+                  double* grdz, //
+                  const grad_prec* gx_src,
+                  const grad_prec* gy_src,
+                  const grad_prec* gz_src);
 
 /// Copies the energy gradients from #gx, #gy, #gz to host.
 ///

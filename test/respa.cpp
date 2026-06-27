@@ -41,7 +41,7 @@ TEST_CASE("NPT-VRESPA", "[ff][npt][respa]")
    COMPARE_REALS(bath::tautemp, 0.2, 1e-12);
    COMPARE_REALS(bath::taupres, 2.0, 1e-12);
    FstrView itg = mdstuf::integrate;
-   REQUIRE(itg=="VRESPA");
+   REQUIRE(itg == "VRESPA");
 
    finish();
    testEnd();

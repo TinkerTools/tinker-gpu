@@ -114,7 +114,8 @@ void reduce(T* g_odata, const T* g_idata, size_t n, Op op = Op())
    if (B >= 128) { if (t < 64 ) { sd[t] = op(sd[t], sd[t + 64 ]); } __syncthreads(); }
    if (t < 32  ) warp_reduce<T, B, Op>(sd, t, op);
    // clang-format on
-   if (t == 0) g_odata[blockIdx.x] = sd[0];
+   if (t == 0)
+      g_odata[blockIdx.x] = sd[0];
 }
 
 template <class T, unsigned int B, unsigned int HN, size_t N, class Op>

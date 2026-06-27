@@ -2,7 +2,7 @@
 #include <tinker/modcpp.h>
 #include <tinker/routines.h>
 #ifdef _OPENMP
-#   include <omp.h>
+#include <omp.h>
 #endif
 
 #include "tinker9.h"
@@ -16,10 +16,13 @@ void initial()
    input = 5;
    iout = 6;
 
-   if (first) promo();
+   if (first)
+      promo();
 
-   if (first) tinker_f_command();
-   if (first) first = false;
+   if (first)
+      tinker_f_command();
+   if (first)
+      first = false;
 
    using namespace openmp;
    nproc = 1;
@@ -29,11 +32,11 @@ void initial()
    nthread = nproc;
    omp_set_num_threads(nthread);
    omp_set_nested(true);
-#   ifdef TINKER_ICPC
+#ifdef TINKER_ICPC
    // Intel compiler extensions to OpenMP standard, 268435456 bytes is 2**28 bytes, or 256 MB
    kmp_set_stacksize_s(268435456);
    kmp_set_blocktime(0);
-#   endif
+#endif
 #endif
 
    tinker_f_initatom();

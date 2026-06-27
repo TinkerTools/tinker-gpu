@@ -66,19 +66,15 @@ void fftData(RcOp op)
          const unsigned int iguess = 0;
          // different from FFTW Fortran API
 #if TINKER_REAL_SIZE == 4
-         iplan.planf =
-            fftwf_plan_dft_3d(nslow, nfft2, nfast, reinterpret_cast<fftwf_complex*>(st.qgrid),
-               reinterpret_cast<fftwf_complex*>(st.qgrid), ifront, iguess);
-         iplan.planb =
-            fftwf_plan_dft_3d(nslow, nfft2, nfast, reinterpret_cast<fftwf_complex*>(st.qgrid),
-               reinterpret_cast<fftwf_complex*>(st.qgrid), iback, iguess);
+         iplan.planf = fftwf_plan_dft_3d(nslow, nfft2, nfast, reinterpret_cast<fftwf_complex*>(st.qgrid),
+            reinterpret_cast<fftwf_complex*>(st.qgrid), ifront, iguess);
+         iplan.planb = fftwf_plan_dft_3d(nslow, nfft2, nfast, reinterpret_cast<fftwf_complex*>(st.qgrid),
+            reinterpret_cast<fftwf_complex*>(st.qgrid), iback, iguess);
 #elif TINKER_REAL_SIZE == 8
-         iplan.planf =
-            fftw_plan_dft_3d(nslow, nfft2, nfast, reinterpret_cast<fftw_complex*>(st.qgrid),
-               reinterpret_cast<fftw_complex*>(st.qgrid), ifront, iguess);
-         iplan.planb =
-            fftw_plan_dft_3d(nslow, nfft2, nfast, reinterpret_cast<fftw_complex*>(st.qgrid),
-               reinterpret_cast<fftw_complex*>(st.qgrid), iback, iguess);
+         iplan.planf = fftw_plan_dft_3d(nslow, nfft2, nfast, reinterpret_cast<fftw_complex*>(st.qgrid),
+            reinterpret_cast<fftw_complex*>(st.qgrid), ifront, iguess);
+         iplan.planb = fftw_plan_dft_3d(nslow, nfft2, nfast, reinterpret_cast<fftw_complex*>(st.qgrid),
+            reinterpret_cast<fftw_complex*>(st.qgrid), iback, iguess);
 #else
          static_assert(false, "");
 #endif
@@ -97,8 +93,7 @@ void fftfront(PMEUnit pme_u)
    fftwf_execute_dft(iplan.planf, reinterpret_cast<fftwf_complex*>(st.qgrid),
       reinterpret_cast<fftwf_complex*>(st.qgrid));
 #elif TINKER_REAL_SIZE == 8
-   fftw_execute_dft(iplan.planf, reinterpret_cast<fftw_complex*>(st.qgrid),
-      reinterpret_cast<fftw_complex*>(st.qgrid));
+   fftw_execute_dft(iplan.planf, reinterpret_cast<fftw_complex*>(st.qgrid), reinterpret_cast<fftw_complex*>(st.qgrid));
 #else
    static_assert(false, "");
 #endif
@@ -114,8 +109,7 @@ void fftback(PMEUnit pme_u)
    fftwf_execute_dft(iplan.planb, reinterpret_cast<fftwf_complex*>(st.qgrid),
       reinterpret_cast<fftwf_complex*>(st.qgrid));
 #elif TINKER_REAL_SIZE == 8
-   fftw_execute_dft(iplan.planb, reinterpret_cast<fftw_complex*>(st.qgrid),
-      reinterpret_cast<fftw_complex*>(st.qgrid));
+   fftw_execute_dft(iplan.planb, reinterpret_cast<fftw_complex*>(st.qgrid), reinterpret_cast<fftw_complex*>(st.qgrid));
 #else
    static_assert(false, "");
 #endif

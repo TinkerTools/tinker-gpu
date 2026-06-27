@@ -1,7 +1,7 @@
 #include "ff/atom.h"
 #include "ff/elec.h"
-#include "ff/modhippo.h"
 #include "ff/image.h"
+#include "ff/modhippo.h"
 #include "ff/nblist.h"
 #include "ff/switch.h"
 #include "seq/add.h"

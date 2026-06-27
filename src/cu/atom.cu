@@ -22,8 +22,8 @@ void copyPosToXyz_cu()
 __global__
 void bounds_cu1(int nmol,                                                     //
    pos_prec* restrict xpos, pos_prec* restrict ypos, pos_prec* restrict zpos, //
-   const int (*restrict imol)[2], const int* restrict kmol, const double* restrict mass,
-   const double* restrict molmass, TINKER_IMAGE_PARAMS)
+   const int (*restrict imol)[2], const int* restrict kmol, const double* restrict mass, const double* restrict molmass,
+   TINKER_IMAGE_PARAMS)
 {
    for (int i = ITHREAD; i < nmol; i += STRIDE) {
       // locate the center of each molecule

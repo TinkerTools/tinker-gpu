@@ -1,5 +1,5 @@
-#include "ff/modamoeba.h"
 #include "ff/atom.h"
+#include "ff/modamoeba.h"
 #include "ff/nblist.h"
 #include "ff/potent.h"
 #include "tool/externfunc.h"
@@ -18,10 +18,8 @@ void diagPrecond(const real (*rsd)[3], const real (*rsdp)[3], real (*zrsd)[3], r
 
 void sparsePrecondBuild() {}
 
-TINKER_FVOID2(
-   acc1, cu1, sparsePrecondApply, const real (*)[3], const real (*)[3], real (*)[3], real (*)[3]);
-void sparsePrecondApply(
-   const real (*rsd)[3], const real (*rsdp)[3], real (*zrsd)[3], real (*zrsdp)[3])
+TINKER_FVOID2(acc1, cu1, sparsePrecondApply, const real (*)[3], const real (*)[3], real (*)[3], real (*)[3]);
+void sparsePrecondApply(const real (*rsd)[3], const real (*rsdp)[3], real (*zrsd)[3], real (*zrsdp)[3])
 {
    TINKER_FCALL2(acc1, cu1, sparsePrecondApply, rsd, rsdp, zrsd, zrsdp);
 }

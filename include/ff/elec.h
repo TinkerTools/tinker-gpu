@@ -66,6 +66,12 @@ namespace tinker {
 
 bool useEwald();
 void elecData(RcOp);
+void exfield(int vers,     ///< Common integer flag for the energy components.
+             int useDipole ///< If 0, use partial charge; otherwise, also include dipole.
+);
+void extfieldModifyDField(real (*field)[3], ///< Permanent field.
+                          real (*fieldp)[3] ///< Set to \c nullptr if not using AMOEBA.
+);
 
 //====================================================================//
 //                                                                    //

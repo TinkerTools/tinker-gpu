@@ -178,7 +178,6 @@ void repoleInit(int vers)
 
    chkrepole();
    rotrepole();
-
 }
 
 TINKER_FVOID2(acc1, cu1, erepel, int);

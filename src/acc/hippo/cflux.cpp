@@ -1,7 +1,7 @@
-#include "ff/modamoeba.h"
 #include "ff/atom.h"
 #include "ff/evalence.h"
 #include "ff/hippo/cflux.h"
+#include "ff/modamoeba.h"
 #include "ff/modhippo.h"
 #include "math/libfunc.h"
 #include "seq/add.h"
@@ -89,7 +89,7 @@ void alterchg_acc()
    angchg_acc1();
 
    // alter monopoles and charge penetration
-   #pragma acc parallel loop independent async\
+    #pragma acc parallel loop independent async\
            deviceptr(pval,pval0,pdelta,pole,mono0)
    for (int i = 0; i < n; ++i) {
       pval[i] = pval0[i] + pdelta[i];

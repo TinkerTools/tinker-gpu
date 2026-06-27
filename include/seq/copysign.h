@@ -18,7 +18,8 @@ __device__
 inline int intCopysignIf(int a, int b)
 {
    int ans = abs(a);
-   if (b < 0) ans = -ans;
+   if (b < 0)
+      ans = -ans;
    return ans;
 }
 

@@ -9,6 +9,7 @@ namespace tinker {
 
 void nData(RcOp);
 void massData(RcOp);
+void atomicData(RcOp); // atomic number
 void xyzData(RcOp);
 
 /// Update #x, #y, #z by #xpos, #ypos, and #zpos.
@@ -64,6 +65,7 @@ static_assert(sizeof(pos_prec) >= sizeof(real), "Type pos_prec cannot be shorter
 
 TINKER_EXTERN double* mass;    ///< Atomic mass.
 TINKER_EXTERN double* massinv; ///< Inversed atomic mass.
+TINKER_EXTERN int* atomic;     ///< atomic number.
 
 /// \}
 }

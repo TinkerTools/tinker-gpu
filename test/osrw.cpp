@@ -1,6 +1,6 @@
 #include "md/osrw.h"
-#include "ff/modamoeba.h"
 #include "ff/evdw.h"
+#include "ff/modamoeba.h"
 
 #include "test.h"
 #include "testrt.h"
@@ -22,20 +22,18 @@ static const double refev_1 = 4.1749;
 static const double refem_1 = -42.4972;
 static const double refep_1 = -4.0921;
 static const double refe_1 = -42.2312;
-static const double refvir_1[][3] = {
-   {7.948, -0.088, -0.017}, {-0.088, 7.438, 0.025}, {-0.017, 0.025, 7.874}};
-static const double refg_1[][3] = {{0.0025, 0.0004, -0.0089}, {0.0031, -0.0058, -0.0063},
-   {-0.0037, 0.0011, 0.0042}, {-0.0068, -0.0027, -0.0003}};
+static const double refvir_1[][3] = {{7.948, -0.088, -0.017}, {-0.088, 7.438, 0.025}, {-0.017, 0.025, 7.874}};
+static const double refg_1[][3] = {{0.0025, 0.0004, -0.0089}, {0.0031, -0.0058, -0.0063}, {-0.0037, 0.0011, 0.0042},
+   {-0.0068, -0.0027, -0.0003}};
 
 static const double s0 = 0.5;
 static const double refev_0 = 0;
 static const double refem_0 = -0.0234;
 static const double refep_0 = -0.0000;
 static const double refe_0 = 0.1598;
-static const double refvir_0[][3] = {
-   {2.888, -4.334, -1.242}, {-4.334, 6.601, 1.632}, {-1.242, 1.632, 4.096}};
-static const double refg_0[][3] = {{0.0000, 0.0000, 0.0000}, {-9.1476, 13.6765, 5.6035},
-   {4.2502, -6.1981, -4.9165}, {4.9047, -7.4853, -0.6896}};
+static const double refvir_0[][3] = {{2.888, -4.334, -1.242}, {-4.334, 6.601, 1.632}, {-1.242, 1.632, 4.096}};
+static const double refg_0[][3] = {{0.0000, 0.0000, 0.0000}, {-9.1476, 13.6765, 5.6035}, {4.2502, -6.1981, -4.9165},
+   {4.9047, -7.4853, -0.6896}};
 
 TEST_CASE("K-Water", "[ff][osrw][mixcuda]")
 {

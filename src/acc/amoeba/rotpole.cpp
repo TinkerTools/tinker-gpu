@@ -1,7 +1,7 @@
-#include "seq/rotpole.h"
-#include "ff/modamoeba.h"
 #include "ff/atom.h"
+#include "ff/modamoeba.h"
 #include "math/libfunc.h"
+#include "seq/rotpole.h"
 
 namespace tinker {
 void chkpole_acc()

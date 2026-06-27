@@ -1,9 +1,9 @@
 #include "ff/amoeba/empole.h"
-#include "ff/modamoeba.h"
 #include "ff/elec.h"
 #include "ff/energy.h"
 #include "ff/hippo/cflux.h"
 #include "ff/hippo/empole.h"
+#include "ff/modamoeba.h"
 #include "ff/modhippo.h"
 #include "ff/potent.h"
 #include "math/zero.h"
@@ -120,6 +120,7 @@ void empoleChgpen(int vers)
       else if (pentyp == Chgpen::GORDON2)
          empoleAplusNonEwald(vers, use_cfgrad);
    }
+   exfield(vers, 1);
    torque(vers, demx, demy, demz);
    if (use_cfgrad)
       dcflux(vers, demx, demy, demz, vir_em);

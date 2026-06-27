@@ -1,32 +1,32 @@
-#include "ff/nblist.h"
 #include "ff/atom.h"
 #include "ff/image.h"
+#include "ff/nblist.h"
 #include "tool/gpucard.h"
 
 #if TINKER_CUDART
 namespace tinker {
-#   define m_swap(a, b)                                                                            \
-      {                                                                                            \
-         auto tmp = b;                                                                             \
-         b = a;                                                                                    \
-         a = tmp;                                                                                  \
-      }
-#   define m_max_heap(arr, start, end)                                                             \
-      {                                                                                            \
-         int dad = start;                                                                          \
-         int son = dad * 2 + 1;                                                                    \
-         while (son <= end) {                                                                      \
-            if (son + 1 <= end && arr[son] < arr[son + 1])                                         \
-               ++son;                                                                              \
-            if (arr[dad] > arr[son])                                                               \
-               return;                                                                             \
-            else {                                                                                 \
-               m_swap(arr[dad], arr[son]);                                                         \
-               dad = son;                                                                          \
-               son = dad * 2 + 1;                                                                  \
-            }                                                                                      \
-         }                                                                                         \
-      }
+#define m_swap(a, b) \
+   {                 \
+      auto tmp = b;  \
+      b = a;         \
+      a = tmp;       \
+   }
+#define m_max_heap(arr, start, end)                     \
+   {                                                    \
+      int dad = start;                                  \
+      int son = dad * 2 + 1;                            \
+      while (son <= end) {                              \
+         if (son + 1 <= end && arr[son] < arr[son + 1]) \
+            ++son;                                      \
+         if (arr[dad] > arr[son])                       \
+            return;                                     \
+         else {                                         \
+            m_swap(arr[dad], arr[son]);                 \
+            dad = son;                                  \
+            son = dad * 2 + 1;                          \
+         }                                              \
+      }                                                 \
+   }
 
 #pragma acc routine seq
 inline static void nblistSort_acc1(int* arr, int len)
@@ -41,11 +41,11 @@ inline static void nblistSort_acc1(int* arr, int len)
       m_max_heap(arr, 0, i - 1);
    }
 }
-#   undef m_swap
-#   undef m_max_heap
+#undef m_swap
+#undef m_max_heap
 }
 #else
-#   include <algorithm>
+#include <algorithm>
 namespace tinker {
 inline static void nblistSort_acc1(int* arr, int len)
 {
@@ -119,9 +119,8 @@ static void nblistBuild_acc1(NBListUnit nu)
    }
 }
 
-static void nblistCheck_acc(int n, real lbuf, int* restrict update, const real* restrict x,
-   const real* restrict y, const real* restrict z, real* restrict xold, real* restrict yold,
-   real* restrict zold)
+static void nblistCheck_acc(int n, real lbuf, int* restrict update, const real* restrict x, const real* restrict y,
+   const real* restrict z, real* restrict xold, real* restrict yold, real* restrict zold)
 {
    const real lbuf2 = (0.5f * lbuf) * (0.5f * lbuf);
    #pragma acc parallel loop independent async\
@@ -244,8 +243,7 @@ void nblistUpdate_acc(NBListUnit nu)
 }
 
 void spatialCheck_acc(int& result, int n, real lbuf, int* restrict update, const real* restrict x,
-   const real* restrict y, const real* restrict z, real* restrict xold, real* restrict yold,
-   real* restrict zold)
+   const real* restrict y, const real* restrict z, real* restrict xold, real* restrict yold, real* restrict zold)
 {
    if (lbuf == 0) {
       result = 1;

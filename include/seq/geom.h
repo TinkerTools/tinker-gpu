@@ -9,18 +9,31 @@ namespace tinker {
 #pragma acc routine seq
 template <class Ver>
 SEQ_CUDA
-void dk_geom_group(real& restrict e, real& restrict vxx, real& restrict vyx,
-   real& restrict vzx, real& restrict vyy, real& restrict vzy,
-   real& restrict vzz,
+void dk_geom_group(real& restrict e,
+                   real& restrict vxx,
+                   real& restrict vyx,
+                   real& restrict vzx,
+                   real& restrict vyy,
+                   real& restrict vzy,
+                   real& restrict vzz,
 
-   grad_prec* restrict degx, grad_prec* restrict degy, grad_prec* restrict degz,
+                   grad_prec* restrict degx,
+                   grad_prec* restrict degy,
+                   grad_prec* restrict degz,
 
-   int i, const int (*restrict igfix)[2], const real (*restrict gfix)[3],
+                   int i,
+                   const int (*restrict igfix)[2],
+                   const real (*restrict gfix)[3],
 
-   const real* restrict x, const real* restrict y, const real* restrict z,
-   const double* restrict mass, const int* restrict molec,
-   const int (*restrict igrp)[2], const int* restrict kgrp,
-   const double* restrict grpmass, TINKER_IMAGE_PARAMS)
+                   const real* restrict x,
+                   const real* restrict y,
+                   const real* restrict z,
+                   const double* restrict mass,
+                   const int* restrict molec,
+                   const int (*restrict igrp)[2],
+                   const int* restrict kgrp,
+                   const double* restrict grpmass,
+                   TINKER_IMAGE_PARAMS)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_g = Ver::g;
@@ -47,7 +60,8 @@ void dk_geom_group(real& restrict e, real& restrict vxx, real& restrict vyx,
       real xr = x[k] - xa1;
       real yr = y[k] - ya1;
       real zr = z[k] - za1;
-      if (molec[ka1] != molec[k]) image(xr, yr, zr);
+      if (molec[ka1] != molec[k])
+         image(xr, yr, zr);
       xacm += xr * weigh;
       yacm += yr * weigh;
       zacm += zr * weigh;
@@ -65,7 +79,8 @@ void dk_geom_group(real& restrict e, real& restrict vxx, real& restrict vyx,
       real xr = x[k] - xb1;
       real yr = y[k] - yb1;
       real zr = z[k] - zb1;
-      if (molec[kb1] != molec[k]) image(xr, yr, zr);
+      if (molec[kb1] != molec[k])
+         image(xr, yr, zr);
       xbcm += xr * weigh;
       ybcm += yr * weigh;
       zbcm += zr * weigh;
@@ -77,7 +92,8 @@ void dk_geom_group(real& restrict e, real& restrict vxx, real& restrict vyx,
    real zr = zacm * weigha - zbcm * weighb;
 
    bool intermol = molec[kgrp[ja1]] != molec[kgrp[jb1]];
-   if (intermol) image(xr, yr, zr);
+   if (intermol)
+      image(xr, yr, zr);
 
    real r = REAL_SQRT(xr * xr + yr * yr + zr * zr);
    real force = gfix[i][0];
@@ -127,16 +143,27 @@ void dk_geom_group(real& restrict e, real& restrict vxx, real& restrict vyx,
 #pragma acc routine seq
 template <class Ver>
 SEQ_CUDA
-void dk_geom_distance(real& restrict e, real& restrict vxx, real& restrict vyx,
-   real& restrict vzx, real& restrict vyy, real& restrict vzy,
-   real& restrict vzz,
+void dk_geom_distance(real& restrict e,
+                      real& restrict vxx,
+                      real& restrict vyx,
+                      real& restrict vzx,
+                      real& restrict vyy,
+                      real& restrict vzy,
+                      real& restrict vzz,
 
-   grad_prec* restrict degx, grad_prec* restrict degy, grad_prec* restrict degz,
+                      grad_prec* restrict degx,
+                      grad_prec* restrict degy,
+                      grad_prec* restrict degz,
 
-   int i, const int (*restrict idfix)[2], const real (*restrict dfix)[3],
+                      int i,
+                      const int (*restrict idfix)[2],
+                      const real (*restrict dfix)[3],
 
-   const real* restrict x, const real* restrict y, const real* restrict z,
-   const int* restrict molec, TINKER_IMAGE_PARAMS)
+                      const real* restrict x,
+                      const real* restrict y,
+                      const real* restrict z,
+                      const int* restrict molec,
+                      TINKER_IMAGE_PARAMS)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_g = Ver::g;
@@ -152,11 +179,14 @@ void dk_geom_distance(real& restrict e, real& restrict vxx, real& restrict vyx,
    real yr = y[ia] - y[ib];
    real zr = z[ia] - z[ib];
    bool intermol = molec[ia] != molec[ib];
-   if (intermol) image(xr, yr, zr);
+   if (intermol)
+      image(xr, yr, zr);
    real r = REAL_SQRT(xr * xr + yr * yr + zr * zr);
    real target = r;
-   if (r < df1) target = df1;
-   if (r > df2) target = df2;
+   if (r < df1)
+      target = df1;
+   if (r > df2)
+      target = df2;
    real dt = r - target;
 
    if CONSTEXPR (do_e) {
@@ -189,21 +219,33 @@ void dk_geom_distance(real& restrict e, real& restrict vxx, real& restrict vyx,
 #pragma acc routine seq
 template <class Ver>
 SEQ_CUDA
-void dk_geom_angle(real& restrict e, real& restrict vxx, real& restrict vyx,
-   real& restrict vzx, real& restrict vyy, real& restrict vzy,
-   real& restrict vzz,
+void dk_geom_angle(real& restrict e,
+                   real& restrict vxx,
+                   real& restrict vyx,
+                   real& restrict vzx,
+                   real& restrict vyy,
+                   real& restrict vzy,
+                   real& restrict vzz,
 
-   grad_prec* restrict degx, grad_prec* restrict degy, grad_prec* restrict degz,
+                   grad_prec* restrict degx,
+                   grad_prec* restrict degy,
+                   grad_prec* restrict degz,
 
-   int i, const int (*restrict iafix)[3], const real (*restrict afix)[3],
+                   int i,
+                   const int (*restrict iafix)[3],
+                   const real (*restrict afix)[3],
 
-   const real* restrict x, const real* restrict y, const real* restrict z)
+                   const real* restrict x,
+                   const real* restrict y,
+                   const real* restrict z)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_g = Ver::g;
    constexpr bool do_v = Ver::v;
-   if CONSTEXPR (do_e) e = 0;
-   if CONSTEXPR (do_v) vxx = 0, vyx = 0, vzx = 0, vyy = 0, vzy = 0, vzz = 0;
+   if CONSTEXPR (do_e)
+      e = 0;
+   if CONSTEXPR (do_v)
+      vxx = 0, vyx = 0, vzx = 0, vyy = 0, vzy = 0, vzz = 0;
 
    int ia = iafix[i][0];
    int ib = iafix[i][1];
@@ -244,8 +286,10 @@ void dk_geom_angle(real& restrict e, real& restrict vxx, real& restrict vyx,
    real angle = radian * REAL_ACOS(cosine);
 
    real target = angle;
-   if (angle < af1) target = af1;
-   if (angle > af2) target = af2;
+   if (angle < af1)
+      target = af1;
+   if (angle > af2)
+      target = af2;
    real dt = (angle - target) * _1radian;
 
    if CONSTEXPR (do_e) {
@@ -289,21 +333,33 @@ void dk_geom_angle(real& restrict e, real& restrict vxx, real& restrict vyx,
 #pragma acc routine seq
 template <class Ver>
 SEQ_CUDA
-void dk_geom_torsion(real& restrict e, real& restrict vxx, real& restrict vyx,
-   real& restrict vzx, real& restrict vyy, real& restrict vzy,
-   real& restrict vzz,
+void dk_geom_torsion(real& restrict e,
+                     real& restrict vxx,
+                     real& restrict vyx,
+                     real& restrict vzx,
+                     real& restrict vyy,
+                     real& restrict vzy,
+                     real& restrict vzz,
 
-   grad_prec* restrict degx, grad_prec* restrict degy, grad_prec* restrict degz,
+                     grad_prec* restrict degx,
+                     grad_prec* restrict degy,
+                     grad_prec* restrict degz,
 
-   int i, const int (*restrict itfix)[4], const real (*restrict tfix)[3],
+                     int i,
+                     const int (*restrict itfix)[4],
+                     const real (*restrict tfix)[3],
 
-   const real* restrict x, const real* restrict y, const real* restrict z)
+                     const real* restrict x,
+                     const real* restrict y,
+                     const real* restrict z)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_g = Ver::g;
    constexpr bool do_v = Ver::v;
-   if CONSTEXPR (do_e) e = 0;
-   if CONSTEXPR (do_v) vxx = 0, vyx = 0, vzx = 0, vyy = 0, vzy = 0, vzz = 0;
+   if CONSTEXPR (do_e)
+      e = 0;
+   if CONSTEXPR (do_v)
+      vxx = 0, vyx = 0, vzx = 0, vyy = 0, vzy = 0, vzz = 0;
 
    int ia = itfix[i][0];
    int ib = itfix[i][1];
@@ -356,7 +412,8 @@ void dk_geom_torsion(real& restrict e, real& restrict vxx, real& restrict vyx,
    real sine = (xcb * xtu + ycb * ytu + zcb * ztu) * REAL_RECIP(rcb * rtru);
    cosine = REAL_MIN((real)1.0, REAL_MAX((real)-1.0, cosine));
    real angle = radian * REAL_ACOS(cosine);
-   if (sine < 0) angle = -angle;
+   if (sine < 0)
+      angle = -angle;
    real target;
    if (angle > tf1 and angle < tf2)
       target = angle;
@@ -367,18 +424,24 @@ void dk_geom_torsion(real& restrict e, real& restrict vxx, real& restrict vyx,
    else {
       real t1 = angle - tf1;
       real t2 = angle - tf2;
-      if (t1 > 180) t1 -= 360;
-      if (t1 < -180) t1 += 360;
-      if (t2 > 180) t2 -= 360;
-      if (t2 < -180) t2 += 360;
+      if (t1 > 180)
+         t1 -= 360;
+      if (t1 < -180)
+         t1 += 360;
+      if (t2 > 180)
+         t2 -= 360;
+      if (t2 < -180)
+         t2 += 360;
       if (REAL_ABS(t1) < REAL_ABS(t2))
          target = tf1;
       else
          target = tf2;
    }
    real dt = angle - target;
-   if (dt > 180) dt -= 360;
-   if (dt < -180) dt += 360;
+   if (dt > 180)
+      dt -= 360;
+   if (dt < -180)
+      dt += 360;
 
    dt *= _1radian;
    if CONSTEXPR (do_e) {
@@ -444,18 +507,30 @@ void dk_geom_torsion(real& restrict e, real& restrict vxx, real& restrict vyx,
 #pragma acc routine seq
 template <class Ver>
 SEQ_CUDA
-void dk_geom_position(real& restrict e, real& restrict vxx, real& restrict vyx,
-   real& restrict vzx, real& restrict vyy, real& restrict vzy,
-   real& restrict vzz,
+void dk_geom_position(real& restrict e,
+                      real& restrict vxx,
+                      real& restrict vyx,
+                      real& restrict vzx,
+                      real& restrict vyy,
+                      real& restrict vzy,
+                      real& restrict vzz,
 
-   grad_prec* restrict degx, grad_prec* restrict degy, grad_prec* restrict degz,
+                      grad_prec* restrict degx,
+                      grad_prec* restrict degy,
+                      grad_prec* restrict degz,
 
-   int i, const int* restrict ipfix, const int (*restrict kpfix)[3],
-   const real* restrict xpfix, const real* restrict ypfix,
-   const real* restrict zpfix, const real (*restrict pfix)[2],
+                      int i,
+                      const int* restrict ipfix,
+                      const int (*restrict kpfix)[3],
+                      const real* restrict xpfix,
+                      const real* restrict ypfix,
+                      const real* restrict zpfix,
+                      const real (*restrict pfix)[2],
 
-   const real* restrict x, const real* restrict y, const real* restrict z,
-   TINKER_IMAGE_PARAMS)
+                      const real* restrict x,
+                      const real* restrict y,
+                      const real* restrict z,
+                      TINKER_IMAGE_PARAMS)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_g = Ver::g;
@@ -465,9 +540,12 @@ void dk_geom_position(real& restrict e, real& restrict vxx, real& restrict vyx,
    real force = pfix[i][0];
    real radius = pfix[i][1];
    real xr = 0, yr = 0, zr = 0;
-   if (kpfix[i][0]) xr = x[ia] - xpfix[i];
-   if (kpfix[i][1]) yr = y[ia] - ypfix[i];
-   if (kpfix[i][2]) zr = z[ia] - zpfix[i];
+   if (kpfix[i][0])
+      xr = x[ia] - xpfix[i];
+   if (kpfix[i][1])
+      yr = y[ia] - ypfix[i];
+   if (kpfix[i][2])
+      zr = z[ia] - zpfix[i];
    image(xr, yr, zr);
    real r = REAL_SQRT(xr * xr + yr * yr + zr * zr);
    real dt = REAL_MAX((real)0, r - radius);

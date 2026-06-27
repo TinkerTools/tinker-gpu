@@ -1,6 +1,7 @@
 #pragma once
 #include "ff/energybuffer.h"
 #include "tool/rcman.h"
+#include <vector>
 
 extern "C"
 {
@@ -30,6 +31,23 @@ namespace tinker {
 /// Computes the total valence potential energy.
 void evalence(int vers);
 
+/// Computes the nn valence potential energy.
+void ennvalenceData(RcOp);
+// void ennvalence(int vers);  for future acc implementation
+
+TINKER_EXTERN int ngrps_nnvalence;                  // number of groups of atoms that uses neural network potentials
+TINKER_EXTERN int* grps_nnvalence;                  // array of group indices of groups of atoms that uses neural network potentials
+TINKER_EXTERN std::vector<int> grps_nnvalence_host; // array of group indices of groups of atoms that uses neural network potentials
+
+TINKER_EXTERN int nennval;
+TINKER_EXTERN EnergyBuffer ennval;
+TINKER_EXTERN VirialBuffer vir_ennval;
+TINKER_EXTERN grad_prec* dennval_x;
+TINKER_EXTERN grad_prec* dennval_y;
+TINKER_EXTERN grad_prec* dennval_z;
+TINKER_EXTERN energy_prec energy_ennval;
+TINKER_EXTERN virial_prec virial_ennval[9];
+
 /// \addtogroup bond
 /// \{
 
@@ -47,6 +65,7 @@ TINKER_EXTERN real cbnd;
 TINKER_EXTERN real qbnd;
 
 TINKER_EXTERN int nbond;
+TINKER_EXTERN int nbond_skipped; // number of bond interactions skipped because of nn valence used instead
 TINKER_EXTERN int (*ibnd)[2];
 TINKER_EXTERN real* bk;
 TINKER_EXTERN real* bl;
@@ -99,6 +118,7 @@ TINKER_EXTERN OPBend opbtyp;
 TINKER_EXTERN Angle* angtyp;
 
 TINKER_EXTERN int nangle;
+TINKER_EXTERN int nangle_skipped; // number of angle interactions skipped because of nn valence used instead
 TINKER_EXTERN int (*iang)[4];
 TINKER_EXTERN real* ak;
 TINKER_EXTERN real* anat;
@@ -113,6 +133,7 @@ TINKER_EXTERN energy_prec energy_ea;
 TINKER_EXTERN virial_prec virial_ea[9];
 
 TINKER_EXTERN int nopbend;
+TINKER_EXTERN int nopbend_skipped; // number of OPBend interactions skipped because of nn valence used instead
 TINKER_EXTERN int* iopb;
 TINKER_EXTERN real* opbk;
 
@@ -133,6 +154,7 @@ void estrbndData(RcOp);
 void estrbnd(int vers);
 
 TINKER_EXTERN int nstrbnd;
+TINKER_EXTERN int nstrbnd_skipped; // number of stretch-bend interactions skipped because of nn valence used instead
 TINKER_EXTERN int (*isb)[3];
 TINKER_EXTERN real (*sbk)[2];
 
@@ -157,6 +179,7 @@ TINKER_EXTERN real cury;
 TINKER_EXTERN real qury;
 
 TINKER_EXTERN int nurey;
+TINKER_EXTERN int nurey_skipped; // number of urey interactions skipped because of nn valence used instead
 TINKER_EXTERN int (*iury)[3];
 TINKER_EXTERN real* uk;
 TINKER_EXTERN real* ul;
@@ -216,6 +239,7 @@ TINKER_EXTERN real* kprop;
 TINKER_EXTERN real* vprop;
 
 TINKER_EXTERN int niprop;
+TINKER_EXTERN int niprop_skipped; // number of improper interactions skipped because of nn valence used instead
 TINKER_EXTERN EnergyBuffer eid;
 TINKER_EXTERN VirialBuffer vir_eid;
 TINKER_EXTERN grad_prec* deidx;
@@ -232,6 +256,7 @@ TINKER_EXTERN real (*itors2)[4];
 TINKER_EXTERN real (*itors3)[4];
 
 TINKER_EXTERN int nitors;
+TINKER_EXTERN int nitors_skipped; // number of improper torsion interactions skipped because of nn valence used instead
 TINKER_EXTERN EnergyBuffer eit;
 TINKER_EXTERN VirialBuffer vir_eit;
 TINKER_EXTERN grad_prec* deitx;
@@ -243,6 +268,7 @@ TINKER_EXTERN virial_prec virial_eit[9];
 // tors
 
 TINKER_EXTERN int ntors;
+TINKER_EXTERN int ntors_skipped; // number of torsion interactions skipped because of nn valence used instead
 TINKER_EXTERN int (*itors)[4];
 TINKER_EXTERN real (*tors1)[4];
 TINKER_EXTERN real (*tors2)[4];
@@ -262,6 +288,7 @@ TINKER_EXTERN virial_prec virial_et[9];
 // pitors
 
 TINKER_EXTERN int npitors;
+TINKER_EXTERN int npitors_skipped; // number of pi-torsion interactions skipped because of nn valence used instead
 TINKER_EXTERN int (*ipit)[6];
 TINKER_EXTERN real* kpit;
 
@@ -276,6 +303,7 @@ TINKER_EXTERN virial_prec virial_ept[9];
 // strtor
 
 TINKER_EXTERN int nstrtor;
+TINKER_EXTERN int nstrtor_skipped; // number of stretch-torsion interactions skipped because of nn valence used instead
 TINKER_EXTERN int (*ist)[4];
 TINKER_EXTERN real (*kst)[9];
 
@@ -290,6 +318,7 @@ TINKER_EXTERN virial_prec virial_ebt[9];
 // angtor
 
 TINKER_EXTERN int nangtor;
+TINKER_EXTERN int nangtor_skipped; // number of angle-torsion interactions skipped because of nn valence used instead
 TINKER_EXTERN int (*iat)[3];
 TINKER_EXTERN real (*kant)[6];
 
@@ -304,6 +333,7 @@ TINKER_EXTERN virial_prec virial_eat[9];
 // bitor
 
 TINKER_EXTERN int nbitor;
+TINKER_EXTERN int nbitor_skipped; // number of bitorsion interactions skipped because of nn valence used instead
 TINKER_EXTERN int (*ibitor)[5];
 
 // ktrtor
@@ -325,6 +355,7 @@ TINKER_EXTERN real (*tbxy)[ktrtor::maxtgrd2];
 TINKER_EXTERN int* chkttor_ia_;
 
 TINKER_EXTERN int ntortor;
+TINKER_EXTERN int ntortor_skipped; // number of torsion-torsion interactions skipped because of nn valence used instead
 TINKER_EXTERN int (*itt)[3];
 
 TINKER_EXTERN EnergyBuffer ett;

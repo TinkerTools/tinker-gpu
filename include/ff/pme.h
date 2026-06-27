@@ -82,8 +82,11 @@ void fphiUind2(PMEUnit, real (*fdip_phi1)[10], real (*fdip_phi2)[10]);
 
 void rpoleToCmp();
 void cmpToFmp(PMEUnit, const real (*cmp)[10], real (*fmp)[10]);
-void cuindToFuind(PMEUnit, const real (*cind)[3], const real (*cinp)[3], //
-   real (*fuind)[3], real (*fuinp)[3]);
+void cuindToFuind(PMEUnit,
+                  const real (*cind)[3],
+                  const real (*cinp)[3], //
+                  real (*fuind)[3],
+                  real (*fuinp)[3]);
 void fphiToCphi(PMEUnit, const real (*fphi)[20], real (*cphi)[10]);
 /// \}
 }

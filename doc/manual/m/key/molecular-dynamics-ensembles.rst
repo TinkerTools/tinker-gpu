@@ -21,7 +21,7 @@ Molecular Dynamics and Ensembles
    :ref:`label-nose-hoover`,
    :ref:`label-lpiston`
 
-**BAROSTAT [MONTECARLO / BERENDSEN / NOSE-HOOVER / LPISTON]**
+**BAROSTAT [MONTECARLO / BERENDSEN / BUSSI / NOSE-HOOVER / LPISTON]**
 
 .. index:: BAROSTAT
 
@@ -29,5 +29,15 @@ Molecular Dynamics and Ensembles
 
    :ref:`label-monte-carlo-barostat`,
    :ref:`label-berendsen-barostat`,
+   :ref:`label-bussi-barostat`,
    :ref:`label-nose-hoover`,
    :ref:`label-lpiston`
+
+**PRESSURE [ISO / SEMI / ANISO]**
+
+.. index:: PRESSURE
+
+``ISO`` selects isotropic periodic-box fluctuations. ``SEMI`` couples the X
+and Y dimensions while allowing Z to fluctuate independently. ``ANISO``
+selects anisotropic fluctuations. The supported modes depend on the selected
+barostat; follow the links above for compatibility details.

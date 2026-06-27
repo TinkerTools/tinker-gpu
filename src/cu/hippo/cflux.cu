@@ -1,5 +1,5 @@
-#include "ff/modamoeba.h"
 #include "ff/evalence.h"
+#include "ff/modamoeba.h"
 #include "ff/modhippo.h"
 #include "math/zero.h"
 #include "seq/add.h"
@@ -108,12 +108,11 @@ void alterchg_cu()
 namespace tinker {
 template <int DO_V>
 __global__
-static void dcfluxBndAng_cu1(VirialBuffer restrict vir, grad_prec* restrict gx,
-   grad_prec* restrict gy, grad_prec* restrict gz, const real* restrict x, const real* restrict y,
-   const real* restrict z, const real* restrict pot,                    //
+static void dcfluxBndAng_cu1(VirialBuffer restrict vir, grad_prec* restrict gx, grad_prec* restrict gy,
+   grad_prec* restrict gz, const real* restrict x, const real* restrict y, const real* restrict z,
+   const real* restrict pot,                                            //
    int nbond, const int (*restrict ibnd)[2], const real* restrict bflx, //
-   int nangle, const int (*restrict iang)[4], const real (*restrict aflx)[2],
-   const real (*restrict abflx)[2])
+   int nangle, const int (*restrict iang)[4], const real (*restrict aflx)[2], const real (*restrict abflx)[2])
 {
    int ithread = ITHREAD;
    real vxx = 0, vyx = 0, vzx = 0, vyy = 0, vzy = 0, vzz = 0;

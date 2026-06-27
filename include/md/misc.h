@@ -4,15 +4,19 @@
 #include "tool/rcman.h"
 
 namespace tinker {
-/// \ingroup mdpt
-void kineticEnergy(energy_prec& eksum_out, energy_prec (&ekin_out)[3][3], int n,
-   const double* mass, const vel_prec* vx, const vel_prec* vy,
-   const vel_prec* vz);
+enum class ScaleBaroEnum;
 
 /// \ingroup mdpt
-void kineticExplicit(T_prec& temp_out, energy_prec& eksum_out,
-   energy_prec (&ekin_out)[3][3], const vel_prec* vx, const vel_prec* vy,
-   const vel_prec* vz);
+void kineticEnergy(energy_prec& eksum_out,
+                   energy_prec (&ekin_out)[3][3],
+                   int n,
+                   const double* mass,
+                   const vel_prec* vx,
+                   const vel_prec* vy,
+                   const vel_prec* vz);
+
+/// \ingroup mdpt
+void kineticExplicit(T_prec& temp_out, energy_prec& eksum_out, energy_prec (&ekin_out)[3][3], const vel_prec* vx, const vel_prec* vy, const vel_prec* vz);
 
 /// \ingroup mdpt
 void kinetic(T_prec& temp);
@@ -30,7 +34,7 @@ void bussiThermostat(time_prec dt, T_prec temp);
 ///    "NpT-ensemble Monte Carlo calculations for binary liquid mixtures",
 ///    Molecular Physics, 23, 41-58 (1972).
 ///    </a>
-void monteCarloBarostat(energy_prec epot, T_prec temp);
+void monteCarloBarostat(energy_prec epot, T_prec temp, bool semiiso, bool aniso);
 
 /// \ingroup mdpt
 /// \brief Berendsen barostat by scaling the coordinates and box dimensions via
@@ -45,7 +49,7 @@ void monteCarloBarostat(energy_prec epot, T_prec temp);
 ///    "Molecular dynamics with coupling to an external bath",
 ///    J. Chem. Phys., 81, 3684-3690 (1984).
 ///    </a>
-void berendsenBarostat(time_prec dt, bool aniso);
+void scaleBarostat(time_prec dt, bool semiiso, bool aniso, ScaleBaroEnum);
 }
 
 namespace tinker {
@@ -57,8 +61,7 @@ void mdIntegrateData(RcOp);
 /// \ingroup md
 void mdrest(int istep);
 /// \ingroup md
-void mdrestPrintP1(bool prints, double e1, double e2, double e3,
-   double totmass);
+void mdrestPrintP1(bool prints, double e1, double e2, double e3, double totmass);
 /// \ingroup mdintg
 void mdPropagate(int nsteps, time_prec dt_ps);
 

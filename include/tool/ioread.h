@@ -52,8 +52,7 @@ int ioReadString(Arg& arg, const char (&src)[Len])
 ///                        `false` if valid.
 /// \param[in]  istream    An `std::istream` object; use `std::cin` by default.
 template <class Arg, class Invalid>
-void ioReadStream(Arg& arg, std::string prompt, Arg auto_fill,
-   Invalid&& invalid, std::istream& istream = std::cin)
+void ioReadStream(Arg& arg, std::string prompt, Arg auto_fill, Invalid&& invalid, std::istream& istream = std::cin)
 {
    bool is_cin = (&istream == &std::cin);
    int input_fail = invalid(arg); // True if arg is out of range.
@@ -79,7 +78,8 @@ void ioReadStream(Arg& arg, std::string prompt, Arg auto_fill,
          // True if failed to parse input.
          input_fail = ioReadString(arg, line.data(), line.size());
       }
-      if (!input_fail) input_fail = invalid(arg);
+      if (!input_fail)
+         input_fail = invalid(arg);
    }
 }
 

@@ -1,5 +1,6 @@
 #include "ff/switch.h"
 #include "math/maxmin.h"
+#include "nn/nn.h"
 #include <cmath>
 #include <tinker/detail/limits.hh>
 #include <tinker/detail/nonpol.hh>
@@ -99,6 +100,9 @@ real switchOff(Switch mode)
       break;
    case Switch::GKSA:
       off = nonpol::stcut;
+      break;
+   case Switch::NN:
+      off = nncut;
       break;
    default:
       off = minOf(vdwcut, repcut, dispcut, chgcut, dplcut, mpolecut, ctrncut);

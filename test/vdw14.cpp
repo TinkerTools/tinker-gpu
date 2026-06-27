@@ -67,13 +67,13 @@ TEST_CASE("Vdw14-Trpcage", "[ff][evdw][vdw14][lj][trpcage]")
 
    SECTION("  - elj -- pbc, cutoff")
    {
-      std::string k1 = k0 +
-         "NEIGHBOR-LIST\n"
-         "LIST-BUFFER      0.5\n"
-         "CUTOFF           9.0\n"
-         "A-AXIS            30\n"
-         "B-AXIS            25\n"
-         "C-AXIS            20\n";
+      std::string k1 = k0
+         + "NEIGHBOR-LIST\n"
+           "LIST-BUFFER      0.5\n"
+           "CUTOFF           9.0\n"
+           "A-AXIS            30\n"
+           "B-AXIS            25\n"
+           "C-AXIS            20\n";
 
       TestFile fxy(TINKER9_DIRSTR "/test/file/trpcage/trp_charmm.xyz", xname);
       TestFile fke(TINKER9_DIRSTR "/test/file/trpcage/trp_charmm.key", kname, k1);

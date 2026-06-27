@@ -3,8 +3,8 @@
 
 namespace tinker {
 __global__
-static void ulspredSaveP1_cu1(int n, real (*restrict ud)[3], real (*restrict up)[3],
-   const real (*restrict uind)[3], const real (*restrict uinp)[3])
+static void ulspredSaveP1_cu1(int n, real (*restrict ud)[3], real (*restrict up)[3], const real (*restrict uind)[3],
+   const real (*restrict uinp)[3])
 {
    if (uinp) {
       for (int i = ITHREAD; i < n; i += STRIDE) {
@@ -34,22 +34,18 @@ namespace tinker {
 __global__
 static void ulspredSumASPC_cu(int n, int nualt,        //
    real (*restrict uind)[3], real (*restrict uinp)[3], //
-   const real (*restrict udalt_00)[3], const real (*restrict udalt_01)[3],
-   const real (*restrict udalt_02)[3], const real (*restrict udalt_03)[3],
-   const real (*restrict udalt_04)[3], const real (*restrict udalt_05)[3],
-   const real (*restrict udalt_06)[3], const real (*restrict udalt_07)[3],
-   const real (*restrict udalt_08)[3], const real (*restrict udalt_09)[3],
-   const real (*restrict udalt_10)[3], const real (*restrict udalt_11)[3],
-   const real (*restrict udalt_12)[3], const real (*restrict udalt_13)[3],
-   const real (*restrict udalt_14)[3], const real (*restrict udalt_15)[3], //
-   const real (*restrict upalt_00)[3], const real (*restrict upalt_01)[3],
-   const real (*restrict upalt_02)[3], const real (*restrict upalt_03)[3],
-   const real (*restrict upalt_04)[3], const real (*restrict upalt_05)[3],
-   const real (*restrict upalt_06)[3], const real (*restrict upalt_07)[3],
-   const real (*restrict upalt_08)[3], const real (*restrict upalt_09)[3],
-   const real (*restrict upalt_10)[3], const real (*restrict upalt_11)[3],
-   const real (*restrict upalt_12)[3], const real (*restrict upalt_13)[3],
-   const real (*restrict upalt_14)[3], const real (*restrict upalt_15)[3])
+   const real (*restrict udalt_00)[3], const real (*restrict udalt_01)[3], const real (*restrict udalt_02)[3],
+   const real (*restrict udalt_03)[3], const real (*restrict udalt_04)[3], const real (*restrict udalt_05)[3],
+   const real (*restrict udalt_06)[3], const real (*restrict udalt_07)[3], const real (*restrict udalt_08)[3],
+   const real (*restrict udalt_09)[3], const real (*restrict udalt_10)[3], const real (*restrict udalt_11)[3],
+   const real (*restrict udalt_12)[3], const real (*restrict udalt_13)[3], const real (*restrict udalt_14)[3],
+   const real (*restrict udalt_15)[3], //
+   const real (*restrict upalt_00)[3], const real (*restrict upalt_01)[3], const real (*restrict upalt_02)[3],
+   const real (*restrict upalt_03)[3], const real (*restrict upalt_04)[3], const real (*restrict upalt_05)[3],
+   const real (*restrict upalt_06)[3], const real (*restrict upalt_07)[3], const real (*restrict upalt_08)[3],
+   const real (*restrict upalt_09)[3], const real (*restrict upalt_10)[3], const real (*restrict upalt_11)[3],
+   const real (*restrict upalt_12)[3], const real (*restrict upalt_13)[3], const real (*restrict upalt_14)[3],
+   const real (*restrict upalt_15)[3])
 {
    constexpr double aspc[16] = {62. / 17., //
       -310. / 51.,                         //
@@ -89,63 +85,45 @@ static void ulspredSumASPC_cu(int n, int nualt,        //
 
    if (uinp) {
       for (int i = ITHREAD; i < n; i += STRIDE) {
-         uind[i][0] = c00 * udalt_00[i][0] + c01 * udalt_01[i][0] + c02 * udalt_02[i][0] +
-            c03 * udalt_03[i][0] + c04 * udalt_04[i][0] + c05 * udalt_05[i][0] +
-            c06 * udalt_06[i][0] + c07 * udalt_07[i][0] + c08 * udalt_08[i][0] +
-            c09 * udalt_09[i][0] + c10 * udalt_10[i][0] + c11 * udalt_11[i][0] +
-            c12 * udalt_12[i][0] + c13 * udalt_13[i][0] + c14 * udalt_14[i][0] +
-            c15 * udalt_15[i][0];
-         uind[i][1] = c00 * udalt_00[i][1] + c01 * udalt_01[i][1] + c02 * udalt_02[i][1] +
-            c03 * udalt_03[i][1] + c04 * udalt_04[i][1] + c05 * udalt_05[i][1] +
-            c06 * udalt_06[i][1] + c07 * udalt_07[i][1] + c08 * udalt_08[i][1] +
-            c09 * udalt_09[i][1] + c10 * udalt_10[i][1] + c11 * udalt_11[i][1] +
-            c12 * udalt_12[i][1] + c13 * udalt_13[i][1] + c14 * udalt_14[i][1] +
-            c15 * udalt_15[i][1];
-         uind[i][2] = c00 * udalt_00[i][2] + c01 * udalt_01[i][2] + c02 * udalt_02[i][2] +
-            c03 * udalt_03[i][2] + c04 * udalt_04[i][2] + c05 * udalt_05[i][2] +
-            c06 * udalt_06[i][2] + c07 * udalt_07[i][2] + c08 * udalt_08[i][2] +
-            c09 * udalt_09[i][2] + c10 * udalt_10[i][2] + c11 * udalt_11[i][2] +
-            c12 * udalt_12[i][2] + c13 * udalt_13[i][2] + c14 * udalt_14[i][2] +
-            c15 * udalt_15[i][2];
-         uinp[i][0] = c00 * upalt_00[i][0] + c01 * upalt_01[i][0] + c02 * upalt_02[i][0] +
-            c03 * upalt_03[i][0] + c04 * upalt_04[i][0] + c05 * upalt_05[i][0] +
-            c06 * upalt_06[i][0] + c07 * upalt_07[i][0] + c08 * upalt_08[i][0] +
-            c09 * upalt_09[i][0] + c10 * upalt_10[i][0] + c11 * upalt_11[i][0] +
-            c12 * upalt_12[i][0] + c13 * upalt_13[i][0] + c14 * upalt_14[i][0] +
-            c15 * upalt_15[i][0];
-         uinp[i][1] = c00 * upalt_00[i][1] + c01 * upalt_01[i][1] + c02 * upalt_02[i][1] +
-            c03 * upalt_03[i][1] + c04 * upalt_04[i][1] + c05 * upalt_05[i][1] +
-            c06 * upalt_06[i][1] + c07 * upalt_07[i][1] + c08 * upalt_08[i][1] +
-            c09 * upalt_09[i][1] + c10 * upalt_10[i][1] + c11 * upalt_11[i][1] +
-            c12 * upalt_12[i][1] + c13 * upalt_13[i][1] + c14 * upalt_14[i][1] +
-            c15 * upalt_15[i][1];
-         uinp[i][2] = c00 * upalt_00[i][2] + c01 * upalt_01[i][2] + c02 * upalt_02[i][2] +
-            c03 * upalt_03[i][2] + c04 * upalt_04[i][2] + c05 * upalt_05[i][2] +
-            c06 * upalt_06[i][2] + c07 * upalt_07[i][2] + c08 * upalt_08[i][2] +
-            c09 * upalt_09[i][2] + c10 * upalt_10[i][2] + c11 * upalt_11[i][2] +
-            c12 * upalt_12[i][2] + c13 * upalt_13[i][2] + c14 * upalt_14[i][2] +
-            c15 * upalt_15[i][2];
+         uind[i][0] = c00 * udalt_00[i][0] + c01 * udalt_01[i][0] + c02 * udalt_02[i][0] + c03 * udalt_03[i][0]
+            + c04 * udalt_04[i][0] + c05 * udalt_05[i][0] + c06 * udalt_06[i][0] + c07 * udalt_07[i][0]
+            + c08 * udalt_08[i][0] + c09 * udalt_09[i][0] + c10 * udalt_10[i][0] + c11 * udalt_11[i][0]
+            + c12 * udalt_12[i][0] + c13 * udalt_13[i][0] + c14 * udalt_14[i][0] + c15 * udalt_15[i][0];
+         uind[i][1] = c00 * udalt_00[i][1] + c01 * udalt_01[i][1] + c02 * udalt_02[i][1] + c03 * udalt_03[i][1]
+            + c04 * udalt_04[i][1] + c05 * udalt_05[i][1] + c06 * udalt_06[i][1] + c07 * udalt_07[i][1]
+            + c08 * udalt_08[i][1] + c09 * udalt_09[i][1] + c10 * udalt_10[i][1] + c11 * udalt_11[i][1]
+            + c12 * udalt_12[i][1] + c13 * udalt_13[i][1] + c14 * udalt_14[i][1] + c15 * udalt_15[i][1];
+         uind[i][2] = c00 * udalt_00[i][2] + c01 * udalt_01[i][2] + c02 * udalt_02[i][2] + c03 * udalt_03[i][2]
+            + c04 * udalt_04[i][2] + c05 * udalt_05[i][2] + c06 * udalt_06[i][2] + c07 * udalt_07[i][2]
+            + c08 * udalt_08[i][2] + c09 * udalt_09[i][2] + c10 * udalt_10[i][2] + c11 * udalt_11[i][2]
+            + c12 * udalt_12[i][2] + c13 * udalt_13[i][2] + c14 * udalt_14[i][2] + c15 * udalt_15[i][2];
+         uinp[i][0] = c00 * upalt_00[i][0] + c01 * upalt_01[i][0] + c02 * upalt_02[i][0] + c03 * upalt_03[i][0]
+            + c04 * upalt_04[i][0] + c05 * upalt_05[i][0] + c06 * upalt_06[i][0] + c07 * upalt_07[i][0]
+            + c08 * upalt_08[i][0] + c09 * upalt_09[i][0] + c10 * upalt_10[i][0] + c11 * upalt_11[i][0]
+            + c12 * upalt_12[i][0] + c13 * upalt_13[i][0] + c14 * upalt_14[i][0] + c15 * upalt_15[i][0];
+         uinp[i][1] = c00 * upalt_00[i][1] + c01 * upalt_01[i][1] + c02 * upalt_02[i][1] + c03 * upalt_03[i][1]
+            + c04 * upalt_04[i][1] + c05 * upalt_05[i][1] + c06 * upalt_06[i][1] + c07 * upalt_07[i][1]
+            + c08 * upalt_08[i][1] + c09 * upalt_09[i][1] + c10 * upalt_10[i][1] + c11 * upalt_11[i][1]
+            + c12 * upalt_12[i][1] + c13 * upalt_13[i][1] + c14 * upalt_14[i][1] + c15 * upalt_15[i][1];
+         uinp[i][2] = c00 * upalt_00[i][2] + c01 * upalt_01[i][2] + c02 * upalt_02[i][2] + c03 * upalt_03[i][2]
+            + c04 * upalt_04[i][2] + c05 * upalt_05[i][2] + c06 * upalt_06[i][2] + c07 * upalt_07[i][2]
+            + c08 * upalt_08[i][2] + c09 * upalt_09[i][2] + c10 * upalt_10[i][2] + c11 * upalt_11[i][2]
+            + c12 * upalt_12[i][2] + c13 * upalt_13[i][2] + c14 * upalt_14[i][2] + c15 * upalt_15[i][2];
       }
    } else {
       for (int i = ITHREAD; i < n; i += STRIDE) {
-         uind[i][0] = c00 * udalt_00[i][0] + c01 * udalt_01[i][0] + c02 * udalt_02[i][0] +
-            c03 * udalt_03[i][0] + c04 * udalt_04[i][0] + c05 * udalt_05[i][0] +
-            c06 * udalt_06[i][0] + c07 * udalt_07[i][0] + c08 * udalt_08[i][0] +
-            c09 * udalt_09[i][0] + c10 * udalt_10[i][0] + c11 * udalt_11[i][0] +
-            c12 * udalt_12[i][0] + c13 * udalt_13[i][0] + c14 * udalt_14[i][0] +
-            c15 * udalt_15[i][0];
-         uind[i][1] = c00 * udalt_00[i][1] + c01 * udalt_01[i][1] + c02 * udalt_02[i][1] +
-            c03 * udalt_03[i][1] + c04 * udalt_04[i][1] + c05 * udalt_05[i][1] +
-            c06 * udalt_06[i][1] + c07 * udalt_07[i][1] + c08 * udalt_08[i][1] +
-            c09 * udalt_09[i][1] + c10 * udalt_10[i][1] + c11 * udalt_11[i][1] +
-            c12 * udalt_12[i][1] + c13 * udalt_13[i][1] + c14 * udalt_14[i][1] +
-            c15 * udalt_15[i][1];
-         uind[i][2] = c00 * udalt_00[i][2] + c01 * udalt_01[i][2] + c02 * udalt_02[i][2] +
-            c03 * udalt_03[i][2] + c04 * udalt_04[i][2] + c05 * udalt_05[i][2] +
-            c06 * udalt_06[i][2] + c07 * udalt_07[i][2] + c08 * udalt_08[i][2] +
-            c09 * udalt_09[i][2] + c10 * udalt_10[i][2] + c11 * udalt_11[i][2] +
-            c12 * udalt_12[i][2] + c13 * udalt_13[i][2] + c14 * udalt_14[i][2] +
-            c15 * udalt_15[i][2];
+         uind[i][0] = c00 * udalt_00[i][0] + c01 * udalt_01[i][0] + c02 * udalt_02[i][0] + c03 * udalt_03[i][0]
+            + c04 * udalt_04[i][0] + c05 * udalt_05[i][0] + c06 * udalt_06[i][0] + c07 * udalt_07[i][0]
+            + c08 * udalt_08[i][0] + c09 * udalt_09[i][0] + c10 * udalt_10[i][0] + c11 * udalt_11[i][0]
+            + c12 * udalt_12[i][0] + c13 * udalt_13[i][0] + c14 * udalt_14[i][0] + c15 * udalt_15[i][0];
+         uind[i][1] = c00 * udalt_00[i][1] + c01 * udalt_01[i][1] + c02 * udalt_02[i][1] + c03 * udalt_03[i][1]
+            + c04 * udalt_04[i][1] + c05 * udalt_05[i][1] + c06 * udalt_06[i][1] + c07 * udalt_07[i][1]
+            + c08 * udalt_08[i][1] + c09 * udalt_09[i][1] + c10 * udalt_10[i][1] + c11 * udalt_11[i][1]
+            + c12 * udalt_12[i][1] + c13 * udalt_13[i][1] + c14 * udalt_14[i][1] + c15 * udalt_15[i][1];
+         uind[i][2] = c00 * udalt_00[i][2] + c01 * udalt_01[i][2] + c02 * udalt_02[i][2] + c03 * udalt_03[i][2]
+            + c04 * udalt_04[i][2] + c05 * udalt_05[i][2] + c06 * udalt_06[i][2] + c07 * udalt_07[i][2]
+            + c08 * udalt_08[i][2] + c09 * udalt_09[i][2] + c10 * udalt_10[i][2] + c11 * udalt_11[i][2]
+            + c12 * udalt_12[i][2] + c13 * udalt_13[i][2] + c14 * udalt_14[i][2] + c15 * udalt_15[i][2];
       }
    }
 }
@@ -153,12 +131,10 @@ static void ulspredSumASPC_cu(int n, int nualt,        //
 __global__
 static void ulspredSumGEAR_cu(int n, int nualt,        //
    real (*restrict uind)[3], real (*restrict uinp)[3], //
-   const real (*restrict udalt_00)[3], const real (*restrict udalt_01)[3],
-   const real (*restrict udalt_02)[3], const real (*restrict udalt_03)[3],
-   const real (*restrict udalt_04)[3], const real (*restrict udalt_05)[3], //
-   const real (*restrict upalt_00)[3], const real (*restrict upalt_01)[3],
-   const real (*restrict upalt_02)[3], const real (*restrict upalt_03)[3],
-   const real (*restrict upalt_04)[3], const real (*restrict upalt_05)[3])
+   const real (*restrict udalt_00)[3], const real (*restrict udalt_01)[3], const real (*restrict udalt_02)[3],
+   const real (*restrict udalt_03)[3], const real (*restrict udalt_04)[3], const real (*restrict udalt_05)[3], //
+   const real (*restrict upalt_00)[3], const real (*restrict upalt_01)[3], const real (*restrict upalt_02)[3],
+   const real (*restrict upalt_03)[3], const real (*restrict upalt_04)[3], const real (*restrict upalt_05)[3])
 {
    constexpr double gear[6] = {6., //
       -15.,                        //
@@ -177,27 +153,27 @@ static void ulspredSumGEAR_cu(int n, int nualt,        //
 
    if (uinp) {
       for (int i = ITHREAD; i < n; i += STRIDE) {
-         uind[i][0] = c00 * udalt_00[i][0] + c01 * udalt_01[i][0] + c02 * udalt_02[i][0] +
-            c03 * udalt_03[i][0] + c04 * udalt_04[i][0] + c05 * udalt_05[i][0];
-         uind[i][1] = c00 * udalt_00[i][1] + c01 * udalt_01[i][1] + c02 * udalt_02[i][1] +
-            c03 * udalt_03[i][1] + c04 * udalt_04[i][1] + c05 * udalt_05[i][1];
-         uind[i][2] = c00 * udalt_00[i][2] + c01 * udalt_01[i][2] + c02 * udalt_02[i][2] +
-            c03 * udalt_03[i][2] + c04 * udalt_04[i][2] + c05 * udalt_05[i][2];
-         uinp[i][0] = c00 * upalt_00[i][0] + c01 * upalt_01[i][0] + c02 * upalt_02[i][0] +
-            c03 * upalt_03[i][0] + c04 * upalt_04[i][0] + c05 * upalt_05[i][0];
-         uinp[i][1] = c00 * upalt_00[i][1] + c01 * upalt_01[i][1] + c02 * upalt_02[i][1] +
-            c03 * upalt_03[i][1] + c04 * upalt_04[i][1] + c05 * upalt_05[i][1];
-         uinp[i][2] = c00 * upalt_00[i][2] + c01 * upalt_01[i][2] + c02 * upalt_02[i][2] +
-            c03 * upalt_03[i][2] + c04 * upalt_04[i][2] + c05 * upalt_05[i][2];
+         uind[i][0] = c00 * udalt_00[i][0] + c01 * udalt_01[i][0] + c02 * udalt_02[i][0] + c03 * udalt_03[i][0]
+            + c04 * udalt_04[i][0] + c05 * udalt_05[i][0];
+         uind[i][1] = c00 * udalt_00[i][1] + c01 * udalt_01[i][1] + c02 * udalt_02[i][1] + c03 * udalt_03[i][1]
+            + c04 * udalt_04[i][1] + c05 * udalt_05[i][1];
+         uind[i][2] = c00 * udalt_00[i][2] + c01 * udalt_01[i][2] + c02 * udalt_02[i][2] + c03 * udalt_03[i][2]
+            + c04 * udalt_04[i][2] + c05 * udalt_05[i][2];
+         uinp[i][0] = c00 * upalt_00[i][0] + c01 * upalt_01[i][0] + c02 * upalt_02[i][0] + c03 * upalt_03[i][0]
+            + c04 * upalt_04[i][0] + c05 * upalt_05[i][0];
+         uinp[i][1] = c00 * upalt_00[i][1] + c01 * upalt_01[i][1] + c02 * upalt_02[i][1] + c03 * upalt_03[i][1]
+            + c04 * upalt_04[i][1] + c05 * upalt_05[i][1];
+         uinp[i][2] = c00 * upalt_00[i][2] + c01 * upalt_01[i][2] + c02 * upalt_02[i][2] + c03 * upalt_03[i][2]
+            + c04 * upalt_04[i][2] + c05 * upalt_05[i][2];
       }
    } else {
       for (int i = ITHREAD; i < n; i += STRIDE) {
-         uind[i][0] = c00 * udalt_00[i][0] + c01 * udalt_01[i][0] + c02 * udalt_02[i][0] +
-            c03 * udalt_03[i][0] + c04 * udalt_04[i][0] + c05 * udalt_05[i][0];
-         uind[i][1] = c00 * udalt_00[i][1] + c01 * udalt_01[i][1] + c02 * udalt_02[i][1] +
-            c03 * udalt_03[i][1] + c04 * udalt_04[i][1] + c05 * udalt_05[i][1];
-         uind[i][2] = c00 * udalt_00[i][2] + c01 * udalt_01[i][2] + c02 * udalt_02[i][2] +
-            c03 * udalt_03[i][2] + c04 * udalt_04[i][2] + c05 * udalt_05[i][2];
+         uind[i][0] = c00 * udalt_00[i][0] + c01 * udalt_01[i][0] + c02 * udalt_02[i][0] + c03 * udalt_03[i][0]
+            + c04 * udalt_04[i][0] + c05 * udalt_05[i][0];
+         uind[i][1] = c00 * udalt_00[i][1] + c01 * udalt_01[i][1] + c02 * udalt_02[i][1] + c03 * udalt_03[i][1]
+            + c04 * udalt_04[i][1] + c05 * udalt_05[i][1];
+         uind[i][2] = c00 * udalt_00[i][2] + c01 * udalt_01[i][2] + c02 * udalt_02[i][2] + c03 * udalt_03[i][2]
+            + c04 * udalt_04[i][2] + c05 * udalt_05[i][2];
       }
    }
 }

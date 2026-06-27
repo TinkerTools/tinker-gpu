@@ -21,6 +21,8 @@ const TimeScaleConfig& defaultTSConfig()
 
       {"evalence", 0},
 
+      {"ennintermol", 0},
+
       {"evdw", 0},
 
       {"echarge", 0},
@@ -60,6 +62,7 @@ static bool fts(std::string eng, bool& use_flag, unsigned tsflag, const TimeScal
 #include "ff/amoeba/epolar.h"
 #include "ff/echarge.h"
 #include "ff/echglj.h"
+#include "ff/ennintermol.h"
 #include "ff/evalence.h"
 #include "ff/evdw.h"
 #include "ff/hippo/echgtrn.h"
@@ -67,9 +70,11 @@ static bool fts(std::string eng, bool& use_flag, unsigned tsflag, const TimeScal
 #include "ff/hippo/empole.h"
 #include "ff/hippo/epolar.h"
 #include "ff/hippo/erepel.h"
+#include "ff/molecule.h"
 #include "ff/nblist.h"
 #include "ff/pmestream.h"
 #include "ff/potent.h"
+#include "nn/nn.h"
 #include <tinker/detail/mplpot.hh>
 #include <tinker/detail/polpot.hh>
 
@@ -77,6 +82,7 @@ namespace tinker {
 static bool ecore_val;
 static bool ecore_vdw;
 static bool ecore_ele;
+static bool ecore_nnintermol;
 
 static bool amoeba_emplar(int vers)
 {
@@ -160,6 +166,13 @@ static bool hippo_epolar(int vers)
    return use(Potent::POLAR);
 }
 
+static bool ennintermol(int vers)
+{
+   if (use(Potent::NNMET))
+      return true;
+   return false;
+}
+
 void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
 {
 #define tscfg(x, f) fts(x, f, tsflag, tsconfig)
@@ -171,12 +184,13 @@ void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
    ecore_val = false;
    ecore_vdw = false;
    ecore_ele = false;
+   ecore_nnintermol = false;
 
    if (pltfm_config & Platform::CUDA) {
       bool calc_val = use(Potent::BOND) or use(Potent::ANGLE) or use(Potent::STRBND) or use(Potent::UREY)
          or use(Potent::OPBEND) or use(Potent::IMPROP) or use(Potent::IMPTORS) or use(Potent::TORSION)
          or use(Potent::PITORS) or use(Potent::STRTOR) or use(Potent::ANGTOR) or use(Potent::TORTOR)
-         or use(Potent::GEOM);
+         or use(Potent::GEOM) or use(Potent::NNVAL);
       if (calc_val and tscfg("evalence", ecore_val))
          evalence(vers);
    } else {
@@ -227,6 +241,10 @@ void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
    }
 
    // non-bonded terms
+
+   if (ennintermol(vers))
+      if (tscfg("ennintermol", ecore_nnintermol))
+         ennintermol_cu(vers);
 
    if (amoeba_evdw(vers))
       if (tscfg("evdw", ecore_vdw))
@@ -287,9 +305,11 @@ struct DHRc
    EnergyBufferTraits::type e_val;
    EnergyBufferTraits::type e_vdw;
    EnergyBufferTraits::type e_ele;
+   EnergyBufferTraits::type e_nnintermol;
    VirialBufferTraits::type v_val[VirialBufferTraits::N];
    VirialBufferTraits::type v_vdw[VirialBufferTraits::N];
    VirialBufferTraits::type v_ele[VirialBufferTraits::N];
+   VirialBufferTraits::type v_nnintermol[VirialBufferTraits::N];
 };
 
 static DHRc ev_hobj;
@@ -310,6 +330,7 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
    ev_hobj.e_val = 0;
    ev_hobj.e_vdw = 0;
    ev_hobj.e_ele = 0;
+   ev_hobj.e_nnintermol = 0;
    if (do_e) {
       if (!rc_a) {
          size_t bufsize = bufferSize();
@@ -325,12 +346,17 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             must_wait = true;
             reduceSumOnDevice(&ev_dptr->e_ele, eng_buf_elec, bufsize, g::q0);
          }
+         if (ecore_nnintermol and eng_buf_nnintermol) {
+            must_wait = true;
+            reduceSumOnDevice(&ev_dptr->e_nnintermol, eng_buf_nnintermol, bufsize, g::q0);
+         }
       }
    }
 
    zeroOnHost(ev_hobj.v_val);
    zeroOnHost(ev_hobj.v_vdw);
    zeroOnHost(ev_hobj.v_ele);
+   zeroOnHost(ev_hobj.v_nnintermol);
    if (do_v) {
       if (!rc_a) {
          size_t bufsize = bufferSize();
@@ -346,6 +372,11 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             must_wait = true;
             reduceSum2OnDevice(ev_dptr->v_ele, vir_buf_elec, bufsize, g::q0);
          }
+         // To be implemented for NN intermolecular virial
+         // if (ecore_nnintermol and vir_buf_nnintermol) {
+         //    must_wait = true;
+         //    reduceSum2OnDevice(ev_dptr->v_nnintermol, vir_buf_nnintermol, bufsize, g::q0);
+         // }
       }
    }
    if (must_wait) {
@@ -363,8 +394,11 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
          if (ecore_ele and eng_buf_elec) {
             energy_elec += toFloatingPoint<energy_prec>(ev_hobj.e_ele);
          }
+         if (ecore_nnintermol and eng_buf_nnintermol) {
+            energy_nnintermol += toFloatingPoint<energy_prec>(ev_hobj.e_nnintermol);
+         }
       }
-      esum = energy_valence + energy_vdw + energy_elec;
+      esum = energy_valence + energy_vdw + energy_elec + energy_nnintermol;
    }
    if (do_v) {
       if (!rc_a) {
@@ -392,6 +426,9 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             for (int iv = 0; iv < 9; ++iv)
                virial_elec[iv] += v2ele[iv];
          }
+         // To be implemented for NN intermolecular virial
+         // if (ecore_nnintermol and vir_buf_nnintermol) {
+         // }
       }
       for (int iv = 0; iv < 9; ++iv)
          vir[iv] = virial_valence[iv] + virial_vdw[iv] + virial_elec[iv];
@@ -401,6 +438,8 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
          sumGradient(gx, gy, gz, gx_vdw, gy_vdw, gz_vdw);
       if (ecore_ele and gx_elec)
          sumGradient(gx, gy, gz, gx_elec, gy_elec, gz_elec);
+      if (ecore_nnintermol and gx_nnintermol)
+         sumGradient(gx, gy, gz, gx_nnintermol, gy_nnintermol, gz_nnintermol);
    }
 }
 
@@ -420,6 +459,7 @@ void energyData(RcOp op)
 
    // bonded terms
 
+   RcMan ennvalence42{ennvalenceData, op};
    RcMan ebond42{ebondData, op};
    RcMan eangle42{eangleData, op};
    RcMan estrbnd42{estrbndData, op};
@@ -438,6 +478,8 @@ void energyData(RcOp op)
    RcMan egeom42{egeomData, op};
 
    // non-bonded terms
+
+   RcMan ennmetal42{ennmetalData, op};
 
    RcMan vdwsSoftcore42{vdwSoftcoreData, op};
    RcMan evdw42{evdwData, op};
@@ -496,6 +538,15 @@ bool useEnergyElec()
 
    return ans;
 }
+
+bool useEnergyINN()
+{
+   bool ans = false;
+
+   ans = ans or use(Potent::NNMET);
+
+   return ans;
+}
 }
 
 namespace tinker {
@@ -520,11 +571,13 @@ void egvData(RcOp op)
                darray::deallocate(eng_buf_vdw);
             if (useEnergyElec())
                darray::deallocate(eng_buf_elec);
+            if (useEnergyINN())
+               darray::deallocate(eng_buf_nnintermol);
          }
       }
 
       if (op & RcOp::ALLOC) {
-         zeroOnHost(eng_buf, eng_buf_vdw, eng_buf_elec);
+         zeroOnHost(eng_buf, eng_buf_vdw, eng_buf_elec, eng_buf_nnintermol);
          if (!rc_a) {
             auto sz = bufferSize();
             darray::allocate(sz, &eng_buf);
@@ -532,6 +585,8 @@ void egvData(RcOp op)
                darray::allocate(sz, &eng_buf_vdw);
             if (useEnergyElec())
                darray::allocate(sz, &eng_buf_elec);
+            if (useEnergyINN())
+               darray::allocate(sz, &eng_buf_nnintermol);
          }
       }
    }
@@ -544,11 +599,13 @@ void egvData(RcOp op)
                darray::deallocate(vir_buf_vdw);
             if (useEnergyElec())
                darray::deallocate(vir_buf_elec);
+            if (useEnergyINN())
+               darray::deallocate(vir_buf_nnintermol);
          }
       }
 
       if (op & RcOp::ALLOC) {
-         zeroOnHost(vir_buf, vir_buf_vdw, vir_buf_elec);
+         zeroOnHost(vir_buf, vir_buf_vdw, vir_buf_elec, vir_buf_nnintermol);
          if (!rc_a) {
             auto sz = bufferSize();
             darray::allocate(sz, &vir_buf);
@@ -556,6 +613,8 @@ void egvData(RcOp op)
                darray::allocate(sz, &vir_buf_vdw);
             if (useEnergyElec())
                darray::allocate(sz, &vir_buf_elec);
+            if (useEnergyINN())
+               darray::allocate(sz, &vir_buf_nnintermol);
          }
       }
    }
@@ -567,15 +626,20 @@ void egvData(RcOp op)
             darray::deallocate(gx_vdw, gy_vdw, gz_vdw);
          if (useEnergyElec())
             darray::deallocate(gx_elec, gy_elec, gz_elec);
+         if (useEnergyINN())
+            darray::deallocate(gx_nnintermol, gy_nnintermol, gz_nnintermol);
       }
 
       if (op & RcOp::ALLOC) {
-         zeroOnHost(gx, gy, gz, gx_vdw, gy_vdw, gz_vdw, gx_elec, gy_elec, gz_elec);
+         zeroOnHost(gx, gy, gz, gx_vdw, gy_vdw, gz_vdw, gx_elec, gy_elec, gz_elec, gx_nnintermol, gy_nnintermol,
+            gz_nnintermol);
          darray::allocate(n, &gx, &gy, &gz);
          if (useEnergyVdw())
             darray::allocate(n, &gx_vdw, &gy_vdw, &gz_vdw);
          if (useEnergyElec())
             darray::allocate(n, &gx_elec, &gy_elec, &gz_elec);
+         if (useEnergyINN())
+            darray::allocate(n, &gx_nnintermol, &gy_nnintermol, &gz_nnintermol);
       }
    }
 }

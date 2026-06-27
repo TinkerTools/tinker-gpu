@@ -8,8 +8,7 @@ namespace tinker {
 #pragma acc routine seq
 template <bool DO_G>
 SEQ_CUDA
-inline void damp_expl(ExpolScr scrtyp, real& restrict s2, real& restrict ds2,
-   real r, real sizik, real alphai, real alphak)
+inline void damp_expl(ExpolScr scrtyp, real& restrict s2, real& restrict ds2, real r, real sizik, real alphai, real alphak)
 {
    constexpr real inv2 = 1. / 2, inv3 = 1. / 3;
    constexpr real one = 1.;
@@ -23,7 +22,8 @@ inline void damp_expl(ExpolScr scrtyp, real& restrict s2, real& restrict ds2,
       expik = REAL_EXP(-dampik);
       s = (one + dampik + dampik2 * inv3) * expik;
       s2 = s * s;
-      if (DO_G) ds2 = s * (-alphaik * inv3) * (dampik + dampik2) * expik;
+      if (DO_G)
+         ds2 = s * (-alphaik * inv3) * (dampik + dampik2) * expik;
    } else if (scrtyp == ExpolScr::S2) {
       real pfac = 2 / (alphai + alphak);
       real r2 = r * r;
@@ -59,17 +59,32 @@ inline void damp_expl(ExpolScr scrtyp, real& restrict s2, real& restrict ds2,
    } else if (scrtyp == ExpolScr::G) {
       real alphaik = REAL_SQRT(alphai * alphak);
       s2 = REAL_EXP(-alphaik / (real)10 * r * r);
-      if (DO_G) ds2 = (-alphaik / (real)5) * r * s2;
+      if (DO_G)
+         ds2 = (-alphaik / (real)5) * r * s2;
    }
 
    s2 = sizik * s2;
-   if (DO_G) ds2 = sizik * ds2;
+   if (DO_G)
+      ds2 = sizik * ds2;
 }
 
 SEQ_ROUTINE
-inline void pair_alterpol(ExpolScr scrtyp, real r, real pscale, real cut,
-   real off, real xr, real yr, real zr, real springi, real sizi, real alphai,
-   real springk, real sizk, real alphak, real ks2i[3][3], real ks2k[3][3])
+inline void pair_alterpol(ExpolScr scrtyp,
+                          real r,
+                          real pscale,
+                          real cut,
+                          real off,
+                          real xr,
+                          real yr,
+                          real zr,
+                          real springi,
+                          real sizi,
+                          real alphai,
+                          real springk,
+                          real sizk,
+                          real alphak,
+                          real ks2i[3][3],
+                          real ks2k[3][3])
 {
    real sizik = sizi * sizk;
    real s2;
@@ -106,10 +121,28 @@ inline void pair_alterpol(ExpolScr scrtyp, real r, real pscale, real cut,
 }
 
 SEQ_ROUTINE
-inline void pair_dexpol(ExpolScr scrtyp, real r, real pscale, real cut,
-   real off, real xr, real yr, real zr, real uix, real uiy, real uiz, real ukx,
-   real uky, real ukz, real springi, real sizi, real alphai, real springk,
-   real sizk, real alphak, const real f, real frc[3])
+inline void pair_dexpol(ExpolScr scrtyp,
+                        real r,
+                        real pscale,
+                        real cut,
+                        real off,
+                        real xr,
+                        real yr,
+                        real zr,
+                        real uix,
+                        real uiy,
+                        real uiz,
+                        real ukx,
+                        real uky,
+                        real ukz,
+                        real springi,
+                        real sizi,
+                        real alphai,
+                        real springk,
+                        real sizk,
+                        real alphak,
+                        const real f,
+                        real frc[3])
 {
    real sizik = sizi * sizk;
    real s2;

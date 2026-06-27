@@ -14,7 +14,6 @@ namespace tinker {
 TINKER_EXTERN real* bflx;
 TINKER_EXTERN real (*aflx)[2];
 TINKER_EXTERN real (*abflx)[2];
-TINKER_EXTERN int* atomic;
 TINKER_EXTERN int (*balist)[2];
 
 TINKER_EXTERN real* mono0;

@@ -6,8 +6,8 @@
 
 namespace tinker {
 void shake2_acc(time_prec dt, const vel_prec* vxold, const vel_prec* vyold, const vel_prec* vzold,
-   const vel_prec* vxnew, const vel_prec* vynew, const vel_prec* vznew, const pos_prec* xold,
-   const pos_prec* yold, const pos_prec* zold)
+   const vel_prec* vxnew, const vel_prec* vynew, const vel_prec* vznew, const pos_prec* xold, const pos_prec* yold,
+   const pos_prec* zold)
 {
    const double vterm = -1 / (dt * units::ekcal);
    size_t bufsize = bufferSize();
@@ -35,8 +35,8 @@ void shake2_acc(time_prec dt, const vel_prec* vxold, const vel_prec* vyold, cons
 
 //====================================================================//
 
-void swap_velocity_acc(vel_prec* vxnew, vel_prec* vynew, vel_prec* vznew, vel_prec* vxold,
-   vel_prec* vyold, vel_prec* vzold)
+void swap_velocity_acc(vel_prec* vxnew, vel_prec* vynew, vel_prec* vznew, vel_prec* vxold, vel_prec* vyold,
+   vel_prec* vzold)
 {
    #pragma acc parallel loop independent async\
                deviceptr(vxnew,vynew,vznew,vxold,vyold,vzold)
@@ -54,9 +54,9 @@ void swap_velocity_acc(vel_prec* vxnew, vel_prec* vynew, vel_prec* vznew, vel_pr
    }
 }
 
-void propagate_pos_lp_acc(time_prec dt, pos_prec* x_lp, pos_prec* y_lp, pos_prec* z_lp,
-   const vel_prec* vx_lp, const vel_prec* vy_lp, const vel_prec* vz_lp, const pos_prec* xold_lp,
-   const pos_prec* yold_lp, const pos_prec* zold_lp, double scale)
+void propagate_pos_lp_acc(time_prec dt, pos_prec* x_lp, pos_prec* y_lp, pos_prec* z_lp, const vel_prec* vx_lp,
+   const vel_prec* vy_lp, const vel_prec* vz_lp, const pos_prec* xold_lp, const pos_prec* yold_lp,
+   const pos_prec* zold_lp, double scale)
 {
    const pos_prec s = scale;
    #pragma acc parallel loop independent async\
@@ -69,8 +69,8 @@ void propagate_pos_lp_acc(time_prec dt, pos_prec* x_lp, pos_prec* y_lp, pos_prec
    }
 }
 
-void propagate_pos_lp2_acc(time_prec dt, const pos_prec* x_lp, const pos_prec* y_lp,
-   const pos_prec* z_lp, pos_prec* xold_lp, pos_prec* yold_lp, pos_prec* zold_lp, double scale)
+void propagate_pos_lp2_acc(time_prec dt, const pos_prec* x_lp, const pos_prec* y_lp, const pos_prec* z_lp,
+   pos_prec* xold_lp, pos_prec* yold_lp, pos_prec* zold_lp, double scale)
 {
    const pos_prec s = scale;
    #pragma acc parallel loop independent async\
@@ -82,9 +82,8 @@ void propagate_pos_lp2_acc(time_prec dt, const pos_prec* x_lp, const pos_prec* y
    }
 }
 
-void propagate_pos_lf_acc(time_prec dt, pos_prec* qx, pos_prec* qy, pos_prec* qz,
-   const pos_prec* qxold, const pos_prec* qyold, const pos_prec* qzold, const vel_prec* vlx,
-   const vel_prec* vly, const vel_prec* vlz)
+void propagate_pos_lf_acc(time_prec dt, pos_prec* qx, pos_prec* qy, pos_prec* qz, const pos_prec* qxold,
+   const pos_prec* qyold, const pos_prec* qzold, const vel_prec* vlx, const vel_prec* vly, const vel_prec* vlz)
 {
    #pragma acc parallel loop independent async\
                deviceptr(qx,qy,qz,qxold,qyold,qzold,vlx,vly,vlz)
@@ -95,10 +94,9 @@ void propagate_pos_lf_acc(time_prec dt, pos_prec* qx, pos_prec* qy, pos_prec* qz
    }
 }
 
-void propagate_velocity_lp_acc(vel_prec* vx_lp, vel_prec* vy_lp, vel_prec* vz_lp,
-   const vel_prec* vxnew_lp, const vel_prec* vynew_lp, const vel_prec* vznew_lp,
-   const vel_prec* vxold_lp, const vel_prec* vyold_lp, const vel_prec* vzold_lp, const double scale,
-   energy_prec& eksum_new, energy_prec& eksum_old)
+void propagate_velocity_lp_acc(vel_prec* vx_lp, vel_prec* vy_lp, vel_prec* vz_lp, const vel_prec* vxnew_lp,
+   const vel_prec* vynew_lp, const vel_prec* vznew_lp, const vel_prec* vxold_lp, const vel_prec* vyold_lp,
+   const vel_prec* vzold_lp, const double scale, energy_prec& eksum_new, energy_prec& eksum_old)
 {
    const energy_prec ekcal_inv = 1.0 / units::ekcal;
    energy_prec ekn = 0, eko = 0;
@@ -122,9 +120,9 @@ void propagate_velocity_lp_acc(vel_prec* vx_lp, vel_prec* vy_lp, vel_prec* vz_lp
    eksum_new = ekn;
 }
 
-void propagate_velocity_lp2_acc(time_prec dt, vel_prec* vx_lp, vel_prec* vy_lp, vel_prec* vz_lp,
-   const pos_prec* x_lp, const pos_prec* y_lp, const pos_prec* z_lp, const pos_prec* xold_lp,
-   const pos_prec* yold_lp, const pos_prec* zold_lp)
+void propagate_velocity_lp2_acc(time_prec dt, vel_prec* vx_lp, vel_prec* vy_lp, vel_prec* vz_lp, const pos_prec* x_lp,
+   const pos_prec* y_lp, const pos_prec* z_lp, const pos_prec* xold_lp, const pos_prec* yold_lp,
+   const pos_prec* zold_lp)
 {
    time_prec invdt = 1 / dt;
    #pragma acc parallel loop independent async\
@@ -137,10 +135,9 @@ void propagate_velocity_lp2_acc(time_prec dt, vel_prec* vx_lp, vel_prec* vy_lp, 
    }
 }
 
-void propagate_velocity_lp3_acc(vel_prec* vx_lp, vel_prec* vy_lp, vel_prec* vz_lp,
-   const vel_prec* vxnew_lp, const vel_prec* vynew_lp, const vel_prec* vznew_lp,
-   const vel_prec* vxold_lp, const vel_prec* vyold_lp, const vel_prec* vzold_lp,
-   energy_prec& eksum_new)
+void propagate_velocity_lp3_acc(vel_prec* vx_lp, vel_prec* vy_lp, vel_prec* vz_lp, const vel_prec* vxnew_lp,
+   const vel_prec* vynew_lp, const vel_prec* vznew_lp, const vel_prec* vxold_lp, const vel_prec* vyold_lp,
+   const vel_prec* vzold_lp, energy_prec& eksum_new)
 {
    const energy_prec ekcal_inv = 1.0 / units::ekcal;
    energy_prec ekn = 0;
@@ -159,9 +156,8 @@ void propagate_velocity_lp3_acc(vel_prec* vx_lp, vel_prec* vy_lp, vel_prec* vz_l
    eksum_new = ekn;
 }
 
-void mdVelB_acc(time_prec dt, vel_prec* vlx, vel_prec* vly, vel_prec* vlz, const vel_prec* vlx0,
-   const vel_prec* vly0, const vel_prec* vlz0, const grad_prec* grx, const grad_prec* gry,
-   const grad_prec* grz)
+void mdVelB_acc(time_prec dt, vel_prec* vlx, vel_prec* vly, vel_prec* vlz, const vel_prec* vlx0, const vel_prec* vly0,
+   const vel_prec* vlz0, const grad_prec* grx, const grad_prec* gry, const grad_prec* grz)
 {
    const vel_prec ekcal = units::ekcal;
    #pragma acc parallel loop independent async\

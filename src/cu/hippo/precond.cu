@@ -1,6 +1,6 @@
+#include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/modhippo.h"
-#include "ff/image.h"
 #include "ff/spatial.h"
 #include "ff/switch.h"
 #include "seq/add.h"

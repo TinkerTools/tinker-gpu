@@ -1,11 +1,11 @@
-#include "md/osrw.h"
-#include "ff/modamoeba.h"
 #include "ff/atom.h"
 #include "ff/echarge.h"
 #include "ff/evalence.h"
 #include "ff/evdw.h"
+#include "ff/modamoeba.h"
 #include "ff/potent.h"
 #include "math/libfunc.h"
+#include "md/osrw.h"
 
 namespace tinker {
 void osrw_altele_acc(double el)

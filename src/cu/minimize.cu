@@ -36,8 +36,8 @@ void xMinimizeSetXxByPos_cu(int n, double* xx, const double* scale)
 }
 
 __global__
-static void xMinimizeSetPos_cu1(int n, const double* restrict dxx, const double* restrict dsc,
-   pos_prec* restrict xpos, pos_prec* restrict ypos, pos_prec* restrict zpos)
+static void xMinimizeSetPos_cu1(int n, const double* restrict dxx, const double* restrict dsc, pos_prec* restrict xpos,
+   pos_prec* restrict ypos, pos_prec* restrict zpos)
 {
    for (int i = ITHREAD; i < n; i += STRIDE) {
       int j = 3 * i;

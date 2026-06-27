@@ -1,8 +1,8 @@
-#include "ff/modamoeba.h"
 #include "ff/atom.h"
 #include "ff/elec.h"
-#include "ff/modhippo.h"
 #include "ff/image.h"
+#include "ff/modamoeba.h"
+#include "ff/modhippo.h"
 #include "ff/nblist.h"
 #include "ff/switch.h"
 #include "seq/add.h"
@@ -20,7 +20,7 @@ void alterpol_acc(real (*polscale)[3][3], real (*polinv)[3][3])
    const auto* mlst = mlist_unit.deviceptr();
 
    // initialize polscale and polinv
-   #pragma acc parallel loop independent async\
+    #pragma acc parallel loop independent async\
                deviceptr(polscale)
    for (int i = 0; i < n; ++i) {
       polscale[i][0][0] = 1.f;
@@ -66,8 +66,7 @@ void alterpol_acc(real (*polscale)[3][3], real (*polinv)[3][3])
             real sizk = prepep[k];
             real alphak = dmppep[k];
             real ks2i[3][3], ks2k[3][3];
-            pair_alterpol(scrtyp, r, 1, cut, off, xr, yr, zr, springi, sizi, alphai, springk, sizk,
-               alphak, ks2i, ks2k);
+            pair_alterpol(scrtyp, r, 1, cut, off, xr, yr, zr, springi, sizi, alphai, springk, sizk, alphak, ks2i, ks2k);
             #pragma acc loop seq
             for (int l = 0; l < 3; ++l) {
                #pragma acc loop seq
@@ -106,8 +105,8 @@ void alterpol_acc(real (*polscale)[3][3], real (*polinv)[3][3])
       if (r2 <= off2 and incl1 and incl2) {
          real r = REAL_SQRT(r2);
          real ks2i[3][3], ks2k[3][3];
-         pair_alterpol(scrtyp, r, dscale, cut, off, xr, yr, zr, springi, sizi, alphai, springk,
-            sizk, alphak, ks2i, ks2k);
+         pair_alterpol(scrtyp, r, dscale, cut, off, xr, yr, zr, springi, sizi, alphai, springk, sizk, alphak, ks2i,
+            ks2k);
          #pragma acc loop seq
          for (int l = 0; l < 3; ++l) {
             #pragma acc loop seq
@@ -120,14 +119,14 @@ void alterpol_acc(real (*polscale)[3][3], real (*polinv)[3][3])
    }
 
    // invert
-   #pragma acc parallel loop independent async\
+    #pragma acc parallel loop independent async\
                deviceptr(polscale,polinv)
    for (int i = 0; i < n; ++i) {
       real det;
       real(&ps)[3][3] = polscale[i];
-      det = ps[0][0] * (ps[1][1] * ps[2][2] - ps[1][2] * ps[2][1]) -
-         ps[1][0] * (ps[0][1] * ps[2][2] - ps[2][1] * ps[0][2]) +
-         ps[2][0] * (ps[0][1] * ps[1][2] - ps[1][1] * ps[0][2]);
+      det = ps[0][0] * (ps[1][1] * ps[2][2] - ps[1][2] * ps[2][1])
+         - ps[1][0] * (ps[0][1] * ps[2][2] - ps[2][1] * ps[0][2])
+         + ps[2][0] * (ps[0][1] * ps[1][2] - ps[1][1] * ps[0][2]);
       polinv[i][0][0] = (ps[1][1] * ps[2][2] - ps[1][2] * ps[2][1]) / det;
       polinv[i][1][0] = (ps[2][0] * ps[1][2] - ps[1][0] * ps[2][2]) / det;
       polinv[i][2][0] = (ps[1][0] * ps[2][1] - ps[2][0] * ps[1][1]) / det;
@@ -140,8 +139,7 @@ void alterpol_acc(real (*polscale)[3][3], real (*polinv)[3][3])
    }
 }
 
-void dexpol_acc(int vers, const real (*uind)[3], grad_prec* depx, grad_prec* depy, grad_prec* depz,
-   VirialBuffer vir_ep)
+void dexpol_acc(int vers, const real (*uind)[3], grad_prec* depx, grad_prec* depy, grad_prec* depz, VirialBuffer vir_ep)
 {
    auto do_v = vers & calc::virial;
    real cut = switchCut(Switch::REPULS);
@@ -194,8 +192,8 @@ void dexpol_acc(int vers, const real (*uind)[3], grad_prec* depx, grad_prec* dep
             real uky = uind[k][1];
             real ukz = uind[k][2];
             real frc[3];
-            pair_dexpol(scrtyp, r, 1, cut, off, xr, yr, zr, uix, uiy, uiz, ukx, uky, ukz, springi,
-               sizi, alphai, springk, sizk, alphak, f, frc);
+            pair_dexpol(scrtyp, r, 1, cut, off, xr, yr, zr, uix, uiy, uiz, ukx, uky, ukz, springi, sizi, alphai,
+               springk, sizk, alphak, f, frc);
             gxi += frc[0];
             gyi += frc[1];
             gzi += frc[2];
@@ -254,8 +252,8 @@ void dexpol_acc(int vers, const real (*uind)[3], grad_prec* depx, grad_prec* dep
       if (r2 <= off2 and incl1 and incl2) {
          real r = REAL_SQRT(r2);
          real frc[3];
-         pair_dexpol(scrtyp, r, dscale, cut, off, xr, yr, zr, uix, uiy, uiz, ukx, uky, ukz, springi,
-            sizi, alphai, springk, sizk, alphak, f, frc);
+         pair_dexpol(scrtyp, r, dscale, cut, off, xr, yr, zr, uix, uiy, uiz, ukx, uky, ukz, springi, sizi, alphai,
+            springk, sizk, alphak, f, frc);
 
          atomic_add(frc[0], depx, i);
          atomic_add(frc[1], depy, i);
@@ -334,9 +332,8 @@ void induceMutualPcg4_acc(real (*uind)[3])
          real poli = polarity[i];
          #pragma acc loop seq
          for (int j = 0; j < 3; ++j) {
-            uind[i][j] = poli *
-               (polinv[i][0][j] * field[i][0] + polinv[i][1][j] * field[i][1] +
-                  polinv[i][2][j] * field[i][2]);
+            uind[i][j] = poli
+               * (polinv[i][0][j] * field[i][0] + polinv[i][1][j] * field[i][1] + polinv[i][2][j] * field[i][2]);
          }
       }
    } else {
@@ -357,10 +354,10 @@ void induceMutualPcg4_acc(real (*uind)[3])
          real poli_inv = polarity_inv[i];
          #pragma acc loop seq
          for (int j = 0; j < 3; ++j) {
-            rsd[i][j] = (udir[i][j] - uind[i][0] * polscale[i][0][j] -
-                           uind[i][1] * polscale[i][1][j] - uind[i][2] * polscale[i][2][j]) *
-                  poli_inv +
-               field[i][j];
+            rsd[i][j] = (udir[i][j] - uind[i][0] * polscale[i][0][j] - uind[i][1] * polscale[i][1][j]
+                           - uind[i][2] * polscale[i][2][j])
+                  * poli_inv
+               + field[i][j];
          }
       }
    } else if (dirguess) {
@@ -421,21 +418,21 @@ void induceMutualPcg4_acc(real (*uind)[3])
          real poli_inv = polarity_inv[i];
          #pragma acc loop seq
          for (int j = 0; j < 3; ++j)
-            vec[i][j] = poli_inv *
-                  (conj[i][0] * polscale[i][0][j] + conj[i][1] * polscale[i][1][j] +
-                     conj[i][2] * polscale[i][2][j]) -
-               field[i][j];
+            vec[i][j] = poli_inv
+                  * (conj[i][0] * polscale[i][0][j] + conj[i][1] * polscale[i][1][j] + conj[i][2] * polscale[i][2][j])
+               - field[i][j];
       }
 
       // a <- p T p
       real a;
       a = darray::dotThenReturn(g::q0, n, conj, vec);
       // a <- r M r / p T p
-      if (a != 0) a = sum / a;
+      if (a != 0)
+         a = sum / a;
 
       // u <- u + a p
       // r <- r - a T p
-      #pragma acc parallel loop independent async\
+       #pragma acc parallel loop independent async\
                   deviceptr(polarity,conj,vec,uind,rsd)
       for (int i = 0; i < n; ++i) {
          #pragma acc loop seq
@@ -460,10 +457,11 @@ void induceMutualPcg4_acc(real (*uind)[3])
       real sum1;
       sum1 = darray::dotThenReturn(g::q0, n, rsd, zrsd);
       b = sum1 / sum;
-      if (sum == 0) b = 0;
+      if (sum == 0)
+         b = 0;
 
       // calculate/update p
-      #pragma acc parallel loop independent async\
+       #pragma acc parallel loop independent async\
                   deviceptr(conj,zrsd)
       for (int i = 0; i < n; ++i) {
          #pragma acc loop seq
@@ -488,10 +486,13 @@ void induceMutualPcg4_acc(real (*uind)[3])
          print(stdout, " %8d       %-16.10f\n", iter, eps);
       }
 
-      if (eps < poleps) done = true;
+      if (eps < poleps)
+         done = true;
       // if (eps > epsold) done = true;
-      if (iter < miniter) done = false;
-      if (iter >= politer) done = true;
+      if (iter < miniter)
+         done = false;
+      if (iter >= politer)
+         done = true;
 
       // apply a "peek" iteration to the mutual induced dipoles
 

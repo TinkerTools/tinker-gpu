@@ -48,8 +48,7 @@ void ehalResolveGradient_acc()
    }
 }
 
-#define DEVICE_PTRS                                                                                \
-   xred, yred, zred, gxred, gyred, gzred, jvdw, radmin, epsilon, mut, nev, ev, vir_ev
+#define DEVICE_PTRS xred, yred, zred, gxred, gyred, gzred, jvdw, radmin, epsilon, mut, nev, ev, vir_ev
 template <class Ver>
 static void ehal_acc1()
 {

@@ -1,6 +1,6 @@
-#include "ff/modamoeba.h"
 #include "ff/atom.h"
 #include "ff/elec.h"
+#include "ff/modamoeba.h"
 #include "ff/pme.h"
 #include "tool/externfunc.h"
 
@@ -40,8 +40,7 @@ void mpoleInit(int vers)
       if (vir_m)
          darray::zero(g::q0, bufferSize(), vir_m);
       if (pltfm_config & Platform::CUDA) {
-         bool precompute_theta =
-            (!TINKER_CU_THETA_ON_THE_FLY_GRID_MPOLE) || (!TINKER_CU_THETA_ON_THE_FLY_GRID_UIND);
+         bool precompute_theta = (!TINKER_CU_THETA_ON_THE_FLY_GRID_MPOLE) || (!TINKER_CU_THETA_ON_THE_FLY_GRID_UIND);
          if (epme_unit.valid()) {
             if (precompute_theta)
                bsplineFill(epme_unit, 3);

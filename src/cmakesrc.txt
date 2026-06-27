@@ -20,6 +20,7 @@ bonded/estrtor.cpp
 bonded/etors.cpp
 bonded/etortor.cpp
 bonded/eurey.cpp
+bonded/ennvalence.cpp
 box.cpp
 compilers.cpp
 cudalib.cpp
@@ -29,6 +30,7 @@ egvop.cpp
 elec.cpp
 energy.cpp
 energybuffer.cpp
+ennintermol.cpp
 errlinux.cpp
 errprint.cpp
 evalence.cpp
@@ -48,6 +50,7 @@ iofortstr.cpp
 iotext.cpp
 mathlu.cpp
 mathrandom.cpp
+mathmatexp.cpp
 mathtrimatexp.cpp
 md/barostat.cpp
 md/integrator.cpp
@@ -64,6 +67,7 @@ mechanic2.cpp
 mod.cpp
 molecule.cpp
 nblist.cpp
+nn.cpp
 platform.cpp
 pme.cpp
 potent.cpp

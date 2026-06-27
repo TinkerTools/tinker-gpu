@@ -20,7 +20,7 @@ void egeom_acc1()
    const auto* grpmass = grp.grpmass;
 
    // position restraints
-   #pragma acc parallel loop independent async\
+    #pragma acc parallel loop independent async\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
                deviceptr(x,y,z,degx,degy,degz,ipfix,kpfix,xpfix,ypfix,zpfix,\
                pfix,eg,vir_eg)
@@ -41,7 +41,7 @@ void egeom_acc1()
    }
 
    // group restraints
-   #pragma acc parallel loop independent async\
+    #pragma acc parallel loop independent async\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
                deviceptr(x,y,z,degx,degy,degz,mass,molec,\
                igrp,kgrp,grpmass,igfix,gfix,\
@@ -63,7 +63,7 @@ void egeom_acc1()
    }
 
    // distance restraints
-   #pragma acc parallel loop independent async\
+    #pragma acc parallel loop independent async\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
                deviceptr(x,y,z,degx,degy,degz,molec,idfix,dfix,eg,vir_eg)
    for (int i = 0; i < ndfix; ++i) {
@@ -83,7 +83,7 @@ void egeom_acc1()
    }
 
    // angle restraints
-   #pragma acc parallel loop independent async\
+    #pragma acc parallel loop independent async\
                deviceptr(x,y,z,degx,degy,degz,iafix,afix,eg,vir_eg)
    for (int i = 0; i < nafix; ++i) {
       int offset = i & (bufsize - 1);
@@ -100,7 +100,7 @@ void egeom_acc1()
    }
 
    // torsion restraints
-   #pragma acc parallel loop independent async\
+    #pragma acc parallel loop independent async\
                deviceptr(x,y,z,degx,degy,degz,itfix,tfix,eg,vir_eg)
    for (int i = 0; i < ntfix; ++i) {
       int offset = i & (bufsize - 1);

@@ -1,11 +1,11 @@
 #include "ff/amoeba/epolar.h"
 #include "ff/amoeba/empole.h"
-#include "ff/modamoeba.h"
 #include "ff/elec.h"
 #include "ff/energy.h"
 #include "ff/hippo/cflux.h"
 #include "ff/hippo/expol.h"
 #include "ff/hippo/induce.h"
+#include "ff/modamoeba.h"
 #include "ff/potent.h"
 #include "math/zero.h"
 #include "tool/externfunc.h"
@@ -228,6 +228,7 @@ void epolarChgpen(int vers)
       epolarChgpenEwald(vers, use_cfgrad);
    else
       epolarChgpenNonEwald(vers, use_cfgrad);
+   epolarPairwiseExtfield(vers, uind);
    torque(vers, depx, depy, depz);
    if (use_cfgrad)
       dcflux(vers, depx, depy, depz, vir_ep);

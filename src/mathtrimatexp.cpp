@@ -125,8 +125,8 @@ static T f3(T a, T b, T c)
          l1 = a + b + c;
          l2 = a2 + a * b + a * c + b2 + b * c + c2;
          l3 = a3 + a2 * b + a * b2 + a * b * c + a2 * c + a * c2 + b3 + b2 * c + b * c2 + c3;
-         l4 = a2 * a2 + a3 * b + a2 * b2 + a * b3 + b2 * b2 + a3 * c + a2 * b * c + a * b2 * c +
-            b3 * c + a2 * c2 + a * b * c2 + b2 * c2 + a * c3 + b * c3 + c2 * c2;
+         l4 = a2 * a2 + a3 * b + a2 * b2 + a * b3 + b2 * b2 + a3 * c + a2 * b * c + a * b2 * c + b3 * c + a2 * c2
+            + a * b * c2 + b2 * c2 + a * c3 + b * c3 + c2 * c2;
          return l0 * k0 + l1 * k1 + l2 * k2 + l3 * k3 + l4 * k4;
       } else {
          T x, y, z; // fabs(x) = max(fabs(a),fabs(b),fabs(c))

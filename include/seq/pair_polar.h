@@ -38,15 +38,54 @@ inline void zero(PairPolarGrad& pgrad)
 #pragma acc routine seq
 template <bool do_e, bool do_g, class ETYP>
 SEQ_CUDA
-void pair_polar(                                                              //
-   real r2, real xr, real yr, real zr, real dscale, real pscale, real uscale, //
-   real ci, real dix, real diy, real diz, real qixx, real qixy, real qixz,
-   real qiyy, real qiyz, real qizz, real uix, real uiy, real uiz, real uixp,
-   real uiyp, real uizp, real pdi, real pti, //
-   real ck, real dkx, real dky, real dkz, real qkxx, real qkxy, real qkxz,
-   real qkyy, real qkyz, real qkzz, real ukx, real uky, real ukz, real ukxp,
-   real ukyp, real ukzp, real pdk, real ptk, //
-   real f, real aewald, real& restrict e, PairPolarGrad& restrict pgrad)
+void pair_polar( //
+   real r2,
+   real xr,
+   real yr,
+   real zr,
+   real dscale,
+   real pscale,
+   real uscale, //
+   real ci,
+   real dix,
+   real diy,
+   real diz,
+   real qixx,
+   real qixy,
+   real qixz,
+   real qiyy,
+   real qiyz,
+   real qizz,
+   real uix,
+   real uiy,
+   real uiz,
+   real uixp,
+   real uiyp,
+   real uizp,
+   real pdi,
+   real pti, //
+   real ck,
+   real dkx,
+   real dky,
+   real dkz,
+   real qkxx,
+   real qkxy,
+   real qkxz,
+   real qkyy,
+   real qkyz,
+   real qkzz,
+   real ukx,
+   real uky,
+   real ukz,
+   real ukxp,
+   real ukyp,
+   real ukzp,
+   real pdk,
+   real ptk, //
+   real f,
+   real aewald,
+   real& restrict e,
+   PairPolarGrad& restrict pgrad)
 {
    if CONSTEXPR (eq<ETYP, EWALD>()) {
       dscale = 1;
@@ -76,7 +115,8 @@ void pair_polar(                                                              //
    real rr5 = 3 * rr3 * rr2;
    real rr7 = 5 * rr5 * rr2;
    MAYBE_UNUSED real rr9;
-   if CONSTEXPR (do_g) rr9 = 7 * rr7 * rr2;
+   if CONSTEXPR (do_g)
+      rr9 = 7 * rr7 * rr2;
    real bn[5];
    if CONSTEXPR (eq<ETYP, EWALD>()) {
       if CONSTEXPR (!do_g)
@@ -87,7 +127,8 @@ void pair_polar(                                                              //
       bn[1] = rr3;
       bn[2] = rr5;
       bn[3] = rr7;
-      if CONSTEXPR (do_g) bn[4] = rr9;
+      if CONSTEXPR (do_g)
+         bn[4] = rr9;
    }
 
    // if use_thole
@@ -95,7 +136,7 @@ void pair_polar(                                                              //
    MAYBE_UNUSED real rc31, rc32, rc33, rc51, rc52, rc53, rc71, rc72, rc73;
    if CONSTEXPR (!do_g) {
       damp_thole3(r, pdi, pti, pdk, ptk, //
-         ex3, ex5, ex7);
+                  ex3, ex5, ex7);
       ex3 = 1 - ex3;
       ex5 = 1 - ex5;
       ex7 = 1 - ex7;
@@ -193,69 +234,54 @@ void pair_polar(                                                              //
       term5 = term2 * xr * xr - sr5 - xr * rc51;
       term6 = (bn[4] - ex7 * rr9) * xr * xr - bn[3] - xr * rc71;
       term7 = rc51 - 2 * bn[3] * xr + (ex5 + 1.5f * ex7) * rr7 * xr;
-      real tixx = ci * term3 + dix * term4 + dir * term5 + 2 * sr5 * qixx
-         + (qiy * yr + qiz * zr) * ex7 * rr7 + 2 * qix * term7 + qir * term6;
-      real tkxx = ck * term3 - dkx * term4 - dkr * term5 + 2 * sr5 * qkxx
-         + (qky * yr + qkz * zr) * ex7 * rr7 + 2 * qkx * term7 + qkr * term6;
+      real tixx = ci * term3 + dix * term4 + dir * term5 + 2 * sr5 * qixx + (qiy * yr + qiz * zr) * ex7 * rr7 + 2 * qix * term7 + qir * term6;
+      real tkxx = ck * term3 - dkx * term4 - dkr * term5 + 2 * sr5 * qkxx + (qky * yr + qkz * zr) * ex7 * rr7 + 2 * qkx * term7 + qkr * term6;
 
       term3 = -sr3 + term1 * yr * yr - yr * rc32;
       term4 = rc32 - term1 * yr - sr5 * yr;
       term5 = term2 * yr * yr - sr5 - yr * rc52;
       term6 = (bn[4] - ex7 * rr9) * yr * yr - bn[3] - yr * rc72;
       term7 = rc52 - 2 * bn[3] * yr + (ex5 + 1.5f * ex7) * rr7 * yr;
-      real tiyy = ci * term3 + diy * term4 + dir * term5 + 2 * sr5 * qiyy
-         + (qix * xr + qiz * zr) * ex7 * rr7 + 2 * qiy * term7 + qir * term6;
-      real tkyy = ck * term3 - dky * term4 - dkr * term5 + 2 * sr5 * qkyy
-         + (qkx * xr + qkz * zr) * ex7 * rr7 + 2 * qky * term7 + qkr * term6;
+      real tiyy = ci * term3 + diy * term4 + dir * term5 + 2 * sr5 * qiyy + (qix * xr + qiz * zr) * ex7 * rr7 + 2 * qiy * term7 + qir * term6;
+      real tkyy = ck * term3 - dky * term4 - dkr * term5 + 2 * sr5 * qkyy + (qkx * xr + qkz * zr) * ex7 * rr7 + 2 * qky * term7 + qkr * term6;
 
       term3 = -sr3 + term1 * zr * zr - zr * rc33;
       term4 = rc33 - term1 * zr - sr5 * zr;
       term5 = term2 * zr * zr - sr5 - zr * rc53;
       term6 = (bn[4] - ex7 * rr9) * zr * zr - bn[3] - zr * rc73;
       term7 = rc53 - 2 * bn[3] * zr + (ex5 + 1.5f * ex7) * rr7 * zr;
-      real tizz = ci * term3 + diz * term4 + dir * term5 + 2 * sr5 * qizz
-         + (qix * xr + qiy * yr) * ex7 * rr7 + 2 * qiz * term7 + qir * term6;
-      real tkzz = ck * term3 - dkz * term4 - dkr * term5 + 2 * sr5 * qkzz
-         + (qkx * xr + qky * yr) * ex7 * rr7 + 2 * qkz * term7 + qkr * term6;
+      real tizz = ci * term3 + diz * term4 + dir * term5 + 2 * sr5 * qizz + (qix * xr + qiy * yr) * ex7 * rr7 + 2 * qiz * term7 + qir * term6;
+      real tkzz = ck * term3 - dkz * term4 - dkr * term5 + 2 * sr5 * qkzz + (qkx * xr + qky * yr) * ex7 * rr7 + 2 * qkz * term7 + qkr * term6;
 
       term3 = term1 * xr * yr - yr * rc31;
       term4 = rc31 - term1 * xr;
       term5 = term2 * xr * yr - yr * rc51;
       term6 = (bn[4] - ex7 * rr9) * xr * yr - yr * rc71;
       term7 = rc51 - term2 * xr;
-      real tixy = ci * term3 - sr5 * dix * yr + diy * term4 + dir * term5
-         + 2 * sr5 * qixy - 2 * sr7 * yr * qix + 2 * qiy * term7 + qir * term6;
-      real tkxy = ck * term3 + sr5 * dkx * yr - dky * term4 - dkr * term5
-         + 2 * sr5 * qkxy - 2 * sr7 * yr * qkx + 2 * qky * term7 + qkr * term6;
+      real tixy = ci * term3 - sr5 * dix * yr + diy * term4 + dir * term5 + 2 * sr5 * qixy - 2 * sr7 * yr * qix + 2 * qiy * term7 + qir * term6;
+      real tkxy = ck * term3 + sr5 * dkx * yr - dky * term4 - dkr * term5 + 2 * sr5 * qkxy - 2 * sr7 * yr * qkx + 2 * qky * term7 + qkr * term6;
 
       term3 = term1 * xr * zr - zr * rc31;
       term5 = term2 * xr * zr - zr * rc51;
       term6 = (bn[4] - ex7 * rr9) * xr * zr - zr * rc71;
-      real tixz = ci * term3 - sr5 * dix * zr + diz * term4 + dir * term5
-         + 2 * sr5 * qixz - 2 * sr7 * zr * qix + 2 * qiz * term7 + qir * term6;
-      real tkxz = ck * term3 + sr5 * dkx * zr - dkz * term4 - dkr * term5
-         + 2 * sr5 * qkxz - 2 * sr7 * zr * qkx + 2 * qkz * term7 + qkr * term6;
+      real tixz = ci * term3 - sr5 * dix * zr + diz * term4 + dir * term5 + 2 * sr5 * qixz - 2 * sr7 * zr * qix + 2 * qiz * term7 + qir * term6;
+      real tkxz = ck * term3 + sr5 * dkx * zr - dkz * term4 - dkr * term5 + 2 * sr5 * qkxz - 2 * sr7 * zr * qkx + 2 * qkz * term7 + qkr * term6;
 
       term3 = term1 * yr * zr - zr * rc32;
       term4 = rc32 - term1 * yr;
       term5 = term2 * yr * zr - zr * rc52;
       term6 = (bn[4] - ex7 * rr9) * yr * zr - zr * rc72;
       term7 = rc52 - term2 * yr;
-      real tiyz = ci * term3 - sr5 * diy * zr + diz * term4 + dir * term5
-         + 2 * sr5 * qiyz - 2 * sr7 * zr * qiy + 2 * qiz * term7 + qir * term6;
-      real tkyz = ck * term3 + sr5 * dky * zr - dkz * term4 - dkr * term5
-         + 2 * sr5 * qkyz - 2 * sr7 * zr * qky + 2 * qkz * term7 + qkr * term6;
+      real tiyz = ci * term3 - sr5 * diy * zr + diz * term4 + dir * term5 + 2 * sr5 * qiyz - 2 * sr7 * zr * qiy + 2 * qiz * term7 + qir * term6;
+      real tkyz = ck * term3 + sr5 * dky * zr - dkz * term4 - dkr * term5 + 2 * sr5 * qkyz - 2 * sr7 * zr * qky + 2 * qkz * term7 + qkr * term6;
 
       // get the dEd/dR terms for Thole direct polarization force
 
       real depx, depy, depz;
 
-      depx = tixx * ukxp + tixy * ukyp + tixz * ukzp - tkxx * uixp - tkxy * uiyp
-         - tkxz * uizp;
-      depy = tixy * ukxp + tiyy * ukyp + tiyz * ukzp - tkxy * uixp - tkyy * uiyp
-         - tkyz * uizp;
-      depz = tixz * ukxp + tiyz * ukyp + tizz * ukzp - tkxz * uixp - tkyz * uiyp
-         - tkzz * uizp;
+      depx = tixx * ukxp + tixy * ukyp + tixz * ukzp - tkxx * uixp - tkxy * uiyp - tkxz * uizp;
+      depy = tixy * ukxp + tiyy * ukyp + tiyz * ukzp - tkxy * uixp - tkyy * uiyp - tkyz * uizp;
+      depz = tixz * ukxp + tiyz * ukyp + tizz * ukzp - tkxz * uixp - tkyz * uiyp - tkzz * uizp;
       if CONSTEXPR (eq<ETYP, EWALD>()) {
          pgrad.frcx = -depx;
          pgrad.frcy = -depy;
@@ -268,12 +294,9 @@ void pair_polar(                                                              //
 
       // get the dEp/dR terms for Thole direct polarization force
 
-      depx = tixx * ukx + tixy * uky + tixz * ukz - tkxx * uix - tkxy * uiy
-         - tkxz * uiz;
-      depy = tixy * ukx + tiyy * uky + tiyz * ukz - tkxy * uix - tkyy * uiy
-         - tkyz * uiz;
-      depz = tixz * ukx + tiyz * uky + tizz * ukz - tkxz * uix - tkyz * uiy
-         - tkzz * uiz;
+      depx = tixx * ukx + tixy * uky + tixz * ukz - tkxx * uix - tkxy * uiy - tkxz * uiz;
+      depy = tixy * ukx + tiyy * uky + tiyz * ukz - tkxy * uix - tkyy * uiy - tkyz * uiz;
+      depz = tixz * ukx + tiyz * uky + tizz * ukz - tkxz * uix - tkyz * uiy - tkzz * uiz;
       if CONSTEXPR (eq<ETYP, EWALD>()) {
          pgrad.frcx -= depx;
          pgrad.frcy -= depy;
@@ -321,12 +344,9 @@ void pair_polar(                                                              //
       tiyz = uiy * term4 + uiz * term5 + uir * term6;
       tkyz = uky * term4 + ukz * term5 + ukr * term6;
 
-      depx = tixx * ukxp + tixy * ukyp + tixz * ukzp + tkxx * uixp + tkxy * uiyp
-         + tkxz * uizp;
-      depy = tixy * ukxp + tiyy * ukyp + tiyz * ukzp + tkxy * uixp + tkyy * uiyp
-         + tkyz * uizp;
-      depz = tixz * ukxp + tiyz * ukyp + tizz * ukzp + tkxz * uixp + tkyz * uiyp
-         + tkzz * uizp;
+      depx = tixx * ukxp + tixy * ukyp + tixz * ukzp + tkxx * uixp + tkxy * uiyp + tkxz * uizp;
+      depy = tixy * ukxp + tiyy * ukyp + tiyz * ukzp + tkxy * uixp + tkyy * uiyp + tkyz * uizp;
+      depz = tixz * ukxp + tiyz * ukyp + tizz * ukzp + tkxz * uixp + tkyz * uiyp + tkzz * uizp;
       if CONSTEXPR (eq<ETYP, EWALD>()) {
          pgrad.frcx -= depx;
          pgrad.frcy -= depy;
@@ -346,25 +366,83 @@ void pair_polar(                                                              //
 #pragma acc routine seq
 template <class Ver, class ETYP>
 SEQ_CUDA
-void pair_polar_v2(                                                           //
-   real r2, real xr, real yr, real zr, real dscale, real pscale, real uscale, //
-   real ci, real dix, real diy, real diz, real qixx, real qixy, real qixz,
-   real qiyy, real qiyz, real qizz, real uix, real uiy, real uiz, real uixp,
-   real uiyp, real uizp, real pdi, real pti, //
-   real ck, real dkx, real dky, real dkz, real qkxx, real qkxy, real qkxz,
-   real qkyy, real qkyz, real qkzz, real ukx, real uky, real ukz, real ukxp,
-   real ukyp, real ukzp, real pdk, real ptk, //
-   real f, real aewald,                      //
-   real& restrict frcxi, real& restrict frcyi, real& restrict frczi,
-   real& restrict frcxk, real& restrict frcyk, real& restrict frczk, //
-   real& restrict uf0i, real& restrict uf1i, real& restrict uf2i,
-   real& restrict uf0k, real& restrict uf1k, real& restrict uf2k,
-   real& restrict duf0i, real& restrict duf1i, real& restrict duf2i,
-   real& restrict duf3i, real& restrict duf4i, real& restrict duf5i,
-   real& restrict duf0k, real& restrict duf1k, real& restrict duf2k,
-   real& restrict duf3k, real& restrict duf4k, real& restrict duf5k,
-   real& restrict e, real& restrict vxx, real& restrict vxy, real& restrict vxz,
-   real& restrict vyy, real& restrict vyz, real& restrict vzz)
+void pair_polar_v2( //
+   real r2,
+   real xr,
+   real yr,
+   real zr,
+   real dscale,
+   real pscale,
+   real uscale, //
+   real ci,
+   real dix,
+   real diy,
+   real diz,
+   real qixx,
+   real qixy,
+   real qixz,
+   real qiyy,
+   real qiyz,
+   real qizz,
+   real uix,
+   real uiy,
+   real uiz,
+   real uixp,
+   real uiyp,
+   real uizp,
+   real pdi,
+   real pti, //
+   real ck,
+   real dkx,
+   real dky,
+   real dkz,
+   real qkxx,
+   real qkxy,
+   real qkxz,
+   real qkyy,
+   real qkyz,
+   real qkzz,
+   real ukx,
+   real uky,
+   real ukz,
+   real ukxp,
+   real ukyp,
+   real ukzp,
+   real pdk,
+   real ptk, //
+   real f,
+   real aewald, //
+   real& restrict frcxi,
+   real& restrict frcyi,
+   real& restrict frczi,
+   real& restrict frcxk,
+   real& restrict frcyk,
+   real& restrict frczk, //
+   real& restrict uf0i,
+   real& restrict uf1i,
+   real& restrict uf2i,
+   real& restrict uf0k,
+   real& restrict uf1k,
+   real& restrict uf2k,
+   real& restrict duf0i,
+   real& restrict duf1i,
+   real& restrict duf2i,
+   real& restrict duf3i,
+   real& restrict duf4i,
+   real& restrict duf5i,
+   real& restrict duf0k,
+   real& restrict duf1k,
+   real& restrict duf2k,
+   real& restrict duf3k,
+   real& restrict duf4k,
+   real& restrict duf5k,
+   real& restrict e,
+   real& restrict vxx,
+   real& restrict vxy,
+   real& restrict vxz,
+   real& restrict vyy,
+   real& restrict vyz,
+   real& restrict vzz)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_g = Ver::g;
@@ -398,7 +476,8 @@ void pair_polar_v2(                                                           //
    real rr5 = 3 * rr3 * rr2;
    real rr7 = 5 * rr5 * rr2;
    MAYBE_UNUSED real rr9;
-   if CONSTEXPR (do_g) rr9 = 7 * rr7 * rr2;
+   if CONSTEXPR (do_g)
+      rr9 = 7 * rr7 * rr2;
    real bn[5];
    if CONSTEXPR (eq<ETYP, EWALD>()) {
       if CONSTEXPR (!do_g)
@@ -409,7 +488,8 @@ void pair_polar_v2(                                                           //
       bn[1] = rr3;
       bn[2] = rr5;
       bn[3] = rr7;
-      if CONSTEXPR (do_g) bn[4] = rr9;
+      if CONSTEXPR (do_g)
+         bn[4] = rr9;
    }
 
    // if use_thole
@@ -417,7 +497,7 @@ void pair_polar_v2(                                                           //
    MAYBE_UNUSED real rc31, rc32, rc33, rc51, rc52, rc53, rc71, rc72, rc73;
    if CONSTEXPR (!do_g) {
       damp_thole3(r, pdi, pti, pdk, ptk, //
-         ex3, ex5, ex7);
+                  ex3, ex5, ex7);
       ex3 = 1 - ex3;
       ex5 = 1 - ex5;
       ex7 = 1 - ex7;
@@ -515,70 +595,55 @@ void pair_polar_v2(                                                           //
       term5 = term2 * xr * xr - sr5 - xr * rc51;
       term6 = (bn[4] - ex7 * rr9) * xr * xr - bn[3] - xr * rc71;
       term7 = rc51 - 2 * bn[3] * xr + (ex5 + 1.5f * ex7) * rr7 * xr;
-      real tixx = ci * term3 + dix * term4 + dir * term5 + 2 * sr5 * qixx
-         + (qiy * yr + qiz * zr) * ex7 * rr7 + 2 * qix * term7 + qir * term6;
-      real tkxx = ck * term3 - dkx * term4 - dkr * term5 + 2 * sr5 * qkxx
-         + (qky * yr + qkz * zr) * ex7 * rr7 + 2 * qkx * term7 + qkr * term6;
+      real tixx = ci * term3 + dix * term4 + dir * term5 + 2 * sr5 * qixx + (qiy * yr + qiz * zr) * ex7 * rr7 + 2 * qix * term7 + qir * term6;
+      real tkxx = ck * term3 - dkx * term4 - dkr * term5 + 2 * sr5 * qkxx + (qky * yr + qkz * zr) * ex7 * rr7 + 2 * qkx * term7 + qkr * term6;
 
       term3 = -sr3 + term1 * yr * yr - yr * rc32;
       term4 = rc32 - term1 * yr - sr5 * yr;
       term5 = term2 * yr * yr - sr5 - yr * rc52;
       term6 = (bn[4] - ex7 * rr9) * yr * yr - bn[3] - yr * rc72;
       term7 = rc52 - 2 * bn[3] * yr + (ex5 + 1.5f * ex7) * rr7 * yr;
-      real tiyy = ci * term3 + diy * term4 + dir * term5 + 2 * sr5 * qiyy
-         + (qix * xr + qiz * zr) * ex7 * rr7 + 2 * qiy * term7 + qir * term6;
-      real tkyy = ck * term3 - dky * term4 - dkr * term5 + 2 * sr5 * qkyy
-         + (qkx * xr + qkz * zr) * ex7 * rr7 + 2 * qky * term7 + qkr * term6;
+      real tiyy = ci * term3 + diy * term4 + dir * term5 + 2 * sr5 * qiyy + (qix * xr + qiz * zr) * ex7 * rr7 + 2 * qiy * term7 + qir * term6;
+      real tkyy = ck * term3 - dky * term4 - dkr * term5 + 2 * sr5 * qkyy + (qkx * xr + qkz * zr) * ex7 * rr7 + 2 * qky * term7 + qkr * term6;
 
       term3 = -sr3 + term1 * zr * zr - zr * rc33;
       term4 = rc33 - term1 * zr - sr5 * zr;
       term5 = term2 * zr * zr - sr5 - zr * rc53;
       term6 = (bn[4] - ex7 * rr9) * zr * zr - bn[3] - zr * rc73;
       term7 = rc53 - 2 * bn[3] * zr + (ex5 + 1.5f * ex7) * rr7 * zr;
-      real tizz = ci * term3 + diz * term4 + dir * term5 + 2 * sr5 * qizz
-         + (qix * xr + qiy * yr) * ex7 * rr7 + 2 * qiz * term7 + qir * term6;
-      real tkzz = ck * term3 - dkz * term4 - dkr * term5 + 2 * sr5 * qkzz
-         + (qkx * xr + qky * yr) * ex7 * rr7 + 2 * qkz * term7 + qkr * term6;
+      real tizz = ci * term3 + diz * term4 + dir * term5 + 2 * sr5 * qizz + (qix * xr + qiy * yr) * ex7 * rr7 + 2 * qiz * term7 + qir * term6;
+      real tkzz = ck * term3 - dkz * term4 - dkr * term5 + 2 * sr5 * qkzz + (qkx * xr + qky * yr) * ex7 * rr7 + 2 * qkz * term7 + qkr * term6;
 
       term3 = term1 * xr * yr - yr * rc31;
       term4 = rc31 - term1 * xr;
       term5 = term2 * xr * yr - yr * rc51;
       term6 = (bn[4] - ex7 * rr9) * xr * yr - yr * rc71;
       term7 = rc51 - term2 * xr;
-      real tixy = ci * term3 - sr5 * dix * yr + diy * term4 + dir * term5
-         + 2 * sr5 * qixy - 2 * sr7 * yr * qix + 2 * qiy * term7 + qir * term6;
-      real tkxy = ck * term3 + sr5 * dkx * yr - dky * term4 - dkr * term5
-         + 2 * sr5 * qkxy - 2 * sr7 * yr * qkx + 2 * qky * term7 + qkr * term6;
+      real tixy = ci * term3 - sr5 * dix * yr + diy * term4 + dir * term5 + 2 * sr5 * qixy - 2 * sr7 * yr * qix + 2 * qiy * term7 + qir * term6;
+      real tkxy = ck * term3 + sr5 * dkx * yr - dky * term4 - dkr * term5 + 2 * sr5 * qkxy - 2 * sr7 * yr * qkx + 2 * qky * term7 + qkr * term6;
 
       term3 = term1 * xr * zr - zr * rc31;
       term5 = term2 * xr * zr - zr * rc51;
       term6 = (bn[4] - ex7 * rr9) * xr * zr - zr * rc71;
-      real tixz = ci * term3 - sr5 * dix * zr + diz * term4 + dir * term5
-         + 2 * sr5 * qixz - 2 * sr7 * zr * qix + 2 * qiz * term7 + qir * term6;
-      real tkxz = ck * term3 + sr5 * dkx * zr - dkz * term4 - dkr * term5
-         + 2 * sr5 * qkxz - 2 * sr7 * zr * qkx + 2 * qkz * term7 + qkr * term6;
+      real tixz = ci * term3 - sr5 * dix * zr + diz * term4 + dir * term5 + 2 * sr5 * qixz - 2 * sr7 * zr * qix + 2 * qiz * term7 + qir * term6;
+      real tkxz = ck * term3 + sr5 * dkx * zr - dkz * term4 - dkr * term5 + 2 * sr5 * qkxz - 2 * sr7 * zr * qkx + 2 * qkz * term7 + qkr * term6;
 
       term3 = term1 * yr * zr - zr * rc32;
       term4 = rc32 - term1 * yr;
       term5 = term2 * yr * zr - zr * rc52;
       term6 = (bn[4] - ex7 * rr9) * yr * zr - zr * rc72;
       term7 = rc52 - term2 * yr;
-      real tiyz = ci * term3 - sr5 * diy * zr + diz * term4 + dir * term5
-         + 2 * sr5 * qiyz - 2 * sr7 * zr * qiy + 2 * qiz * term7 + qir * term6;
-      real tkyz = ck * term3 + sr5 * dky * zr - dkz * term4 - dkr * term5
-         + 2 * sr5 * qkyz - 2 * sr7 * zr * qky + 2 * qkz * term7 + qkr * term6;
+      real tiyz = ci * term3 - sr5 * diy * zr + diz * term4 + dir * term5 + 2 * sr5 * qiyz - 2 * sr7 * zr * qiy + 2 * qiz * term7 + qir * term6;
+      real tkyz = ck * term3 + sr5 * dky * zr - dkz * term4 - dkr * term5 + 2 * sr5 * qkyz - 2 * sr7 * zr * qky + 2 * qkz * term7 + qkr * term6;
 
       // get the dEd/dR terms for Thole direct polarization force
 
       real depx, depy, depz;
       real frcx, frcy, frcz;
 
-      depx = tixx * ukxp + tixy * ukyp + tixz * ukzp - tkxx * uixp - tkxy * uiyp
-         - tkxz * uizp;
-      depy = tixy * ukxp + tiyy * ukyp + tiyz * ukzp - tkxy * uixp - tkyy * uiyp
-         - tkyz * uizp;
-      depz = tixz * ukxp + tiyz * ukyp + tizz * ukzp - tkxz * uixp - tkyz * uiyp
-         - tkzz * uizp;
+      depx = tixx * ukxp + tixy * ukyp + tixz * ukzp - tkxx * uixp - tkxy * uiyp - tkxz * uizp;
+      depy = tixy * ukxp + tiyy * ukyp + tiyz * ukzp - tkxy * uixp - tkyy * uiyp - tkyz * uizp;
+      depz = tixz * ukxp + tiyz * ukyp + tizz * ukzp - tkxz * uixp - tkyz * uiyp - tkzz * uizp;
       if CONSTEXPR (eq<ETYP, EWALD>()) {
          frcx = -depx;
          frcy = -depy;
@@ -591,12 +656,9 @@ void pair_polar_v2(                                                           //
 
       // get the dEp/dR terms for Thole direct polarization force
 
-      depx = tixx * ukx + tixy * uky + tixz * ukz - tkxx * uix - tkxy * uiy
-         - tkxz * uiz;
-      depy = tixy * ukx + tiyy * uky + tiyz * ukz - tkxy * uix - tkyy * uiy
-         - tkyz * uiz;
-      depz = tixz * ukx + tiyz * uky + tizz * ukz - tkxz * uix - tkyz * uiy
-         - tkzz * uiz;
+      depx = tixx * ukx + tixy * uky + tixz * ukz - tkxx * uix - tkxy * uiy - tkxz * uiz;
+      depy = tixy * ukx + tiyy * uky + tiyz * ukz - tkxy * uix - tkyy * uiy - tkyz * uiz;
+      depz = tixz * ukx + tiyz * uky + tizz * ukz - tkxz * uix - tkyz * uiy - tkzz * uiz;
       if CONSTEXPR (eq<ETYP, EWALD>()) {
          frcx -= depx;
          frcy -= depy;
@@ -644,12 +706,9 @@ void pair_polar_v2(                                                           //
       tiyz = uiy * term4 + uiz * term5 + uir * term6;
       tkyz = uky * term4 + ukz * term5 + ukr * term6;
 
-      depx = tixx * ukxp + tixy * ukyp + tixz * ukzp + tkxx * uixp + tkxy * uiyp
-         + tkxz * uizp;
-      depy = tixy * ukxp + tiyy * ukyp + tiyz * ukzp + tkxy * uixp + tkyy * uiyp
-         + tkyz * uizp;
-      depz = tixz * ukxp + tiyz * ukyp + tizz * ukzp + tkxz * uixp + tkyz * uiyp
-         + tkzz * uizp;
+      depx = tixx * ukxp + tixy * ukyp + tixz * ukzp + tkxx * uixp + tkxy * uiyp + tkxz * uizp;
+      depy = tixy * ukxp + tiyy * ukyp + tiyz * ukzp + tkxy * uixp + tkyy * uiyp + tkyz * uizp;
+      depz = tixz * ukxp + tiyz * ukyp + tizz * ukzp + tkxz * uixp + tkyz * uiyp + tkzz * uizp;
       if CONSTEXPR (eq<ETYP, EWALD>()) {
          frcx -= depx;
          frcy -= depy;

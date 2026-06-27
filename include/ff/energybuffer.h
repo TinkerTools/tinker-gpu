@@ -100,8 +100,12 @@ typedef VirialBufferTraits::type (*VirialBuffer)[VirialBufferTraits::value];
 /// \param px    Pointer of the x gradient.
 /// \param py    Pointer of the y gradient.
 /// \param pz    Pointer of the z gradient.
-void bufferAllocate(int flag, EnergyBuffer* pe, VirialBuffer* pv, //
-   grad_prec** px, grad_prec** py, grad_prec** pz);
+void bufferAllocate(int flag,
+                    EnergyBuffer* pe,
+                    VirialBuffer* pv, //
+                    grad_prec** px,
+                    grad_prec** py,
+                    grad_prec** pz);
 
 /// Deallocates a set of variables for an energy term as necessary.
 /// \param flag  Controls the variables to be deallocated.
@@ -110,8 +114,12 @@ void bufferAllocate(int flag, EnergyBuffer* pe, VirialBuffer* pv, //
 /// \param gx    The x gradient.
 /// \param gy    The y gradient.
 /// \param gz    The z gradient.
-void bufferDeallocate(int flag, EnergyBuffer e, VirialBuffer v, //
-   grad_prec* gx, grad_prec* gy, grad_prec* gz);
+void bufferDeallocate(int flag,
+                      EnergyBuffer e,
+                      VirialBuffer v, //
+                      grad_prec* gx,
+                      grad_prec* gy,
+                      grad_prec* gz);
 
 /// Allocates a CountBuffer for an energy term as necessary.
 /// \param flag  Controls the variable to be allocated.

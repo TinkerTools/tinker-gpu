@@ -2,6 +2,7 @@
 #include "ff/box.h"
 #include "ff/energybuffer.h"
 #include "ff/nblist.h"
+#include "ff/potent.h"
 #include "tool/darray.h"
 #include "tool/error.h"
 #include "tool/externfunc.h"
@@ -65,6 +66,25 @@ void massData(RcOp op)
          mbuf[i] = 1 / atomid::mass[i];
       darray::copyin(g::q0, n, massinv, mbuf.data());
       darray::copyin(g::q0, n, mass, atomid::mass);
+      waitFor(g::q0);
+   }
+}
+
+void atomicData(RcOp op)
+{
+   if (not(use(Potent::CHGFLX) | use(Potent::NNVAL) | use(Potent::NNMET)))
+      return;
+
+   if (op & RcOp::DEALLOC) {
+      darray::deallocate(atomic);
+   }
+
+   if (op & RcOp::ALLOC) {
+      darray::allocate(n, &atomic);
+   }
+
+   if (op & RcOp::INIT) {
+      darray::copyin(g::q0, n, atomic, atomid::atomic);
       waitFor(g::q0);
    }
 }

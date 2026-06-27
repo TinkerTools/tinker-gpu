@@ -12,8 +12,8 @@
 namespace tinker {
 template <unsigned int B>
 __global__
-void mdrestSumP_cu(int n, vel_prec* restrict odata, const double* restrict mass,
-   const vel_prec* restrict vx, const vel_prec* restrict vy, const vel_prec* restrict vz)
+void mdrestSumP_cu(int n, vel_prec* restrict odata, const double* restrict mass, const vel_prec* restrict vx,
+   const vel_prec* restrict vy, const vel_prec* restrict vz)
 {
    static_assert(B == 64, "");
    const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
@@ -47,8 +47,8 @@ void mdrestSumP_cu(int n, vel_prec* restrict odata, const double* restrict mass,
 
 template <int B>
 __global__
-void mdrestRemoveP_cu(int n, double invtotmass, const vel_prec* restrict idata,
-   vel_prec* restrict vx, vel_prec* restrict vy, vel_prec* restrict vz, vel_prec* restrict xout)
+void mdrestRemoveP_cu(int n, double invtotmass, const vel_prec* restrict idata, vel_prec* restrict vx,
+   vel_prec* restrict vy, vel_prec* restrict vz, vel_prec* restrict xout)
 {
    static_assert(B == 64, "");
    const int ithread = threadIdx.x + blockIdx.x * blockDim.x;

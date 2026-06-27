@@ -39,11 +39,11 @@
 /// FLT answer = val2 / 0x100000000ull;
 /// \endcode
 #ifndef TINKER_DETERMINISTIC_FORCE
-#   if TINKER_DOUBLE_PRECISION
-#      define TINKER_DETERMINISTIC_FORCE 0
-#   else
-#      define TINKER_DETERMINISTIC_FORCE 1
-#   endif
+#if TINKER_DOUBLE_PRECISION
+#define TINKER_DETERMINISTIC_FORCE 0
+#else
+#define TINKER_DETERMINISTIC_FORCE 1
+#endif
 #endif
 
 namespace tinker {
@@ -69,20 +69,20 @@ typedef unsigned long long fixed;
 static_assert(sizeof(fixed) == 8, "");
 
 #if TINKER_DOUBLE_PRECISION
-#   define TINKER_REAL_SIZE  8
-#   define TINKER_MIXED_SIZE 8
+#define TINKER_REAL_SIZE  8
+#define TINKER_MIXED_SIZE 8
 typedef double real;
 typedef double mixed;
 #endif
 #if TINKER_MIXED_PRECISION
-#   define TINKER_REAL_SIZE  4
-#   define TINKER_MIXED_SIZE 8
+#define TINKER_REAL_SIZE  4
+#define TINKER_MIXED_SIZE 8
 typedef float real;
 typedef double mixed;
 #endif
 #if TINKER_SINGLE_PRECISION
-#   define TINKER_REAL_SIZE  4
-#   define TINKER_MIXED_SIZE 4
+#define TINKER_REAL_SIZE  4
+#define TINKER_MIXED_SIZE 4
 typedef float real;
 typedef float mixed;
 #endif

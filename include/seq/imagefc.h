@@ -60,8 +60,7 @@ inline real3 imageFrac(real3 f)
 
 /// Cartesian to fractional: triclinic.
 __device__
-inline real3 ctof_triclinic(real xr, real yr, real zr, real3 ra, real3 rb,
-   real3 rc)
+inline real3 ctof_triclinic(real xr, real yr, real zr, real3 ra, real3 rb, real3 rc)
 {
    real3 f;
    f.x = zr * ra.z + yr * ra.y + xr * ra.x;
@@ -72,8 +71,7 @@ inline real3 ctof_triclinic(real xr, real yr, real zr, real3 ra, real3 rb,
 
 /// Cartesian to fractional: monoclinic.
 __device__
-inline real3 ctof_monoclinic(real xr, real yr, real zr, real3 ra, real3 rb,
-   real3 rc)
+inline real3 ctof_monoclinic(real xr, real yr, real zr, real3 ra, real3 rb, real3 rc)
 {
    real3 f;
    f.x = zr * ra.z + xr * ra.x;
@@ -84,8 +82,7 @@ inline real3 ctof_monoclinic(real xr, real yr, real zr, real3 ra, real3 rb,
 
 /// Cartesian to fractional: orthogonal.
 __device__
-inline real3 ctof_orthogonal(real xr, real yr, real zr, real3 ra, real3 rb,
-   real3 rc)
+inline real3 ctof_orthogonal(real xr, real yr, real zr, real3 ra, real3 rb, real3 rc)
 {
    real3 f;
    f.x = xr * ra.x;
@@ -96,8 +93,7 @@ inline real3 ctof_orthogonal(real xr, real yr, real zr, real3 ra, real3 rb,
 
 /// Cartesian to fractional.
 __device__
-inline real3 imagectof_general(real xr, real yr, real zr, real3 ra, real3 rb,
-   real3 rc)
+inline real3 imagectof_general(real xr, real yr, real zr, real3 ra, real3 rb, real3 rc)
 {
    if (ra.z == 0) {
       return imageFrac(ctof_orthogonal(xr, yr, zr, ra, rb, rc));

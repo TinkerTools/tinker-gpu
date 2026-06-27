@@ -38,6 +38,7 @@ mdintg.cu
 mdpq.cu
 mdpt.cu
 minimize.cu
+nn.cu
 pme.cu
 rattle.cu
 spatial.cu

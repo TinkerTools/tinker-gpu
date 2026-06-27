@@ -1,7 +1,7 @@
-#include "ff/modamoeba.h"
 #include "ff/atom.h"
-#include "ff/modhippo.h"
 #include "ff/image.h"
+#include "ff/modamoeba.h"
+#include "ff/modhippo.h"
 #include "ff/nblist.h"
 #include "ff/pme.h"
 #include "ff/switch.h"
@@ -9,8 +9,7 @@
 #include "tool/gpucard.h"
 
 namespace tinker {
-#define DEVICE_PTRS                                                                                \
-   x, y, z, demx, demy, demz, rpole, pcore, pval, palpha, pot, nem, em, vir_em, trqx, trqy, trqz
+#define DEVICE_PTRS x, y, z, demx, demy, demz, rpole, pcore, pval, palpha, pot, nem, em, vir_em, trqx, trqy, trqz
 template <class Ver, class ETYP, bool CFLX>
 static void empoleChgpen_acc1()
 {
@@ -85,10 +84,9 @@ static void empoleChgpen_acc1()
             pair_mpole_chgpen<do_e, do_g, ETYP, CFLX>(r2, xr, yr, zr, 1, //
                ci, dix, diy, diz, corei, vali, alphai,                   //
                qixx, qixy, qixz, qiyy, qiyz, qizz,                       //
-               rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z],
-               corek, valk, alphak, rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY],
-               rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY], rpole[k][MPL_PME_YZ],
-               rpole[k][MPL_PME_ZZ], f, aewald, e, pota, potb, pgrad);
+               rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], corek, valk, alphak,
+               rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY],
+               rpole[k][MPL_PME_YZ], rpole[k][MPL_PME_ZZ], f, aewald, e, pota, potb, pgrad);
 
             if CONSTEXPR (do_a)
                if (e != 0)
@@ -149,8 +147,7 @@ static void empoleChgpen_acc1()
          const real fterm = -f * aewald * 0.5f * (real)(M_2_SQRTPI);
          real cii = ci * ci;
          real dii = dix * dix + diy * diy + diz * diz;
-         real qii =
-            2 * (qixy * qixy + qixz * qixz + qiyz * qiyz) + qixx * qixx + qiyy * qiyy + qizz * qizz;
+         real qii = 2 * (qixy * qixy + qixz * qixz + qiyz * qiyz) + qixx * qixx + qiyy * qiyy + qizz * qizz;
 
          if CONSTEXPR (do_e) {
             int offset = i & (bufsize - 1);
@@ -213,10 +210,9 @@ static void empoleChgpen_acc1()
          pair_mpole_chgpen<do_e, do_g, NON_EWALD, CFLX>(r2, xr, yr, zr, mscale, //
             ci, dix, diy, diz, corei, vali, alphai,                             //
             qixx, qixy, qixz, qiyy, qiyz, qizz,                                 //
-            rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z],
-            corek, valk, alphak, rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ],
-            rpole[k][MPL_PME_YY], rpole[k][MPL_PME_YZ], rpole[k][MPL_PME_ZZ], f, 0, e, pota, potb,
-            pgrad);
+            rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], corek, valk, alphak,
+            rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY],
+            rpole[k][MPL_PME_YZ], rpole[k][MPL_PME_ZZ], f, 0, e, pota, potb, pgrad);
 
          if CONSTEXPR (do_a)
             if (mscale == -1 and e != 0)
@@ -344,15 +340,12 @@ static void empoleEwaldRecipGeneric_acc()
 
          // resolve site torques then increment forces and virial
 
-         real tem1 = cmp[i][3] * cphi[i][2] - cmp[i][2] * cphi[i][3] +
-            2 * (cmp[i][6] - cmp[i][5]) * cphi[i][9] + cmp[i][8] * cphi[i][7] +
-            cmp[i][9] * cphi[i][5] - cmp[i][7] * cphi[i][8] - cmp[i][9] * cphi[i][6];
-         real tem2 = cmp[i][1] * cphi[i][3] - cmp[i][3] * cphi[i][1] +
-            2 * (cmp[i][4] - cmp[i][6]) * cphi[i][8] + cmp[i][7] * cphi[i][9] +
-            cmp[i][8] * cphi[i][6] - cmp[i][8] * cphi[i][4] - cmp[i][9] * cphi[i][7];
-         real tem3 = cmp[i][2] * cphi[i][1] - cmp[i][1] * cphi[i][2] +
-            2 * (cmp[i][5] - cmp[i][4]) * cphi[i][7] + cmp[i][7] * cphi[i][4] +
-            cmp[i][9] * cphi[i][8] - cmp[i][7] * cphi[i][5] - cmp[i][8] * cphi[i][9];
+         real tem1 = cmp[i][3] * cphi[i][2] - cmp[i][2] * cphi[i][3] + 2 * (cmp[i][6] - cmp[i][5]) * cphi[i][9]
+            + cmp[i][8] * cphi[i][7] + cmp[i][9] * cphi[i][5] - cmp[i][7] * cphi[i][8] - cmp[i][9] * cphi[i][6];
+         real tem2 = cmp[i][1] * cphi[i][3] - cmp[i][3] * cphi[i][1] + 2 * (cmp[i][4] - cmp[i][6]) * cphi[i][8]
+            + cmp[i][7] * cphi[i][9] + cmp[i][8] * cphi[i][6] - cmp[i][8] * cphi[i][4] - cmp[i][9] * cphi[i][7];
+         real tem3 = cmp[i][2] * cphi[i][1] - cmp[i][1] * cphi[i][2] + 2 * (cmp[i][5] - cmp[i][4]) * cphi[i][7]
+            + cmp[i][7] * cphi[i][4] + cmp[i][9] * cphi[i][8] - cmp[i][7] * cphi[i][5] - cmp[i][8] * cphi[i][9];
          tem1 *= f;
          tem2 *= f;
          tem3 *= f;
@@ -362,21 +355,21 @@ static void empoleEwaldRecipGeneric_acc()
          atomic_add(tem3, trqz, i);
 
          if CONSTEXPR (do_v) {
-            real vxx = -cmp[i][1] * cphi[i][1] - 2 * cmp[i][4] * cphi[i][4] -
-               cmp[i][7] * cphi[i][7] - cmp[i][8] * cphi[i][8];
-            real vxy = -0.5f * (cmp[i][2] * cphi[i][1] + cmp[i][1] * cphi[i][2]) -
-               (cmp[i][4] + cmp[i][5]) * cphi[i][7] - 0.5f * cmp[i][7] * (cphi[i][4] + cphi[i][5]) -
-               0.5f * (cmp[i][8] * cphi[i][9] + cmp[i][9] * cphi[i][8]);
-            real vxz = -0.5f * (cmp[i][3] * cphi[i][1] + cmp[i][1] * cphi[i][3]) -
-               (cmp[i][4] + cmp[i][6]) * cphi[i][8] - 0.5f * cmp[i][8] * (cphi[i][4] + cphi[i][6]) -
-               0.5f * (cmp[i][7] * cphi[i][9] + cmp[i][9] * cphi[i][7]);
-            real vyy = -cmp[i][2] * cphi[i][2] - 2 * cmp[i][5] * cphi[i][5] -
-               cmp[i][7] * cphi[i][7] - cmp[i][9] * cphi[i][9];
-            real vyz = -0.5f * (cmp[i][3] * cphi[i][2] + cmp[i][2] * cphi[i][3]) -
-               (cmp[i][5] + cmp[i][6]) * cphi[i][9] - 0.5f * cmp[i][9] * (cphi[i][5] + cphi[i][6]) -
-               0.5f * (cmp[i][7] * cphi[i][8] + cmp[i][8] * cphi[i][7]);
-            real vzz = -cmp[i][3] * cphi[i][3] - 2 * cmp[i][6] * cphi[i][6] -
-               cmp[i][8] * cphi[i][8] - cmp[i][9] * cphi[i][9];
+            real vxx = -cmp[i][1] * cphi[i][1] - 2 * cmp[i][4] * cphi[i][4] - cmp[i][7] * cphi[i][7]
+               - cmp[i][8] * cphi[i][8];
+            real vxy = -0.5f * (cmp[i][2] * cphi[i][1] + cmp[i][1] * cphi[i][2]) - (cmp[i][4] + cmp[i][5]) * cphi[i][7]
+               - 0.5f * cmp[i][7] * (cphi[i][4] + cphi[i][5])
+               - 0.5f * (cmp[i][8] * cphi[i][9] + cmp[i][9] * cphi[i][8]);
+            real vxz = -0.5f * (cmp[i][3] * cphi[i][1] + cmp[i][1] * cphi[i][3]) - (cmp[i][4] + cmp[i][6]) * cphi[i][8]
+               - 0.5f * cmp[i][8] * (cphi[i][4] + cphi[i][6])
+               - 0.5f * (cmp[i][7] * cphi[i][9] + cmp[i][9] * cphi[i][7]);
+            real vyy = -cmp[i][2] * cphi[i][2] - 2 * cmp[i][5] * cphi[i][5] - cmp[i][7] * cphi[i][7]
+               - cmp[i][9] * cphi[i][9];
+            real vyz = -0.5f * (cmp[i][3] * cphi[i][2] + cmp[i][2] * cphi[i][3]) - (cmp[i][5] + cmp[i][6]) * cphi[i][9]
+               - 0.5f * cmp[i][9] * (cphi[i][5] + cphi[i][6])
+               - 0.5f * (cmp[i][7] * cphi[i][8] + cmp[i][8] * cphi[i][7]);
+            real vzz = -cmp[i][3] * cphi[i][3] - 2 * cmp[i][6] * cphi[i][6] - cmp[i][8] * cphi[i][8]
+               - cmp[i][9] * cphi[i][9];
             vxx *= f;
             vxy *= f;
             vxz *= f;

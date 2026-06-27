@@ -17,8 +17,7 @@ private:
    // If `dst != src`, copy the `first_n` characters from `src` to `dst`;
    // fill `dst` with blanks if `first_n` is less than `dstlen`;
    // `dst` is NOT NULL-terminated.
-   static void copyWithBlank(char* dst, size_t dstlen, const char* src,
-      size_t first_n);
+   static void copyWithBlank(char* dst, size_t dstlen, const char* src, size_t first_n);
 
    // Compare to a string `src` of `len`.
    // The shorter string is filled by blanks prior to comparison.

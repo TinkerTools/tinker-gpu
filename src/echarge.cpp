@@ -196,8 +196,10 @@ void echarge(int vers)
       echargeEwaldRecipSelf(vers);
       TINKER_FCALL2(acc1, cu1, echargeEwaldReal, vers);
       pmeStreamFinishWait(use_pme_stream and static_cast<bool>(vers & calc::analyz));
-   } else
+   } else {
       echargeNonEwald(vers);
+   }
+   exfield(vers, 0);
 
    if (rc_a) {
       if (do_e) {

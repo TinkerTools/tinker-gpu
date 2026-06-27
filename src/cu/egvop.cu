@@ -3,8 +3,8 @@
 
 namespace tinker {
 __global__
-void sumGradient_cu1(int n, grad_prec* g0x, grad_prec* g0y, grad_prec* g0z, const grad_prec* g1x,
-   const grad_prec* g1y, const grad_prec* g1z)
+void sumGradient_cu1(int n, grad_prec* g0x, grad_prec* g0y, grad_prec* g0z, const grad_prec* g1x, const grad_prec* g1y,
+   const grad_prec* g1z)
 {
    for (int i = ITHREAD; i < n; i += STRIDE) {
       g0x[i] += g1x[i];
@@ -13,15 +13,15 @@ void sumGradient_cu1(int n, grad_prec* g0x, grad_prec* g0y, grad_prec* g0z, cons
    }
 }
 
-void sumGradientV1_cu(grad_prec* g0x, grad_prec* g0y, grad_prec* g0z, const grad_prec* g1x,
-   const grad_prec* g1y, const grad_prec* g1z)
+void sumGradientV1_cu(grad_prec* g0x, grad_prec* g0y, grad_prec* g0z, const grad_prec* g1x, const grad_prec* g1y,
+   const grad_prec* g1z)
 {
    launch_k1s(g::s0, n, sumGradient_cu1, n, g0x, g0y, g0z, g1x, g1y, g1z);
 }
 
 __global__
-void sumGradient_cu2(int n, real s, grad_prec* g0x, grad_prec* g0y, grad_prec* g0z,
-   const grad_prec* g1x, const grad_prec* g1y, const grad_prec* g1z)
+void sumGradient_cu2(int n, real s, grad_prec* g0x, grad_prec* g0y, grad_prec* g0z, const grad_prec* g1x,
+   const grad_prec* g1y, const grad_prec* g1z)
 {
    for (int i = ITHREAD; i < n; i += STRIDE) {
       auto gxi = toFloatGrad<real>(g1x[i]);
@@ -33,8 +33,8 @@ void sumGradient_cu2(int n, real s, grad_prec* g0x, grad_prec* g0y, grad_prec* g
    }
 }
 
-void sumGradientV2_cu(double ss, grad_prec* g0x, grad_prec* g0y, grad_prec* g0z,
-   const grad_prec* g1x, const grad_prec* g1y, const grad_prec* g1z)
+void sumGradientV2_cu(double ss, grad_prec* g0x, grad_prec* g0y, grad_prec* g0z, const grad_prec* g1x,
+   const grad_prec* g1y, const grad_prec* g1z)
 {
    real s = ss;
    launch_k1s(g::s0, n, sumGradient_cu2, n, s, g0x, g0y, g0z, g1x, g1y, g1z);

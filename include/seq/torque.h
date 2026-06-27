@@ -10,8 +10,7 @@ inline real torqueDot(const real* restrict a, const real* restrict b)
 }
 
 SEQ_ROUTINE
-inline void torqueCross(real* restrict ans, const real* restrict u,
-   const real* restrict v)
+inline void torqueCross(real* restrict ans, const real* restrict u, const real* restrict v)
 {
    ans[0] = u[1] * v[2] - u[2] * v[1];
    ans[1] = u[2] * v[0] - u[0] * v[2];

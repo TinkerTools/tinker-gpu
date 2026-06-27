@@ -16,8 +16,7 @@ namespace tinker {
 /// \param a       Parameter `a`.
 /// \param b       Parameter `b`.
 /// \param R       Random number of a standard normal distribution.
-inline double OUProcess(double t, double x0, double gamma, double a, double b,
-   double R)
+inline double OUProcess(double t, double x0, double gamma, double a, double b, double R)
 {
    if (gamma == 0) {
       return x0 + a * t + b * R * std::sqrt(t);

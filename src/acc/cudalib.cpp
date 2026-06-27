@@ -1,9 +1,9 @@
 #include "tool/rcman.h"
 #if TINKER_CUDART
-#   include "tool/accasync.h"
-#   include "tool/cudalib.h"
-#   include "tool/platform.h"
-#   include <openacc.h>
+#include "tool/accasync.h"
+#include "tool/cudalib.h"
+#include "tool/platform.h"
+#include <openacc.h>
 #endif
 
 namespace tinker {

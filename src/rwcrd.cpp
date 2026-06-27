@@ -83,8 +83,7 @@ CrdWriter::~CrdWriter()
    delete m_impl;
 }
 
-CrdWriter::CrdWriter(
-   const double* xx, const double* yy, const double* zz, std::string crdfile, CrdFormat crdformat)
+CrdWriter::CrdWriter(const double* xx, const double* yy, const double* zz, std::string crdfile, CrdFormat crdformat)
    : m_impl(CrdW::create(crdfile, crdformat))
    , qx(xx)
    , qy(yy)
@@ -134,7 +133,8 @@ private:
    {
       int size1, size2;
       ipt.read((char*)&size1, sizeof(int));
-      if (nbyte > 0) assert(nbyte == size1);
+      if (nbyte > 0)
+         assert(nbyte == size1);
       ipt.read((char*)buffer, size1);
       ipt.read((char*)&size2, sizeof(int));
    }
@@ -146,9 +146,12 @@ private:
          readIntoBuffer(dcdXtal, sizeof(double) * DCD_XTAL_LEN, ipt);
          double ax = dcdXtal[DCD_AX], bx = dcdXtal[DCD_BX], cx = dcdXtal[DCD_CX];
          double al = 90., be = 90., ga = 90.;
-         if (dcdXtal[DCD_COS_A] != 0.0) al = std::acos(dcdXtal[DCD_COS_A]) * (180 / M_PI);
-         if (dcdXtal[DCD_COS_B] != 0.0) be = std::acos(dcdXtal[DCD_COS_B]) * (180 / M_PI);
-         if (dcdXtal[DCD_COS_G] != 0.0) ga = std::acos(dcdXtal[DCD_COS_G]) * (180 / M_PI);
+         if (dcdXtal[DCD_COS_A] != 0.0)
+            al = std::acos(dcdXtal[DCD_COS_A]) * (180 / M_PI);
+         if (dcdXtal[DCD_COS_B] != 0.0)
+            be = std::acos(dcdXtal[DCD_COS_B]) * (180 / M_PI);
+         if (dcdXtal[DCD_COS_G] != 0.0)
+            ga = std::acos(dcdXtal[DCD_COS_G]) * (180 / M_PI);
          Box p;
          boxLattice(p, box_shape, ax, bx, cx, al, be, ga);
          boxSetCurrent(p);
@@ -269,7 +272,8 @@ CrdR* CrdR::create(std::string crdfile, CrdFormat crdformat)
          //  1  O      8.733783    7.084710   -0.688468     1     2     3
          double l1, l2, l3, a1, a2, a3;
          int matched = std::sscanf(line.data(), "%lf%lf%lf%lf%lf%lf", &l1, &l2, &l3, &a1, &a2, &a3);
-         if (matched == 6) fmt = CrdFormat::TXYZ2_PBC;
+         if (matched == 6)
+            fmt = CrdFormat::TXYZ2_PBC;
       }
    }
 
@@ -292,9 +296,7 @@ CrdR* CrdR::create(std::string crdfile, CrdFormat crdformat)
 //====================================================================//
 
 namespace tinker {
-static auto d3__ = [](const double* a, const double* b) -> double {
-   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-};
+static auto d3__ = [](const double* a, const double* b) -> double { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; };
 
 class CrdWDcd : public CrdW
 {
@@ -355,7 +357,8 @@ public:
          dcdControl[i] = 0;
       const char* cord = "CORD";
       std::memcpy(&dcdControl[DCD_HEADER], cord, 4);
-      if (bound::use_bounds) dcdControl[DCD_USEBOX] = 1;
+      if (bound::use_bounds)
+         dcdControl[DCD_USEBOX] = 1;
       dcdControl[DCD_CHARMM_VER] = 24;
 
       int dcdTitle[21] = {0};
@@ -430,10 +433,14 @@ private:
          crdmin = minOf(crdmin, xi, yi, zi);
          crdmax = maxOf(crdmax, xi, yi, zi);
       }
-      if (crdmin <= -1000.) crdsiz = 7;
-      if (crdmax >= 10000.) crdsiz = 7;
-      if (crdmin <= -10000.) crdsiz = 8;
-      if (crdmax >= 100000.) crdsiz = 8;
+      if (crdmin <= -1000.)
+         crdsiz = 7;
+      if (crdmax >= 10000.)
+         crdsiz = 7;
+      if (crdmin <= -10000.)
+         crdsiz = 8;
+      if (crdmax >= 100000.)
+         crdsiz = 8;
       const char* fflt = formatFlt(crdsiz, digc);
       const char* fint = formatInt(ilen);
 
@@ -455,9 +462,12 @@ private:
          double al = 90.0;
          double be = 90.0;
          double ga = 90.0;
-         if (cos_a != 0.0) al = (180 / M_PI) * std::acos(cos_a);
-         if (cos_b != 0.0) be = (180 / M_PI) * std::acos(cos_b);
-         if (cos_c != 0.0) ga = (180 / M_PI) * std::acos(cos_c);
+         if (cos_a != 0.0)
+            al = (180 / M_PI) * std::acos(cos_a);
+         if (cos_b != 0.0)
+            be = (180 / M_PI) * std::acos(cos_b);
+         if (cos_c != 0.0)
+            ga = (180 / M_PI) * std::acos(cos_c);
 
          std::string fmt_box = " ";
          fmt_box = fmt_box + fflt + fflt + fflt + fflt + fflt + fflt + "\n";
@@ -468,8 +478,7 @@ private:
       fmt_atom = fmt_atom + "  %c%c%c" + fflt + fflt + fflt + "%6d";
       for (int i = 0; i < n; ++i) {
          const char* nm = atomid::name[i];
-         std::fprintf(fout, fmt_atom.c_str(), i + 1, nm[0], nm[1], nm[2], qx[i], qy[i], qz[i],
-            atoms::type[i]);
+         std::fprintf(fout, fmt_atom.c_str(), i + 1, nm[0], nm[1], nm[2], qx[i], qy[i], qz[i], atoms::type[i]);
          for (int k = 0; k < couple::n12[i]; ++k)
             std::fprintf(fout, fint, couple::i12[i][k]);
          std::fprintf(fout, "%s", "\n");
@@ -483,8 +492,10 @@ public:
       , m_usepbc(usepbc)
    {
       ilen = 6;
-      if (n >= 100000) ilen = 7;
-      if (n >= 1000000) ilen = 8;
+      if (n >= 100000)
+         ilen = 7;
+      if (n >= 1000000)
+         ilen = 8;
       const char* f;
 
       if (titles::ltitle > 0) {
@@ -509,7 +520,8 @@ public:
 
 CrdW* CrdW::create(std::string crdfile, CrdFormat crdformat)
 {
-   if (crdfile == "") return nullptr;
+   if (crdfile == "")
+      return nullptr;
 
    auto fmt = crdformat;
    if (fmt == CrdFormat::NONE) {

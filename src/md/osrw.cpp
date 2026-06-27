@@ -1,9 +1,9 @@
 #include "md/osrw.h"
-#include "ff/modamoeba.h"
 #include "ff/echarge.h"
 #include "ff/energy.h"
 #include "ff/evalence.h"
 #include "ff/evdw.h"
+#include "ff/modamoeba.h"
 #include "ff/modhippo.h"
 #include "ff/potent.h"
 #include "math/zero.h"
@@ -77,8 +77,7 @@ void osrwData(RcOp op)
 
       if (use(Potent::TORSION)) {
          if (osrw_ntbnd > 0) {
-            darray::deallocate(
-               osrw_itbnd, osrw_tors1, osrw_tors2, osrw_tors3, osrw_tors4, osrw_tors5, osrw_tors6);
+            darray::deallocate(osrw_itbnd, osrw_tors1, osrw_tors2, osrw_tors3, osrw_tors4, osrw_tors5, osrw_tors6);
             osrw_ntbnd = 0;
          }
       }
@@ -114,8 +113,7 @@ void osrwData(RcOp op)
          }
          if (osrw_ntbnd > 0) {
             darray::allocate(osrw_ntbnd, &osrw_itbnd);
-            darray::allocate(
-               ntors, &osrw_tors1, &osrw_tors2, &osrw_tors3, &osrw_tors4, &osrw_tors5, &osrw_tors6);
+            darray::allocate(ntors, &osrw_tors1, &osrw_tors2, &osrw_tors3, &osrw_tors4, &osrw_tors5, &osrw_tors6);
             darray::copy(g::q0, ntors, osrw_tors1, tors1);
             darray::copy(g::q0, ntors, osrw_tors2, tors2);
             darray::copy(g::q0, ntors, osrw_tors3, tors3);
@@ -297,10 +295,8 @@ void osrw_energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
          }
       }
       for (int iv = 0; iv < 9; ++iv) {
-         osrw_dv0[iv] +=
-            (stor0 * virial_valence[iv] + svdw0 * virial_vdw[iv] + sele0 * virial_elec[iv]);
-         osrw_dv1[iv] -=
-            (stor1 * virial_valence[iv] + svdw1 * virial_vdw[iv] + sele1 * virial_elec[iv]);
+         osrw_dv0[iv] += (stor0 * virial_valence[iv] + svdw0 * virial_vdw[iv] + sele0 * virial_elec[iv]);
+         osrw_dv1[iv] -= (stor1 * virial_valence[iv] + svdw1 * virial_vdw[iv] + sele1 * virial_elec[iv]);
       }
    }
    if (do_g) {
@@ -378,10 +374,8 @@ void osrw_energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
          }
       }
       for (int iv = 0; iv < 9; ++iv) {
-         osrw_dv0[iv] +=
-            (stor0 * virial_valence[iv] + svdw0 * virial_vdw[iv] + sele0 * virial_elec[iv]);
-         osrw_dv1[iv] +=
-            (stor1 * virial_valence[iv] + svdw1 * virial_vdw[iv] + sele1 * virial_elec[iv]);
+         osrw_dv0[iv] += (stor0 * virial_valence[iv] + svdw0 * virial_vdw[iv] + sele0 * virial_elec[iv]);
+         osrw_dv1[iv] += (stor1 * virial_valence[iv] + svdw1 * virial_vdw[iv] + sele1 * virial_elec[iv]);
       }
       for (int iv = 0; iv < 9; ++iv) {
          vir[iv] = osrw_dv0[iv];

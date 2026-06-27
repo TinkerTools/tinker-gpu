@@ -35,6 +35,12 @@ We are working to merge this documentation into [tinkerdoc.](https://tinkerdoc.r
 Please use [GitHub Issues](https://github.com/TinkerTools/tinker-gpu/issues) for bug tracking and
 [GitHub Discussions](https://github.com/TinkerTools/tinker-gpu/discussions) for general discussions.
 
+<h2>Updates</h2>
+
+***06/2026*** : Molecular dynamics simulations with an external electric field are now supported. Check the [External electric field paper](https://doi.org/10.1063/5.0332639) (*The Journal of Chemical Physics*, 2026, doi: 10.1063/5.0332639). See the [External Electric Field](https://tinker9-manual.readthedocs.io/en/latest/m/key/external-electric-field.html) section of the manual for details.
+
+***05/2026*** : The AMOEBA+NN hybrid model supports molecular dynamics simulations. Check the [AMOEBA+NN paper](https://pubs.acs.org/doi/abs/10.1021/acs.jpcb.3c08166) (*The Journal of Physical Chemistry B*, 2024, doi: 10.1021/acs.jpcb.3c08166). See the [Neural Network Potential](https://tinker9-manual.readthedocs.io/en/latest/m/key/neural-network-potential.html) section of the manual for details.
+
 <h2><a href="https://github.com/TinkerTools/tinker-gpu/releases">
 Release Notes
 </a></h2>

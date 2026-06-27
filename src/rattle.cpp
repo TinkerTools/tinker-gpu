@@ -186,11 +186,9 @@ void rattleData(RcOp op)
    if (op & RcOp::DEALLOC) {
       rattle_dmol.nmol = 0;
       rattle_dmol.totmass = 0;
-      darray::deallocate(
-         rattle_dmol.imol, rattle_dmol.kmol, rattle_dmol.molecule, rattle_dmol.molmass);
+      darray::deallocate(rattle_dmol.imol, rattle_dmol.kmol, rattle_dmol.molecule, rattle_dmol.molmass);
       if (rc_flag & calc::md) {
-         darray::deallocate(
-            ratcom_x, ratcom_y, ratcom_z, ratcom_vx, ratcom_vy, ratcom_vz, ratcom_massfrac);
+         darray::deallocate(ratcom_x, ratcom_y, ratcom_z, ratcom_vx, ratcom_vy, ratcom_vz, ratcom_massfrac);
          ratcom_x = nullptr;
          ratcom_y = nullptr;
          ratcom_z = nullptr;
@@ -229,7 +227,7 @@ void rattleData(RcOp op)
 
       for (int i = 0; i < freeze::nwat; ++i) {
          int index = freeze::nrat + 3 * i;
-         int i_O  = freeze::iwat[3 * i + 0];
+         int i_O = freeze::iwat[3 * i + 0];
          int i_H1 = freeze::iwat[3 * i + 1];
          int i_H2 = freeze::iwat[3 * i + 2];
          double OH = freeze::kwat[3 * i + 0];
@@ -369,8 +367,7 @@ void rattleData(RcOp op)
          // allocate
          if (rc_flag & calc::md) {
             // Actually these arrays are only used for NPT RATTLE.
-            darray::allocate(n, &ratcom_x, &ratcom_y, &ratcom_z, &ratcom_vx, &ratcom_vy, &ratcom_vz,
-               &ratcom_massfrac);
+            darray::allocate(n, &ratcom_x, &ratcom_y, &ratcom_z, &ratcom_vx, &ratcom_vy, &ratcom_vz, &ratcom_massfrac);
          }
 
          int nrmol = hvec_molmass.size();
@@ -463,8 +460,7 @@ void rattleData(RcOp op)
       waitFor(g::q0);
 
       // erase water-like and methyl-like constraints in hc_mols
-      hc_mols.erase(std::remove_if(hc_mols.begin(), hc_mols.end(),
-                       [](const HCMol& h) { return h.size() == 0; }),
+      hc_mols.erase(std::remove_if(hc_mols.begin(), hc_mols.end(), [](const HCMol& h) { return h.size() == 0; }),
          hc_mols.end());
       std::sort(hc_mols.begin(), hc_mols.end());
 
@@ -557,16 +553,16 @@ void rattle2(time_prec dt, bool do_v)
 }
 
 namespace tinker {
-TINKER_FVOID2(acc1, cu1, shakeSettle, time_prec, pos_prec*, pos_prec*, pos_prec*, const pos_prec*,
-   const pos_prec*, const pos_prec*);
-TINKER_FVOID2(acc0, cu1, shakeMethyl, time_prec, pos_prec*, pos_prec*, pos_prec*, const pos_prec*,
-   const pos_prec*, const pos_prec*);
-TINKER_FVOID1(acc1, cu0, shakeCH, time_prec, pos_prec*, pos_prec*, pos_prec*, const pos_prec*,
-   const pos_prec*, const pos_prec*);
-TINKER_FVOID1(acc1, cu0, shake, time_prec, pos_prec*, pos_prec*, pos_prec*, const pos_prec*,
-   const pos_prec*, const pos_prec*);
-void shake(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew, const pos_prec* xold,
-   const pos_prec* yold, const pos_prec* zold)
+TINKER_FVOID2(acc1, cu1, shakeSettle, time_prec, pos_prec*, pos_prec*, pos_prec*, const pos_prec*, const pos_prec*,
+   const pos_prec*);
+TINKER_FVOID2(acc0, cu1, shakeMethyl, time_prec, pos_prec*, pos_prec*, pos_prec*, const pos_prec*, const pos_prec*,
+   const pos_prec*);
+TINKER_FVOID1(acc1, cu0, shakeCH, time_prec, pos_prec*, pos_prec*, pos_prec*, const pos_prec*, const pos_prec*,
+   const pos_prec*);
+TINKER_FVOID1(acc1, cu0, shake, time_prec, pos_prec*, pos_prec*, pos_prec*, const pos_prec*, const pos_prec*,
+   const pos_prec*);
+void shake(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew, const pos_prec* xold, const pos_prec* yold,
+   const pos_prec* zold)
 {
    TINKER_FCALL2(acc1, cu1, shakeSettle, dt, xnew, ynew, znew, xold, yold, zold);
    if (pltfm_config & Platform::CUDA)
@@ -594,10 +590,10 @@ void hcVirial()
    TINKER_FCALL2(acc1, cu1, hcVirial);
 }
 
-TINKER_FVOID2(acc1, cu1, hcCenterOfMass, const pos_prec*, const pos_prec*, const pos_prec*,
-   pos_prec*, pos_prec*, pos_prec*);
-void hcCenterOfMass(const pos_prec* atomx, const pos_prec* atomy, const pos_prec* atomz,
-   pos_prec* molx, pos_prec* moly, pos_prec* molz)
+TINKER_FVOID2(acc1, cu1, hcCenterOfMass, const pos_prec*, const pos_prec*, const pos_prec*, pos_prec*, pos_prec*,
+   pos_prec*);
+void hcCenterOfMass(const pos_prec* atomx, const pos_prec* atomy, const pos_prec* atomz, pos_prec* molx, pos_prec* moly,
+   pos_prec* molz)
 {
    static_assert(std::is_same<pos_prec, vel_prec>::value, //
       "pos_prec and vel_prec must be the same type.");

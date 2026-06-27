@@ -235,7 +235,7 @@ enum class BarostatEnum
 {
    NONE,
    BERENDSEN,
-   BUSSI, // empty
+   BUSSI,
    LP2022,
    MONTECARLO,
    NHC2006,
@@ -243,6 +243,13 @@ enum class BarostatEnum
    m_LOGVISO,
    m_LOGVANISO,
    m_NHC1996,
+};
+
+/// \ingroup mdpt
+enum class ScaleBaroEnum
+{
+   BERENDSEN,
+   BUSSI,
 };
 
 /// \ingroup mdpt
@@ -286,6 +293,15 @@ public:
 
 /// \ingroup mdpt
 class BerendsenBarostat : public BasicBarostat
+{
+public:
+   void printDetail(FILE*) override;
+   BarostatEnum getBarostatEnum() const override;
+   void control2(time_prec timeStep) override;
+};
+
+/// \ingroup mdpt
+class BussiBarostat : public BasicBarostat
 {
 public:
    void printDetail(FILE*) override;

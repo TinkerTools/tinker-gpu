@@ -1,10 +1,10 @@
 #if defined(__APPLE__) || defined(__linux__)
-#   include "tool/ioprint.h"
-#   include "tool/iotext.h"
-#   include "tool/macro.h"
-#   include <cstring>
-#   include <cxxabi.h>
-#   include <execinfo.h>
+#include "tool/ioprint.h"
+#include "tool/iotext.h"
+#include "tool/macro.h"
+#include <cstring>
+#include <cxxabi.h>
+#include <execinfo.h>
 
 namespace tinker {
 enum class BackTraceOS
@@ -57,9 +57,7 @@ static void print_backtrace_tmpl(std::FILE* fp)
       demangled_name = abi::__cxa_demangle(callee.c_str(), 0, 0, &status);
       if (!status) {
          // This name CAN be demangled.
-         std::string tmp = ((tolerance + callee.length()) >= std::strlen(demangled_name))
-            ? demangled_name
-            : callee;
+         std::string tmp = ((tolerance + callee.length()) >= std::strlen(demangled_name)) ? demangled_name : callee;
          callee = tmp;
          free(demangled_name);
       }
@@ -70,11 +68,11 @@ static void print_backtrace_tmpl(std::FILE* fp)
 
 void printBacktrace(std::FILE* out)
 {
-#   if defined(__APPLE__)
+#if defined(__APPLE__)
    print_backtrace_tmpl<BackTraceOS::MACOS>(out);
-#   elif defined(__linux__)
+#elif defined(__linux__)
    print_backtrace_tmpl<BackTraceOS::LINUX>(out);
-#   endif
+#endif
    std::fflush(out);
 }
 }

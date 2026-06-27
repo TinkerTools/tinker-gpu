@@ -1,35 +1,35 @@
-#include "ff/modamoeba.h"
 #include "ff/evdw.h"
+#include "ff/modamoeba.h"
 
 #include "test.h"
 #include "testrt.h"
 
 using namespace tinker;
 
-#define COMPARE_CODE_BLOCK1                                                                        \
-   {                                                                                               \
-      energy(calc::v0);                                                                            \
-      COMPARE_REALS(energy_ev, ref_eng, eps);                                                      \
-                                                                                                   \
-      energy(calc::v1);                                                                            \
-      COMPARE_REALS(energy_ev, ref_eng, eps);                                                      \
-      COMPARE_GRADIENT(ref_grad, eps);                                                             \
-      COMPARE_VIR9(virial_ev, ref_v, eps);                                                         \
-                                                                                                   \
-      energy(calc::v3);                                                                            \
-      COMPARE_REALS(energy_ev, ref_eng, eps);                                                      \
-      COMPARE_COUNT(nev, ref_count);                                                               \
-                                                                                                   \
-      energy(calc::v4);                                                                            \
-      COMPARE_REALS(energy_ev, ref_eng, eps);                                                      \
-      COMPARE_GRADIENT(ref_grad, eps);                                                             \
-                                                                                                   \
-      energy(calc::v5);                                                                            \
-      COMPARE_GRADIENT(ref_grad, eps);                                                             \
-                                                                                                   \
-      energy(calc::v6);                                                                            \
-      COMPARE_GRADIENT(ref_grad, eps);                                                             \
-      COMPARE_VIR9(virial_ev, ref_v, eps);                                                         \
+#define COMPARE_CODE_BLOCK1                   \
+   {                                          \
+      energy(calc::v0);                       \
+      COMPARE_REALS(energy_ev, ref_eng, eps); \
+                                              \
+      energy(calc::v1);                       \
+      COMPARE_REALS(energy_ev, ref_eng, eps); \
+      COMPARE_GRADIENT(ref_grad, eps);        \
+      COMPARE_VIR9(virial_ev, ref_v, eps);    \
+                                              \
+      energy(calc::v3);                       \
+      COMPARE_REALS(energy_ev, ref_eng, eps); \
+      COMPARE_COUNT(nev, ref_count);          \
+                                              \
+      energy(calc::v4);                       \
+      COMPARE_REALS(energy_ev, ref_eng, eps); \
+      COMPARE_GRADIENT(ref_grad, eps);        \
+                                              \
+      energy(calc::v5);                       \
+      COMPARE_GRADIENT(ref_grad, eps);        \
+                                              \
+      energy(calc::v6);                       \
+      COMPARE_GRADIENT(ref_grad, eps);        \
+      COMPARE_VIR9(virial_ev, ref_v, eps);    \
    }
 
 TEST_CASE("NaCl-1", "[ff][evdw][evcorr][hal][switch][nacl]")
@@ -178,30 +178,30 @@ TEST_CASE("NaCl-1", "[ff][evdw][evcorr][hal][switch][nacl]")
    }
 }
 
-#define COMPARE_CODE_BLOCK2                                                                        \
-   {                                                                                               \
-      energy(calc::v0);                                                                            \
-      COMPARE_ENERGY(em, ref_eng, eps);                                                            \
-                                                                                                   \
-      energy(calc::v1);                                                                            \
-      COMPARE_ENERGY(em, ref_eng, eps);                                                            \
-      COMPARE_GRADIENT(ref_grad, eps_g);                                                           \
-      COMPARE_VIR2(vir_em, vir_trq, ref_v, eps_v);                                                 \
-                                                                                                   \
-      energy(calc::v3);                                                                            \
-      COMPARE_ENERGY(em, ref_eng, eps);                                                            \
-      COMPARE_COUNT(nem, ref_count);                                                               \
-                                                                                                   \
-      energy(calc::v4);                                                                            \
-      COMPARE_ENERGY(em, ref_eng, eps);                                                            \
-      COMPARE_GRADIENT(ref_grad, eps_g);                                                           \
-                                                                                                   \
-      energy(calc::v5);                                                                            \
-      COMPARE_GRADIENT(ref_grad, eps_g);                                                           \
-                                                                                                   \
-      energy(calc::v6);                                                                            \
-      COMPARE_GRADIENT(ref_grad, eps_g);                                                           \
-      COMPARE_VIR2(vir_em, vir_trq, ref_v, eps_v);                                                 \
+#define COMPARE_CODE_BLOCK2                        \
+   {                                               \
+      energy(calc::v0);                            \
+      COMPARE_ENERGY(em, ref_eng, eps);            \
+                                                   \
+      energy(calc::v1);                            \
+      COMPARE_ENERGY(em, ref_eng, eps);            \
+      COMPARE_GRADIENT(ref_grad, eps_g);           \
+      COMPARE_VIR2(vir_em, vir_trq, ref_v, eps_v); \
+                                                   \
+      energy(calc::v3);                            \
+      COMPARE_ENERGY(em, ref_eng, eps);            \
+      COMPARE_COUNT(nem, ref_count);               \
+                                                   \
+      energy(calc::v4);                            \
+      COMPARE_ENERGY(em, ref_eng, eps);            \
+      COMPARE_GRADIENT(ref_grad, eps_g);           \
+                                                   \
+      energy(calc::v5);                            \
+      COMPARE_GRADIENT(ref_grad, eps_g);           \
+                                                   \
+      energy(calc::v6);                            \
+      COMPARE_GRADIENT(ref_grad, eps_g);           \
+      COMPARE_VIR2(vir_em, vir_trq, ref_v, eps_v); \
    }
 
 TEST_CASE("NaCl-2", "[ff][empole][nonewald][nacl]")
@@ -281,8 +281,7 @@ TEST_CASE("NaCl-3", "[ff][empole][ewald][nacl]")
       //                               {21.7791, 23.9487, 26.1709}};
       const double eps_v = eps;
       // total virial
-      const double ref_v[][3] = {
-         {0.059, -0.284, -0.311}, {-0.284, 0.105, -0.342}, {-0.311, -0.342, 0.155}};
+      const double ref_v[][3] = {{0.059, -0.284, -0.311}, {-0.284, 0.105, -0.342}, {-0.311, -0.342, 0.155}};
       // self virial = 0
       // real virial
       // const double ref_v[][3] = {{-21.946, -24.140, -26.379},

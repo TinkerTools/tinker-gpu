@@ -1,10 +1,11 @@
-#include "ff/modamoeba.h"
 #include "ff/atom.h"
 #include "ff/image.h"
+#include "ff/modamoeba.h"
 #include "ff/nblist.h"
 #include "ff/switch.h"
 #include "seq/pair_polar.h"
 #include "tool/gpucard.h"
+#include <tinker/detail/extfld.hh>
 
 #define TINKER9_POLPAIR 2
 
@@ -20,17 +21,35 @@ void epolar0DotProd_acc(const real (*gpu_uind)[3], const real (*gpu_udirp)[3])
    for (int i = 0; i < n; ++i) {
       int offset = i & (bufsize - 1);
       real e = polarity_inv[i]
-         * (gpu_uind[i][0] * gpu_udirp[i][0] + gpu_uind[i][1] * gpu_udirp[i][1]
-            + gpu_uind[i][2] * gpu_udirp[i][2]);
+         * (gpu_uind[i][0] * gpu_udirp[i][0] + gpu_uind[i][1] * gpu_udirp[i][1] + gpu_uind[i][2] * gpu_udirp[i][2]);
       atomic_add(f * e, ep, offset);
+   }
+}
+
+void epolarPairwiseExtfield_acc(const real (*uind)[3])
+{
+   const real f = -0.5 * electric / dielec;
+
+   auto bufsize = bufferSize();
+
+   real ex1 = extfld::texfld[0];
+   real ex2 = extfld::texfld[1];
+   real ex3 = extfld::texfld[2];
+
+   #pragma acc parallel loop independent async deviceptr(ep,nep,uind)
+   for (int i = 0; i < n; ++i) {
+      int offset = i & (bufsize - 1);
+      real e = uind[i][0] * ex1 + uind[i][1] * ex2 + uind[i][2] * ex3;
+      atomic_add(f * e, ep, offset);
+      if (e != 0)
+         atomic_add(1, nep, offset);
    }
 }
 }
 
 namespace tinker {
-#define POLAR_DPTRS                                                     \
-   x, y, z, depx, depy, depz, rpole, thole, pdamp, uind, uinp, nep, ep, \
-      vir_ep, ufld, dufld, jpolar, thlval
+#define POLAR_DPTRS \
+   x, y, z, depx, depy, depz, rpole, thole, pdamp, uind, uinp, nep, ep, vir_ep, ufld, dufld, jpolar, thlval
 template <class Ver>
 static void epolarNonEwald_acc1(const real (*uind)[3], const real (*uinp)[3])
 {
@@ -39,7 +58,8 @@ static void epolarNonEwald_acc1(const real (*uind)[3], const real (*uinp)[3])
    constexpr bool do_g = Ver::g;
    constexpr bool do_v = Ver::v;
 
-   if CONSTEXPR (do_g) darray::zero(g::q0, n, ufld, dufld);
+   if CONSTEXPR (do_g)
+      darray::zero(g::q0, n, ufld, dufld);
 
    const real off = switchOff(Switch::MPOLE);
    const real off2 = off * off;
@@ -126,26 +146,25 @@ static void epolarNonEwald_acc1(const real (*uind)[3], const real (*uinp)[3])
 #if TINKER9_POLPAIR == 2
             int jpk = jpolar[k];
             real pga = thlval[njpolar * jpi + jpk];
-            pair_polar<do_e, do_g, NON_EWALD>( //
-               r2, xr, yr, zr, 1, 1, 1,        //
-               ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy,
-               uiz, uixp, uiyp, uizp, pdi, pga, //
-               ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky,
-               ukz, ukxp, ukyp, ukzp, pdamp[k], pga, //
+            pair_polar<do_e, do_g, NON_EWALD>(                                                                        //
+               r2, xr, yr, zr, 1, 1, 1,                                                                               //
+               ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy, uiz, uixp, uiyp, uizp, pdi, pga,      //
+               ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, ukxp, ukyp, ukzp, pdamp[k], pga, //
                f, 0, e, pgrad);
 #else
-            pair_polar<do_e, do_g, NON_EWALD>( //
-               r2, xr, yr, zr, 1, 1, 1,        //
-               ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy,
-               uiz, uixp, uiyp, uizp, pdi, pti, //
-               ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky,
-               ukz, ukxp, ukyp, ukzp, pdamp[k], thole[k], //
+            pair_polar<do_e, do_g, NON_EWALD>(                                                                   //
+               r2, xr, yr, zr, 1, 1, 1,                                                                          //
+               ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy, uiz, uixp, uiyp, uizp, pdi, pti, //
+               ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, ukxp, ukyp, ukzp, pdamp[k],
+               thole[k], //
                f, 0, e, pgrad);
 #endif
 
             if CONSTEXPR (do_a)
-               if (e != 0) atomic_add(1, nep, offset);
-            if CONSTEXPR (do_e) atomic_add(e, ep, offset);
+               if (e != 0)
+                  atomic_add(1, nep, offset);
+            if CONSTEXPR (do_e)
+               atomic_add(e, ep, offset);
             if CONSTEXPR (do_g) {
                gxi += pgrad.frcx;
                gyi += pgrad.frcy;
@@ -276,26 +295,25 @@ static void epolarNonEwald_acc1(const real (*uind)[3], const real (*uinp)[3])
 #if TINKER9_POLPAIR == 2
          int jpk = jpolar[k];
          real pga = thlval[njpolar * jpi + jpk];
-         pair_polar<do_e, do_g, NON_EWALD>(         //
-            r2, xr, yr, zr, dscale, pscale, uscale, //
-            ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy,
-            uiz, uixp, uiyp, uizp, pdi, pga, //
-            ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky,
-            ukz, ukxp, ukyp, ukzp, pdamp[k], pga, //
+         pair_polar<do_e, do_g, NON_EWALD>(                                                                        //
+            r2, xr, yr, zr, dscale, pscale, uscale,                                                                //
+            ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy, uiz, uixp, uiyp, uizp, pdi, pga,      //
+            ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, ukxp, ukyp, ukzp, pdamp[k], pga, //
             f, 0, e, pgrad);
 #else
-         pair_polar<do_e, do_g, NON_EWALD>(         //
-            r2, xr, yr, zr, dscale, pscale, uscale, //
-            ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy,
-            uiz, uixp, uiyp, uizp, pdi, pti, //
-            ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky,
-            ukz, ukxp, ukyp, ukzp, pdamp[k], thole[k], //
+         pair_polar<do_e, do_g, NON_EWALD>(                                                                   //
+            r2, xr, yr, zr, dscale, pscale, uscale,                                                           //
+            ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy, uiz, uixp, uiyp, uizp, pdi, pti, //
+            ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, ukxp, ukyp, ukzp, pdamp[k],
+            thole[k], //
             f, 0, e, pgrad);
 #endif
 
          if CONSTEXPR (do_a)
-            if (pscale == -1 and e != 0) atomic_add(-1, nep, offset);
-         if CONSTEXPR (do_e) atomic_add(e, ep, offset);
+            if (pscale == -1 and e != 0)
+               atomic_add(-1, nep, offset);
+         if CONSTEXPR (do_e)
+            atomic_add(e, ep, offset);
 
          if CONSTEXPR (do_g) {
             atomic_add(pgrad.frcx, depx, i);
@@ -355,15 +373,12 @@ static void epolarNonEwald_acc1(const real (*uind)[3], const real (*uinp)[3])
          real qiyz = rpole[i][MPL_PME_YZ];
          real qizz = rpole[i][MPL_PME_ZZ];
 
-         real tep1 = diz * ufld[i][1] - diy * ufld[i][2] + qixz * dufld[i][1]
-            - qixy * dufld[i][3] + 2 * qiyz * (dufld[i][2] - dufld[i][5])
-            + (qizz - qiyy) * dufld[i][4];
-         real tep2 = dix * ufld[i][2] - diz * ufld[i][0] - qiyz * dufld[i][1]
-            + qixy * dufld[i][4] + 2 * qixz * (dufld[i][5] - dufld[i][0])
-            + (qixx - qizz) * dufld[i][3];
-         real tep3 = diy * ufld[i][0] - dix * ufld[i][1] + qiyz * dufld[i][3]
-            - qixz * dufld[i][4] + 2 * qixy * (dufld[i][0] - dufld[i][2])
-            + (qiyy - qixx) * dufld[i][1];
+         real tep1 = diz * ufld[i][1] - diy * ufld[i][2] + qixz * dufld[i][1] - qixy * dufld[i][3]
+            + 2 * qiyz * (dufld[i][2] - dufld[i][5]) + (qizz - qiyy) * dufld[i][4];
+         real tep2 = dix * ufld[i][2] - diz * ufld[i][0] - qiyz * dufld[i][1] + qixy * dufld[i][4]
+            + 2 * qixz * (dufld[i][5] - dufld[i][0]) + (qixx - qizz) * dufld[i][3];
+         real tep3 = diy * ufld[i][0] - dix * ufld[i][1] + qiyz * dufld[i][3] - qixz * dufld[i][4]
+            + 2 * qixy * (dufld[i][0] - dufld[i][2]) + (qiyy - qixx) * dufld[i][1];
 
          trqx[i] += tep1;
          trqy[i] += tep2;

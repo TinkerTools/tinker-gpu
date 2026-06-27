@@ -34,8 +34,7 @@ void throwExceptionMissingFunction(const char* functionName, const char* file, i
    }
 
    printBacktrace();
-   auto err = FatalError(
-      format("Function void %s(...) is not implemented at %s:%d", functionName, s3, lineNum));
+   auto err = FatalError(format("Function void %s(...) is not implemented at %s:%d", functionName, s3, lineNum));
    throw err;
 }
 }

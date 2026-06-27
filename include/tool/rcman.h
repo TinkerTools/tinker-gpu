@@ -26,8 +26,7 @@ struct EnableEnumBitMask
 
 /// \ingroup rc
 template <class E>
-constexpr typename std::enable_if<EnableEnumBitMask<E>::value, E>::type
-operator|(E lhs, E rhs)
+constexpr typename std::enable_if<EnableEnumBitMask<E>::value, E>::type operator|(E lhs, E rhs)
 {
    using ut = typename std::underlying_type<E>::type;
    return static_cast<E>(static_cast<ut>(lhs) | static_cast<ut>(rhs));

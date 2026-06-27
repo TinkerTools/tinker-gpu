@@ -1,8 +1,8 @@
-#include "ff/pme.h"
-#include "ff/modamoeba.h"
 #include "ff/atom.h"
 #include "ff/box.h"
 #include "ff/elec.h"
+#include "ff/modamoeba.h"
+#include "ff/pme.h"
 #include "seq/add.h"
 #include "seq/bsplgen.h"
 
@@ -133,8 +133,8 @@ static void gridPut_acc(PMEUnit pme_u, real* ptr1, real* ptr2)
                real u2 = thetai2[4 * iy + 2];
                // fmp: 0, x, y, z, xx, yy, zz, xy, xz, yz
                //      1, 2, 3, 4,  5,  6,  7,  8,  9, 10
-               real term0 = fmpi0 * u0 * v0 + fmpiy * u1 * v0 + fmpiz * u0 * v1 + fmpiyy * u2 * v0 +
-                  fmpizz * u0 * v2 + fmpiyz * u1 * v1;
+               real term0 = fmpi0 * u0 * v0 + fmpiy * u1 * v0 + fmpiz * u0 * v1 + fmpiyy * u2 * v0 + fmpizz * u0 * v2
+                  + fmpiyz * u1 * v1;
                real term1 = fmpix * u0 * v0 + fmpixy * u1 * v0 + fmpixz * u0 * v1;
                real term2 = fmpixx * u0 * v0;
                #pragma acc loop seq
@@ -718,8 +718,7 @@ void fphiMpole_acc(PMEUnit pme_u, real (*gpu_fphi)[20])
    fphiGet_acc<MPOLE>(pme_u, (real*)gpu_fphi, nullptr, nullptr);
 }
 
-void fphiUind_acc(PMEUnit pme_u, real (*gpu_fdip_phi1)[10], real (*gpu_fdip_phi2)[10],
-   real (*gpu_fdip_sum_phi)[20])
+void fphiUind_acc(PMEUnit pme_u, real (*gpu_fdip_phi1)[10], real (*gpu_fdip_phi2)[10], real (*gpu_fdip_sum_phi)[20])
 {
    fphiGet_acc<UIND>(pme_u, (real*)gpu_fdip_phi1, (real*)gpu_fdip_phi2, (real*)gpu_fdip_sum_phi);
 }

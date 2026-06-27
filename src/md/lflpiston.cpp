@@ -15,80 +15,75 @@ namespace tinker {
 static double press;
 
 TINKER_FVOID2(acc1, cu0, propagate_velocity_lp, vel_prec* vx_lp, vel_prec* vy_lp, vel_prec* vz_lp,
-   const vel_prec* vxnew_lp, const vel_prec* vynew_lp, const vel_prec* vznew_lp,
-   const vel_prec* vxold_lp, const vel_prec* vyold_lp, const vel_prec* vzold_lp, const double scale,
-   energy_prec& eksum_new, energy_prec& eksum_old);
-static void propagate_velocity_lp(vel_prec* vx_lp, vel_prec* vy_lp, vel_prec* vz_lp,
-   const vel_prec* vxnew_lp, const vel_prec* vynew_lp, const vel_prec* vznew_lp,
-   const vel_prec* vxold_lp, const vel_prec* vyold_lp, const vel_prec* vzold_lp, const double scale,
-   energy_prec& eksum_new, energy_prec& eksum_old)
+   const vel_prec* vxnew_lp, const vel_prec* vynew_lp, const vel_prec* vznew_lp, const vel_prec* vxold_lp,
+   const vel_prec* vyold_lp, const vel_prec* vzold_lp, const double scale, energy_prec& eksum_new,
+   energy_prec& eksum_old);
+static void propagate_velocity_lp(vel_prec* vx_lp, vel_prec* vy_lp, vel_prec* vz_lp, const vel_prec* vxnew_lp,
+   const vel_prec* vynew_lp, const vel_prec* vznew_lp, const vel_prec* vxold_lp, const vel_prec* vyold_lp,
+   const vel_prec* vzold_lp, const double scale, energy_prec& eksum_new, energy_prec& eksum_old)
 {
-   TINKER_FCALL2(acc1, cu0, propagate_velocity_lp, vx_lp, vy_lp, vz_lp, vxnew_lp, vynew_lp,
-      vznew_lp, vxold_lp, vyold_lp, vzold_lp, scale, eksum_new, eksum_old);
+   TINKER_FCALL2(acc1, cu0, propagate_velocity_lp, vx_lp, vy_lp, vz_lp, vxnew_lp, vynew_lp, vznew_lp, vxold_lp,
+      vyold_lp, vzold_lp, scale, eksum_new, eksum_old);
 }
 
-TINKER_FVOID2(acc1, cu0, propagate_pos_lp, time_prec dt, pos_prec* x_lp, pos_prec* y_lp,
-   pos_prec* z_lp, const vel_prec* vx_lp, const vel_prec* vy_lp, const vel_prec* vz_lp,
-   const pos_prec* xold_lp, const pos_prec* yold_lp, const pos_prec* zold_lp, double scale);
-static void propagate_pos_lp(time_prec dt, pos_prec* x_lp, pos_prec* y_lp, pos_prec* z_lp,
+TINKER_FVOID2(acc1, cu0, propagate_pos_lp, time_prec dt, pos_prec* x_lp, pos_prec* y_lp, pos_prec* z_lp,
    const vel_prec* vx_lp, const vel_prec* vy_lp, const vel_prec* vz_lp, const pos_prec* xold_lp,
-   const pos_prec* yold_lp, const pos_prec* zold_lp, double scale)
+   const pos_prec* yold_lp, const pos_prec* zold_lp, double scale);
+static void propagate_pos_lp(time_prec dt, pos_prec* x_lp, pos_prec* y_lp, pos_prec* z_lp, const vel_prec* vx_lp,
+   const vel_prec* vy_lp, const vel_prec* vz_lp, const pos_prec* xold_lp, const pos_prec* yold_lp,
+   const pos_prec* zold_lp, double scale)
 {
-   TINKER_FCALL2(acc1, cu0, propagate_pos_lp, dt, x_lp, y_lp, z_lp, vx_lp, vy_lp, vz_lp, xold_lp,
-      yold_lp, zold_lp, scale);
+   TINKER_FCALL2(acc1, cu0, propagate_pos_lp, dt, x_lp, y_lp, z_lp, vx_lp, vy_lp, vz_lp, xold_lp, yold_lp, zold_lp,
+      scale);
 }
 
-TINKER_FVOID2(acc1, cu0, propagate_pos_lp2, time_prec dt, const pos_prec* x_lp,
-   const pos_prec* y_lp, const pos_prec* z_lp, pos_prec* xold_lp, pos_prec* yold_lp,
-   pos_prec* zold_lp, double scale);
-static void propagate_pos_lp2(time_prec dt, const pos_prec* x_lp, const pos_prec* y_lp,
-   const pos_prec* z_lp, pos_prec* xold_lp, pos_prec* yold_lp, pos_prec* zold_lp, double scale)
+TINKER_FVOID2(acc1, cu0, propagate_pos_lp2, time_prec dt, const pos_prec* x_lp, const pos_prec* y_lp,
+   const pos_prec* z_lp, pos_prec* xold_lp, pos_prec* yold_lp, pos_prec* zold_lp, double scale);
+static void propagate_pos_lp2(time_prec dt, const pos_prec* x_lp, const pos_prec* y_lp, const pos_prec* z_lp,
+   pos_prec* xold_lp, pos_prec* yold_lp, pos_prec* zold_lp, double scale)
 {
    TINKER_FCALL2(acc1, cu0, propagate_pos_lp2, //
       dt, x_lp, y_lp, z_lp, xold_lp, yold_lp, zold_lp, scale);
 }
 
-TINKER_FVOID2(acc1, cu0, propagate_velocity_lp2, time_prec dt, vel_prec* vx_lp, vel_prec* vy_lp,
-   vel_prec* vz_lp, const pos_prec* x_lp, const pos_prec* y_lp, const pos_prec* z_lp,
-   const pos_prec* xold_lp, const pos_prec* yold_lp, const pos_prec* zold_lp);
+TINKER_FVOID2(acc1, cu0, propagate_velocity_lp2, time_prec dt, vel_prec* vx_lp, vel_prec* vy_lp, vel_prec* vz_lp,
+   const pos_prec* x_lp, const pos_prec* y_lp, const pos_prec* z_lp, const pos_prec* xold_lp, const pos_prec* yold_lp,
+   const pos_prec* zold_lp);
 static void propagate_velocity_lp2(time_prec dt, vel_prec* vx_lp, vel_prec* vy_lp, vel_prec* vz_lp,
-   const pos_prec* x_lp, const pos_prec* y_lp, const pos_prec* z_lp, const pos_prec* xold_lp,
-   const pos_prec* yold_lp, const pos_prec* zold_lp)
+   const pos_prec* x_lp, const pos_prec* y_lp, const pos_prec* z_lp, const pos_prec* xold_lp, const pos_prec* yold_lp,
+   const pos_prec* zold_lp)
 {
-   TINKER_FCALL2(acc1, cu0, propagate_velocity_lp2, dt, vx_lp, vy_lp, vz_lp, x_lp, y_lp, z_lp,
-      xold_lp, yold_lp, zold_lp);
+   TINKER_FCALL2(acc1, cu0, propagate_velocity_lp2, dt, vx_lp, vy_lp, vz_lp, x_lp, y_lp, z_lp, xold_lp, yold_lp,
+      zold_lp);
 }
 
 TINKER_FVOID2(acc1, cu0, propagate_velocity_lp3, vel_prec* vx_lp, vel_prec* vy_lp, vel_prec* vz_lp,
-   const vel_prec* vxnew_lp, const vel_prec* vynew_lp, const vel_prec* vznew_lp,
-   const vel_prec* vxold_lp, const vel_prec* vyold_lp, const vel_prec* vzold_lp,
-   energy_prec& eksum_new);
-static void propagate_velocity_lp3(vel_prec* vx_lp, vel_prec* vy_lp, vel_prec* vz_lp,
-   const vel_prec* vxnew_lp, const vel_prec* vynew_lp, const vel_prec* vznew_lp,
-   const vel_prec* vxold_lp, const vel_prec* vyold_lp, const vel_prec* vzold_lp,
-   energy_prec& eksum_new)
+   const vel_prec* vxnew_lp, const vel_prec* vynew_lp, const vel_prec* vznew_lp, const vel_prec* vxold_lp,
+   const vel_prec* vyold_lp, const vel_prec* vzold_lp, energy_prec& eksum_new);
+static void propagate_velocity_lp3(vel_prec* vx_lp, vel_prec* vy_lp, vel_prec* vz_lp, const vel_prec* vxnew_lp,
+   const vel_prec* vynew_lp, const vel_prec* vznew_lp, const vel_prec* vxold_lp, const vel_prec* vyold_lp,
+   const vel_prec* vzold_lp, energy_prec& eksum_new)
 {
-   TINKER_FCALL2(acc1, cu0, propagate_velocity_lp3, vx_lp, vy_lp, vz_lp, vxnew_lp, vynew_lp,
-      vznew_lp, vxold_lp, vyold_lp, vzold_lp, eksum_new);
+   TINKER_FCALL2(acc1, cu0, propagate_velocity_lp3, vx_lp, vy_lp, vz_lp, vxnew_lp, vynew_lp, vznew_lp, vxold_lp,
+      vyold_lp, vzold_lp, eksum_new);
 }
 
 TINKER_FVOID2(acc1, cu0, propagate_pos_lf, time_prec dt, pos_prec* qx, pos_prec* qy, pos_prec* qz,
-   const pos_prec* qxold, const pos_prec* qyold, const pos_prec* qzold, const vel_prec* vlx,
-   const vel_prec* vly, const vel_prec* vlz);
-static void propagate_pos_lf(time_prec dt, pos_prec* qx, pos_prec* qy, pos_prec* qz,
-   const pos_prec* qxold, const pos_prec* qyold, const pos_prec* qzold, const vel_prec* vlx,
-   const vel_prec* vly, const vel_prec* vlz)
+   const pos_prec* qxold, const pos_prec* qyold, const pos_prec* qzold, const vel_prec* vlx, const vel_prec* vly,
+   const vel_prec* vlz);
+static void propagate_pos_lf(time_prec dt, pos_prec* qx, pos_prec* qy, pos_prec* qz, const pos_prec* qxold,
+   const pos_prec* qyold, const pos_prec* qzold, const vel_prec* vlx, const vel_prec* vly, const vel_prec* vlz)
 {
    TINKER_FCALL2(acc1, cu0, propagate_pos_lf, //
       dt, qx, qy, qz, qxold, qyold, qzold, vlx, vly, vlz);
 }
 
-TINKER_FVOID2(acc1, cu0, shake2, time_prec dt, const vel_prec* vxold, const vel_prec* vyold,
-   const vel_prec* vzold, const vel_prec* vxnew, const vel_prec* vynew, const vel_prec* vznew,
-   const pos_prec* xold, const pos_prec* yold, const pos_prec* zold);
-static void shake2(time_prec dt, const vel_prec* vxold, const vel_prec* vyold,
-   const vel_prec* vzold, const vel_prec* vxnew, const vel_prec* vynew, const vel_prec* vznew,
-   const pos_prec* xold, const pos_prec* yold, const pos_prec* zold)
+TINKER_FVOID2(acc1, cu0, shake2, time_prec dt, const vel_prec* vxold, const vel_prec* vyold, const vel_prec* vzold,
+   const vel_prec* vxnew, const vel_prec* vynew, const vel_prec* vznew, const pos_prec* xold, const pos_prec* yold,
+   const pos_prec* zold);
+static void shake2(time_prec dt, const vel_prec* vxold, const vel_prec* vyold, const vel_prec* vzold,
+   const vel_prec* vxnew, const vel_prec* vynew, const vel_prec* vznew, const pos_prec* xold, const pos_prec* yold,
+   const pos_prec* zold)
 {
    darray::zero(g::q0, bufferSize(), vir_buf);
 
@@ -102,10 +97,10 @@ static void shake2(time_prec dt, const vel_prec* vxold, const vel_prec* vyold,
    }
 }
 
-TINKER_FVOID2(acc1, cu0, swap_velocity, vel_prec* vxnew, vel_prec* vynew, vel_prec* vznew,
-   vel_prec* vxold, vel_prec* vyold, vel_prec* vzold);
-static void swap_velocity(vel_prec* vxnew, vel_prec* vynew, vel_prec* vznew, vel_prec* vxold,
-   vel_prec* vyold, vel_prec* vzold)
+TINKER_FVOID2(acc1, cu0, swap_velocity, vel_prec* vxnew, vel_prec* vynew, vel_prec* vznew, vel_prec* vxold,
+   vel_prec* vyold, vel_prec* vzold);
+static void swap_velocity(vel_prec* vxnew, vel_prec* vynew, vel_prec* vznew, vel_prec* vxold, vel_prec* vyold,
+   vel_prec* vzold)
 {
    TINKER_FCALL2(acc1, cu0, swap_velocity, vxnew, vynew, vznew, vxold, vyold, vzold);
 }
@@ -215,8 +210,8 @@ static void lf_langevin_piston(time_prec dt, virial_prec press)
       eksum_mid = 0.0;
       scale = -(hdot_mid / xtlabc + pnhv_lp) * dt;
       // vx = vxnew + scale * (vold + vx)/2
-      propagate_velocity_lp(vx, vy, vz, leapfrog_vxold, leapfrog_vyold, leapfrog_vzold, leapfrog_vx,
-         leapfrog_vy, leapfrog_vz, scale, eksum_new,
+      propagate_velocity_lp(vx, vy, vz, leapfrog_vxold, leapfrog_vyold, leapfrog_vzold, leapfrog_vx, leapfrog_vy,
+         leapfrog_vz, scale, eksum_new,
          eksum_mid); // eksum_new -> vx; eksum -> (vx+vold)/2
 
       // x = vx * dt + xold + scale * (x+xold)
@@ -248,8 +243,8 @@ static void lf_langevin_piston(time_prec dt, virial_prec press)
    darray::copy(g::q0, n, leapfrog_vzold, vz);
    // vx = 0.5 * (vxnew + vxold)
    eksum_new = 0.0;
-   propagate_velocity_lp3(vx, vy, vz, leapfrog_vx, leapfrog_vy, leapfrog_vz, leapfrog_vxold,
-      leapfrog_vyold, leapfrog_vzold,
+   propagate_velocity_lp3(vx, vy, vz, leapfrog_vx, leapfrog_vy, leapfrog_vz, leapfrog_vxold, leapfrog_vyold,
+      leapfrog_vzold,
       eksum_new); // eksum_new => vx
 
    pnhf_lp = (2.0 * eksum_new - df * kbt) / pnhm_lp;
@@ -319,16 +314,16 @@ void lf_lpiston_npt(int istep, time_prec dt_ps)
       if (userat) {
 
          // x = xold - vnew * dt
-         propagate_pos_lf(-dt_ps, xpos, ypos, zpos, leapfrog_x, leapfrog_y, leapfrog_z, leapfrog_vx,
-            leapfrog_vy, leapfrog_vz);
+         propagate_pos_lf(-dt_ps, xpos, ypos, zpos, leapfrog_x, leapfrog_y, leapfrog_z, leapfrog_vx, leapfrog_vy,
+            leapfrog_vz);
          shake(dt_ps, xpos, ypos, zpos, leapfrog_x, leapfrog_y, leapfrog_z);
          // vnew =  (xold - x) / dt
-         propagate_velocity_lp2(dt_ps, leapfrog_vx, leapfrog_vy, leapfrog_vz, leapfrog_x,
-            leapfrog_y, leapfrog_z, xpos, ypos, zpos);
+         propagate_velocity_lp2(dt_ps, leapfrog_vx, leapfrog_vy, leapfrog_vz, leapfrog_x, leapfrog_y, leapfrog_z, xpos,
+            ypos, zpos);
 
          // x = xold + vold * dt
-         propagate_pos_lf(dt_ps, xpos, ypos, zpos, leapfrog_x, leapfrog_y, leapfrog_z,
-            leapfrog_vxold, leapfrog_vyold, leapfrog_vzold);
+         propagate_pos_lf(dt_ps, xpos, ypos, zpos, leapfrog_x, leapfrog_y, leapfrog_z, leapfrog_vxold, leapfrog_vyold,
+            leapfrog_vzold);
 
          // propagate vx = vnew + a(1)*dt
          mdVelB(dt_ps, vx, vy, vz, leapfrog_vx, leapfrog_vy, leapfrog_vz, gx, gy, gz);
@@ -336,15 +331,14 @@ void lf_lpiston_npt(int istep, time_prec dt_ps)
          shake(dt_ps, xpos, ypos, zpos, leapfrog_x, leapfrog_y, leapfrog_z);
 
          // vold =  (x - xold) / dt
-         propagate_velocity_lp2(dt_ps, leapfrog_vxold, leapfrog_vyold, leapfrog_vzold, xpos, ypos,
-            zpos, leapfrog_x, leapfrog_y, leapfrog_z);
-         // virshk
-         shake2(dt_ps, vx, vy, vz, leapfrog_vxold, leapfrog_vyold, leapfrog_vzold, leapfrog_x,
+         propagate_velocity_lp2(dt_ps, leapfrog_vxold, leapfrog_vyold, leapfrog_vzold, xpos, ypos, zpos, leapfrog_x,
             leapfrog_y, leapfrog_z);
+         // virshk
+         shake2(dt_ps, vx, vy, vz, leapfrog_vxold, leapfrog_vyold, leapfrog_vzold, leapfrog_x, leapfrog_y, leapfrog_z);
          // vx = (vnew + vold) / 2
          eksum_new = 0.0;
-         propagate_velocity_lp3(vx, vy, vz, leapfrog_vx, leapfrog_vy, leapfrog_vz, leapfrog_vxold,
-            leapfrog_vyold, leapfrog_vzold, eksum_new); // eksum_new -> vx
+         propagate_velocity_lp3(vx, vy, vz, leapfrog_vx, leapfrog_vy, leapfrog_vz, leapfrog_vxold, leapfrog_vyold,
+            leapfrog_vzold, eksum_new); // eksum_new -> vx
       }
 
       // calculate eksum (at n+1/2) and eksum_old (at n-1/2)
@@ -363,8 +357,8 @@ void lf_lpiston_npt(int istep, time_prec dt_ps)
    }
 
    // propagate x(0 -> 1): x = xold + v(0.5)*dt
-   propagate_pos_lf(dt_ps, xpos, ypos, zpos, leapfrog_x, leapfrog_y, leapfrog_z, leapfrog_vxold,
-      leapfrog_vyold, leapfrog_vzold);
+   propagate_pos_lf(dt_ps, xpos, ypos, zpos, leapfrog_x, leapfrog_y, leapfrog_z, leapfrog_vxold, leapfrog_vyold,
+      leapfrog_vzold);
    lf_langevin_piston(dt_ps, press);
    copyPosToXyz(true);
    energy(vers1);
@@ -374,8 +368,7 @@ void lf_lpiston_npt(int istep, time_prec dt_ps)
    darray::copy(g::q0, n, leapfrog_z, zpos);
 
    // propagate v(0.5 -> 1.5 old): v = vold + a(1)*dt
-   mdVelB(dt_ps, leapfrog_vx, leapfrog_vy, leapfrog_vz, leapfrog_vxold, leapfrog_vyold,
-      leapfrog_vzold, gx, gy, gz);
+   mdVelB(dt_ps, leapfrog_vx, leapfrog_vy, leapfrog_vz, leapfrog_vxold, leapfrog_vyold, leapfrog_vzold, gx, gy, gz);
 
    if (userat) {
       darray::copy(g::q0, n, vx, leapfrog_vx);
@@ -383,25 +376,24 @@ void lf_lpiston_npt(int istep, time_prec dt_ps)
       darray::copy(g::q0, n, vz, leapfrog_vz);
 
       // x = xold + vnew * dt
-      propagate_pos_lf(dt_ps, xpos, ypos, zpos, leapfrog_x, leapfrog_y, leapfrog_z, leapfrog_vx,
-         leapfrog_vy, leapfrog_vz);
+      propagate_pos_lf(dt_ps, xpos, ypos, zpos, leapfrog_x, leapfrog_y, leapfrog_z, leapfrog_vx, leapfrog_vy,
+         leapfrog_vz);
 
       shake(dt_ps, xpos, ypos, zpos, leapfrog_x, leapfrog_y, leapfrog_z);
 
       // vnew =  (x - xold) / dt
-      propagate_velocity_lp2(dt_ps, leapfrog_vx, leapfrog_vy, leapfrog_vz, xpos, ypos, zpos,
-         leapfrog_x, leapfrog_y, leapfrog_z);
+      propagate_velocity_lp2(dt_ps, leapfrog_vx, leapfrog_vy, leapfrog_vz, xpos, ypos, zpos, leapfrog_x, leapfrog_y,
+         leapfrog_z);
 
       // do virial correction
-      shake2(dt_ps, vx, vy, vz, leapfrog_vx, leapfrog_vy, leapfrog_vz, leapfrog_x, leapfrog_y,
-         leapfrog_z);
+      shake2(dt_ps, vx, vy, vz, leapfrog_vx, leapfrog_vy, leapfrog_vz, leapfrog_x, leapfrog_y, leapfrog_z);
    }
 
    // vx = (vnew + vold) / 2
    eksum_new = 0.0;
    eksum_mid = 0.0;
-   propagate_velocity_lp3(vx, vy, vz, leapfrog_vx, leapfrog_vy, leapfrog_vz, leapfrog_vxold,
-      leapfrog_vyold, leapfrog_vzold, eksum_mid);
+   propagate_velocity_lp3(vx, vy, vz, leapfrog_vx, leapfrog_vy, leapfrog_vz, leapfrog_vxold, leapfrog_vyold,
+      leapfrog_vzold, eksum_mid);
 
    kinetic_leapfrog(temp); // get eksum and eksum_old
 
@@ -415,7 +407,6 @@ void lf_lpiston_npt(int istep, time_prec dt_ps)
    }
    press = (stress[0][0] + stress[1][1] + stress[2][2]) / 3;
    press += (eksum + eksum_old) * factor / 3;
-   swap_velocity(
-      leapfrog_vx, leapfrog_vy, leapfrog_vz, leapfrog_vxold, leapfrog_vyold, leapfrog_vzold);
+   swap_velocity(leapfrog_vx, leapfrog_vy, leapfrog_vz, leapfrog_vxold, leapfrog_vyold, leapfrog_vzold);
 }
 }

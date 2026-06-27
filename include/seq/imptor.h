@@ -7,24 +7,36 @@ namespace tinker {
 #pragma acc routine seq
 template <class Ver>
 SEQ_CUDA
-void dk_imptor(real& restrict e, real& restrict vxx, real& restrict vyx,
-   real& restrict vzx, real& restrict vyy, real& restrict vzy,
-   real& restrict vzz,
+void dk_imptor(real& restrict e,
+               real& restrict vxx,
+               real& restrict vyx,
+               real& restrict vzx,
+               real& restrict vyy,
+               real& restrict vzy,
+               real& restrict vzz,
 
-   grad_prec* restrict deitx, grad_prec* restrict deity,
-   grad_prec* restrict deitz,
+               grad_prec* restrict deitx,
+               grad_prec* restrict deity,
+               grad_prec* restrict deitz,
 
-   real itorunit, int i, const int (*restrict iitors)[4],
-   const real (*restrict itors1)[4], const real (*restrict itors2)[4],
-   const real (*restrict itors3)[4],
+               real itorunit,
+               int i,
+               const int (*restrict iitors)[4],
+               const real (*restrict itors1)[4],
+               const real (*restrict itors2)[4],
+               const real (*restrict itors3)[4],
 
-   const real* restrict x, const real* restrict y, const real* restrict z)
+               const real* restrict x,
+               const real* restrict y,
+               const real* restrict z)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_g = Ver::g;
    constexpr bool do_v = Ver::v;
-   if CONSTEXPR (do_e) e = 0;
-   if CONSTEXPR (do_v) vxx = 0, vyx = 0, vzx = 0, vyy = 0, vzy = 0, vzz = 0;
+   if CONSTEXPR (do_e)
+      e = 0;
+   if CONSTEXPR (do_v)
+      vxx = 0, vyx = 0, vzx = 0, vyy = 0, vzy = 0, vzz = 0;
 
    const int ia = iitors[i][0];
    const int ib = iitors[i][1];

@@ -31,6 +31,7 @@ void dfieldChgpen(real (*field)[3])
       dfieldChgpenEwald(field);
    else
       dfieldChgpenNonEwald(field);
+   extfieldModifyDField(field, nullptr);
 }
 }
 
@@ -108,6 +109,7 @@ void dfieldAplus(real (*field)[3])
       dfieldAplusEwald(field);
    else
       dfieldAplusNonEwald(field);
+   extfieldModifyDField(field, nullptr);
 }
 }
 

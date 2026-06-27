@@ -21,21 +21,21 @@ static void set_box(BoxShape shape, const double* p)
    boxSetCurrent(bo);
 }
 
-#define compare_im()                                                                               \
-   {                                                                                               \
-      real xx = xr, yy = yr, zz = zr;                                                              \
-      image(xx, yy, zz);                                                                           \
-      REQUIRE(xx == Approx(xa).margin(eps));                                                       \
-      REQUIRE(yy == Approx(ya).margin(eps));                                                       \
-      REQUIRE(zz == Approx(za).margin(eps));                                                       \
+#define compare_im()                         \
+   {                                         \
+      real xx = xr, yy = yr, zz = zr;        \
+      image(xx, yy, zz);                     \
+      REQUIRE(xx == Approx(xa).margin(eps)); \
+      REQUIRE(yy == Approx(ya).margin(eps)); \
+      REQUIRE(zz == Approx(za).margin(eps)); \
    }
-#define compare_in()                                                                               \
-   {                                                                                               \
-      real xx = xr, yy = yr, zz = zr;                                                              \
-      imagen2(xx, yy, zz);                                                                         \
-      REQUIRE(REAL_ABS(xx) == Approx(std::fabs(xa)).margin(eps));                                  \
-      REQUIRE(REAL_ABS(yy) == Approx(std::fabs(ya)).margin(eps));                                  \
-      REQUIRE(REAL_ABS(zz) == Approx(std::fabs(za)).margin(eps));                                  \
+#define compare_in()                                              \
+   {                                                              \
+      real xx = xr, yy = yr, zz = zr;                             \
+      imagen2(xx, yy, zz);                                        \
+      REQUIRE(REAL_ABS(xx) == Approx(std::fabs(xa)).margin(eps)); \
+      REQUIRE(REAL_ABS(yy) == Approx(std::fabs(ya)).margin(eps)); \
+      REQUIRE(REAL_ABS(zz) == Approx(std::fabs(za)).margin(eps)); \
    }
 #define COS(x) std::cos(x* _1radian)
 #define SIN(x) std::sin(x* _1radian)

@@ -10,12 +10,29 @@ namespace tinker {
 #pragma acc routine seq
 template <class Ver, class ETYP>
 SEQ_CUDA
-void pair_charge(real r, real xr, real yr, real zr, real cscale, real chgi,
-   real chgk, real ebuffer, real f, real aewald, real cut, real off,
-   real& restrict grdx, real& restrict grdy, real& restrict grdz,
-   int& restrict ctl, real& restrict etl, real& restrict vtlxx,
-   real& restrict vtlxy, real& restrict vtlxz, real& restrict vtlyy,
-   real& restrict vtlyz, real& restrict vtlzz)
+void pair_charge(real r,
+                 real xr,
+                 real yr,
+                 real zr,
+                 real cscale,
+                 real chgi,
+                 real chgk,
+                 real ebuffer,
+                 real f,
+                 real aewald,
+                 real cut,
+                 real off,
+                 real& restrict grdx,
+                 real& restrict grdy,
+                 real& restrict grdz,
+                 int& restrict ctl,
+                 real& restrict etl,
+                 real& restrict vtlxx,
+                 real& restrict vtlxy,
+                 real& restrict vtlxz,
+                 real& restrict vtlyy,
+                 real& restrict vtlyz,
+                 real& restrict vtlzz)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;
@@ -31,7 +48,8 @@ void pair_charge(real r, real xr, real yr, real zr, real cscale, real chgi,
       real rb = r + ebuffer;
       real invrb = REAL_RECIP(rb);
 
-      if CONSTEXPR (do_e) e = fik * invrb * erfterm;
+      if CONSTEXPR (do_e)
+         e = fik * invrb * erfterm;
       if CONSTEXPR (do_g) {
          real invr = REAL_RECIP(r);
          real invrb2 = invrb * invrb;
@@ -85,8 +103,7 @@ void pair_charge(real r, real xr, real yr, real zr, real cscale, real chgi,
             switchTaper5<do_g>(r, cut, off, taper, dtaper);
 
             real trans, dtrans;
-            real coef = fik * (REAL_RECIP(cut) - REAL_RECIP(off))
-               * REAL_RECIP((real)9.3);
+            real coef = fik * (REAL_RECIP(cut) - REAL_RECIP(off)) * REAL_RECIP((real)9.3);
             real invs = REAL_RECIP(off - cut);
             real x = (r - cut) * invs;
             real y = (1 - x) * x;
@@ -96,8 +113,10 @@ void pair_charge(real r, real xr, real yr, real zr, real cscale, real chgi,
                dtrans *= coef * invs;
             }
 
-            if CONSTEXPR (do_g) de = e * dtaper + de * taper + dtrans;
-            if CONSTEXPR (do_e) e = e * taper + trans;
+            if CONSTEXPR (do_g)
+               de = e * dtaper + de * taper + dtrans;
+            if CONSTEXPR (do_e)
+               e = e * taper + trans;
          }
       }
 
@@ -120,7 +139,8 @@ void pair_charge(real r, real xr, real yr, real zr, real cscale, real chgi,
             ctl -= 1;
       }
    }
-   if CONSTEXPR (do_e) etl += e;
+   if CONSTEXPR (do_e)
+      etl += e;
    if CONSTEXPR (do_g) {
       grdx += dedx;
       grdy += dedy;
@@ -145,13 +165,22 @@ void pair_charge(real r, real xr, real yr, real zr, real cscale, real chgi,
 #pragma acc routine seq
 template <bool DO_G, class ETYP, int SCALE>
 SEQ_CUDA
-void pair_chg_v2(real r, real invr, //
-   real cscale, real chgi, real chgk, real f, real aewald, real eccut,
-   real ecoff, real& restrict ec, real& restrict dec)
+void pair_chg_v2(real r,
+                 real invr, //
+                 real cscale,
+                 real chgi,
+                 real chgk,
+                 real f,
+                 real aewald,
+                 real eccut,
+                 real ecoff,
+                 real& restrict ec,
+                 real& restrict dec)
 {
    if (r > ecoff) {
       ec = 0;
-      if CONSTEXPR (DO_G) dec = 0;
+      if CONSTEXPR (DO_G)
+         dec = 0;
       return;
    }
    real fik = f * chgi * chgk;
@@ -159,7 +188,8 @@ void pair_chg_v2(real r, real invr, //
       const real rew = aewald * r;
       const real expterm = REAL_EXP(-rew * rew);
       real erfterm = REAL_ERFC_V2(rew, expterm);
-      if CONSTEXPR (SCALE != 1) erfterm += cscale - 1;
+      if CONSTEXPR (SCALE != 1)
+         erfterm += cscale - 1;
       ec = fik * invr * erfterm;
       if CONSTEXPR (DO_G) {
          constexpr real two = 2.0f / sqrtpi;
@@ -167,9 +197,11 @@ void pair_chg_v2(real r, real invr, //
          dec *= -fik * invr;
       }
    } else if CONSTEXPR (eq<ETYP, NON_EWALD_TAPER>()) {
-      if CONSTEXPR (SCALE != 1) fik *= cscale;
+      if CONSTEXPR (SCALE != 1)
+         fik *= cscale;
       ec = fik * invr;
-      if CONSTEXPR (DO_G) dec = -ec * invr;
+      if CONSTEXPR (DO_G)
+         dec = -ec * invr;
 
       // shift energy
       real shift = fik * 2 * REAL_RECIP(eccut + ecoff);
@@ -178,8 +210,7 @@ void pair_chg_v2(real r, real invr, //
          real taper, dtaper;
          switchTaper5<DO_G>(r, eccut, ecoff, taper, dtaper);
          real trans, dtrans;
-         real coef = fik * (REAL_RECIP(eccut) - REAL_RECIP(ecoff))
-            * REAL_RECIP((real)9.3);
+         real coef = fik * (REAL_RECIP(eccut) - REAL_RECIP(ecoff)) * REAL_RECIP((real)9.3);
          real invs = REAL_RECIP(ecoff - eccut);
          real x = (r - eccut) * invs;
          real y = (1 - x) * x;
@@ -197,9 +228,7 @@ void pair_chg_v2(real r, real invr, //
 #pragma acc routine seq
 template <bool DO_G, class ETYP, int SCALE>
 SEQ_CUDA
-void pair_chg_v3(real r, real cscale, real chgi, real chgk, real ebuffer,
-   real f, real aewald, real eccut, real ecoff, real& restrict ec,
-   real& restrict dec)
+void pair_chg_v3(real r, real cscale, real chgi, real chgk, real ebuffer, real f, real aewald, real eccut, real ecoff, real& restrict ec, real& restrict dec)
 {
    real fik = f * chgi * chgk;
    real rb = r + ebuffer;
@@ -208,7 +237,8 @@ void pair_chg_v3(real r, real cscale, real chgi, real chgk, real ebuffer,
       const real rew = aewald * r;
       const real expterm = REAL_EXP(-rew * rew);
       real erfterm = REAL_ERFC_V2(rew, expterm);
-      if CONSTEXPR (SCALE != 1) erfterm += cscale - 1;
+      if CONSTEXPR (SCALE != 1)
+         erfterm += cscale - 1;
       ec = fik * invrb * erfterm;
       if CONSTEXPR (DO_G) {
          constexpr real two = 2.0f / sqrtpi;
@@ -216,9 +246,11 @@ void pair_chg_v3(real r, real cscale, real chgi, real chgk, real ebuffer,
          dec *= -fik * invrb;
       }
    } else if CONSTEXPR (eq<ETYP, NON_EWALD_TAPER>()) {
-      if CONSTEXPR (SCALE != 1) fik *= cscale;
+      if CONSTEXPR (SCALE != 1)
+         fik *= cscale;
       ec = fik * invrb;
-      if CONSTEXPR (DO_G) dec = -ec * invrb;
+      if CONSTEXPR (DO_G)
+         dec = -ec * invrb;
 
       // shift energy
       real shift = fik * 2 * REAL_RECIP(eccut + ecoff);
@@ -227,8 +259,7 @@ void pair_chg_v3(real r, real cscale, real chgi, real chgk, real ebuffer,
          real taper, dtaper;
          switchTaper5<DO_G>(r, eccut, ecoff, taper, dtaper);
          real trans, dtrans;
-         real coef = fik * (REAL_RECIP(eccut) - REAL_RECIP(ecoff))
-            * REAL_RECIP((real)9.3);
+         real coef = fik * (REAL_RECIP(eccut) - REAL_RECIP(ecoff)) * REAL_RECIP((real)9.3);
          real invs = REAL_RECIP(ecoff - eccut);
          real x = (r - eccut) * invs;
          real y = (1 - x) * x;

@@ -55,7 +55,7 @@ void reduceSumOnDevice_acc(T* dp_ans, const T* a, size_t nelem, int queue)
 
    ans1 = 0;
    #pragma acc update async(queue) device(ans1)
-   #pragma acc parallel loop independent async(queue) deviceptr(a)\
+    #pragma acc parallel loop independent async(queue) deviceptr(a)\
                reduction(+:ans1) present(ans1)
    for (size_t i = 0; i < nelem; ++i) {
       ans1 += a[i];
@@ -83,7 +83,7 @@ void reduceSum2OnDevice_acc(T (&dref)[HN], DPTR v, size_t nelem, int queue)
    for (size_t iv = 0; iv < HN; ++iv) {
       ans1 = 0;
       #pragma acc update async(queue) device(ans1)
-      #pragma acc parallel loop independent async(queue) deviceptr(v)\
+       #pragma acc parallel loop independent async(queue) deviceptr(v)\
                   reduction(+:ans1) present(ans1)
       for (size_t ig = 0; ig < nelem; ++ig) {
          ans1 += v[ig][iv];
@@ -96,8 +96,7 @@ void reduceSum2OnDevice_acc(T (&dref)[HN], DPTR v, size_t nelem, int queue)
 }
 template void reduceSum2OnDevice_acc(float (&)[6], float (*)[8], size_t, int);
 template void reduceSum2OnDevice_acc(double (&)[6], double (*)[8], size_t, int);
-template void reduceSum2OnDevice_acc(
-   unsigned long long (&)[6], unsigned long long (*)[8], size_t, int);
+template void reduceSum2OnDevice_acc(unsigned long long (&)[6], unsigned long long (*)[8], size_t, int);
 
 template <class T>
 T dotProd_acc(const T* restrict gpu_a, const T* restrict gpu_b, size_t cpu_n, int queue)
@@ -125,7 +124,7 @@ void dotProd_acc(T* ans, const T* a, const T* b, size_t nelem, int queue)
 
    ans1 = 0;
    #pragma acc update async(queue) device(ans1)
-   #pragma acc parallel loop independent async(queue) deviceptr(a,b)\
+    #pragma acc parallel loop independent async(queue) deviceptr(a,b)\
                reduction(+:ans1) present(ans1)
    for (size_t i = 0; i < nelem; ++i) {
       ans1 += a[i] * b[i];

@@ -33,7 +33,7 @@ BasicPropagator::BasicPropagator(int nrspa)
    std::string pressure_mode;
    getKV("PRESSURE", pressure_mode, "ISOTROPIC");
 
-   semiiso = (pressure_mode == "SEMIISO");
+   semiiso = (pressure_mode == "SEMI") or (pressure_mode == "SEMIISO");
    aniso = semiiso || (pressure_mode == "ANISO");
 
    if (aniso) {
@@ -60,8 +60,7 @@ BasicPropagator::BasicPropagator(int nrspa)
       print(o, fmt, "Number of X-H3 Constraint Groups", nratch3);
       print(o, fmt, "Number of Rigid Water", nratwt);
       print(o, fmt, "Number of Other Constraints", nrat);
-      print(o, fmt, "Number of Constraints in Total",
-         nratch + nratch2 * 2 + nratch3 * 3 + nratwt * 3 + nrat);
+      print(o, fmt, "Number of Constraints in Total", nratch + nratch2 * 2 + nratch3 * 3 + nratwt * 3 + nrat);
       print(o, fmt, "Number of Atom Groups", rattle_dmol.nmol);
 
       darray::allocate(bufferSize(), &hc_vir_buf);

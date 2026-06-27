@@ -11,8 +11,8 @@ static const int maxiter = 500;
 static const double sor = 1.25;
 
 template <class HTYPE>
-static void constrain_acc(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew,
-   const pos_prec* xold, const pos_prec* yold, const pos_prec* zold)
+static void constrain_acc(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew, const pos_prec* xold,
+   const pos_prec* yold, const pos_prec* zold)
 {
    if (nratmol <= 0)
       return;
@@ -74,8 +74,8 @@ static void constrain_acc(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec
 }
 
 template <class HTYPE>
-static void settle_acc1(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew,
-   const pos_prec* xold, const pos_prec* yold, const pos_prec* zold)
+static void settle_acc1(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew, const pos_prec* xold,
+   const pos_prec* yold, const pos_prec* zold)
 {
    if (nratwt <= 0)
       return;
@@ -90,8 +90,8 @@ static void settle_acc1(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* 
 }
 
 template <class HTYPE>
-static void constrainCH_acc1(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew,
-   const pos_prec* xold, const pos_prec* yold, const pos_prec* zold)
+static void constrainCH_acc1(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew, const pos_prec* xold,
+   const pos_prec* yold, const pos_prec* zold)
 {
    if (nratch <= 0)
       return;
@@ -164,8 +164,7 @@ void rattle_acc(time_prec dt, const pos_prec* xold, const pos_prec* yold, const 
    constrain_acc<RATTLE>(dt, xpos, ypos, zpos, xold, yold, zold);
 }
 
-void rattleSettle_acc(
-   time_prec dt, const pos_prec* xold, const pos_prec* yold, const pos_prec* zold)
+void rattleSettle_acc(time_prec dt, const pos_prec* xold, const pos_prec* yold, const pos_prec* zold)
 {
    settle_acc1<RATTLE>(dt, xpos, ypos, zpos, xold, yold, zold);
 }
@@ -175,14 +174,14 @@ void rattleCH_acc(time_prec dt, const pos_prec* xold, const pos_prec* yold, cons
    constrainCH_acc1<RATTLE>(dt, xpos, ypos, zpos, xold, yold, zold);
 }
 
-void shake_acc(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew, const pos_prec* xold,
-   const pos_prec* yold, const pos_prec* zold)
+void shake_acc(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew, const pos_prec* xold, const pos_prec* yold,
+   const pos_prec* zold)
 {
    constrain_acc<SHAKE>(dt, xnew, ynew, znew, xold, yold, zold);
 }
 
-void shakeSettle_acc(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew,
-   const pos_prec* xold, const pos_prec* yold, const pos_prec* zold)
+void shakeSettle_acc(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew, const pos_prec* xold,
+   const pos_prec* yold, const pos_prec* zold)
 {
    settle_acc1<SHAKE>(dt, xnew, ynew, znew, xold, yold, zold);
 }
@@ -253,8 +252,7 @@ static void constrain2_acc(time_prec dt)
                   vyy -= yr * yterm;
                   vzy -= zr * yterm;
                   vzz -= zr * zterm;
-                  atomic_add((real)vxx, (real)vyx, (real)vzx, (real)vyy, (real)vzy, (real)vzz,
-                     vir_buf, offset);
+                  atomic_add((real)vxx, (real)vyx, (real)vzx, (real)vyy, (real)vzy, (real)vzz, vir_buf, offset);
                }
             } // end if (delta > eps)
          }
@@ -278,8 +276,7 @@ static void settle2_acc1(time_prec dt)
          vxx, vyx, vzx, vyy, vzy, vzz);
       if CONSTEXPR (DO_V) {
          size_t offset = iw & (bufsize - 1);
-         atomic_add(
-            (real)vxx, (real)vyx, (real)vzx, (real)vyy, (real)vzy, (real)vzz, vir_buf, offset);
+         atomic_add((real)vxx, (real)vyx, (real)vzx, (real)vyy, (real)vzy, (real)vzz, vir_buf, offset);
       }
    }
 }
@@ -338,8 +335,7 @@ void constrain2CH_acc1(time_prec dt)
          vyy -= yr * yterm;
          vzy -= zr * yterm;
          vzz -= zr * zterm;
-         atomic_add(
-            (real)vxx, (real)vyx, (real)vzx, (real)vyy, (real)vzy, (real)vzz, vir_buf, offset);
+         atomic_add((real)vxx, (real)vyx, (real)vzx, (real)vyy, (real)vzy, (real)vzz, vir_buf, offset);
       }
    }
 }
@@ -443,8 +439,8 @@ void hcVirial_acc()
    hc_vir[8] = mvzz + vir[8];
 }
 
-void hcCenterOfMass_acc(const pos_prec* ax, const pos_prec* ay, const pos_prec* az, pos_prec* mx,
-   pos_prec* my, pos_prec* mz)
+void hcCenterOfMass_acc(const pos_prec* ax, const pos_prec* ay, const pos_prec* az, pos_prec* mx, pos_prec* my,
+   pos_prec* mz)
 {
    const int nmol = rattle_dmol.nmol;
    const auto* imol = rattle_dmol.imol;

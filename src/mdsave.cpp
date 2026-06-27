@@ -1,5 +1,6 @@
-#include "ff/modamoeba.h"
 #include "ff/energy.h"
+#include "ff/modamoeba.h"
+#include "ff/modhippo.h"
 #include "ff/potent.h"
 #include "md/misc.h"
 #include "md/pq.h"
@@ -12,18 +13,21 @@
 #include <tinker/detail/atoms.hh>
 #include <tinker/detail/couple.hh>
 #include <tinker/detail/deriv.hh>
+#include <tinker/detail/expol.hh>
 #include <tinker/detail/files.hh>
 #include <tinker/detail/moldyn.hh>
+#include <tinker/detail/mpole.hh>
 #include <tinker/detail/output.hh>
 #include <tinker/detail/polar.hh>
+#include <tinker/detail/polpot.hh>
 #include <tinker/detail/titles.hh>
 #include <tinker/detail/units.hh>
 #include <tinker/routines.h>
 
 #if TINKER_CUDART
-#   include "tool/error.h"
-#   include "tool/gpucard.h"
-#   include <cuda_runtime.h>
+#include "tool/error.h"
+#include "tool/gpucard.h"
+#include <cuda_runtime.h>
 #endif
 
 namespace tinker {
@@ -34,13 +38,40 @@ static std::future<void> fut_dup_then_write;
 
 static bool mdsaveUseUind()
 {
-   return static_cast<bool>(output::uindsave) and use(Potent::POLAR);
+   return (static_cast<bool>(output::uindsave) or static_cast<bool>(output::tefsave)
+             or static_cast<bool>(output::usyssave))
+      and use(Potent::POLAR);
+}
+
+static bool mdsaveUseUstc()
+{
+   return static_cast<bool>(output::ustcsave) or static_cast<bool>(output::uchgsave)
+      or static_cast<bool>(output::usyssave);
+}
+
+static bool mdsaveUseUdir()
+{
+   return (static_cast<bool>(output::udirsave) or static_cast<bool>(output::defsave)) and use(Potent::POLAR);
+}
+
+static bool mdsaveUseExpolUdir()
+{
+   return static_cast<bool>(polpot::use_expol) and static_cast<bool>(output::udirsave) and use(Potent::POLAR);
+}
+
+static bool mdsaveUseExpolTef()
+{
+   return static_cast<bool>(polpot::use_expol) and static_cast<bool>(output::tefsave) and use(Potent::POLAR);
 }
 
 #if TINKER_CUDART
 static cudaEvent_t mdsave_begin_event, mdsave_end_event;
 #endif
 static real (*dup_buf_uind)[3];
+static real (*dup_buf_udir)[3];
+static real (*dup_buf_rpole)[MPL_TOTAL];
+static real (*dup_buf_polinv)[3][3];
+static real (*dup_buf_polscale)[3][3];
 static energy_prec dup_buf_esum;
 static Box dup_buf_box;
 static pos_prec *dup_buf_x, *dup_buf_y, *dup_buf_z;
@@ -76,6 +107,18 @@ static void mdsaveDupThenWrite(int istep, time_prec dt)
 
    if (mdsaveUseUind())
       darray::copy(g::q0, 3 * n, &dup_buf_uind[0][0], &uind[0][0]);
+
+   if (mdsaveUseUstc())
+      darray::copy(g::q0, MPL_TOTAL * n, &dup_buf_rpole[0][0], &rpole[0][0]);
+
+   if (mdsaveUseUdir())
+      darray::copy(g::q0, 3 * n, &dup_buf_udir[0][0], &udir[0][0]);
+
+   if (mdsaveUseExpolUdir())
+      darray::copy(g::q0, 9 * n, &dup_buf_polinv[0][0][0], &polinv[0][0][0]);
+
+   if (mdsaveUseExpolTef())
+      darray::copy(g::q0, 9 * n, &dup_buf_polscale[0][0][0], &polscale[0][0][0]);
 
       // Record mdsave_begin_event when g::s0 is available.
       // g::s1 will wait until mdsave_begin_event is recorded.
@@ -127,8 +170,7 @@ static void mdsaveDupThenWrite(int istep, time_prec dt)
 
    {
       std::vector<double> arrx(n), arry(n), arrz(n);
-      copyGradientSync(calc::grad, arrx.data(), arry.data(), arrz.data(),
-         dup_buf_gx, dup_buf_gy, dup_buf_gz, g::q1);
+      copyGradientSync(calc::grad, arrx.data(), arry.data(), arrz.data(), dup_buf_gx, dup_buf_gy, dup_buf_gz, g::q1);
       // convert gradient to acceleration
       const double ekcal = units::ekcal;
       for (int i = 0; i < n; ++i) {
@@ -148,6 +190,35 @@ static void mdsaveDupThenWrite(int istep, time_prec dt)
 
    if (mdsaveUseUind()) {
       darray::copyout(g::q1, n, polar::uind, dup_buf_uind);
+      waitFor(g::q1);
+   }
+
+   if (mdsaveUseUstc()) {
+      std::vector<real> rpolev(n * MPL_TOTAL);
+      darray::copyout(g::q1, n * MPL_TOTAL, rpolev.data(), &dup_buf_rpole[0][0]);
+      waitFor(g::q1);
+      for (int i = 0; i < n; ++i) {
+         int c1 = 13 * i;
+         int c2 = MPL_TOTAL * i;
+         mpole::rpole[c1 + 0] = rpolev[c2 + MPL_PME_0];
+         mpole::rpole[c1 + 1] = rpolev[c2 + MPL_PME_X];
+         mpole::rpole[c1 + 2] = rpolev[c2 + MPL_PME_Y];
+         mpole::rpole[c1 + 3] = rpolev[c2 + MPL_PME_Z];
+      }
+   }
+
+   if (mdsaveUseUdir()) {
+      darray::copyout(g::q1, n, polar::udir, dup_buf_udir);
+      waitFor(g::q1);
+   }
+
+   if (mdsaveUseExpolUdir()) {
+      darray::copyout(g::q1, 9 * n, &expol::polinv[0], &dup_buf_polinv[0][0][0]);
+      waitFor(g::q1);
+   }
+
+   if (mdsaveUseExpolTef()) {
+      darray::copyout(g::q1, 9 * n, &expol::polscale[0], &dup_buf_polscale[0][0][0]);
       waitFor(g::q1);
    }
 
@@ -178,8 +249,7 @@ void mdsaveAsync(int istep, time_prec dt)
    cv_write.wait(lck_write, [=]() { return idle_write; });
    idle_write = false;
 
-   fut_dup_then_write = std::async(std::launch::async, mdsaveDupThenWrite,
-      istep, dt);
+   fut_dup_then_write = std::async(std::launch::async, mdsaveDupThenWrite, istep, dt);
 
    std::unique_lock<std::mutex> lck_copy(mtx_dup);
    cv_dup.wait(lck_copy, [=]() { return idle_dup; });
@@ -188,7 +258,8 @@ void mdsaveAsync(int istep, time_prec dt)
 
 void mdsaveSynchronize()
 {
-   if (fut_dup_then_write.valid()) fut_dup_then_write.get();
+   if (fut_dup_then_write.valid())
+      fut_dup_then_write.get();
 }
 
 void mdsaveData(RcOp op)
@@ -199,7 +270,20 @@ void mdsaveData(RcOp op)
       check_rt(cudaEventDestroy(mdsave_end_event));
 #endif
 
-      if (mdsaveUseUind()) darray::deallocate(dup_buf_uind);
+      if (mdsaveUseUind())
+         darray::deallocate(dup_buf_uind);
+
+      if (mdsaveUseUstc())
+         darray::deallocate(dup_buf_rpole);
+
+      if (mdsaveUseUdir())
+         darray::deallocate(dup_buf_udir);
+
+      if (mdsaveUseExpolUdir())
+         darray::deallocate(dup_buf_polinv);
+
+      if (mdsaveUseExpolTef())
+         darray::deallocate(dup_buf_polscale);
 
       darray::deallocate(dup_buf_x, dup_buf_y, dup_buf_z);
       darray::deallocate(dup_buf_vx, dup_buf_vy, dup_buf_vz);
@@ -208,16 +292,38 @@ void mdsaveData(RcOp op)
 
    if (op & RcOp::ALLOC) {
 #if TINKER_CUDART
-      check_rt(cudaEventCreateWithFlags(&mdsave_begin_event,
-         cudaEventDisableTiming));
-      check_rt(cudaEventCreateWithFlags(&mdsave_end_event,
-         cudaEventDisableTiming));
+      check_rt(cudaEventCreateWithFlags(&mdsave_begin_event, cudaEventDisableTiming));
+      check_rt(cudaEventCreateWithFlags(&mdsave_end_event, cudaEventDisableTiming));
 #endif
 
       if (mdsaveUseUind()) {
          darray::allocate(n, &dup_buf_uind);
       } else {
          dup_buf_uind = nullptr;
+      }
+
+      if (mdsaveUseUstc()) {
+         darray::allocate(n, &dup_buf_rpole);
+      } else {
+         dup_buf_rpole = nullptr;
+      }
+
+      if (mdsaveUseUdir()) {
+         darray::allocate(n, &dup_buf_udir);
+      } else {
+         dup_buf_udir = nullptr;
+      }
+
+      if (mdsaveUseExpolUdir()) {
+         darray::allocate(n, &dup_buf_polinv);
+      } else {
+         dup_buf_polinv = nullptr;
+      }
+
+      if (mdsaveUseExpolTef()) {
+         darray::allocate(n, &dup_buf_polscale);
+      } else {
+         dup_buf_polscale = nullptr;
       }
 
       darray::allocate(n, &dup_buf_x, &dup_buf_y, &dup_buf_z);

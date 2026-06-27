@@ -34,8 +34,7 @@ static bool find_match(const int* array, int na, int iframe, int iatom)
    if (missing.size() == 0) {
       return true;
    } else {
-      std::string line = format(
-         "The following neighbors of atom %3d in frame %d are missing:", iatom + 1, iframe + 1);
+      std::string line = format("The following neighbors of atom %3d in frame %d are missing:", iatom + 1, iframe + 1);
       for (auto i : missing) {
          line += format(" %3d", i + 1);
       }
@@ -111,8 +110,7 @@ static void copyin_arc_file(const std::string& arcfile, int first1, int last1, i
                std::getline(iarc, line);
                std::istringstream ss(line);
                int c = 6 * current;
-               ss >> bbuf[c] >> bbuf[c + 1] >> bbuf[c + 2] >> bbuf[c + 3] >> bbuf[c + 4] >>
-                  bbuf[c + 5];
+               ss >> bbuf[c] >> bbuf[c + 1] >> bbuf[c + 2] >> bbuf[c + 3] >> bbuf[c + 4] >> bbuf[c + 5];
             }
             int off = current * n;
             for (int j = 0; j < n; ++j) {
@@ -130,8 +128,7 @@ static void copyin_arc_file(const std::string& arcfile, int first1, int last1, i
       if (has_boxsize) {
          for (int i = 0; i < tn; ++i) {
             int c = i * 6;
-            boxLattice(trajbox[i], box_shape, bbuf[c], bbuf[c + 1], bbuf[c + 2], bbuf[c + 3],
-               bbuf[c + 4], bbuf[c + 5]);
+            boxLattice(trajbox[i], box_shape, bbuf[c], bbuf[c + 1], bbuf[c + 2], bbuf[c + 3], bbuf[c + 4], bbuf[c + 5]);
          }
       }
       darray::copyin(g::q0, n * tn, trajx, xbuf.data());

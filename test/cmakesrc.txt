@@ -5,6 +5,7 @@ aplusgas.cpp
 aplusliquid.cpp
 argkey.cpp
 async.cpp
+barostat.cpp
 bond.cpp
 bounds.cpp
 box.cpp
@@ -14,6 +15,7 @@ disp.cpp
 emhippo.cpp
 ephippo.cpp
 expol.cpp
+extfield.cpp
 geom.cpp
 improp.cpp
 imptor.cpp
@@ -24,6 +26,7 @@ localframe2.cpp
 localframe3.cpp
 main.cpp
 mathfunc.cpp
+matexp.cpp
 nacl.cpp
 nblist.cpp
 nh.cpp
@@ -40,6 +43,7 @@ strbnd.cpp
 strtor.cpp
 testrt.cpp
 text.cpp
+tinkernist.cpp
 torsion.cpp
 tortor.cpp
 trimatexp.cpp

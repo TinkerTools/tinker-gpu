@@ -1,7 +1,7 @@
-#include "ff/modamoeba.h"
 #include "ff/atom.h"
-#include "ff/modhippo.h"
 #include "ff/image.h"
+#include "ff/modamoeba.h"
+#include "ff/modhippo.h"
 #include "ff/nblist.h"
 #include "ff/pme.h"
 #include "ff/switch.h"
@@ -9,8 +9,7 @@
 #include "tool/gpucard.h"
 
 namespace tinker {
-#define POLAR_DPTRS                                                                                \
-   x, y, z, depx, depy, depz, rpole, thole, dirdamp, pdamp, pot, uind, nep, ep, vir_ep, ufld, dufld
+#define POLAR_DPTRS x, y, z, depx, depy, depz, rpole, thole, dirdamp, pdamp, pot, uind, nep, ep, vir_ep, ufld, dufld
 template <class Ver, class ETYP, bool CFLX>
 static void epolarAplus_acc1(const real (*uind)[3])
 {
@@ -108,9 +107,9 @@ static void epolarAplus_acc1(const real (*uind)[3])
             real ddk = dirdamp[k];
 
             pair_polar_aplus<do_e, do_g, ETYP, CFLX>( //
-               r2, xr, yr, zr, 1, 1, ci, dix, diy, diz, pdi, pti, ddi, qixx, qixy, qixz, qiyy, qiyz,
-               qizz, uix, uiy, uiz, ck, dkx, dky, dkz, pdk, ptk, ddk, qkxx, qkxy, qkxz, qkyy, qkyz,
-               qkzz, ukx, uky, ukz, f, aewald, e, pota, potb, pgrad);
+               r2, xr, yr, zr, 1, 1, ci, dix, diy, diz, pdi, pti, ddi, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy,
+               uiz, ck, dkx, dky, dkz, pdk, ptk, ddk, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, f, aewald, e,
+               pota, potb, pgrad);
 
             if CONSTEXPR (do_a)
                atomic_add(1, nep, offset);
@@ -234,10 +233,9 @@ static void epolarAplus_acc1(const real (*uind)[3])
             r2, xr, yr, zr, pscale, uscale,                    //
             ci, dix, diy, diz, pdi, pti, ddi,                  //
             qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy, uiz, //
-            rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], pdk,
-            ptk, ddk, rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ],
-            rpole[k][MPL_PME_YY], rpole[k][MPL_PME_YZ], rpole[k][MPL_PME_ZZ], uind[k][0],
-            uind[k][1], uind[k][2], f, 0, e, pota, potb, pgrad);
+            rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], pdk, ptk, ddk,
+            rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY],
+            rpole[k][MPL_PME_YZ], rpole[k][MPL_PME_ZZ], uind[k][0], uind[k][1], uind[k][2], f, 0, e, pota, potb, pgrad);
 
          if CONSTEXPR (do_a)
             if (pscale == -1 and e != 0)
@@ -307,12 +305,12 @@ static void epolarAplus_acc1(const real (*uind)[3])
          real qiyz = rpole[i][MPL_PME_YZ];
          real qizz = rpole[i][MPL_PME_ZZ];
 
-         real tep1 = diz * ufld[i][1] - diy * ufld[i][2] + qixz * dufld[i][1] - qixy * dufld[i][3] +
-            2 * qiyz * (dufld[i][2] - dufld[i][5]) + (qizz - qiyy) * dufld[i][4];
-         real tep2 = dix * ufld[i][2] - diz * ufld[i][0] - qiyz * dufld[i][1] + qixy * dufld[i][4] +
-            2 * qixz * (dufld[i][5] - dufld[i][0]) + (qixx - qizz) * dufld[i][3];
-         real tep3 = diy * ufld[i][0] - dix * ufld[i][1] + qiyz * dufld[i][3] - qixz * dufld[i][4] +
-            2 * qixy * (dufld[i][0] - dufld[i][2]) + (qiyy - qixx) * dufld[i][1];
+         real tep1 = diz * ufld[i][1] - diy * ufld[i][2] + qixz * dufld[i][1] - qixy * dufld[i][3]
+            + 2 * qiyz * (dufld[i][2] - dufld[i][5]) + (qizz - qiyy) * dufld[i][4];
+         real tep2 = dix * ufld[i][2] - diz * ufld[i][0] - qiyz * dufld[i][1] + qixy * dufld[i][4]
+            + 2 * qixz * (dufld[i][5] - dufld[i][0]) + (qixx - qizz) * dufld[i][3];
+         real tep3 = diy * ufld[i][0] - dix * ufld[i][1] + qiyz * dufld[i][3] - qixz * dufld[i][4]
+            + 2 * qixy * (dufld[i][0] - dufld[i][2]) + (qiyy - qixx) * dufld[i][1];
 
          trqx[i] += tep1;
          trqy[i] += tep2;

@@ -27,9 +27,7 @@ static void xBarMake()
 
    auto out = stdout;
    auto invalid_temperature = [](double t) { return t <= 0; };
-   auto invalid_recompute_answer = [](char c) {
-      return c != 'y' and c != 'Y' and c != 'n' and c != 'N';
-   };
+   auto invalid_recompute_answer = [](char c) { return c != 'y' and c != 'Y' and c != 'n' and c != 'N'; };
 
    int lenga, lengb;
    int ltitlea, ltitleb;
@@ -117,16 +115,14 @@ static void xBarMake()
    const char* log_fmt = " Current Potential %lf\n";
    const char* process_fmt = "       Completed%8d Coordinate Frames\n";
    std::memcpy(string, filea, lenga);
-   tinker_f_suffix(
-      {string, MAX_NCHAR}, {const_cast<char*>("bar"), 3}, {const_cast<char*>("new"), 3});
+   tinker_f_suffix({string, MAX_NCHAR}, {const_cast<char*>("bar"), 3}, {const_cast<char*>("new"), 3});
    std::string barfile = FstrView(string).trim();
    std::vector<double> ua0, ua1, ub0, ub1, vola, volb;
 
    // check for log with energies of trajectory A in state 0
    if (not recompute) {
       std::memcpy(string, filea, lenga);
-      tinker_f_suffix(
-         {string, MAX_NCHAR}, {const_cast<char*>("log"), 3}, {const_cast<char*>("old"), 3});
+      tinker_f_suffix({string, MAX_NCHAR}, {const_cast<char*>("log"), 3}, {const_cast<char*>("old"), 3});
       str = FstrView(string).trim();
       std::ifstream a_log(str);
       while (std::getline(a_log, str)) {
@@ -145,8 +141,7 @@ static void xBarMake()
       "\n");
 
    std::memcpy(string, filea, MAX_NCHAR);
-   tinker_f_suffix(
-      {string, MAX_NCHAR}, {const_cast<char*>("arc"), 3}, {const_cast<char*>("old"), 3});
+   tinker_f_suffix({string, MAX_NCHAR}, {const_cast<char*>("arc"), 3}, {const_cast<char*>("old"), 3});
    iarc = tinker_f_freeunit();
    str = FstrView(string).trim();
    if (output::archive)
@@ -242,8 +237,7 @@ static void xBarMake()
    // check for log with energies of trajectory B in state 1
    if (not recompute) {
       std::memcpy(string, fileb, lengb);
-      tinker_f_suffix(
-         {string, MAX_NCHAR}, {const_cast<char*>("log"), 3}, {const_cast<char*>("old"), 3});
+      tinker_f_suffix({string, MAX_NCHAR}, {const_cast<char*>("log"), 3}, {const_cast<char*>("old"), 3});
       str = FstrView(string).trim();
       std::ifstream b_log(str);
       while (std::getline(b_log, str)) {
@@ -262,8 +256,7 @@ static void xBarMake()
       "\n");
 
    std::memcpy(string, fileb, MAX_NCHAR);
-   tinker_f_suffix(
-      {string, MAX_NCHAR}, {const_cast<char*>("arc"), 3}, {const_cast<char*>("old"), 3});
+   tinker_f_suffix({string, MAX_NCHAR}, {const_cast<char*>("arc"), 3}, {const_cast<char*>("old"), 3});
    iarc = tinker_f_freeunit();
    str = FstrView(string).trim();
    if (output::archive)
@@ -369,8 +362,7 @@ static void xBarCalc()
    auto invalid_barfile = [&](const std::string& s) {
       std::memcpy(string, s.data(), s.length());
       tinker_f_basefile({string, MAX_NCHAR});
-      tinker_f_suffix(
-         {string, MAX_NCHAR}, {const_cast<char*>("bar"), 3}, {const_cast<char*>("old"), 3});
+      tinker_f_suffix({string, MAX_NCHAR}, {const_cast<char*>("bar"), 3}, {const_cast<char*>("old"), 3});
       std::string str = FstrView(string).trim();
       std::ifstream fr(str);
       return not fr;
@@ -380,8 +372,7 @@ static void xBarCalc()
    nextarg(string, exist);
    if (exist) {
       tinker_f_basefile({string, MAX_NCHAR});
-      tinker_f_suffix(
-         {string, MAX_NCHAR}, {const_cast<char*>("bar"), 3}, {const_cast<char*>("old"), 3});
+      tinker_f_suffix({string, MAX_NCHAR}, {const_cast<char*>("bar"), 3}, {const_cast<char*>("old"), 3});
       str = FstrView(string).trim();
    }
    ioReadStream(str,
@@ -661,8 +652,7 @@ static void xBarCalc()
          bot2 += fterm * fterm;
       }
       cnew = rt * std::log(rfrm * top / bot) + cold;
-      stdev = std::sqrt(
-         (bot2 - bot * bot / frma) / (bot * bot) + (top2 - top * top / frmb) / (top * top));
+      stdev = std::sqrt((bot2 - bot * bot / frma) / (bot * bot) + (top2 - top * top / frmb) / (top * top));
       double delta = std::fabs(cnew - cold);
       print(out, " BAR Iteration%4d%19s%12.4lf Kcal/mol\n", iter, "", cnew);
       if (delta < eps) {

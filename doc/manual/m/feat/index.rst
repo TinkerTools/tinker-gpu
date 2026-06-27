@@ -6,3 +6,4 @@ Features & Methods
    potent
    potent-vdw
    integrators
+   nn

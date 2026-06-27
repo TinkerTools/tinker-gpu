@@ -19,6 +19,7 @@ enum class Switch
    USOLVE,
    GKV,
    GKSA,
+   NN,
 };
 
 /// \ingroup ff

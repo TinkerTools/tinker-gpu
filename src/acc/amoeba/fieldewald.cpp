@@ -1,6 +1,6 @@
-#include "ff/modamoeba.h"
 #include "ff/atom.h"
 #include "ff/image.h"
+#include "ff/modamoeba.h"
 #include "ff/nblist.h"
 #include "ff/pme.h"
 #include "ff/switch.h"
@@ -90,9 +90,8 @@ void dfieldEwaldReal_acc(real (*field)[3], real (*fieldp)[3])
                r2, xr, yr, zr, 1, 1, //
                ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, pdi,
                pga, //
-               rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y],
-               rpole[k][MPL_PME_Z], rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY],
-               rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY], rpole[k][MPL_PME_YZ],
+               rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], rpole[k][MPL_PME_XX],
+               rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY], rpole[k][MPL_PME_YZ],
                rpole[k][MPL_PME_ZZ], pdamp[k],
                pga, //
                aewald, fid, fip, fkd, fkp);
@@ -101,9 +100,8 @@ void dfieldEwaldReal_acc(real (*field)[3], real (*fieldp)[3])
                r2, xr, yr, zr, 1, 1, //
                ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, pdi,
                pti, //
-               rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y],
-               rpole[k][MPL_PME_Z], rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY],
-               rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY], rpole[k][MPL_PME_YZ],
+               rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], rpole[k][MPL_PME_XX],
+               rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY], rpole[k][MPL_PME_YZ],
                rpole[k][MPL_PME_ZZ], pdamp[k],
                thole[k], //
                aewald, fid, fip, fkd, fkp);
@@ -179,18 +177,16 @@ void dfieldEwaldReal_acc(real (*field)[3], real (*fieldp)[3])
          pair_dfield<NON_EWALD>(                                             //
             r2, xr, yr, zr, dscale, pscale,                                  //
             ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, pdi, pga, //
-            rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y],
-            rpole[k][MPL_PME_Z], rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY],
-            rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY], rpole[k][MPL_PME_YZ],
+            rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], rpole[k][MPL_PME_XX],
+            rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY], rpole[k][MPL_PME_YZ],
             rpole[k][MPL_PME_ZZ], pdamp[k], pga, //
             0, fid, fip, fkd, fkp);
 #else
          pair_dfield<NON_EWALD>(                                             //
             r2, xr, yr, zr, dscale, pscale,                                  //
             ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, pdi, pti, //
-            rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y],
-            rpole[k][MPL_PME_Z], rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY],
-            rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY], rpole[k][MPL_PME_YZ],
+            rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], rpole[k][MPL_PME_XX],
+            rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY], rpole[k][MPL_PME_YZ],
             rpole[k][MPL_PME_ZZ], pdamp[k], thole[k], //
             0, fid, fip, fkd, fkp);
 #endif
@@ -241,28 +237,23 @@ void ufieldEwaldRecipSelfP1_acc(const real (*uind)[3], const real (*uinp)[3], //
       if (uinp) {
          #pragma acc loop seq
          for (int j = 0; j < 3; ++j) {
-            real df1 = a[0][j] * fdip_phi1[i][1] + a[1][j] * fdip_phi1[i][2]
-               + a[2][j] * fdip_phi1[i][3];
-            real df2 = a[0][j] * fdip_phi2[i][1] + a[1][j] * fdip_phi2[i][2]
-               + a[2][j] * fdip_phi2[i][3];
+            real df1 = a[0][j] * fdip_phi1[i][1] + a[1][j] * fdip_phi1[i][2] + a[2][j] * fdip_phi1[i][3];
+            real df2 = a[0][j] * fdip_phi2[i][1] + a[1][j] * fdip_phi2[i][2] + a[2][j] * fdip_phi2[i][3];
             field[i][j] += (term * uind[i][j] - df1);
             fieldp[i][j] += (term * uinp[i][j] - df2);
          }
       } else {
          #pragma acc loop seq
          for (int j = 0; j < 3; ++j) {
-            real df1 = a[0][j] * fdip_phi1[i][1] + a[1][j] * fdip_phi1[i][2]
-               + a[2][j] * fdip_phi1[i][3];
+            real df1 = a[0][j] * fdip_phi1[i][1] + a[1][j] * fdip_phi1[i][2] + a[2][j] * fdip_phi1[i][3];
             field[i][j] += (term * uind[i][j] - df1);
          }
       }
    }
 }
 
-#define UFIELD_DPTRS \
-   x, y, z, thole, pdamp, field, fieldp, uind, uinp, jpolar, thlval
-void ufieldEwaldReal_acc(const real (*uind)[3], const real (*uinp)[3],
-   real (*field)[3], real (*fieldp)[3])
+#define UFIELD_DPTRS x, y, z, thole, pdamp, field, fieldp, uind, uinp, jpolar, thlval
+void ufieldEwaldReal_acc(const real (*uind)[3], const real (*uinp)[3], real (*field)[3], real (*fieldp)[3])
 {
    const real off = switchOff(Switch::EWALD);
    const real off2 = off * off;
@@ -317,16 +308,14 @@ void ufieldEwaldReal_acc(const real (*uind)[3], const real (*uinp)[3],
             pair_ufield<EWALD>(                                          //
                r2, xr, yr, zr, 1,                                        //
                uindi0, uindi1, uindi2, uinpi0, uinpi1, uinpi2, pdi, pga, //
-               uind[k][0], uind[k][1], uind[k][2], uinp[k][0], uinp[k][1],
-               uinp[k][2], pdamp[k],
+               uind[k][0], uind[k][1], uind[k][2], uinp[k][0], uinp[k][1], uinp[k][2], pdamp[k],
                pga, //
                aewald, fid, fip, fkd, fkp);
 #elif
             pair_ufield<EWALD>(                                          //
                r2, xr, yr, zr, 1,                                        //
                uindi0, uindi1, uindi2, uinpi0, uinpi1, uinpi2, pdi, pti, //
-               uind[k][0], uind[k][1], uind[k][2], uinp[k][0], uinp[k][1],
-               uinp[k][2], pdamp[k],
+               uind[k][0], uind[k][1], uind[k][2], uinp[k][0], uinp[k][1], uinp[k][2], pdamp[k],
                thole[k], //
                aewald, fid, fip, fkd, fkp);
 #endif
@@ -396,16 +385,14 @@ void ufieldEwaldReal_acc(const real (*uind)[3], const real (*uinp)[3],
          pair_ufield<NON_EWALD>(                                      //
             r2, xr, yr, zr, uscale,                                   //
             uindi0, uindi1, uindi2, uinpi0, uinpi1, uinpi2, pdi, pga, //
-            uind[k][0], uind[k][1], uind[k][2], uinp[k][0], uinp[k][1],
-            uinp[k][2], pdamp[k],
+            uind[k][0], uind[k][1], uind[k][2], uinp[k][0], uinp[k][1], uinp[k][2], pdamp[k],
             pga, //
             0, fid, fip, fkd, fkp);
 #else
          pair_ufield<NON_EWALD>(                                      //
             r2, xr, yr, zr, uscale,                                   //
             uindi0, uindi1, uindi2, uinpi0, uinpi1, uinpi2, pdi, pti, //
-            uind[k][0], uind[k][1], uind[k][2], uinp[k][0], uinp[k][1],
-            uinp[k][2], pdamp[k],
+            uind[k][0], uind[k][1], uind[k][2], uinp[k][0], uinp[k][1], uinp[k][2], pdamp[k],
             thole[k], //
             0, fid, fip, fkd, fkp);
 #endif

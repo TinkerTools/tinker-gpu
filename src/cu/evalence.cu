@@ -1,8 +1,13 @@
+#include "ff/atom.h"
 #include "ff/evalence.h"
 #include "ff/image.h"
 #include "ff/molecule.h"
 #include "ff/potent.h"
+#include "ff/spatial.h"
+#include "math/const.h"
 #include "math/zero.h"
+#include "nn/nn.h"
+#include "nn/nndk.h"
 #include "seq/angle.h"
 #include "seq/angtor.h"
 #include "seq/bond.h"
@@ -16,93 +21,93 @@
 #include "seq/strtor.h"
 #include "seq/torsion.h"
 #include "seq/tortor.h"
+#include "seq/triangle.h"
 #include "seq/urey.h"
 #include <cassert>
+#include <cuda_runtime.h>
 
 namespace tinker {
 template <class Ver, bool rc_a>
 __global__
 void evalence_cu1(
    // ebond
-   EnergyBuffer restrict eb, VirialBuffer restrict vir_eb, grad_prec* restrict debx,
-   grad_prec* restrict deby, grad_prec* restrict debz,
+   EnergyBuffer restrict eb, VirialBuffer restrict vir_eb, grad_prec* restrict debx, grad_prec* restrict deby,
+   grad_prec* restrict debz,
 
    Bond bndtyp, real bndunit, int nbond, const int (*restrict ibnd)[2], const real* restrict bl,
    const real* restrict bk, real cbnd, real qbnd,
 
    // eangle
-   EnergyBuffer restrict ea, VirialBuffer restrict vir_ea, grad_prec* restrict deax,
-   grad_prec* restrict deay, grad_prec* restrict deaz,
+   EnergyBuffer restrict ea, VirialBuffer restrict vir_ea, grad_prec* restrict deax, grad_prec* restrict deay,
+   grad_prec* restrict deaz,
 
-   const Angle* restrict angtyp, real angunit, int nangle, const int (*restrict iang)[4],
-   const real* restrict anat, const real* restrict ak, const real* restrict afld,
+   const Angle* restrict angtyp, real angunit, int nangle, const int (*restrict iang)[4], const real* restrict anat,
+   const real* restrict ak, const real* restrict afld,
 
    real cang, real qang, real pang, real sang,
 
    // estrbnd
-   EnergyBuffer restrict eba, VirialBuffer restrict vir_eba, grad_prec* restrict debax,
-   grad_prec* restrict debay, grad_prec* restrict debaz,
+   EnergyBuffer restrict eba, VirialBuffer restrict vir_eba, grad_prec* restrict debax, grad_prec* restrict debay,
+   grad_prec* restrict debaz,
 
    real stbnunit, int nstrbnd, const int (*restrict isb)[3], const real (*restrict sbk)[2],
 
    // eurey
-   EnergyBuffer restrict eub, VirialBuffer restrict vir_eub, grad_prec* restrict deubx,
-   grad_prec* restrict deuby, grad_prec* restrict deubz,
+   EnergyBuffer restrict eub, VirialBuffer restrict vir_eub, grad_prec* restrict deubx, grad_prec* restrict deuby,
+   grad_prec* restrict deubz,
 
-   real ureyunit, int nurey, const int (*restrict iury)[3], const real* restrict uk,
-   const real* restrict ul, real cury, real qury,
+   real ureyunit, int nurey, const int (*restrict iury)[3], const real* restrict uk, const real* restrict ul, real cury,
+   real qury,
 
    // eopbend
-   EnergyBuffer restrict eopb, VirialBuffer restrict vir_eopb, grad_prec* restrict deopbx,
-   grad_prec* restrict deopby, grad_prec* restrict deopbz,
+   EnergyBuffer restrict eopb, VirialBuffer restrict vir_eopb, grad_prec* restrict deopbx, grad_prec* restrict deopby,
+   grad_prec* restrict deopbz,
 
-   OPBend opbtyp, real opbunit, int nopbend, const int* restrict iopb, const real* restrict opbk,
-   real copb, real qopb, real popb, real sopb,
+   OPBend opbtyp, real opbunit, int nopbend, const int* restrict iopb, const real* restrict opbk, real copb, real qopb,
+   real popb, real sopb,
 
    // eimprop
-   EnergyBuffer restrict eid, VirialBuffer restrict vir_eid, grad_prec* restrict deidx,
-   grad_prec* restrict deidy, grad_prec* restrict deidz,
+   EnergyBuffer restrict eid, VirialBuffer restrict vir_eid, grad_prec* restrict deidx, grad_prec* restrict deidy,
+   grad_prec* restrict deidz,
 
-   real idihunit, int niprop, const int (*restrict iiprop)[4], const real* restrict kprop,
-   const real* restrict vprop,
+   real idihunit, int niprop, const int (*restrict iiprop)[4], const real* restrict kprop, const real* restrict vprop,
 
    // eimptor
-   EnergyBuffer restrict eit, VirialBuffer restrict vir_eit, grad_prec* restrict deitx,
-   grad_prec* restrict deity, grad_prec* restrict deitz,
+   EnergyBuffer restrict eit, VirialBuffer restrict vir_eit, grad_prec* restrict deitx, grad_prec* restrict deity,
+   grad_prec* restrict deitz,
 
    real itorunit, int nitors, const int (*restrict iitors)[4], const real (*restrict itors1)[4],
    const real (*restrict itors2)[4], const real (*restrict itors3)[4],
 
    // etors
-   EnergyBuffer restrict et, VirialBuffer restrict vir_et, grad_prec* restrict detx,
-   grad_prec* restrict dety, grad_prec* restrict detz,
+   EnergyBuffer restrict et, VirialBuffer restrict vir_et, grad_prec* restrict detx, grad_prec* restrict dety,
+   grad_prec* restrict detz,
 
    real torsunit, int ntors, const int (*restrict itors)[4], const real (*restrict tors1)[4],
-   const real (*restrict tors2)[4], const real (*restrict tors3)[4],
-   const real (*restrict tors4)[4], const real (*restrict tors5)[4],
-   const real (*restrict tors6)[4],
+   const real (*restrict tors2)[4], const real (*restrict tors3)[4], const real (*restrict tors4)[4],
+   const real (*restrict tors5)[4], const real (*restrict tors6)[4],
 
    // epitors
-   EnergyBuffer restrict ept, VirialBuffer restrict vir_ept, grad_prec* restrict deptx,
-   grad_prec* restrict depty, grad_prec* restrict deptz,
+   EnergyBuffer restrict ept, VirialBuffer restrict vir_ept, grad_prec* restrict deptx, grad_prec* restrict depty,
+   grad_prec* restrict deptz,
 
    real ptorunit, int npitors, const int (*restrict ipit)[6], const real* restrict kpit,
 
    // estrtor
-   EnergyBuffer restrict ebt, VirialBuffer restrict vir_ebt, grad_prec* restrict debtx,
-   grad_prec* restrict debty, grad_prec* restrict debtz,
+   EnergyBuffer restrict ebt, VirialBuffer restrict vir_ebt, grad_prec* restrict debtx, grad_prec* restrict debty,
+   grad_prec* restrict debtz,
 
    real storunit, int nstrtor, const int (*restrict ist)[4], const real (*restrict kst)[9],
 
    // eangtor
-   EnergyBuffer restrict eat, VirialBuffer restrict vir_eat, grad_prec* restrict deatx,
-   grad_prec* restrict deaty, grad_prec* restrict deatz,
+   EnergyBuffer restrict eat, VirialBuffer restrict vir_eat, grad_prec* restrict deatx, grad_prec* restrict deaty,
+   grad_prec* restrict deatz,
 
    real atorunit, int nangtor, const int (*restrict iat)[3], const real (*restrict kant)[6],
 
    // etortor
-   EnergyBuffer restrict ett, VirialBuffer restrict vir_ett, grad_prec* restrict dettx,
-   grad_prec* restrict detty, grad_prec* restrict dettz,
+   EnergyBuffer restrict ett, VirialBuffer restrict vir_ett, grad_prec* restrict dettx, grad_prec* restrict detty,
+   grad_prec* restrict dettz,
 
    real ttorunit, int ntortor, const int (*restrict itt)[3], const int (*restrict ibitor)[5],
    const int* restrict chkttor_ia_,
@@ -113,8 +118,8 @@ void evalence_cu1(
    const real (*restrict tbxy)[ktrtor::maxtgrd2],
 
    // egeom
-   EnergyBuffer restrict eg, VirialBuffer restrict vir_eg, grad_prec* restrict degx,
-   grad_prec* restrict degy, grad_prec* restrict degz,
+   EnergyBuffer restrict eg, VirialBuffer restrict vir_eg, grad_prec* restrict degx, grad_prec* restrict degy,
+   grad_prec* restrict degz,
 
    int npfix, const int* restrict ipfix, const int (*restrict kpfix)[3], const real* restrict xpfix,
    const real* restrict ypfix, const real* restrict zpfix, const real (*restrict pfix)[2],
@@ -131,9 +136,10 @@ void evalence_cu1(
    EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf,
 
    // other
-   const real* restrict x, const real* restrict y, const real* restrict z,
-   const double* restrict mass, const int* restrict molec, const int (*restrict igrp)[2],
-   const int* restrict kgrp, const double* restrict grpmass, TINKER_IMAGE_PARAMS)
+   const real* restrict x, const real* restrict y, const real* restrict z, const double* restrict mass,
+   const int* restrict molec, const int (*restrict igrp)[2], const int* restrict kgrp, const double* restrict grpmass,
+   const int* restrict grplist, bool use_nnval, int ngrps_nnvalence, const int* restrict grps_nnvalence,
+   TINKER_IMAGE_PARAMS)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_v = Ver::v;
@@ -202,6 +208,9 @@ void evalence_cu1(
 
    // ebond
    for (int i = ithread; i < nbond; i += stride) {
+      // skip the bonds whose energy is calculated with NN valence
+      if (use_nnval && atom_use_nn<2>(i, ibnd, ngrps_nnvalence, grps_nnvalence, grplist))
+         continue;
       real e, vxx, vyx, vzx, vyy, vzy, vzz;
       dk_bond<Ver>(e, vxx, vyx, vzx, vyy, vzy, vzz,
 
@@ -233,6 +242,9 @@ void evalence_cu1(
 
    // eangle
    for (int i = ithread; i < nangle; i += stride) {
+      // skip the angles whose energy is calculated with NN valence
+      if (use_nnval && atom_use_nn<4>(i, iang, ngrps_nnvalence, grps_nnvalence, grplist))
+         continue;
       real e, vxx, vyx, vzx, vyy, vzy, vzz;
       dk_angle<Ver>(e, vxx, vyx, vzx, vyy, vzy, vzz,
 
@@ -266,6 +278,9 @@ void evalence_cu1(
 
    // estrbnd
    for (int i = ithread; i < nstrbnd; i += stride) {
+      // skip the strbnd whose energy is calculated with NN valence
+      if (use_nnval && atom_use_nn<4>(isb[i][0], iang, ngrps_nnvalence, grps_nnvalence, grplist))
+         continue;
       real e, vxx, vyx, vzx, vyy, vzy, vzz;
       dk_strbnd<Ver>(e, vxx, vyx, vzx, vyy, vzy, vzz,
 
@@ -297,6 +312,9 @@ void evalence_cu1(
 
    // eurey
    for (int i = ithread; i < nurey; i += stride) {
+      // skip the urey whose energy is calculated with NN valence
+      if (use_nnval && atom_use_nn<3>(i, iury, ngrps_nnvalence, grps_nnvalence, grplist))
+         continue;
       real e, vxx, vyx, vzx, vyy, vzy, vzz;
       dk_urey<Ver>(e, vxx, vyx, vzx, vyy, vzy, vzz,
 
@@ -328,6 +346,9 @@ void evalence_cu1(
 
    // eopbend
    for (int i = ithread; i < nopbend; i += stride) {
+      // skip the opbend whose energy is calculated with NN valence
+      if (use_nnval && atom_use_nn<4>(iopb[i], iang, ngrps_nnvalence, grps_nnvalence, grplist))
+         continue;
       real e, vxx, vyx, vzx, vyy, vzy, vzz;
       dk_opbend<Ver>(e, vxx, vyx, vzx, vyy, vzy, vzz,
 
@@ -359,6 +380,9 @@ void evalence_cu1(
 
    // eimprop
    for (int i = ithread; i < niprop; i += stride) {
+      // skip the improp whose energy is calculated with NN valence
+      if (use_nnval && atom_use_nn<4>(i, iiprop, ngrps_nnvalence, grps_nnvalence, grplist))
+         continue;
       real e, vxx, vyx, vzx, vyy, vzy, vzz;
       dk_improp<Ver>(e, vxx, vyx, vzx, vyy, vzy, vzz,
 
@@ -390,6 +414,9 @@ void evalence_cu1(
 
    // eimptor
    for (int i = ithread; i < nitors; i += stride) {
+      // skip the imptor whose energy is calculated with NN valence
+      if (use_nnval && atom_use_nn<4>(i, iitors, ngrps_nnvalence, grps_nnvalence, grplist))
+         continue;
       real e, vxx, vyx, vzx, vyy, vzy, vzz;
       dk_imptor<Ver>(e, vxx, vyx, vzx, vyy, vzy, vzz,
 
@@ -421,6 +448,9 @@ void evalence_cu1(
 
    // etors
    for (int i = ithread; i < ntors; i += stride) {
+      // skip the torsion whose energy is calculated with NN valence
+      if (use_nnval && atom_use_nn<4>(i, itors, ngrps_nnvalence, grps_nnvalence, grplist))
+         continue;
       real e, vxx, vyx, vzx, vyy, vzy, vzz;
       dk_tors<Ver>(e, vxx, vyx, vzx, vyy, vzy, vzz,
 
@@ -452,6 +482,9 @@ void evalence_cu1(
 
    // epitors
    for (int i = ithread; i < npitors; i += stride) {
+      // skip the pitors whose energy is calculated with NN valence
+      if (use_nnval && atom_use_nn<6>(i, ipit, ngrps_nnvalence, grps_nnvalence, grplist))
+         continue;
       real e, vxx, vyx, vzx, vyy, vzy, vzz;
       dk_pitors<Ver>(e, vxx, vyx, vzx, vyy, vzy, vzz,
 
@@ -481,6 +514,9 @@ void evalence_cu1(
 
    // estrtor
    for (int i = ithread; i < nstrtor; i += stride) {
+      // skip the strtor whose energy is calculated with NN valence
+      if (use_nnval && atom_use_nn<4>(ist[i][0], itors, ngrps_nnvalence, grps_nnvalence, grplist))
+         continue;
       real e, vxx, vyx, vzx, vyy, vzy, vzz;
       dk_strtor<Ver>(e, vxx, vyx, vzx, vyy, vzy, vzz, debtx, debty, debtz,
 
@@ -512,6 +548,9 @@ void evalence_cu1(
 
    // eangtor
    for (int i = ithread; i < nangtor; i += stride) {
+      // skip the angtor whose energy is calculated with NN valence
+      if (use_nnval && atom_use_nn<4>(iat[i][0], itors, ngrps_nnvalence, grps_nnvalence, grplist))
+         continue;
       real e, vxx, vyx, vzx, vyy, vzy, vzz;
       dk_angtor<Ver>(e, vxx, vyx, vzx, vyy, vzy, vzz, deatx, deaty, deatz,
 
@@ -543,6 +582,9 @@ void evalence_cu1(
 
    // etortor
    for (int i = ithread; i < ntortor; i += stride) {
+      // skip the tortor whose energy is calculated with NN valence
+      if (use_nnval && atom_use_nn<5>(itt[i][0], ibitor, ngrps_nnvalence, grps_nnvalence, grplist))
+         continue;
       real e, vxx, vyx, vzx, vyy, vzy, vzz;
       dk_tortor<Ver>(e, vxx, vyx, vzx, vyy, vzy, vzz,
 
@@ -780,11 +822,14 @@ void evalence_cu1(
    flag_geom ? ntfix : 0, itfix, tfix,                                         \
    /* total */ eng_buf, vir_buf,                                               \
    /* other */ x, y, z, mass, molecule.molecule,                               \
-   grp.igrp, grp.kgrp, grp.grpmass, TINKER_IMAGE_ARGS
+   grp.igrp, grp.kgrp, grp.grpmass, grp.grplist,                               \
+   /* nn val */ flag_nnval, ngrps_nnvalence, grps_nnvalence,                   \
+   TINKER_IMAGE_ARGS
+
 // clang-format on
-void evalence_cu2(int vers, bool flag_bond, bool flag_angle, bool flag_strbnd, bool flag_urey,
-   bool flag_opb, bool flag_improp, bool flag_imptor, bool flag_tors, bool flag_pitors,
-   bool flag_strtor, bool flag_angtor, bool flag_tortor, bool flag_geom)
+void evalence_cu2(int vers, bool flag_bond, bool flag_angle, bool flag_strbnd, bool flag_urey, bool flag_opb,
+   bool flag_improp, bool flag_imptor, bool flag_tors, bool flag_pitors, bool flag_strtor, bool flag_angtor,
+   bool flag_tortor, bool flag_geom, bool flag_nnval)
 {
    int ngrid = gpuGridSize(BLOCK_DIM);
    if (rc_flag & calc::analyz) {
@@ -813,6 +858,27 @@ void evalence_cu2(int vers, bool flag_bond, bool flag_angle, bool flag_strbnd, b
          evalence_cu1<calc::V6, false><<<ngrid, BLOCK_DIM, 0, g::s0>>>(EVALENCE_ARGS);
    }
 }
+
+void ennvalence_cu2(int vers)
+{
+   // auto rc_a = rc_flag & calc::analyz;
+   auto do_e = vers & calc::energy;
+   auto do_v = vers & calc::virial;
+   auto do_g = vers & calc::grad;
+   for (int i = 0; i < nnps.size(); i++) {
+      if (nnps[i].type == "valence") {
+         if (do_e or do_g) {
+            nnps[i].forward(calc::energy, ngrps_nnvalence, grps_nnvalence, ennval);
+         }
+         if (do_g)
+            nnps[i].gradient(calc::grad, ngrps_nnvalence, grps_nnvalence, dennval_x, dennval_y, dennval_z, vir_ennval);
+         // TODO implement virial for nnvalence
+         // if (do_v)
+         //    some code;
+      }
+   }
+}
+
 #undef EVALENCE_ARGS
 
 void evalence_cu(int vers)
@@ -822,6 +888,7 @@ void evalence_cu(int vers)
    auto do_v = vers & calc::virial;
    auto do_g = vers & calc::grad;
 
+   bool flag_nnval = use(Potent::NNVAL);
    bool flag_bond = use(Potent::BOND);
    bool flag_angle = use(Potent::ANGLE);
    bool flag_strbnd = use(Potent::STRBND);
@@ -837,6 +904,17 @@ void evalence_cu(int vers)
    bool flag_geom = use(Potent::GEOM);
 
    size_t bsize = bufferSize();
+   if (rc_a and flag_nnval) {
+      // if (flag_nnval) {
+      zeroOnHost(energy_ennval, virial_ennval);
+      // if (do_e)
+      darray::zero(g::q0, bsize, ennval);
+      if (do_v)
+         darray::zero(g::q0, bsize, vir_ennval);
+      if (do_g) {
+         darray::zero(g::q0, n, dennval_x, dennval_y, dennval_z);
+      }
+   }
    if (rc_a and flag_bond) {
       zeroOnHost(energy_eb, virial_eb);
       if (do_e)
@@ -953,13 +1031,29 @@ void evalence_cu(int vers)
          darray::zero(g::q0, n, degx, degy, degz);
    }
 
-   if (flag_bond or flag_angle or flag_strbnd or flag_urey or flag_opb or flag_improp or
-      flag_imptor or flag_tors or flag_pitors or flag_strtor or flag_angtor or flag_tortor or
-      flag_geom) {
-      evalence_cu2(vers, flag_bond, flag_angle, flag_strbnd, flag_urey, flag_opb, flag_improp,
-         flag_imptor, flag_tors, flag_pitors, flag_strtor, flag_angtor, flag_tortor, flag_geom);
+   if (flag_bond or flag_angle or flag_strbnd or flag_urey or flag_opb or flag_improp or flag_imptor or flag_tors
+      or flag_pitors or flag_strtor or flag_angtor or flag_tortor or flag_geom or flag_nnval) {
+      evalence_cu2(vers, flag_bond, flag_angle, flag_strbnd, flag_urey, flag_opb, flag_improp, flag_imptor, flag_tors,
+         flag_pitors, flag_strtor, flag_angtor, flag_tortor, flag_geom, flag_nnval);
+      if (flag_nnval) {
+         ennvalence_cu2(vers);
+      }
    }
 
+   if (rc_a and flag_nnval) {
+      // if (flag_nnval) {
+      if (do_e) {
+         energy_ennval = energyReduce(ennval);
+         energy_valence += energy_ennval;
+      }
+      if (do_v) {
+         // virialReduce(virial_eb, vir_eb);
+         // for (int iv = 0; iv < 9; ++iv)
+         //    virial_valence[iv] += virial_eb[iv];
+      }
+      if (do_g)
+         sumGradient(gx, gy, gz, dennval_x, dennval_y, dennval_z);
+   }
    if (rc_a and flag_bond) {
       if (do_e) {
          energy_eb = energyReduce(eb);

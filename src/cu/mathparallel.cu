@@ -115,8 +115,7 @@ void reduceSum2OnDevice_cu(HT (&dref)[HN], DPTR v, size_t nelem, int queue)
 }
 template void reduceSum2OnDevice_cu(float (&)[6], float (*)[8], size_t, int);
 template void reduceSum2OnDevice_cu(double (&)[6], double (*)[8], size_t, int);
-template void reduceSum2OnDevice_cu(
-   unsigned long long (&)[6], unsigned long long (*)[8], size_t, int);
+template void reduceSum2OnDevice_cu(unsigned long long (&)[6], unsigned long long (*)[8], size_t, int);
 
 template <>
 void dotProd_cu<float>(float* ans, const float* a, const float* b, size_t nelem, int queue)
@@ -165,4 +164,28 @@ void scaleArray_cu(T* dst, T scal, size_t nelem, int queue)
 }
 template void scaleArray_cu(float*, float, size_t, int);
 template void scaleArray_cu(double*, double, size_t, int);
+
+template <>
+void genMatMul_cu<float>(float* c, const float* a, const float* b, int m, int n, int k, bool transa, bool transb,
+   const float* alpha, const float* beta, int queue)
+{
+   bool dq = queue == g::q1;
+   cublasHandle_t hd = (dq ? g::h1 : g::h0);
+   cublasOperation_t opa = (transa ? CUBLAS_OP_T : CUBLAS_OP_N);
+   cublasOperation_t opb = (transb ? CUBLAS_OP_T : CUBLAS_OP_N);
+   check_rt(cublasSgemm(hd, opa, opb, m, n, k, //
+      alpha, a, (transa ? k : m), b, (transb ? n : k), beta, c, m));
+}
+
+template <>
+void genMatMul_cu<double>(double* c, const double* a, const double* b, int m, int n, int k, bool transa, bool transb,
+   const double* alpha, const double* beta, int queue)
+{
+   bool dq = queue == g::q1;
+   cublasHandle_t hd = (dq ? g::h1 : g::h0);
+   cublasOperation_t opa = (transa ? CUBLAS_OP_T : CUBLAS_OP_N);
+   cublasOperation_t opb = (transb ? CUBLAS_OP_T : CUBLAS_OP_N);
+   check_rt(cublasDgemm(hd, opa, opb, m, n, k, alpha, a, (transa ? k : m), b, (transb ? n : k), beta, c, m));
+}
+
 }

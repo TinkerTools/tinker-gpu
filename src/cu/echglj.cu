@@ -74,10 +74,10 @@ void echgljData_cu(RcOp op)
 namespace tinker {
 template <class Ver, class IMG, class ETYP, class RADRULE, class EPSRULE, bool SOFTCORE, bool VOUT>
 __global__
-void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_prec* restrict gx,
-   grad_prec* restrict gy, grad_prec* restrict gz, TINKER_IMAGE_PARAMS, //
-   int n, const Spatial::SortedAtom* restrict sorted, int nakpl, const int* restrict iakpl,
-   int niak, const int* restrict iak,
+void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_prec* restrict gx, grad_prec* restrict gy,
+   grad_prec* restrict gz, TINKER_IMAGE_PARAMS, //
+   int n, const Spatial::SortedAtom* restrict sorted, int nakpl, const int* restrict iakpl, int niak,
+   const int* restrict iak,
    const int* restrict lst, //
    const int* restrict bnum,
    const Spatial::Center* restrict akc, //
@@ -87,8 +87,8 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
    const unsigned int* restrict cvinfo, //
    real evcut, real evoff, const real2* restrict radeps, const int* restrict mut, real vlam,
    Vdw vcouple, //
-   EnergyBuffer restrict ev, VirialBuffer restrict vev, grad_prec* restrict devx,
-   grad_prec* restrict devy, grad_prec* restrict devz)
+   EnergyBuffer restrict ev, VirialBuffer restrict vev, grad_prec* restrict devx, grad_prec* restrict devy,
+   grad_prec* restrict devz)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_g = Ver::g;
@@ -877,9 +877,9 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
 
 template <class RADRULE, class EPSRULE>
 __global__
-void echgljCoalesce(int n, int use_mutate, int* restrict smut, real* restrict schg,
-   real2* restrict svdw, const Spatial::SortedAtom* restrict sorted, const int* restrict mut,
-   const real* restrict chg, const real* restrict rad, const real* restrict eps)
+void echgljCoalesce(int n, int use_mutate, int* restrict smut, real* restrict schg, real2* restrict svdw,
+   const Spatial::SortedAtom* restrict sorted, const int* restrict mut, const real* restrict chg,
+   const real* restrict rad, const real* restrict eps)
 {
    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < n; i += blockDim.x * gridDim.x) {
       int iold = sorted[i].unsorted;
@@ -930,11 +930,10 @@ static void echglj_cu3()
    evoff = switchOff(Switch::VDW);
    evcut = switchCut(Switch::VDW);
 
-#define ECHGLJ_CU3_V2_ARGS                                                                         \
-   ec, vir_ec, decx, decy, decz, TINKER_IMAGE_ARGS, st.n, st.sorted, st.nakpl, st.iakpl, st.niak,  \
-      st.iak, st.lst, st.bnum, st.akc, ncvexclude, cvexclude, cvexclude_scale, eccut, ecoff, f,    \
-      aewald, chg_coalesced, st.si3.bit0, evcut, evoff, (const real2*)radeps_coalesced,            \
-      mut_coalesced, vlam, vcouple, ev, vir_ev, devx, devy, devz
+#define ECHGLJ_CU3_V2_ARGS                                                                                          \
+   ec, vir_ec, decx, decy, decz, TINKER_IMAGE_ARGS, st.n, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst,   \
+      st.bnum, st.akc, ncvexclude, cvexclude, cvexclude_scale, eccut, ecoff, f, aewald, chg_coalesced, st.si3.bit0, \
+      evcut, evoff, (const real2*)radeps_coalesced, mut_coalesced, vlam, vcouple, ev, vir_ev, devx, devy, devz
 
    int ngrid = gpuGridSize(BLOCK_DIM);
    if (box_shape == BoxShape::ORTHO) {

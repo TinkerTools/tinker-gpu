@@ -7,27 +7,40 @@ namespace tinker {
 #pragma acc routine seq
 template <class Ver>
 SEQ_CUDA
-void dk_strtor(real& restrict e, real& restrict vxx, real& restrict vyx,
-   real& restrict vzx, real& restrict vyy, real& restrict vzy,
-   real& restrict vzz,
+void dk_strtor(real& restrict e,
+               real& restrict vxx,
+               real& restrict vyx,
+               real& restrict vzx,
+               real& restrict vyy,
+               real& restrict vzy,
+               real& restrict vzz,
 
-   grad_prec* restrict debtx, grad_prec* restrict debty,
-   grad_prec* restrict debtz,
+               grad_prec* restrict debtx,
+               grad_prec* restrict debty,
+               grad_prec* restrict debtz,
 
-   real storunit, int istrtor, const int (*restrict ist)[4],
-   const real (*restrict kst)[9],
+               real storunit,
+               int istrtor,
+               const int (*restrict ist)[4],
+               const real (*restrict kst)[9],
 
-   const real* restrict bl, const int (*restrict itors)[4],
-   const real (*restrict tors1)[4], const real (*restrict tors2)[4],
-   const real (*restrict tors3)[4],
+               const real* restrict bl,
+               const int (*restrict itors)[4],
+               const real (*restrict tors1)[4],
+               const real (*restrict tors2)[4],
+               const real (*restrict tors3)[4],
 
-   const real* restrict x, const real* restrict y, const real* restrict z)
+               const real* restrict x,
+               const real* restrict y,
+               const real* restrict z)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_g = Ver::g;
    constexpr bool do_v = Ver::v;
-   if CONSTEXPR (do_e) e = 0;
-   if CONSTEXPR (do_v) vxx = 0, vyx = 0, vzx = 0, vyy = 0, vzy = 0, vzz = 0;
+   if CONSTEXPR (do_e)
+      e = 0;
+   if CONSTEXPR (do_v)
+      vxx = 0, vyx = 0, vzx = 0, vyy = 0, vzy = 0, vzz = 0;
 
    const int i = ist[istrtor][0];
    const int ia = itors[i][0];
@@ -62,7 +75,8 @@ void dk_strtor(real& restrict e, real& restrict vxx, real& restrict vyx,
    real rdc = REAL_SQRT(xdc * xdc + ydc * ydc + zdc * zdc);
    real rmin = REAL_MIN(rba, rcb);
    rmin = REAL_MIN(rmin, rdc);
-   if (rmin == 0) return;
+   if (rmin == 0)
+      return;
 
    real xt = yba * zcb - ycb * zba;
    real yt = zba * xcb - zcb * xba;
@@ -216,7 +230,8 @@ void dk_strtor(real& restrict e, real& restrict vxx, real& restrict vyx,
       dedzid += ycb * dedxu - xcb * dedyu + ddrdz;
    }
 
-   if CONSTEXPR (do_e) e = e1 + e2 + e3;
+   if CONSTEXPR (do_e)
+      e = e1 + e2 + e3;
    if CONSTEXPR (do_g) {
       atomic_add(dedxia, debtx, ia);
       atomic_add(dedyia, debty, ia);

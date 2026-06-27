@@ -25,8 +25,7 @@ void chkrepole_cu()
 namespace tinker {
 __global__
 void rotpole_cu1(int n, real (*restrict rpole)[MPL_TOTAL], const real (*restrict pole)[MPL_TOTAL],
-   const LocalFrame* restrict zaxis, const real* restrict x, const real* restrict y,
-   const real* restrict z)
+   const LocalFrame* restrict zaxis, const real* restrict x, const real* restrict y, const real* restrict z)
 {
    for (int i = ITHREAD; i < n; i += STRIDE)
       rotpoleAtomI(i, rpole, pole, zaxis, x, y, z);

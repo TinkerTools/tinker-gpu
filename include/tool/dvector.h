@@ -37,7 +37,8 @@ struct DeviceAllocator
 
    void deallocate(T* const p, size_t) const noexcept
    {
-      if (p) darray::deallocate(p);
+      if (p)
+         darray::deallocate(p);
    }
 };
 }

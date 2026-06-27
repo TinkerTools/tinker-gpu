@@ -8,10 +8,14 @@
 #include "tool/externfunc.h"
 #include "tool/iofortstr.h"
 #include "tool/tinkersuppl.h"
+#include <tinker/detail/bound.hh>
+#include <tinker/detail/extfld.hh>
 #include <tinker/detail/files.hh>
 #include <tinker/detail/inform.hh>
 #include <tinker/detail/mdstuf.hh>
+#include <tinker/detail/output.hh>
 #include <tinker/detail/units.hh>
+#include <tinker/routines.h>
 
 #include <cassert>
 
@@ -108,6 +112,12 @@ void mdIntegrateData(RcOp op)
             thermostat = ThermostatEnum::m_NHC2006;
          }
       }
+      // only allow Montecarlo barostat for NPT + extfield simulation
+      if (bath::isothermal and bath::isobaric and extfld::use_exfld) {
+         if (barostat != BarostatEnum::MONTECARLO) {
+            TINKER_THROW("NPT with External Field Should Use MonteCarlo Barostat.");
+         }
+      }
 
       intg = nullptr;
       if (integrator == IntegratorEnum::RESPA)
@@ -153,11 +163,17 @@ void mdrestPrintP1(bool prints, double vtot1, double vtot2, double vtot3, double
 void mdPropagate(int nsteps, time_prec dt_ps)
 {
    for (int istep = 1; istep <= nsteps; ++istep) {
+      if (extfld::use_exfld and extfld::use_exfreq) {
+         double phs = sin(extfld::exfreq * (istep - 1) * dt_ps);
+         for (int i = 0; i < 3; i++) {
+            extfld::texfld[i] = phs * extfld::exfld[i];
+         }
+      }
       intg->dynamic(istep, dt_ps);
 
       // mdstat
       bool save = (istep % inform::iwrite == 0);
-      if (save || (istep % BOUNDS_EVERY_X_STEPS) == 0)
+      if ((save || (istep % BOUNDS_EVERY_X_STEPS) == 0) and bound::use_wrap)
          bounds();
       if (save) {
          T_prec temp;
@@ -167,6 +183,8 @@ void mdPropagate(int nsteps, time_prec dt_ps)
       mdrest(istep);
    }
    mdsaveSynchronize();
+   if (!output::dynsave)
+      tinker_f_prtdyn();
 }
 
 const TimeScaleConfig& respaTSConfig()
@@ -191,6 +209,8 @@ const TimeScaleConfig& respaTSConfig()
       {"evalence", fast},
 
       {"evdw", slow},
+
+      {"ennintermol", slow},
 
       {"echarge", slow},
       {"echglj", slow},

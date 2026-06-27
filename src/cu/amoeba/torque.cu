@@ -9,8 +9,8 @@ template <bool DO_V>
 __global__
 void torque_cu1(int n, VirialBuffer restrict gpu_vir, //
    grad_prec* restrict gx, grad_prec* restrict gy, grad_prec* restrict gz, const real* restrict x,
-   const real* restrict y, const real* restrict z, const LocalFrame* restrict zaxis,
-   const real* restrict trqx, const real* restrict trqy, const real* restrict trqz)
+   const real* restrict y, const real* restrict z, const LocalFrame* restrict zaxis, const real* restrict trqx,
+   const real* restrict trqy, const real* restrict trqz)
 {
    real trq[3], frcz[3], frcx[3], frcy[3];
    real deia[3], deib[3], deic[3], deid[3];
@@ -352,16 +352,13 @@ void torque_cu1(int n, VirialBuffer restrict gpu_vir, //
          real ziy = z[iay] - z[i];
 
          real vxx = xix * frcx[0] + xiy * frcy[0] + xiz * frcz[0];
-         real vxy = 0.5f *
-            (yix * frcx[0] + yiy * frcy[0] + yiz * frcz[0] + xix * frcx[1] + xiy * frcy[1] +
-               xiz * frcz[1]);
-         real vxz = 0.5f *
-            (zix * frcx[0] + ziy * frcy[0] + ziz * frcz[0] + xix * frcx[2] + xiy * frcy[2] +
-               xiz * frcz[2]);
+         real vxy = 0.5f
+            * (yix * frcx[0] + yiy * frcy[0] + yiz * frcz[0] + xix * frcx[1] + xiy * frcy[1] + xiz * frcz[1]);
+         real vxz = 0.5f
+            * (zix * frcx[0] + ziy * frcy[0] + ziz * frcz[0] + xix * frcx[2] + xiy * frcy[2] + xiz * frcz[2]);
          real vyy = yix * frcx[1] + yiy * frcy[1] + yiz * frcz[1];
-         real vyz = 0.5f *
-            (zix * frcx[1] + ziy * frcy[1] + ziz * frcz[1] + yix * frcx[2] + yiy * frcy[2] +
-               yiz * frcz[2]);
+         real vyz = 0.5f
+            * (zix * frcx[1] + ziy * frcy[1] + ziz * frcz[1] + yix * frcx[2] + yiy * frcy[2] + yiz * frcz[2]);
          real vzz = zix * frcx[2] + ziy * frcy[2] + ziz * frcz[2];
 
          atomic_add(vxx, vxy, vxz, vyy, vyz, vzz, gpu_vir, ithread);

@@ -8,11 +8,10 @@
 namespace tinker {
 template <class HTYPE>
 __global__
-static void constrainSettle_cu1(time_prec dt, int nratwt, const pos_prec* restrict xold,
-   const pos_prec* restrict yold, const pos_prec* restrict zold, pos_prec* restrict xnew,
-   pos_prec* restrict ynew, pos_prec* restrict znew, vel_prec* restrict vx, vel_prec* restrict vy,
-   vel_prec* restrict vz, const double* restrict mass, const int (*restrict iratwt)[3],
-   const pos_prec (*restrict kratwt)[3])
+static void constrainSettle_cu1(time_prec dt, int nratwt, const pos_prec* restrict xold, const pos_prec* restrict yold,
+   const pos_prec* restrict zold, pos_prec* restrict xnew, pos_prec* restrict ynew, pos_prec* restrict znew,
+   vel_prec* restrict vx, vel_prec* restrict vy, vel_prec* restrict vz, const double* restrict mass,
+   const int (*restrict iratwt)[3], const pos_prec (*restrict kratwt)[3])
 {
    for (int iw = ITHREAD; iw < nratwt; iw += STRIDE) {
       dk_settle1<HTYPE>(dt, iw, xold, yold, zold, xnew, ynew, znew, //
@@ -21,8 +20,8 @@ static void constrainSettle_cu1(time_prec dt, int nratwt, const pos_prec* restri
 }
 
 template <class HTYPE>
-static void constrainSettle_cu(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew,
-   const pos_prec* xold, const pos_prec* yold, const pos_prec* zold)
+static void constrainSettle_cu(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew, const pos_prec* xold,
+   const pos_prec* yold, const pos_prec* zold)
 {
    if (nratwt <= 0)
       return;
@@ -38,18 +37,17 @@ void rattleSettle_cu(time_prec dt, const pos_prec* xold, const pos_prec* yold, c
    constrainSettle_cu<RATTLE>(dt, xpos, ypos, zpos, xold, yold, zold);
 }
 
-void shakeSettle_cu(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew,
-   const pos_prec* xold, const pos_prec* yold, const pos_prec* zold)
+void shakeSettle_cu(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew, const pos_prec* xold,
+   const pos_prec* yold, const pos_prec* zold)
 {
    constrainSettle_cu<SHAKE>(dt, xnew, ynew, znew, xold, yold, zold);
 }
 
 template <bool DO_V>
 __global__
-static void constrainSettle2_cu1(time_prec dt, int nratwt, vel_prec* restrict vx,
-   vel_prec* restrict vy, vel_prec* restrict vz, const pos_prec* restrict xpos,
-   const pos_prec* restrict ypos, const pos_prec* restrict zpos, const double* restrict mass,
-   const int (*restrict iratwt)[3], VirialBuffer restrict vir_buf)
+static void constrainSettle2_cu1(time_prec dt, int nratwt, vel_prec* restrict vx, vel_prec* restrict vy,
+   vel_prec* restrict vz, const pos_prec* restrict xpos, const pos_prec* restrict ypos, const pos_prec* restrict zpos,
+   const double* restrict mass, const int (*restrict iratwt)[3], VirialBuffer restrict vir_buf)
 {
    int ithread = ITHREAD;
    for (int iw = ithread; iw < nratwt; iw += STRIDE) {
@@ -57,8 +55,7 @@ static void constrainSettle2_cu1(time_prec dt, int nratwt, vel_prec* restrict vx
       dk_settle2<DO_V>(dt, iw, vx, vy, vz, xpos, ypos, zpos, mass, iratwt, //
          vxx, vyx, vzx, vyy, vzy, vzz);
       if CONSTEXPR (DO_V) {
-         atomic_add(
-            (real)vxx, (real)vyx, (real)vzx, (real)vyy, (real)vzy, (real)vzz, vir_buf, ithread);
+         atomic_add((real)vxx, (real)vyx, (real)vzx, (real)vyy, (real)vzy, (real)vzz, vir_buf, ithread);
       }
    }
 }
@@ -95,8 +92,7 @@ void constrainMethyl_cu1(double eps,                                            
 
    time_prec dt, pos_prec* restrict xnew, pos_prec* restrict ynew, pos_prec* restrict znew,
    const pos_prec* restrict xold, const pos_prec* restrict yold, const pos_prec* restrict zold,
-   const double* restrict massinv, vel_prec* restrict vx, vel_prec* restrict vy,
-   vel_prec* restrict vz)
+   const double* restrict massinv, vel_prec* restrict vx, vel_prec* restrict vy, vel_prec* restrict vz)
 {
    const int ithread = ITHREAD;
    for (int im = ithread; im < nratch; im += STRIDE) {
@@ -382,8 +378,8 @@ void rattleMethyl_cu(time_prec dt, const pos_prec* xold, const pos_prec* yold, c
       dt, xpos, ypos, zpos, xold, yold, zold, massinv, vx, vy, vz);
 }
 
-void shakeMethyl_cu(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew,
-   const pos_prec* xold, const pos_prec* yold, const pos_prec* zold)
+void shakeMethyl_cu(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew, const pos_prec* xold,
+   const pos_prec* yold, const pos_prec* zold)
 {
    int n23 = nratch + nratch2 + nratch3 + nratmol;
    if (n23 <= 0)
@@ -404,11 +400,10 @@ __global__
 void constrain2Methyl_cu1(int nratch, const int (*restrict iratch)[2], //
    int nratch2, const int (*restrict iratch2)[3],                      //
    int nratch3, const int (*restrict iratch3)[4],                      //
-   int nratmol, const int (*restrict iratmol)[2], const int (*restrict irat)[2],
-   const pos_prec* restrict krat, double eps,
+   int nratmol, const int (*restrict iratmol)[2], const int (*restrict irat)[2], const pos_prec* restrict krat,
+   double eps,
 
-   time_prec dt, vel_prec* restrict vx, vel_prec* restrict vy, vel_prec* restrict vz,
-   VirialBuffer restrict vir_buf,
+   time_prec dt, vel_prec* restrict vx, vel_prec* restrict vy, vel_prec* restrict vz, VirialBuffer restrict vir_buf,
 
    const pos_prec* restrict xpos, const pos_prec* restrict ypos, const pos_prec* restrict zpos,
    const double* restrict massinv)
@@ -547,8 +542,7 @@ void constrain2Methyl_cu1(int nratch, const int (*restrict iratch)[2], //
          m13 = rma * dotbd;
          m23 = rma * dotcd;
          m33 = (rma + rmd) * rd2;
-         det = (m11 * m22 - m12 * m12) * m33 + (m12 * m13 - m11 * m23) * m23 +
-            (m12 * m23 - m22 * m13) * m13;
+         det = (m11 * m22 - m12 * m12) * m33 + (m12 * m13 - m11 * m23) * m23 + (m12 * m23 - m22 * m13) * m13;
          det = 1 / det;
          double i11 = m22 * m33 - m23 * m23;
          double i22 = m11 * m33 - m13 * m13;
@@ -663,8 +657,7 @@ void constrain2Methyl_cu1(int nratch, const int (*restrict iratch)[2], //
    }
 
    if CONSTEXPR (DO_V) {
-      atomic_add(
-         (real)vxx, (real)vyx, (real)vzx, (real)vyy, (real)vzy, (real)vzz, vir_buf, ithread);
+      atomic_add((real)vxx, (real)vyx, (real)vzx, (real)vyy, (real)vzy, (real)vzz, vir_buf, ithread);
    }
 }
 
@@ -708,8 +701,7 @@ void hcVirial_cu1(VirialBuffer restrict hc_vir_buf,
    const pos_prec* restrict zpos, const grad_prec* restrict gx, const grad_prec* restrict gy,
    const grad_prec* restrict gz,
 
-   int nmol, const int (*restrict imol)[2], const int* restrict kmol,
-   const double* restrict molmass)
+   int nmol, const int (*restrict imol)[2], const int* restrict kmol, const double* restrict molmass)
 {
    const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
    const int stride = blockDim.x * gridDim.x;

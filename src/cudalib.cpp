@@ -1,10 +1,10 @@
 #include "tool/cudalib.h"
 #include "tool/accasync.h"
 #if TINKER_CUDART
-#   include "tool/error.h"
-#   include "tool/externfunc.h"
-#   include "tool/gpucard.h"
-#   include <cuda_profiler_api.h>
+#include "tool/error.h"
+#include "tool/externfunc.h"
+#include "tool/gpucard.h"
+#include <cuda_profiler_api.h>
 
 namespace tinker {
 TINKER_FVOID2(acc1, cu1, cudalibDataStreamAndQ, RcOp);

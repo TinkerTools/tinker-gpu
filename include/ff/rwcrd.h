@@ -31,8 +31,11 @@ protected:
 
 public:
    ~CrdWriter();
-   CrdWriter(const double* xx, const double* yy, const double* zz, //
-      std::string crdfile, CrdFormat crdformat = CrdFormat::NONE);
+   CrdWriter(const double* xx,
+             const double* yy,
+             const double* zz, //
+             std::string crdfile,
+             CrdFormat crdformat = CrdFormat::NONE);
    int writeCurrent();
 };
 }

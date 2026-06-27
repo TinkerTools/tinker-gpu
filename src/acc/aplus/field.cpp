@@ -1,6 +1,6 @@
-#include "ff/modamoeba.h"
 #include "ff/atom.h"
 #include "ff/image.h"
+#include "ff/modamoeba.h"
 #include "ff/nblist.h"
 #include "ff/pme.h"
 #include "ff/potent.h"
@@ -67,11 +67,10 @@ static void dfieldAplus_acc1(real (*field)[3])
             real3 fid = make_real3(0, 0, 0);
             real3 fkd = make_real3(0, 0, 0);
             pair_dfield_aplus<ETYP>( //
-               r2, xr, yr, zr, 1, ci, dix, diy, diz, pdi, ddi, qixx, qixy, qixz, qiyy, qiyz, qizz,
-               rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z],
-               pdamp[k], dirdamp[k], rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY],
-               rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY], rpole[k][MPL_PME_YZ],
-               rpole[k][MPL_PME_ZZ], aewald, fid.x, fid.y, fid.z, fkd.x, fkd.y, fkd.z);
+               r2, xr, yr, zr, 1, ci, dix, diy, diz, pdi, ddi, qixx, qixy, qixz, qiyy, qiyz, qizz, rpole[k][MPL_PME_0],
+               rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], pdamp[k], dirdamp[k],
+               rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY],
+               rpole[k][MPL_PME_YZ], rpole[k][MPL_PME_ZZ], aewald, fid.x, fid.y, fid.z, fkd.x, fkd.y, fkd.z);
 
             gxi += fid.x;
             gyi += fid.y;
@@ -121,11 +120,10 @@ static void dfieldAplus_acc1(real (*field)[3])
       if (r2 <= off2) {
          real3 fid = make_real3(0, 0, 0);
          real3 fkd = make_real3(0, 0, 0);
-         pair_dfield_aplus<NON_EWALD>(r2, xr, yr, zr, pscale, ci, dix, diy, diz, pdi, ddi, qixx,
-            qixy, qixz, qiyy, qiyz, qizz, rpole[k][MPL_PME_0], rpole[k][MPL_PME_X],
-            rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], pdamp[k], dirdamp[k], rpole[k][MPL_PME_XX],
-            rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY], rpole[k][MPL_PME_YZ],
-            rpole[k][MPL_PME_ZZ], 0, fid.x, fid.y, fid.z, fkd.x, fkd.y, fkd.z);
+         pair_dfield_aplus<NON_EWALD>(r2, xr, yr, zr, pscale, ci, dix, diy, diz, pdi, ddi, qixx, qixy, qixz, qiyy, qiyz,
+            qizz, rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], pdamp[k],
+            dirdamp[k], rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY],
+            rpole[k][MPL_PME_YZ], rpole[k][MPL_PME_ZZ], 0, fid.x, fid.y, fid.z, fkd.x, fkd.y, fkd.z);
 
          atomic_add(fid.x, &field[i][0]);
          atomic_add(fid.y, &field[i][1]);
@@ -196,9 +194,8 @@ static void ufieldAplus_acc1(const real (*uind)[3], real (*field)[3])
          if (r2 <= off2) {
             real3 fid = make_real3(0, 0, 0);
             real3 fkd = make_real3(0, 0, 0);
-            pair_ufield_aplus<ETYP>(r2, xr, yr, zr, 1, uindi0, uindi1, uindi2, pdi, pti, uind[k][0],
-               uind[k][1], uind[k][2], pdamp[k], thole[k], aewald, fid.x, fid.y, fid.z, fkd.x,
-               fkd.y, fkd.z);
+            pair_ufield_aplus<ETYP>(r2, xr, yr, zr, 1, uindi0, uindi1, uindi2, pdi, pti, uind[k][0], uind[k][1],
+               uind[k][2], pdamp[k], thole[k], aewald, fid.x, fid.y, fid.z, fkd.x, fkd.y, fkd.z);
 
             gxi += fid.x;
             gyi += fid.y;
@@ -241,9 +238,8 @@ static void ufieldAplus_acc1(const real (*uind)[3], real (*field)[3])
       if (r2 <= off2) {
          real3 fid = make_real3(0, 0, 0);
          real3 fkd = make_real3(0, 0, 0);
-         pair_ufield_aplus<NON_EWALD>(r2, xr, yr, zr, uscale, uindi0, uindi1, uindi2, pdi, pti,
-            uind[k][0], uind[k][1], uind[k][2], pdamp[k], thole[k], 0, fid.x, fid.y, fid.z, fkd.x,
-            fkd.y, fkd.z);
+         pair_ufield_aplus<NON_EWALD>(r2, xr, yr, zr, uscale, uindi0, uindi1, uindi2, pdi, pti, uind[k][0], uind[k][1],
+            uind[k][2], pdamp[k], thole[k], 0, fid.x, fid.y, fid.z, fkd.x, fkd.y, fkd.z);
 
          atomic_add(fid.x, &field[i][0]);
          atomic_add(fid.y, &field[i][1]);

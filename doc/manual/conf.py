@@ -18,12 +18,13 @@
 # -- Project information -----------------------------------------------------
 
 import datetime
-project = "Tinker9 User Manual"
+project = "Tinker-GPU User Manual"
+html_title = project
 author_html = "Zhi Wang & Jay W. Ponder"
 author_latex = "Zhi Wang \& Jay W. Ponder"
 copyright = '%s, %s' % (datetime.datetime.now().year, author_html)
 master_doc = 'index'
-latex_documents = [(master_doc, 'tinker9manual.tex', project,
+latex_documents = [(master_doc, 'tinker-gpu-manual.tex', project,
      author_latex,
     'manual')]
 
@@ -55,7 +56,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 #
 html_theme = 'pydata_sphinx_theme'
 html_theme_options = {
-    'github_url': 'https://github.com/tinkertools/tinker9',
+    'github_url': 'https://github.com/tinkertools/tinker-gpu',
     'twitter_url': 'https://twitter.com/tinkertoolsmd'
 }
 

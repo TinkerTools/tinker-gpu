@@ -5,8 +5,8 @@
 namespace tinker {
 __global__
 static void hcCenterOfMass_cu1(int nmol, const int (*restrict imol)[2], const int* restrict kmol,
-   const double* restrict mfrac, const pos_prec* ax, const pos_prec* ay, const pos_prec* az,
-   pos_prec* mx, pos_prec* my, pos_prec* mz)
+   const double* restrict mfrac, const pos_prec* ax, const pos_prec* ay, const pos_prec* az, pos_prec* mx, pos_prec* my,
+   pos_prec* mz)
 {
    for (int im = ITHREAD; im < nmol; im += STRIDE) {
       int start = imol[im][0];
@@ -25,8 +25,8 @@ static void hcCenterOfMass_cu1(int nmol, const int (*restrict imol)[2], const in
    }
 }
 
-void hcCenterOfMass_cu(const pos_prec* atomx, const pos_prec* atomy, const pos_prec* atomz,
-   pos_prec* molx, pos_prec* moly, pos_prec* molz)
+void hcCenterOfMass_cu(const pos_prec* atomx, const pos_prec* atomy, const pos_prec* atomz, pos_prec* molx,
+   pos_prec* moly, pos_prec* molz)
 {
    const int nmol = rattle_dmol.nmol;
    const auto* imol = rattle_dmol.imol;
@@ -40,8 +40,8 @@ void hcCenterOfMass_cu(const pos_prec* atomx, const pos_prec* atomy, const pos_p
 namespace tinker {
 __global__
 static void hcPosVelIso_cu(int n, vel_prec scal, const int* restrict molec, vel_prec* restrict vx,
-   vel_prec* restrict vy, vel_prec* restrict vz, const vel_prec* restrict ratcom_vx,
-   const vel_prec* restrict ratcom_vy, const vel_prec* restrict ratcom_vz)
+   vel_prec* restrict vy, vel_prec* restrict vz, const vel_prec* restrict ratcom_vx, const vel_prec* restrict ratcom_vy,
+   const vel_prec* restrict ratcom_vz)
 {
    for (int i = ITHREAD; i < n; i += STRIDE) {
       int im = molec[i];
@@ -70,9 +70,8 @@ void hcPosIso_cu(pos_prec s)
 
 namespace tinker {
 __global__
-static void hcPosVelAn_cu(int n, double3 s0, double3 s1, double3 s2, const int* restrict molec,
-   vel_prec* restrict vx, vel_prec* restrict vy, vel_prec* restrict vz,
-   const vel_prec* restrict ratcom_vx, const vel_prec* restrict ratcom_vy,
+static void hcPosVelAn_cu(int n, double3 s0, double3 s1, double3 s2, const int* restrict molec, vel_prec* restrict vx,
+   vel_prec* restrict vy, vel_prec* restrict vz, const vel_prec* restrict ratcom_vx, const vel_prec* restrict ratcom_vy,
    const vel_prec* restrict ratcom_vz)
 {
    vel_prec s00 = s0.x, s01 = s0.y, s02 = s0.z;

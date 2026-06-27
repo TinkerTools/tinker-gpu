@@ -95,23 +95,31 @@ TINKER_EXTERN grad_prec* gx_elec; ///< Gradient of electrostatic terms.
 TINKER_EXTERN grad_prec* gy_elec; ///< Gradient of electrostatic terms.
 TINKER_EXTERN grad_prec* gz_elec; ///< Gradient of electrostatic terms.
 
-TINKER_EXTERN EnergyBuffer eng_buf;      ///< Energy buffer for the valence terms.
-TINKER_EXTERN EnergyBuffer eng_buf_vdw;  ///< Energy buffer for the vdw terms.
-TINKER_EXTERN EnergyBuffer eng_buf_elec; ///< Energy buffer for the electrostatic terms.
+TINKER_EXTERN grad_prec* gx_nnintermol; ///< Gradient of intermolecular neural network terms.
+TINKER_EXTERN grad_prec* gy_nnintermol; ///< Gradient of intermolecular neural network terms.
+TINKER_EXTERN grad_prec* gz_nnintermol; ///< Gradient of intermolecular neural network terms.
 
-TINKER_EXTERN VirialBuffer vir_buf;      ///< Virial buffer for the valence terms.
-TINKER_EXTERN VirialBuffer vir_buf_vdw;  ///< Virial buffer for the vdw terms.
-TINKER_EXTERN VirialBuffer vir_buf_elec; ///< Virial buffer for the electrostatic terms.
+TINKER_EXTERN EnergyBuffer eng_buf;            ///< Energy buffer for the valence terms.
+TINKER_EXTERN EnergyBuffer eng_buf_vdw;        ///< Energy buffer for the vdw terms.
+TINKER_EXTERN EnergyBuffer eng_buf_elec;       ///< Energy buffer for the electrostatic terms.
+TINKER_EXTERN EnergyBuffer eng_buf_nnintermol; ///< Energy buffer for the Intermolecular NN terms.
 
-TINKER_EXTERN energy_prec esum;           ///< Total potential energy.
-TINKER_EXTERN energy_prec energy_valence; ///< Total valence energy.
-TINKER_EXTERN energy_prec energy_vdw;     ///< Total vdw energy.
-TINKER_EXTERN energy_prec energy_elec;    ///< Total electrostatic energy.
+TINKER_EXTERN VirialBuffer vir_buf;            ///< Virial buffer for the valence terms.
+TINKER_EXTERN VirialBuffer vir_buf_vdw;        ///< Virial buffer for the vdw terms.
+TINKER_EXTERN VirialBuffer vir_buf_elec;       ///< Virial buffer for the electrostatic terms.
+TINKER_EXTERN VirialBuffer vir_buf_nnintermol; ///< Virial buffer for the Intermolecular NN terms. Note Virial for NN has not been implemented yet.
 
-TINKER_EXTERN virial_prec vir[9];            ///< Total potential virial tensor.
-TINKER_EXTERN virial_prec virial_valence[9]; ///< Total valence virial tensor.
-TINKER_EXTERN virial_prec virial_vdw[9];     ///< Total vdw virial tensor.
-TINKER_EXTERN virial_prec virial_elec[9];    ///< Total electrostatic virial tensor.
+TINKER_EXTERN energy_prec esum;              ///< Total potential energy.
+TINKER_EXTERN energy_prec energy_valence;    ///< Total valence energy.
+TINKER_EXTERN energy_prec energy_vdw;        ///< Total vdw energy.
+TINKER_EXTERN energy_prec energy_elec;       ///< Total electrostatic energy.
+TINKER_EXTERN energy_prec energy_nnintermol; ///< Total intermolecular neural network energy.
+
+TINKER_EXTERN virial_prec vir[9];               ///< Total potential virial tensor.
+TINKER_EXTERN virial_prec virial_valence[9];    ///< Total valence virial tensor.
+TINKER_EXTERN virial_prec virial_vdw[9];        ///< Total vdw virial tensor.
+TINKER_EXTERN virial_prec virial_elec[9];       ///< Total electrostatic virial tensor.
+TINKER_EXTERN virial_prec virial_nnintermol[9]; ///< Total intermolecular neural network virial tensor. Note Virial for NN has not been implemented yet.
 
 /// \}
 }

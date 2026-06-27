@@ -19,4 +19,8 @@ void dotProd_cu(T* ans, const T* a, const T* b, size_t nelem, int queue);
 
 template <class T>
 void scaleArray_cu(T* dst, T scal, size_t nelem, int queue);
+
+/// general matrix multiplication
+template <class T>
+void genMatMul_cu(T* c, const T* a, const T* b, int m, int n, int k, bool transa, bool transb, const T* alpha, const T* beta, int queue);
 }

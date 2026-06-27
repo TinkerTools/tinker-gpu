@@ -4,8 +4,8 @@
 #include <tinker/detail/units.hh>
 
 namespace tinker {
-void mdPos_acc(time_prec dt, pos_prec* qx, pos_prec* qy, pos_prec* qz, const vel_prec* vlx,
-   const vel_prec* vly, const vel_prec* vlz)
+void mdPos_acc(time_prec dt, pos_prec* qx, pos_prec* qy, pos_prec* qz, const vel_prec* vlx, const vel_prec* vly,
+   const vel_prec* vlz)
 {
    #pragma acc parallel loop independent async deviceptr(qx,qy,qz,vlx,vly,vlz)
    for (int i = 0; i < n; ++i) {
@@ -74,8 +74,8 @@ void mdDebugPosNorm_acc(pos_prec poseps, time_prec dt, //
 }
 
 namespace tinker {
-void mdVel_acc(time_prec dt, vel_prec* vlx, vel_prec* vly, vel_prec* vlz, const grad_prec* grx,
-   const grad_prec* gry, const grad_prec* grz)
+void mdVel_acc(time_prec dt, vel_prec* vlx, vel_prec* vly, vel_prec* vlz, const grad_prec* grx, const grad_prec* gry,
+   const grad_prec* grz)
 {
    const vel_prec ekcal = units::ekcal;
    #pragma acc parallel loop independent async\
@@ -88,8 +88,8 @@ void mdVel_acc(time_prec dt, vel_prec* vlx, vel_prec* vly, vel_prec* vlz, const 
    }
 }
 
-void mdVel2_acc(time_prec dt, const grad_prec* grx, const grad_prec* gry, const grad_prec* grz,
-   time_prec dt2, const grad_prec* grx2, const grad_prec* gry2, const grad_prec* grz2)
+void mdVel2_acc(time_prec dt, const grad_prec* grx, const grad_prec* gry, const grad_prec* grz, time_prec dt2,
+   const grad_prec* grx2, const grad_prec* gry2, const grad_prec* grz2)
 {
    const vel_prec ekcal = units::ekcal;
    #pragma acc parallel loop independent async\
@@ -114,9 +114,8 @@ void mdVelScale_acc(vel_prec sc, int nelem, vel_prec* vx0, vel_prec* vy0, vel_pr
    }
 }
 
-void mdVelAvbf_acc(int nrespa, vel_prec a, vel_prec b, vel_prec* vx, vel_prec* vy, vel_prec* vz,
-   const grad_prec* gx1, const grad_prec* gy1, const grad_prec* gz1, const grad_prec* gx2,
-   const grad_prec* gy2, const grad_prec* gz2)
+void mdVelAvbf_acc(int nrespa, vel_prec a, vel_prec b, vel_prec* vx, vel_prec* vy, vel_prec* vz, const grad_prec* gx1,
+   const grad_prec* gy1, const grad_prec* gz1, const grad_prec* gx2, const grad_prec* gy2, const grad_prec* gz2)
 {
    auto ekcal = units::ekcal;
    if (nrespa == 1)
@@ -159,9 +158,9 @@ label_nrespa2:
    return;
 }
 
-void mdVelAvbfAn_acc(int nrespa, vel_prec (*a)[3], vel_prec (*b)[3], vel_prec* vx, vel_prec* vy,
-   vel_prec* vz, const grad_prec* gx1, const grad_prec* gy1, const grad_prec* gz1,
-   const grad_prec* gx2, const grad_prec* gy2, const grad_prec* gz2)
+void mdVelAvbfAn_acc(int nrespa, vel_prec (*a)[3], vel_prec (*b)[3], vel_prec* vx, vel_prec* vy, vel_prec* vz,
+   const grad_prec* gx1, const grad_prec* gy1, const grad_prec* gz1, const grad_prec* gx2, const grad_prec* gy2,
+   const grad_prec* gz2)
 {
    auto ekcal = units::ekcal;
    auto a00 = a[0][0], a01 = a[0][1], a02 = a[0][2];

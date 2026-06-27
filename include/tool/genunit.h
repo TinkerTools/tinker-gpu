@@ -45,22 +45,17 @@ struct GenericUnitAlloc<GenericUnitVersion::ENABLE_ON_DEVICE>
 /// \ingroup rc
 /// \brief Resource handle. Analogous to Fortran i/o unit
 /// represented by a signed integer.
-template <class T,
-   GenericUnitVersion VERSION = GenericUnitVersion::DISABLE_ON_DEVICE>
+template <class T, GenericUnitVersion VERSION = GenericUnitVersion::DISABLE_ON_DEVICE>
 class GenericUnit
 {
 private:
-   static constexpr bool USE_DPTR = (VERSION ==
-            GenericUnitVersion::DISABLE_ON_DEVICE
-         ? false
-         : true);
+   static constexpr bool USE_DPTR = (VERSION == GenericUnitVersion::DISABLE_ON_DEVICE ? false : true);
 
    int unit;
 
    using mem_op = GenericUnitAlloc<VERSION>;
    using hostptr_vec = std::vector<std::unique_ptr<T>>;
-   using deviceptr_vec = std::vector<
-      std::unique_ptr<T, decltype(&mem_op::deallocate)>>;
+   using deviceptr_vec = std::vector<std::unique_ptr<T, decltype(&mem_op::deallocate)>>;
 
    static hostptr_vec& hostptrs()
    {
@@ -77,15 +72,13 @@ private:
 
    const T& obj() const
    {
-      assert(0 <= unit && unit < (int)hostptrs().size() &&
-         "const T& GenericUnit::obj() const");
+      assert(0 <= unit && unit < (int)hostptrs().size() && "const T& GenericUnit::obj() const");
       return *hostptrs()[unit];
    }
 
    T& obj()
    {
-      assert(0 <= unit && unit < (int)hostptrs().size() &&
-         "T& GenericUnit::obj()");
+      assert(0 <= unit && unit < (int)hostptrs().size() && "T& GenericUnit::obj()");
       return *hostptrs()[unit];
    }
 
@@ -93,7 +86,8 @@ public:
    /// \brief Gets the number of open units.
    static int size()
    {
-      if CONSTEXPR (USE_DPTR) assert(hostptrs().size() == deviceptrs().size());
+      if CONSTEXPR (USE_DPTR)
+         assert(hostptrs().size() == deviceptrs().size());
       return hostptrs().size();
    }
 
@@ -184,15 +178,13 @@ public:
    /// \brief Gets (const) device pointer to the object.
    const T* deviceptr() const
    {
-      assert(0 <= unit && (size_t)unit < deviceptrs().size() &&
-         "const T* GenericUnit::deviceptr() const");
+      assert(0 <= unit && (size_t)unit < deviceptrs().size() && "const T* GenericUnit::deviceptr() const");
       return deviceptrs()[unit].get();
    }
 
    T* deviceptr()
    {
-      assert(0 <= unit && unit < (int)deviceptrs().size() &&
-         "T* GenericUnit::deviceptr()");
+      assert(0 <= unit && unit < (int)deviceptrs().size() && "T* GenericUnit::deviceptr()");
       return deviceptrs()[unit].get();
    }
    /// \}

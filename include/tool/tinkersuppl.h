@@ -10,8 +10,7 @@ void tinker_f_rewind(int* unit);
 void tinker_f_close(int* unit);
 
 void tinker_f_open(int* unit, std::string file, std::string status);
-void tinker_f_open(int* unit, std::string file, std::string form,
-   std::string status);
+void tinker_f_open(int* unit, std::string file, std::string form, std::string status);
 
 // memory
 int tinker_f_allocated(void* p);

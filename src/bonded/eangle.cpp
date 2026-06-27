@@ -11,8 +11,8 @@
 namespace tinker {
 void eangleData(RcOp op)
 {
-   if (not use(Potent::ANGLE) and not use(Potent::STRBND) and not use(Potent::OPBEND) and
-      not use(Potent::ANGTOR) and not use(Potent::CHGFLX))
+   if (not use(Potent::ANGLE) and not use(Potent::STRBND) and not use(Potent::OPBEND) and not use(Potent::ANGTOR)
+      and not use(Potent::CHGFLX))
       return;
 
    auto rc_a = rc_flag & calc::analyz;

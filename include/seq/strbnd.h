@@ -8,26 +8,38 @@ namespace tinker {
 #pragma acc routine seq
 template <class Ver>
 SEQ_CUDA
-void dk_strbnd(real& restrict e, real& restrict vxx, real& restrict vyx,
-   real& restrict vzx, real& restrict vyy, real& restrict vzy,
-   real& restrict vzz,
+void dk_strbnd(real& restrict e,
+               real& restrict vxx,
+               real& restrict vyx,
+               real& restrict vzx,
+               real& restrict vyy,
+               real& restrict vzy,
+               real& restrict vzz,
 
-   grad_prec* restrict debax, grad_prec* restrict debay,
-   grad_prec* restrict debaz,
+               grad_prec* restrict debax,
+               grad_prec* restrict debay,
+               grad_prec* restrict debaz,
 
-   real stbnunit, int istrbnd, const int (*restrict isb)[3],
-   const real (*restrict sbk)[2],
+               real stbnunit,
+               int istrbnd,
+               const int (*restrict isb)[3],
+               const real (*restrict sbk)[2],
 
-   const real* restrict bl, const int (*restrict iang)[4],
-   const real* restrict anat,
+               const real* restrict bl,
+               const int (*restrict iang)[4],
+               const real* restrict anat,
 
-   const real* restrict x, const real* restrict y, const real* restrict z)
+               const real* restrict x,
+               const real* restrict y,
+               const real* restrict z)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_g = Ver::g;
    constexpr bool do_v = Ver::v;
-   if CONSTEXPR (do_e) e = 0;
-   if CONSTEXPR (do_v) vxx = 0, vyx = 0, vzx = 0, vyy = 0, vzy = 0, vzz = 0;
+   if CONSTEXPR (do_e)
+      e = 0;
+   if CONSTEXPR (do_v)
+      vxx = 0, vyx = 0, vzx = 0, vyy = 0, vzy = 0, vzz = 0;
 
    int i = isb[istrbnd][0];
    int j = isb[istrbnd][1];
@@ -96,7 +108,8 @@ void dk_strbnd(real& restrict e, real& restrict vxx, real& restrict vyx,
       term2 = stbnunit * force2;
       real termr = term1 * dr1 + term2 * dr2;
 
-      if CONSTEXPR (do_e) e = termr * dt;
+      if CONSTEXPR (do_e)
+         e = termr * dt;
 
       if CONSTEXPR (do_g) {
          real term1t = term1 * dt;

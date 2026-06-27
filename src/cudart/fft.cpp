@@ -71,11 +71,11 @@ void fftfront(PMEUnit pme_u)
    auto& st = *pme_u;
 
 #if TINKER_REAL_SIZE == 4
-   cufftExecC2C(iplan, reinterpret_cast<cufftComplex*>(st.qgrid),
-      reinterpret_cast<cufftComplex*>(st.qgrid), CUFFT_FORWARD);
+   cufftExecC2C(iplan, reinterpret_cast<cufftComplex*>(st.qgrid), reinterpret_cast<cufftComplex*>(st.qgrid),
+      CUFFT_FORWARD);
 #elif TINKER_REAL_SIZE == 8
-   cufftExecZ2Z(iplan, reinterpret_cast<cufftDoubleComplex*>(st.qgrid),
-      reinterpret_cast<cufftDoubleComplex*>(st.qgrid), CUFFT_FORWARD);
+   cufftExecZ2Z(iplan, reinterpret_cast<cufftDoubleComplex*>(st.qgrid), reinterpret_cast<cufftDoubleComplex*>(st.qgrid),
+      CUFFT_FORWARD);
 #else
    static_assert(false, "");
 #endif
@@ -88,11 +88,11 @@ void fftback(PMEUnit pme_u)
    auto& st = *pme_u;
 
 #if TINKER_REAL_SIZE == 4
-   cufftExecC2C(iplan, reinterpret_cast<cufftComplex*>(st.qgrid),
-      reinterpret_cast<cufftComplex*>(st.qgrid), CUFFT_INVERSE);
+   cufftExecC2C(iplan, reinterpret_cast<cufftComplex*>(st.qgrid), reinterpret_cast<cufftComplex*>(st.qgrid),
+      CUFFT_INVERSE);
 #elif TINKER_REAL_SIZE == 8
-   cufftExecZ2Z(iplan, reinterpret_cast<cufftDoubleComplex*>(st.qgrid),
-      reinterpret_cast<cufftDoubleComplex*>(st.qgrid), CUFFT_INVERSE);
+   cufftExecZ2Z(iplan, reinterpret_cast<cufftDoubleComplex*>(st.qgrid), reinterpret_cast<cufftDoubleComplex*>(st.qgrid),
+      CUFFT_INVERSE);
 #else
    static_assert(false, "");
 #endif

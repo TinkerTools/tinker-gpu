@@ -79,9 +79,14 @@ void boxSetTinker(const Box& p);  ///< Updates the related PBC modules of Tinker
 void boxCopyin();
 
 /// Sets up the internal PBC data. Similar to Tinker \c lattice subroutine.
-void boxLattice(Box& p, BoxShape sh, //
-   double a, double b, double c,     //
-   double alphaDeg, double betaDeg, double gammaDeg);
+void boxLattice(Box& p,
+                BoxShape sh, //
+                double a,
+                double b,
+                double c, //
+                double alphaDeg,
+                double betaDeg,
+                double gammaDeg);
 
 /// Gets the volume of the PBC box.
 /// \note This function may calculate the volume on-the-fly instead of using

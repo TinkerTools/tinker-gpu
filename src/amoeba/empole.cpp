@@ -1,8 +1,8 @@
 #include "ff/amoeba/empole.h"
-#include "ff/modamoeba.h"
 #include "ff/elec.h"
 #include "ff/energy.h"
 #include "ff/hippo/empole.h"
+#include "ff/modamoeba.h"
 #include "ff/nblist.h"
 #include "ff/potent.h"
 #include "math/zero.h"
@@ -104,6 +104,7 @@ void empole(int vers)
       empoleEwald(vers);
    else
       empoleNonEwald(vers);
+   exfield(vers, 1);
    torque(vers, demx, demy, demz);
    if (do_v) {
       VirialBuffer u2 = vir_trq;

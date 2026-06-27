@@ -43,6 +43,7 @@ Nbl clistVersion();    ///< For partial charge models and for VDW models that do
 Nbl mlistVersion();    ///< For multipole, polarization, repulsion, etc.
 Nbl ulistVersion();    ///< For sparse preconditioner.
 Nbl dsplistVersion();  ///< For dispersion.
+Nbl nnlistVersion();   ///< For neural network.
 void nblistData(RcOp); ///< Sets up data on device.
 void nblistRefresh();  ///< Updates the neighbor lists.
 

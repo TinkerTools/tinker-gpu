@@ -1,5 +1,5 @@
-#include "ff/modamoeba.h"
 #include "ff/elec.h"
+#include "ff/modamoeba.h"
 #include "ff/modhippo.h"
 #include "ff/pme.h"
 #include "seq/add.h"
@@ -12,8 +12,7 @@ void epolarEwaldRecipSelfEp_cu(int n, EnergyBuffer restrict ep, real f, //
 {
    int ithread = ITHREAD;
    for (int i = ithread; i < n; i += STRIDE) {
-      real e = 0.5f * f *
-         (fuind[i][0] * fphi[i][1] + fuind[i][1] * fphi[i][2] + fuind[i][2] * fphi[i][3]);
+      real e = 0.5f * f * (fuind[i][0] * fphi[i][1] + fuind[i][1] * fphi[i][2] + fuind[i][2] * fphi[i][3]);
       atomic_add(e, ep, ithread);
    }
 }
@@ -22,8 +21,8 @@ __global__
 void epolarEwaldRecipSelfDep_cu(int n, real f,                                   //
    grad_prec* restrict depx, grad_prec* restrict depy, grad_prec* restrict depz, //
    const real (*restrict fmp)[10], const real (*restrict fphi)[20], const real (*restrict fuind)[3],
-   const real (*restrict fuinp)[3], const real (*restrict fphid)[10],
-   const real (*restrict fphip)[10], const real (*restrict fphidp)[20], //
+   const real (*restrict fuinp)[3], const real (*restrict fphid)[10], const real (*restrict fphip)[10],
+   const real (*restrict fphidp)[20], //
    int nfft1, int nfft2, int nfft3, TINKER_IMAGE_PARAMS)
 {
    // data deriv1  / 2, 5,  8,  9, 11, 16, 18, 14, 15, 20 /
@@ -104,9 +103,8 @@ void epolarEwaldRecipSelfEptrq_cu(int n, real term, real fterm,   //
    CountBuffer restrict nep, EnergyBuffer restrict ep,            //
    real* restrict trqx, real* restrict trqy, real* restrict trqz, //
    real* restrict pot,                                            //
-   const real (*restrict rpole)[MPL_TOTAL], const real (*restrict cmp)[10],
-   const real (*restrict gpu_uind)[3], const real (*restrict gpu_uinp)[3],
-   const real (*restrict cphidp)[10])
+   const real (*restrict rpole)[MPL_TOTAL], const real (*restrict cmp)[10], const real (*restrict gpu_uind)[3],
+   const real (*restrict gpu_uinp)[3], const real (*restrict cphidp)[10])
 {
    int ithread = ITHREAD;
    if (gpu_uinp) {
@@ -119,15 +117,15 @@ void epolarEwaldRecipSelfEptrq_cu(int n, real term, real fterm,   //
          real uiz = 0.5f * (gpu_uind[i][2] + gpu_uinp[i][2]);
 
          if CONSTEXPR (do_g) {
-            real tep1 = cmp[i][3] * cphidp[i][2] - cmp[i][2] * cphidp[i][3] +
-               2 * (cmp[i][6] - cmp[i][5]) * cphidp[i][9] + cmp[i][8] * cphidp[i][7] +
-               cmp[i][9] * cphidp[i][5] - cmp[i][7] * cphidp[i][8] - cmp[i][9] * cphidp[i][6];
-            real tep2 = cmp[i][1] * cphidp[i][3] - cmp[i][3] * cphidp[i][1] +
-               2 * (cmp[i][4] - cmp[i][6]) * cphidp[i][8] + cmp[i][7] * cphidp[i][9] +
-               cmp[i][8] * cphidp[i][6] - cmp[i][8] * cphidp[i][4] - cmp[i][9] * cphidp[i][7];
-            real tep3 = cmp[i][2] * cphidp[i][1] - cmp[i][1] * cphidp[i][2] +
-               2 * (cmp[i][5] - cmp[i][4]) * cphidp[i][7] + cmp[i][7] * cphidp[i][4] +
-               cmp[i][9] * cphidp[i][8] - cmp[i][7] * cphidp[i][5] - cmp[i][8] * cphidp[i][9];
+            real tep1 = cmp[i][3] * cphidp[i][2] - cmp[i][2] * cphidp[i][3] + 2 * (cmp[i][6] - cmp[i][5]) * cphidp[i][9]
+               + cmp[i][8] * cphidp[i][7] + cmp[i][9] * cphidp[i][5] - cmp[i][7] * cphidp[i][8]
+               - cmp[i][9] * cphidp[i][6];
+            real tep2 = cmp[i][1] * cphidp[i][3] - cmp[i][3] * cphidp[i][1] + 2 * (cmp[i][4] - cmp[i][6]) * cphidp[i][8]
+               + cmp[i][7] * cphidp[i][9] + cmp[i][8] * cphidp[i][6] - cmp[i][8] * cphidp[i][4]
+               - cmp[i][9] * cphidp[i][7];
+            real tep3 = cmp[i][2] * cphidp[i][1] - cmp[i][1] * cphidp[i][2] + 2 * (cmp[i][5] - cmp[i][4]) * cphidp[i][7]
+               + cmp[i][7] * cphidp[i][4] + cmp[i][9] * cphidp[i][8] - cmp[i][7] * cphidp[i][5]
+               - cmp[i][8] * cphidp[i][9];
 
             // self term
 
@@ -163,15 +161,15 @@ void epolarEwaldRecipSelfEptrq_cu(int n, real term, real fterm,   //
          real uiz = gpu_uind[i][2];
 
          if CONSTEXPR (do_g) {
-            real tep1 = cmp[i][3] * cphidp[i][2] - cmp[i][2] * cphidp[i][3] +
-               2 * (cmp[i][6] - cmp[i][5]) * cphidp[i][9] + cmp[i][8] * cphidp[i][7] +
-               cmp[i][9] * cphidp[i][5] - cmp[i][7] * cphidp[i][8] - cmp[i][9] * cphidp[i][6];
-            real tep2 = cmp[i][1] * cphidp[i][3] - cmp[i][3] * cphidp[i][1] +
-               2 * (cmp[i][4] - cmp[i][6]) * cphidp[i][8] + cmp[i][7] * cphidp[i][9] +
-               cmp[i][8] * cphidp[i][6] - cmp[i][8] * cphidp[i][4] - cmp[i][9] * cphidp[i][7];
-            real tep3 = cmp[i][2] * cphidp[i][1] - cmp[i][1] * cphidp[i][2] +
-               2 * (cmp[i][5] - cmp[i][4]) * cphidp[i][7] + cmp[i][7] * cphidp[i][4] +
-               cmp[i][9] * cphidp[i][8] - cmp[i][7] * cphidp[i][5] - cmp[i][8] * cphidp[i][9];
+            real tep1 = cmp[i][3] * cphidp[i][2] - cmp[i][2] * cphidp[i][3] + 2 * (cmp[i][6] - cmp[i][5]) * cphidp[i][9]
+               + cmp[i][8] * cphidp[i][7] + cmp[i][9] * cphidp[i][5] - cmp[i][7] * cphidp[i][8]
+               - cmp[i][9] * cphidp[i][6];
+            real tep2 = cmp[i][1] * cphidp[i][3] - cmp[i][3] * cphidp[i][1] + 2 * (cmp[i][4] - cmp[i][6]) * cphidp[i][8]
+               + cmp[i][7] * cphidp[i][9] + cmp[i][8] * cphidp[i][6] - cmp[i][8] * cphidp[i][4]
+               - cmp[i][9] * cphidp[i][7];
+            real tep3 = cmp[i][2] * cphidp[i][1] - cmp[i][1] * cphidp[i][2] + 2 * (cmp[i][5] - cmp[i][4]) * cphidp[i][7]
+               + cmp[i][7] * cphidp[i][4] + cmp[i][9] * cphidp[i][8] - cmp[i][7] * cphidp[i][5]
+               - cmp[i][8] * cphidp[i][9];
 
             // self term
 
@@ -201,8 +199,7 @@ void epolarEwaldRecipSelfEptrq_cu(int n, real term, real fterm,   //
 }
 
 __global__
-void epolarEwaldRecipSelfVirial_cu1(
-   size_t size, VirialBuffer restrict vir_ep, const VirialBuffer restrict vir_m)
+void epolarEwaldRecipSelfVirial_cu1(size_t size, VirialBuffer restrict vir_ep, const VirialBuffer restrict vir_m)
 {
    for (size_t i = ITHREAD; i < size; i += STRIDE)
       vir_ep[0][i] -= vir_m[0][i];
@@ -210,9 +207,8 @@ void epolarEwaldRecipSelfVirial_cu1(
 
 __global__
 void epolarEwaldRecipSelfVirial_cu2(int n, VirialBuffer restrict vir_ep, //
-   const real (*restrict cmp)[10], const real (*restrict gpu_uind)[3],
-   const real (*restrict gpu_uinp)[3], const real (*restrict fphid)[10],
-   const real (*restrict fphip)[10], const real (*restrict cphi)[10],
+   const real (*restrict cmp)[10], const real (*restrict gpu_uind)[3], const real (*restrict gpu_uinp)[3],
+   const real (*restrict fphid)[10], const real (*restrict fphip)[10], const real (*restrict cphi)[10],
    const real (*restrict cphidp)[10], //
    int nfft1, int nfft2, int nfft3, TINKER_IMAGE_PARAMS)
 {
@@ -250,58 +246,40 @@ void epolarEwaldRecipSelfVirial_cu2(int n, VirialBuffer restrict vir_ep, //
          real vxz = 0;
          real vyz = 0;
 
-         vxx = vxx - cmp[i][1] * cphidp[i][1] -
-            0.5f * ((gpu_uind[i][0] + gpu_uinp[i][0]) * cphi[i][1]);
-         vxy = vxy - 0.5f * (cphidp[i][1] * cmp[i][2] + cphidp[i][2] * cmp[i][1]) -
-            0.25f *
-               ((gpu_uind[i][1] + gpu_uinp[i][1]) * cphi[i][1] +
-                  (gpu_uind[i][0] + gpu_uinp[i][0]) * cphi[i][2]);
-         vxz = vxz - 0.5f * (cphidp[i][1] * cmp[i][3] + cphidp[i][3] * cmp[i][1]) -
-            0.25f *
-               ((gpu_uind[i][2] + gpu_uinp[i][2]) * cphi[i][1] +
-                  (gpu_uind[i][0] + gpu_uinp[i][0]) * cphi[i][3]);
-         vyy = vyy - cmp[i][2] * cphidp[i][2] -
-            0.5f * ((gpu_uind[i][1] + gpu_uinp[i][1]) * cphi[i][2]);
-         vyz = vyz - 0.5f * (cphidp[i][2] * cmp[i][3] + cphidp[i][3] * cmp[i][2]) -
-            0.25f *
-               ((gpu_uind[i][2] + gpu_uinp[i][2]) * cphi[i][2] +
-                  (gpu_uind[i][1] + gpu_uinp[i][1]) * cphi[i][3]);
-         vzz = vzz - cmp[i][3] * cphidp[i][3] -
-            0.5f * ((gpu_uind[i][2] + gpu_uinp[i][2]) * cphi[i][3]);
-         vxx = vxx - 2 * cmp[i][4] * cphidp[i][4] - cmp[i][7] * cphidp[i][7] -
-            cmp[i][8] * cphidp[i][8];
-         vxy = vxy - (cmp[i][4] + cmp[i][5]) * cphidp[i][7] -
-            0.5f *
-               (cmp[i][7] * (cphidp[i][5] + cphidp[i][4]) + cmp[i][8] * cphidp[i][9] +
-                  cmp[i][9] * cphidp[i][8]);
-         vxz = vxz - (cmp[i][4] + cmp[i][6]) * cphidp[i][8] -
-            0.5f *
-               (cmp[i][8] * (cphidp[i][4] + cphidp[i][6]) + cmp[i][7] * cphidp[i][9] +
-                  cmp[i][9] * cphidp[i][7]);
-         vyy = vyy - 2 * cmp[i][5] * cphidp[i][5] - cmp[i][7] * cphidp[i][7] -
-            cmp[i][9] * cphidp[i][9];
-         vyz = vyz - (cmp[i][5] + cmp[i][6]) * cphidp[i][9] -
-            0.5f *
-               (cmp[i][9] * (cphidp[i][5] + cphidp[i][6]) + cmp[i][7] * cphidp[i][8] +
-                  cmp[i][8] * cphidp[i][7]);
-         vzz = vzz - 2 * cmp[i][6] * cphidp[i][6] - cmp[i][8] * cphidp[i][8] -
-            cmp[i][9] * cphidp[i][9];
+         vxx = vxx - cmp[i][1] * cphidp[i][1] - 0.5f * ((gpu_uind[i][0] + gpu_uinp[i][0]) * cphi[i][1]);
+         vxy = vxy - 0.5f * (cphidp[i][1] * cmp[i][2] + cphidp[i][2] * cmp[i][1])
+            - 0.25f * ((gpu_uind[i][1] + gpu_uinp[i][1]) * cphi[i][1] + (gpu_uind[i][0] + gpu_uinp[i][0]) * cphi[i][2]);
+         vxz = vxz - 0.5f * (cphidp[i][1] * cmp[i][3] + cphidp[i][3] * cmp[i][1])
+            - 0.25f * ((gpu_uind[i][2] + gpu_uinp[i][2]) * cphi[i][1] + (gpu_uind[i][0] + gpu_uinp[i][0]) * cphi[i][3]);
+         vyy = vyy - cmp[i][2] * cphidp[i][2] - 0.5f * ((gpu_uind[i][1] + gpu_uinp[i][1]) * cphi[i][2]);
+         vyz = vyz - 0.5f * (cphidp[i][2] * cmp[i][3] + cphidp[i][3] * cmp[i][2])
+            - 0.25f * ((gpu_uind[i][2] + gpu_uinp[i][2]) * cphi[i][2] + (gpu_uind[i][1] + gpu_uinp[i][1]) * cphi[i][3]);
+         vzz = vzz - cmp[i][3] * cphidp[i][3] - 0.5f * ((gpu_uind[i][2] + gpu_uinp[i][2]) * cphi[i][3]);
+         vxx = vxx - 2 * cmp[i][4] * cphidp[i][4] - cmp[i][7] * cphidp[i][7] - cmp[i][8] * cphidp[i][8];
+         vxy = vxy - (cmp[i][4] + cmp[i][5]) * cphidp[i][7]
+            - 0.5f * (cmp[i][7] * (cphidp[i][5] + cphidp[i][4]) + cmp[i][8] * cphidp[i][9] + cmp[i][9] * cphidp[i][8]);
+         vxz = vxz - (cmp[i][4] + cmp[i][6]) * cphidp[i][8]
+            - 0.5f * (cmp[i][8] * (cphidp[i][4] + cphidp[i][6]) + cmp[i][7] * cphidp[i][9] + cmp[i][9] * cphidp[i][7]);
+         vyy = vyy - 2 * cmp[i][5] * cphidp[i][5] - cmp[i][7] * cphidp[i][7] - cmp[i][9] * cphidp[i][9];
+         vyz = vyz - (cmp[i][5] + cmp[i][6]) * cphidp[i][9]
+            - 0.5f * (cmp[i][9] * (cphidp[i][5] + cphidp[i][6]) + cmp[i][7] * cphidp[i][8] + cmp[i][8] * cphidp[i][7]);
+         vzz = vzz - 2 * cmp[i][6] * cphidp[i][6] - cmp[i][8] * cphidp[i][8] - cmp[i][9] * cphidp[i][9];
 
          // if (poltyp .eq. 'MUTUAL')
          vxx = vxx - 0.5f * (cphid[1] * gpu_uinp[i][0] + cphip[1] * gpu_uind[i][0]);
-         vxy = vxy -
-            0.25f *
-               (cphid[1] * gpu_uinp[i][1] + cphip[1] * gpu_uind[i][1] + cphid[2] * gpu_uinp[i][0] +
-                  cphip[2] * gpu_uind[i][0]);
-         vxz = vxz -
-            0.25f *
-               (cphid[1] * gpu_uinp[i][2] + cphip[1] * gpu_uind[i][2] + cphid[3] * gpu_uinp[i][0] +
-                  cphip[3] * gpu_uind[i][0]);
+         vxy = vxy
+            - 0.25f
+               * (cphid[1] * gpu_uinp[i][1] + cphip[1] * gpu_uind[i][1] + cphid[2] * gpu_uinp[i][0]
+                  + cphip[2] * gpu_uind[i][0]);
+         vxz = vxz
+            - 0.25f
+               * (cphid[1] * gpu_uinp[i][2] + cphip[1] * gpu_uind[i][2] + cphid[3] * gpu_uinp[i][0]
+                  + cphip[3] * gpu_uind[i][0]);
          vyy = vyy - 0.5f * (cphid[2] * gpu_uinp[i][1] + cphip[2] * gpu_uind[i][1]);
-         vyz = vyz -
-            0.25f *
-               (cphid[2] * gpu_uinp[i][2] + cphip[2] * gpu_uind[i][2] + cphid[3] * gpu_uinp[i][1] +
-                  cphip[3] * gpu_uind[i][1]);
+         vyz = vyz
+            - 0.25f
+               * (cphid[2] * gpu_uinp[i][2] + cphip[2] * gpu_uind[i][2] + cphid[3] * gpu_uinp[i][1]
+                  + cphip[3] * gpu_uind[i][1]);
          vzz = vzz - 0.5f * (cphid[3] * gpu_uinp[i][2] + cphip[3] * gpu_uind[i][2]);
          // end if
 
@@ -324,42 +302,24 @@ void epolarEwaldRecipSelfVirial_cu2(int n, VirialBuffer restrict vir_ep, //
          real vxz = 0;
          real vyz = 0;
 
-         vxx = vxx - cmp[i][1] * cphidp[i][1] -
-            0.5f * ((gpu_uind[i][0] + gpu_uind[i][0]) * cphi[i][1]);
-         vxy = vxy - 0.5f * (cphidp[i][1] * cmp[i][2] + cphidp[i][2] * cmp[i][1]) -
-            0.25f *
-               ((gpu_uind[i][1] + gpu_uind[i][1]) * cphi[i][1] +
-                  (gpu_uind[i][0] + gpu_uind[i][0]) * cphi[i][2]);
-         vxz = vxz - 0.5f * (cphidp[i][1] * cmp[i][3] + cphidp[i][3] * cmp[i][1]) -
-            0.25f *
-               ((gpu_uind[i][2] + gpu_uind[i][2]) * cphi[i][1] +
-                  (gpu_uind[i][0] + gpu_uind[i][0]) * cphi[i][3]);
-         vyy = vyy - cmp[i][2] * cphidp[i][2] -
-            0.5f * ((gpu_uind[i][1] + gpu_uind[i][1]) * cphi[i][2]);
-         vyz = vyz - 0.5f * (cphidp[i][2] * cmp[i][3] + cphidp[i][3] * cmp[i][2]) -
-            0.25f *
-               ((gpu_uind[i][2] + gpu_uind[i][2]) * cphi[i][2] +
-                  (gpu_uind[i][1] + gpu_uind[i][1]) * cphi[i][3]);
-         vzz = vzz - cmp[i][3] * cphidp[i][3] -
-            0.5f * ((gpu_uind[i][2] + gpu_uind[i][2]) * cphi[i][3]);
-         vxx = vxx - 2 * cmp[i][4] * cphidp[i][4] - cmp[i][7] * cphidp[i][7] -
-            cmp[i][8] * cphidp[i][8];
-         vxy = vxy - (cmp[i][4] + cmp[i][5]) * cphidp[i][7] -
-            0.5f *
-               (cmp[i][7] * (cphidp[i][5] + cphidp[i][4]) + cmp[i][8] * cphidp[i][9] +
-                  cmp[i][9] * cphidp[i][8]);
-         vxz = vxz - (cmp[i][4] + cmp[i][6]) * cphidp[i][8] -
-            0.5f *
-               (cmp[i][8] * (cphidp[i][4] + cphidp[i][6]) + cmp[i][7] * cphidp[i][9] +
-                  cmp[i][9] * cphidp[i][7]);
-         vyy = vyy - 2 * cmp[i][5] * cphidp[i][5] - cmp[i][7] * cphidp[i][7] -
-            cmp[i][9] * cphidp[i][9];
-         vyz = vyz - (cmp[i][5] + cmp[i][6]) * cphidp[i][9] -
-            0.5f *
-               (cmp[i][9] * (cphidp[i][5] + cphidp[i][6]) + cmp[i][7] * cphidp[i][8] +
-                  cmp[i][8] * cphidp[i][7]);
-         vzz = vzz - 2 * cmp[i][6] * cphidp[i][6] - cmp[i][8] * cphidp[i][8] -
-            cmp[i][9] * cphidp[i][9];
+         vxx = vxx - cmp[i][1] * cphidp[i][1] - 0.5f * ((gpu_uind[i][0] + gpu_uind[i][0]) * cphi[i][1]);
+         vxy = vxy - 0.5f * (cphidp[i][1] * cmp[i][2] + cphidp[i][2] * cmp[i][1])
+            - 0.25f * ((gpu_uind[i][1] + gpu_uind[i][1]) * cphi[i][1] + (gpu_uind[i][0] + gpu_uind[i][0]) * cphi[i][2]);
+         vxz = vxz - 0.5f * (cphidp[i][1] * cmp[i][3] + cphidp[i][3] * cmp[i][1])
+            - 0.25f * ((gpu_uind[i][2] + gpu_uind[i][2]) * cphi[i][1] + (gpu_uind[i][0] + gpu_uind[i][0]) * cphi[i][3]);
+         vyy = vyy - cmp[i][2] * cphidp[i][2] - 0.5f * ((gpu_uind[i][1] + gpu_uind[i][1]) * cphi[i][2]);
+         vyz = vyz - 0.5f * (cphidp[i][2] * cmp[i][3] + cphidp[i][3] * cmp[i][2])
+            - 0.25f * ((gpu_uind[i][2] + gpu_uind[i][2]) * cphi[i][2] + (gpu_uind[i][1] + gpu_uind[i][1]) * cphi[i][3]);
+         vzz = vzz - cmp[i][3] * cphidp[i][3] - 0.5f * ((gpu_uind[i][2] + gpu_uind[i][2]) * cphi[i][3]);
+         vxx = vxx - 2 * cmp[i][4] * cphidp[i][4] - cmp[i][7] * cphidp[i][7] - cmp[i][8] * cphidp[i][8];
+         vxy = vxy - (cmp[i][4] + cmp[i][5]) * cphidp[i][7]
+            - 0.5f * (cmp[i][7] * (cphidp[i][5] + cphidp[i][4]) + cmp[i][8] * cphidp[i][9] + cmp[i][9] * cphidp[i][8]);
+         vxz = vxz - (cmp[i][4] + cmp[i][6]) * cphidp[i][8]
+            - 0.5f * (cmp[i][8] * (cphidp[i][4] + cphidp[i][6]) + cmp[i][7] * cphidp[i][9] + cmp[i][9] * cphidp[i][7]);
+         vyy = vyy - 2 * cmp[i][5] * cphidp[i][5] - cmp[i][7] * cphidp[i][7] - cmp[i][9] * cphidp[i][9];
+         vyz = vyz - (cmp[i][5] + cmp[i][6]) * cphidp[i][9]
+            - 0.5f * (cmp[i][9] * (cphidp[i][5] + cphidp[i][6]) + cmp[i][7] * cphidp[i][8] + cmp[i][8] * cphidp[i][7]);
+         vzz = vzz - 2 * cmp[i][6] * cphidp[i][6] - cmp[i][8] * cphidp[i][8] - cmp[i][9] * cphidp[i][9];
 
          // if (poltyp .eq. 'MUTUAL')
          vxx = vxx - (cphid[1] * gpu_uind[i][0]);
@@ -376,8 +336,7 @@ void epolarEwaldRecipSelfVirial_cu2(int n, VirialBuffer restrict vir_ep, //
 }
 
 __global__
-void epolarEwaldRecipSelfVirial_cu3(
-   int n, real (*restrict cmp)[10], const real (*restrict gpu_uinp)[3])
+void epolarEwaldRecipSelfVirial_cu3(int n, real (*restrict cmp)[10], const real (*restrict gpu_uinp)[3])
 {
    for (int i = ITHREAD; i < n; i += STRIDE) {
       cmp[i][1] += gpu_uinp[i][0];
@@ -387,8 +346,8 @@ void epolarEwaldRecipSelfVirial_cu3(
 }
 
 __global__
-void epolarEwaldRecipSelfVirial_cu4(int n, real (*restrict cmp)[10],
-   const real (*restrict gpu_uind)[3], const real (*restrict gpu_uinp)[3])
+void epolarEwaldRecipSelfVirial_cu4(int n, real (*restrict cmp)[10], const real (*restrict gpu_uind)[3],
+   const real (*restrict gpu_uinp)[3])
 {
    for (int i = ITHREAD; i < n; i += STRIDE) {
       cmp[i][1] += (gpu_uind[i][0] - gpu_uinp[i][0]);
@@ -434,8 +393,7 @@ void epolarEwaldRecipSelfVirial_cu5(int ntot, int nff, VirialBuffer restrict vir
             if ((k1 + k2 + k3) & 1)
                expterm = 0; // end if ((k1 + k2 + k3) % 2 != 0)
 
-         real struc2 =
-            d->qgrid[2 * i] * p->qgrid[2 * i] + d->qgrid[2 * i + 1] * p->qgrid[2 * i + 1];
+         real struc2 = d->qgrid[2 * i] * p->qgrid[2 * i] + d->qgrid[2 * i + 1] * p->qgrid[2 * i + 1];
          real eterm = 0.5f * f * expterm * struc2;
          real vterm = (2 / hsq) * (1 - term) * eterm;
 

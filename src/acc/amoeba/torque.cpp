@@ -1,8 +1,8 @@
-#include "seq/torque.h"
-#include "ff/modamoeba.h"
 #include "ff/atom.h"
+#include "ff/modamoeba.h"
 #include "math/libfunc.h"
 #include "seq/add.h"
+#include "seq/torque.h"
 
 namespace tinker {
 // This commit `09beaa8b0215913c1b658b0b2d8ecdf97bda8c15` had a weird segfault
@@ -373,16 +373,13 @@ static void torque_acc1(VirialBuffer gpu_vir, grad_prec* gx, grad_prec* gy, grad
          real ziy = z[iay] - z[i];
 
          real vxx = xix * frcx[0] + xiy * frcy[0] + xiz * frcz[0];
-         real vxy = 0.5f *
-            (yix * frcx[0] + yiy * frcy[0] + yiz * frcz[0] + xix * frcx[1] + xiy * frcy[1] +
-               xiz * frcz[1]);
-         real vxz = 0.5f *
-            (zix * frcx[0] + ziy * frcy[0] + ziz * frcz[0] + xix * frcx[2] + xiy * frcy[2] +
-               xiz * frcz[2]);
+         real vxy = 0.5f
+            * (yix * frcx[0] + yiy * frcy[0] + yiz * frcz[0] + xix * frcx[1] + xiy * frcy[1] + xiz * frcz[1]);
+         real vxz = 0.5f
+            * (zix * frcx[0] + ziy * frcy[0] + ziz * frcz[0] + xix * frcx[2] + xiy * frcy[2] + xiz * frcz[2]);
          real vyy = yix * frcx[1] + yiy * frcy[1] + yiz * frcz[1];
-         real vyz = 0.5f *
-            (zix * frcx[1] + ziy * frcy[1] + ziz * frcz[1] + yix * frcx[2] + yiy * frcy[2] +
-               yiz * frcz[2]);
+         real vyz = 0.5f
+            * (zix * frcx[1] + ziy * frcy[1] + ziz * frcz[1] + yix * frcx[2] + yiy * frcy[2] + yiz * frcz[2]);
          real vzz = zix * frcx[2] + ziy * frcy[2] + ziz * frcz[2];
 
          atomic_add(vxx, vxy, vxz, vyy, vyz, vzz, gpu_vir, i & (bufsize - 1));

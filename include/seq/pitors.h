@@ -7,23 +7,34 @@ namespace tinker {
 #pragma acc routine seq
 template <class Ver>
 SEQ_CUDA
-void dk_pitors(real& restrict e, real& restrict vxx, real& restrict vyx,
-   real& restrict vzx, real& restrict vyy, real& restrict vzy,
-   real& restrict vzz,
+void dk_pitors(real& restrict e,
+               real& restrict vxx,
+               real& restrict vyx,
+               real& restrict vzx,
+               real& restrict vyy,
+               real& restrict vzy,
+               real& restrict vzz,
 
-   grad_prec* restrict deptx, grad_prec* restrict depty,
-   grad_prec* restrict deptz,
+               grad_prec* restrict deptx,
+               grad_prec* restrict depty,
+               grad_prec* restrict deptz,
 
-   real ptorunit, int i, const int (*restrict ipit)[6],
-   const real* restrict kpit,
+               real ptorunit,
+               int i,
+               const int (*restrict ipit)[6],
+               const real* restrict kpit,
 
-   const real* restrict x, const real* restrict y, const real* restrict z)
+               const real* restrict x,
+               const real* restrict y,
+               const real* restrict z)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_g = Ver::g;
    constexpr bool do_v = Ver::v;
-   if CONSTEXPR (do_e) e = 0;
-   if CONSTEXPR (do_v) vxx = 0, vyx = 0, vzx = 0, vyy = 0, vzy = 0, vzz = 0;
+   if CONSTEXPR (do_e)
+      e = 0;
+   if CONSTEXPR (do_v)
+      vxx = 0, vyx = 0, vzx = 0, vyy = 0, vzy = 0, vzz = 0;
 
    const int ia = ipit[i][0];
    const int ib = ipit[i][1];
@@ -111,7 +122,8 @@ void dk_pitors(real& restrict e, real& restrict vxx, real& restrict vyx,
 
       // calculate the pi-system torsion energy for this angle
 
-      if CONSTEXPR (do_e) e = ptorunit * v2 * phi2;
+      if CONSTEXPR (do_e)
+         e = ptorunit * v2 * phi2;
 
       if CONSTEXPR (do_g) {
          real dphi2 = 2 * (cosine2 * s2 - sine2 * c2);

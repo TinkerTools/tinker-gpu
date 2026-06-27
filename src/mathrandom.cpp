@@ -9,6 +9,13 @@ namespace tinker {
 static std::default_random_engine generator;
 
 template <class T>
+static std::normal_distribution<T>& normalDistribution()
+{
+   static std::normal_distribution<T> norm(0, 1);
+   return norm;
+}
+
+template <class T>
 T random()
 {
 #if USE_TINKER_RANDOM_FUNC
@@ -27,8 +34,7 @@ T normal()
 #if USE_TINKER_RANDOM_FUNC
    return tinker_f_normal();
 #else
-   static std::normal_distribution<T> norm(0, 1);
-   return norm(generator);
+   return normalDistribution<T>()(generator);
 #endif
 }
 template float normal<float>();
@@ -94,6 +100,8 @@ void randomData(RcOp op)
          seed += 60 * minute + second;
       }
       generator.seed(seed);
+      normalDistribution<float>().reset();
+      normalDistribution<double>().reset();
    }
 }
 }

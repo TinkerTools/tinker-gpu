@@ -8,16 +8,30 @@ namespace tinker {
 #pragma acc routine seq
 template <class Ver>
 SEQ_CUDA
-void dk_bond(real& restrict e, real& restrict vxx, real& restrict vyx,
-   real& restrict vzx, real& restrict vyy, real& restrict vzy,
-   real& restrict vzz,
+void dk_bond(real& restrict e,
+             real& restrict vxx,
+             real& restrict vyx,
+             real& restrict vzx,
+             real& restrict vyy,
+             real& restrict vzy,
+             real& restrict vzz,
 
-   grad_prec* restrict debx, grad_prec* restrict deby, grad_prec* restrict debz,
+             grad_prec* restrict debx,
+             grad_prec* restrict deby,
+             grad_prec* restrict debz,
 
-   Bond bndtyp, real bndunit, int i, const int (*restrict ibnd)[2],
-   const real* restrict bl, const real* restrict bk, real cbnd, real qbnd,
+             Bond bndtyp,
+             real bndunit,
+             int i,
+             const int (*restrict ibnd)[2],
+             const real* restrict bl,
+             const real* restrict bk,
+             real cbnd,
+             real qbnd,
 
-   const real* restrict x, const real* restrict y, const real* restrict z)
+             const real* restrict x,
+             const real* restrict y,
+             const real* restrict z)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_g = Ver::g;
@@ -41,13 +55,14 @@ void dk_bond(real& restrict e, real& restrict vxx, real& restrict vyx,
       if CONSTEXPR (do_e)
          e = bndunit * force * dt2 * (1 + cbnd * dt + qbnd * dt2);
       if CONSTEXPR (do_g)
-         deddt = 2 * bndunit * force * dt
-            * (1 + 1.5f * cbnd * dt + 2 * qbnd * dt2);
+         deddt = 2 * bndunit * force * dt * (1 + 1.5f * cbnd * dt + 2 * qbnd * dt2);
    } else if (bndtyp == Bond::MORSE) {
       real expterm = REAL_EXP(-2 * dt);
       real bde = 0.25f * bndunit * force;
-      if CONSTEXPR (do_e) e = bde * (1 - expterm) * (1 - expterm);
-      if CONSTEXPR (do_g) deddt = 4 * bde * (1 - expterm) * expterm;
+      if CONSTEXPR (do_e)
+         e = bde * (1 - expterm) * (1 - expterm);
+      if CONSTEXPR (do_g)
+         deddt = 4 * bde * (1 - expterm) * expterm;
    }
 
    if CONSTEXPR (do_g) {

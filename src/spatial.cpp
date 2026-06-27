@@ -20,7 +20,7 @@ void Spatial::ScaleInfo::set(int nns, int (*jjs)[2])
 
 Spatial::~Spatial()
 {
-   darray::deallocate(iakpl, iak, lst);
+   darray::deallocate(iakpl, iak, lst, iak_idmap, lst_tmp);
 
    darray::deallocate(iakpl_rev, akpf, sorted, bnum);
    darray::deallocate(akc, half);
@@ -117,11 +117,11 @@ static void spatialCut(int& px, int& py, int& pz, int level)
 }
 
 namespace tinker {
-void Spatial::dataAlloc(SpatialUnit& u, int n, double cutoff, double buffer, const real* x,
-   const real* y, const real* z,                   //
+void Spatial::dataAlloc(SpatialUnit& u, int n, double cutoff, double buffer, const real* x, const real* y,
+   const real* z,                                  //
    int nstype,                                     //
    int ns1, int (*js1)[2], int ns2, int (*js2)[2], //
-   int ns3, int (*js3)[2], int ns4, int (*js4)[2])
+   int ns3, int (*js3)[2], int ns4, int (*js4)[2], bool nblist4nn)
 {
    u = SpatialUnit::open();
    auto& st = *u;
@@ -132,6 +132,9 @@ void Spatial::dataAlloc(SpatialUnit& u, int n, double cutoff, double buffer, con
    st.iakpl = nullptr;
    st.iak = nullptr;
    st.lst = nullptr;
+   st.iak_idmap = nullptr;
+   st.lst_tmp = nullptr;
+   st.nblist4nn = nblist4nn;
 
    // internal
    st.n = n;
@@ -145,6 +148,10 @@ void Spatial::dataAlloc(SpatialUnit& u, int n, double cutoff, double buffer, con
    darray::allocate(st.cap_nakpl, &st.iakpl);
    darray::allocate(st.nak * Spatial::LSTCAP, &st.iak);
    darray::allocate(st.nak * Spatial::LSTCAP * 32, &st.lst);
+   if (st.nblist4nn) {
+      darray::allocate(st.nak * Spatial::LSTCAP, &st.iak_idmap);
+      darray::allocate(st.nak * Spatial::LSTCAP * 32, &st.lst_tmp);
+   }
 
    darray::allocate(st.nakp, &st.iakpl_rev);
    darray::allocate(st.nakpk, &st.akpf);

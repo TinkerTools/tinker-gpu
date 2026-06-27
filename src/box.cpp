@@ -63,9 +63,7 @@ static void boxGetTinkerModule(Box& p)
 static void boxGetAxesAngles(const Box& p, double& a, double& b, double& c, //
    double& alpha, double& beta, double& gamma)
 {
-   auto DOT3 = [](const double* a, const double* b) -> double {
-      return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-   };
+   auto DOT3 = [](const double* a, const double* b) -> double { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; };
 
    double ax[3] = {p.lvec1.x, p.lvec2.x, p.lvec3.x};
    double bx[3] = {p.lvec1.y, p.lvec2.y, p.lvec3.y};
@@ -95,8 +93,8 @@ static void boxGetAxesAngles(const Box& p, double& a, double& b, double& c, //
    gamma = c_deg;
 }
 
-static void boxSetRecip(real3& recipa, real3& recipb, real3& recipc, BoxShape box_shape,
-   const real3& lvec1, const real3& lvec2, const real3& lvec3)
+static void boxSetRecip(real3& recipa, real3& recipb, real3& recipc, BoxShape box_shape, const real3& lvec1,
+   const real3& lvec2, const real3& lvec3)
 {
    if (box_shape == BoxShape::ORTHO) {
       recipc.x = 0;
@@ -263,8 +261,7 @@ void boxSetTinker(const Box& p)
    tinker_f_lattice();
 }
 
-void boxLattice(Box& p, BoxShape sh, double a, double b, double c, double alphaDeg, double betaDeg,
-   double gammaDeg)
+void boxLattice(Box& p, BoxShape sh, double a, double b, double c, double alphaDeg, double betaDeg, double gammaDeg)
 {
    p.box_shape = sh;
    if (sh == BoxShape::TRI) {
@@ -279,9 +276,9 @@ void boxLattice(Box& p, BoxShape sh, double a, double b, double c, double alphaD
       double by = b * sin_gamma;
       double cx = c * cos_beta;
       double cy = c * (cos_alpha - cos_beta * cos_gamma) / sin_gamma;
-      double cz = c / sin_gamma *
-         std::sqrt(2 * cos_alpha * cos_beta * cos_gamma + sin_gamma * sin_gamma -
-            cos_alpha * cos_alpha - cos_beta * cos_beta);
+      double cz = c / sin_gamma
+         * std::sqrt(2 * cos_alpha * cos_beta * cos_gamma + sin_gamma * sin_gamma - cos_alpha * cos_alpha
+            - cos_beta * cos_beta);
       p.lvec1 = make_real3(a, bx, cx);
       p.lvec2 = make_real3(0, by, cy);
       p.lvec3 = make_real3(0, 0, cz);

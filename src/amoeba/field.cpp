@@ -59,6 +59,7 @@ void dfield(real (*field)[3], real (*fieldp)[3])
       dfieldEwald(field, fieldp);
    else
       dfieldNonEwald(field, fieldp);
+   extfieldModifyDField(field, fieldp);
 }
 }
 
@@ -73,8 +74,7 @@ void ufieldNonEwald(const real (*uind)[3], const real (*uinp)[3], //
 }
 
 namespace tinker {
-TINKER_FVOID2(acc1, cu1, ufieldEwaldRecipSelfP1, const real (*)[3], const real (*)[3], real (*)[3],
-   real (*)[3]);
+TINKER_FVOID2(acc1, cu1, ufieldEwaldRecipSelfP1, const real (*)[3], const real (*)[3], real (*)[3], real (*)[3]);
 static void ufieldEwaldRecipSelf(const real (*uind)[3], const real (*uinp)[3], //
    real (*field)[3], real (*fieldp)[3])
 {

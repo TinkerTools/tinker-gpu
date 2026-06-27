@@ -71,6 +71,18 @@ void testMdInit(double t = 0,  ///< Temperature in Kelvin.
                 double atm = 0 ///< Atmosphere in atm.
 );
 
+/// \brief Determine whether file exists and deletes it.
+bool fileExistsAndDelete(const std::string& fname);
+
+struct AtomData
+{
+   int atom_type;
+   double x, y, z;
+};
+
+/// \brief Reads AMOEBA file
+std::vector<std::vector<AtomData>> readAmoebaCoordinateFile(const std::string& fname);
+
 /// \}
 }
 
@@ -166,15 +178,18 @@ void testMdInit(double t = 0,  ///< Temperature in Kelvin.
 ///
 /// \def COMPARE_GRADIENT2
 /// \brief Compares the flitered gradients[i][j] components.
-#define COMPARE_GRADIENT2(ref_grad, eps, check_ij)                                    \
-   {                                                                                  \
-      std::vector<double> gradx(n), grady(n), gradz(n);                               \
-      copyGradient(calc::grad, gradx.data(), grady.data(), gradz.data());             \
-      for (int i = 0; i < n; ++i) {                                                   \
-         if (check_ij(i, 0)) REQUIRE(gradx[i] == Approx(ref_grad[i][0]).margin(eps)); \
-         if (check_ij(i, 1)) REQUIRE(grady[i] == Approx(ref_grad[i][1]).margin(eps)); \
-         if (check_ij(i, 2)) REQUIRE(gradz[i] == Approx(ref_grad[i][2]).margin(eps)); \
-      }                                                                               \
+#define COMPARE_GRADIENT2(ref_grad, eps, check_ij)                        \
+   {                                                                      \
+      std::vector<double> gradx(n), grady(n), gradz(n);                   \
+      copyGradient(calc::grad, gradx.data(), grady.data(), gradz.data()); \
+      for (int i = 0; i < n; ++i) {                                       \
+         if (check_ij(i, 0))                                              \
+            REQUIRE(gradx[i] == Approx(ref_grad[i][0]).margin(eps));      \
+         if (check_ij(i, 1))                                              \
+            REQUIRE(grady[i] == Approx(ref_grad[i][1]).margin(eps));      \
+         if (check_ij(i, 2))                                              \
+            REQUIRE(gradz[i] == Approx(ref_grad[i][2]).margin(eps));      \
+      }                                                                   \
    }
 #define COMPARE_GRADIENT(ref_grad, eps) COMPARE_GRADIENT2(ref_grad, eps, [](int, int) { return true; })
 /// \}

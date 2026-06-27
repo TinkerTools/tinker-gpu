@@ -26,8 +26,7 @@ public:
 
    /// \brief Splits a string `str` by `delimiters` and
    /// returns a vector of strings.
-   static std::vector<std::string> split(std::string str,
-      std::string delimiters = whitespaces);
+   static std::vector<std::string> split(std::string str, std::string delimiters = whitespaces);
 
    /// \brief Transforms a string to upper case.
    static void upcase(std::string& s);

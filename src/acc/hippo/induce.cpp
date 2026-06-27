@@ -1,9 +1,9 @@
 #include "ff/amoeba/induce.h"
-#include "ff/modamoeba.h"
 #include "ff/atom.h"
 #include "ff/hippo/induce.h"
-#include "ff/modhippo.h"
 #include "ff/image.h"
+#include "ff/modamoeba.h"
+#include "ff/modhippo.h"
 #include "ff/nblist.h"
 #include "ff/switch.h"
 #include "math/lu.h"
@@ -148,7 +148,7 @@ void induceMutualPcg2_acc(real (*uind)[3])
 
       // u <- u + a p
       // r <- r - a T p
-      #pragma acc parallel loop independent async\
+       #pragma acc parallel loop independent async\
                   deviceptr(polarity,uind,conj,rsd,vec)
       for (int i = 0; i < n; ++i) {
          #pragma acc loop seq
@@ -177,7 +177,7 @@ void induceMutualPcg2_acc(real (*uind)[3])
          b = 0;
 
       // calculate/update p
-      #pragma acc parallel loop independent async\
+       #pragma acc parallel loop independent async\
                   deviceptr(conj,zrsd)
       for (int i = 0; i < n; ++i) {
          #pragma acc loop seq

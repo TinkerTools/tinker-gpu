@@ -1,5 +1,4 @@
 #include "ff/nblist.h"
-#include "ff/modamoeba.h"
 #include "ff/atom.h"
 #include "ff/echarge.h"
 #include "ff/echglj.h"
@@ -7,10 +6,12 @@
 #include "ff/evdw.h"
 #include "ff/hippo/edisp.h"
 #include "ff/hippo/erepel.h"
+#include "ff/modamoeba.h"
 #include "ff/modhippo.h"
 #include "ff/potent.h"
 #include "ff/spatial.h"
 #include "ff/switch.h"
+#include "nn/nn.h"
 #include "tool/externfunc.h"
 #include "tool/thrustcache.h"
 #include <tinker/detail/bound.hh>
@@ -116,8 +117,8 @@ Nbl clistVersion()
 Nbl mlistVersion()
 {
    Nbl u;
-   if (not use(Potent::MPOLE) and not use(Potent::POLAR) and not use(Potent::CHGTRN) and
-      not use(Potent::REPULS) /* and not use(Potent::SOLV) */) {
+   if (not use(Potent::MPOLE) and not use(Potent::POLAR) and not use(Potent::CHGTRN)
+      and not use(Potent::REPULS) /* and not use(Potent::SOLV) */) {
       u = Nbl::UNDEFINED;
    } else if (!limits::use_mlist) {
 #if TINKER_GPULANG_CUDA
@@ -201,6 +202,17 @@ Nbl dsplistVersion()
    }
    return u;
 }
+
+Nbl nnlistVersion()
+{
+   Nbl u;
+   if (not(use(Potent::NNVAL) | use(Potent::NNMET))) {
+      u = Nbl::UNDEFINED;
+   } else {
+      u = Nbl::SPATIAL;
+   }
+   return u;
+}
 }
 
 namespace tinker {
@@ -237,8 +249,8 @@ static int nblistMaxlst(int maxn, double cutoff, double buffer)
 }
 
 // RcOp::ALLOC
-static void nblistAlloc(Nbl version, NBListUnit& nblu, int maxn, real cutoff, real buffer,
-   const real* x, const real* y, const real* z)
+static void nblistAlloc(Nbl version, NBListUnit& nblu, int maxn, real cutoff, real buffer, const real* x, const real* y,
+   const real* z)
 {
    if (version & Nbl::DOUBLE_LOOP)
       maxn = 1;
@@ -279,11 +291,12 @@ static void spatialAlloc( //
    int ns1 = 0, int (*js1)[2] = nullptr, //
    int ns2 = 0, int (*js2)[2] = nullptr, //
    int ns3 = 0, int (*js3)[2] = nullptr, //
-   int ns4 = 0, int (*js4)[2] = nullptr)
+   int ns4 = 0, int (*js4)[2] = nullptr, //
+   bool nblist4nn = false)
 {
 #if TINKER_CUDART
    Spatial::dataAlloc(unt, n, cut, buf, x, y, z, nstype, //
-      ns1, js1, ns2, js2, ns3, js3, ns4, js4);
+      ns1, js1, ns2, js2, ns3, js3, ns4, js4, nblist4nn);
    alloc_thrust_cache = true;
 #endif
 }
@@ -318,6 +331,7 @@ void nblistData(RcOp op)
       uspatial_v2_unit.close();
       mspatial_v2_unit.close();
       dspspatial_v2_unit.close();
+      nnspatial_v2_unit.close();
 
       ThrustCache::deallocate();
 #endif
@@ -409,14 +423,13 @@ void nblistData(RcOp op)
       auto& un2 = mspatial_v2_unit;
       if (op & RcOp::ALLOC) {
          if (mplpot::use_chgpen and not polpot::use_tholed) { // HIPPO
-            spatialAlloc(
-               un2, n, cut, buf, x, y, z, 2, nmdwexclude, mdwexclude, nrepexclude, repexclude);
+            spatialAlloc(un2, n, cut, buf, x, y, z, 2, nmdwexclude, mdwexclude, nrepexclude, repexclude);
          } else if (mplpot::use_chgpen and polpot::use_tholed) { // AMOEBA Plus
-            spatialAlloc(un2, n, cut, buf, x, y, z, 3, nmdwexclude, mdwexclude, nmdpuexclude,
-               mdpuexclude, nuexclude, uexclude);
+            spatialAlloc(un2, n, cut, buf, x, y, z, 3, nmdwexclude, mdwexclude, nmdpuexclude, mdpuexclude, nuexclude,
+               uexclude);
          } else { // AMOEBA
-            spatialAlloc(un2, n, cut, buf, x, y, z, 4, nmdpuexclude, mdpuexclude, nmexclude,
-               mexclude, ndpexclude, dpexclude, nuexclude, uexclude);
+            spatialAlloc(un2, n, cut, buf, x, y, z, 4, nmdpuexclude, mdpuexclude, nmexclude, mexclude, ndpexclude,
+               dpexclude, nuexclude, uexclude);
          }
       }
       if (op & RcOp::INIT) {
@@ -475,6 +488,20 @@ void nblistData(RcOp op)
       }
    }
 
+   // nnlist
+   u = nnlistVersion();
+   cut = switchOff(Switch::NN);
+   buf = neigh::lbuffer;
+   if (u & Nbl::SPATIAL) {
+      auto& un2 = nnspatial_v2_unit;
+      if (op & RcOp::ALLOC) {
+         spatialAlloc(un2, n, cut, buf, x, y, z, 0, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, true);
+      }
+      if (op & RcOp::INIT) {
+         spatialBuild(un2);
+      }
+   }
+
 #if TINKER_CUDART
    if (alloc_thrust_cache)
       ThrustCache::allocate();
@@ -489,14 +516,14 @@ static void nblistUpdate(NBListUnit u)
    TINKER_FCALL1(acc1, cu0, nblistUpdate, u);
 }
 
-TINKER_FVOID2(acc1, cu1, spatialCheck, int&, int, real, int*, const real*, const real*, const real*,
-   real*, real*, real*);
+TINKER_FVOID2(acc1, cu1, spatialCheck, int&, int, real, int*, const real*, const real*, const real*, real*, real*,
+   real*);
 void spatialUpdate(SpatialUnit unt)
 {
    MAYBE_UNUSED auto& st = *unt;
    int answer = 0;
-   TINKER_FCALL2(acc1, cu1, spatialCheck, answer, st.n, st.buffer, st.update, st.x, st.y, st.z,
-      st.xold, st.yold, st.zold);
+   TINKER_FCALL2(acc1, cu1, spatialCheck, answer, st.n, st.buffer, st.update, st.x, st.y, st.z, st.xold, st.yold,
+      st.zold);
    if (answer) {
       Spatial::dataInit(unt);
    } else {
@@ -601,6 +628,18 @@ void nblistRefresh()
    }
    if (u & Nbl::SPATIAL) {
       auto& un2 = dspspatial_v2_unit;
+      if (rc_flag & calc::traj) {
+         un2->x = x;
+         un2->y = y;
+         un2->z = z;
+      }
+      spatialUpdate(un2);
+   }
+
+   // nnlist
+   u = nnlistVersion();
+   if (u & Nbl::SPATIAL) {
+      auto& un2 = nnspatial_v2_unit;
       if (rc_flag & calc::traj) {
          un2->x = x;
          un2->y = y;

@@ -5,8 +5,7 @@ namespace tinker {
 #pragma ac routine seq
 template <int DO_G>
 SEQ_CUDA
-inline void damp_hippodisp(real* restrict dmpij, real r, real rr1, real ai,
-   real aj)
+inline void damp_hippodisp(real* restrict dmpij, real r, real rr1, real ai, real aj)
 {
    real a = ai * r, b = aj * r;
    real c = (b + a) / 2, d = (b - a) / 2;
@@ -39,9 +38,7 @@ inline void damp_hippodisp(real* restrict dmpij, real r, real rr1, real ai,
    l01x *= t, l01y *= t;
    l02x *= t * t, l02y *= t * t;
    l03x *= t * t * t, l03y *= t * t * t;
-   dmpij[0] = 1
-      - ((k01 * f1d + k02 * f2d) * ec + (l00x + l01x + l02x + l03x) * ea
-         + (l00y + l01y + l02y + l03y) * eb);
+   dmpij[0] = 1 - ((k01 * f1d + k02 * f2d) * ec + (l00x + l01x + l02x + l03x) * ea + (l00y + l01y + l02y + l03y) * eb);
 
    // [1]
    if CONSTEXPR (DO_G) {
@@ -57,10 +54,7 @@ inline void damp_hippodisp(real* restrict dmpij, real r, real rr1, real ai,
       l11y = (b - 1) * l01y;
       l12y = (b - 2) * l02y;
       l13y = (b - 3) * l03y;
-      dmpij[1] = ((k11 * f1d + k12 * f2d + k13 * f3d) * ec
-                    + (l10x + l11x + l12x + l13x) * ea
-                    + (l10y + l11y + l12y + l13y) * eb)
-         * rr1;
+      dmpij[1] = ((k11 * f1d + k12 * f2d + k13 * f3d) * ec + (l10x + l11x + l12x + l13x) * ea + (l10y + l11y + l12y + l13y) * eb) * rr1;
    }
 }
 }

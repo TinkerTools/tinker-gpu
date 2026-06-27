@@ -10,9 +10,17 @@ namespace tinker {
 #pragma acc routine seq
 template <bool DO_G>
 SEQ_CUDA
-void pair_hal(real rik, real rv, real eps, real vscalek, real vlambda, //
-   real ghal, real dhal, real scexp, real scalpha,                     //
-   real& restrict e, real& restrict de)
+void pair_hal(real rik,
+              real rv,
+              real eps,
+              real vscalek,
+              real vlambda, //
+              real ghal,
+              real dhal,
+              real scexp,
+              real scalpha, //
+              real& restrict e,
+              real& restrict de)
 {
    eps *= vscalek;
    real rho = rik * REAL_RECIP(rv);
@@ -38,11 +46,22 @@ void pair_hal(real rik, real rv, real eps, real vscalek, real vlambda, //
 #pragma acc routine seq
 template <bool DO_G, int SCALE>
 SEQ_CUDA
-void pair_hal_v2(real r, real vscale, real rv, real eps, real evcut, real evoff,
-   real vlambda, real ghal, real dhal, real scexp, real scalpha,
-   real& restrict e, real& restrict de)
+void pair_hal_v2(real r,
+                 real vscale,
+                 real rv,
+                 real eps,
+                 real evcut,
+                 real evoff,
+                 real vlambda,
+                 real ghal,
+                 real dhal,
+                 real scexp,
+                 real scalpha,
+                 real& restrict e,
+                 real& restrict de)
 {
-   if CONSTEXPR (SCALE != 1) eps *= vscale;
+   if CONSTEXPR (SCALE != 1)
+      eps *= vscale;
    real rho = r * REAL_RECIP(rv);
    real rho6 = REAL_POW(rho, 6);
    real rho7 = rho6 * rho;
@@ -61,7 +80,8 @@ void pair_hal_v2(real r, real vscale, real rv, real eps, real evcut, real evoff,
    if (r > evcut) {
       real taper, dtaper;
       switchTaper5<DO_G>(r, evcut, evoff, taper, dtaper);
-      if CONSTEXPR (DO_G) de = e * dtaper + de * taper;
+      if CONSTEXPR (DO_G)
+         de = e * dtaper + de * taper;
       e = e * taper;
    }
 }

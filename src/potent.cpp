@@ -1,4 +1,6 @@
 #include "ff/potent.h"
+#include "ff/evalence.h"
+#include "nn/nn.h"
 #include <cassert>
 #include <tinker/detail/angbnd.hh>
 #include <tinker/detail/angtor.hh>
@@ -59,6 +61,12 @@ bool use(Potent term)
       break;
    case Potent::TORTOR:
       val = potent::use_tortor;
+      break;
+   case Potent::NNVAL:
+      val = use_nnvalence;
+      break;
+   case Potent::NNMET:
+      val = use_nnmetal;
       break;
 
       // misc. terms
@@ -145,6 +153,9 @@ int countBondedTerm(Potent term)
       break;
    case Potent::TORTOR:
       val = tortor::ntortor;
+      break;
+   case Potent::NNVAL:
+      val = nennval;
       break;
 
       // misc. terms

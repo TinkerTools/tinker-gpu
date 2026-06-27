@@ -1,7 +1,7 @@
-#include "ff/modamoeba.h"
 #include "ff/atom.h"
-#include "ff/modhippo.h"
 #include "ff/image.h"
+#include "ff/modamoeba.h"
+#include "ff/modhippo.h"
 #include "ff/nblist.h"
 #include "ff/pme.h"
 #include "ff/switch.h"
@@ -9,8 +9,7 @@
 #include "tool/gpucard.h"
 
 namespace tinker {
-#define DEVICE_PTRS                                                                                \
-   x, y, z, demx, demy, demz, rpole, pcore, pval, palpha, pot, nem, em, vir_em, trqx, trqy, trqz
+#define DEVICE_PTRS x, y, z, demx, demy, demz, rpole, pcore, pval, palpha, pot, nem, em, vir_em, trqx, trqy, trqz
 template <class Ver, class ETYP, bool CFLX>
 static void empoleAplus_acc1()
 {
@@ -85,10 +84,9 @@ static void empoleAplus_acc1()
             pair_mpole_chgpen_aplus<do_e, do_g, ETYP, CFLX>(r2, xr, yr, zr, 1, //
                ci, dix, diy, diz, corei, vali, alphai,                         //
                qixx, qixy, qixz, qiyy, qiyz, qizz,                             //
-               rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z],
-               corek, valk, alphak, rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY],
-               rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY], rpole[k][MPL_PME_YZ],
-               rpole[k][MPL_PME_ZZ], f, aewald, e, pota, potb, pgrad);
+               rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], corek, valk, alphak,
+               rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY],
+               rpole[k][MPL_PME_YZ], rpole[k][MPL_PME_ZZ], f, aewald, e, pota, potb, pgrad);
 
             if CONSTEXPR (do_a)
                if (e != 0)
@@ -149,8 +147,7 @@ static void empoleAplus_acc1()
          const real fterm = -f * aewald * 0.5f * (real)(M_2_SQRTPI);
          real cii = ci * ci;
          real dii = dix * dix + diy * diy + diz * diz;
-         real qii =
-            2 * (qixy * qixy + qixz * qixz + qiyz * qiyz) + qixx * qixx + qiyy * qiyy + qizz * qizz;
+         real qii = 2 * (qixy * qixy + qixz * qixz + qiyz * qiyz) + qixx * qixx + qiyy * qiyy + qizz * qizz;
 
          if CONSTEXPR (do_e) {
             int offset = i & (bufsize - 1);
@@ -213,10 +210,9 @@ static void empoleAplus_acc1()
          pair_mpole_chgpen_aplus<do_e, do_g, NON_EWALD, CFLX>(r2, xr, yr, zr, mscale, //
             ci, dix, diy, diz, corei, vali, alphai,                                   //
             qixx, qixy, qixz, qiyy, qiyz, qizz,                                       //
-            rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z],
-            corek, valk, alphak, rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ],
-            rpole[k][MPL_PME_YY], rpole[k][MPL_PME_YZ], rpole[k][MPL_PME_ZZ], f, 0, e, pota, potb,
-            pgrad);
+            rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], corek, valk, alphak,
+            rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY],
+            rpole[k][MPL_PME_YZ], rpole[k][MPL_PME_ZZ], f, 0, e, pota, potb, pgrad);
 
          if CONSTEXPR (do_a)
             if (mscale == -1 and e != 0)

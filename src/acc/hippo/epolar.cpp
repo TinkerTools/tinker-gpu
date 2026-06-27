@@ -1,7 +1,7 @@
-#include "ff/modamoeba.h"
 #include "ff/atom.h"
-#include "ff/modhippo.h"
 #include "ff/image.h"
+#include "ff/modamoeba.h"
+#include "ff/modhippo.h"
 #include "ff/nblist.h"
 #include "ff/pme.h"
 #include "ff/switch.h"
@@ -9,8 +9,7 @@
 #include "tool/gpucard.h"
 
 namespace tinker {
-#define POLAR_DPTRS                                                                                \
-   x, y, z, depx, depy, depz, rpole, pcore, pval, palpha, pot, uind, nep, ep, vir_ep, ufld, dufld
+#define POLAR_DPTRS x, y, z, depx, depy, depz, rpole, pcore, pval, palpha, pot, uind, nep, ep, vir_ep, ufld, dufld
 template <class Ver, class ETYP, bool CFLX>
 static void epolarChgpen_acc1(const real (*uind)[3])
 {
@@ -108,9 +107,9 @@ static void epolarChgpen_acc1(const real (*uind)[3])
             real valk = pval[k];
 
             pair_polar_chgpen<do_e, do_g, ETYP, CFLX>( //
-               r2, xr, yr, zr, 1, 1, ci, dix, diy, diz, corei, vali, alphai, qixx, qixy, qixz, qiyy,
-               qiyz, qizz, uix, uiy, uiz, ck, dkx, dky, dkz, corek, valk, alphak, qkxx, qkxy, qkxz,
-               qkyy, qkyz, qkzz, ukx, uky, ukz, f, aewald, e, pota, potb, pgrad);
+               r2, xr, yr, zr, 1, 1, ci, dix, diy, diz, corei, vali, alphai, qixx, qixy, qixz, qiyy, qiyz, qizz, uix,
+               uiy, uiz, ck, dkx, dky, dkz, corek, valk, alphak, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, f,
+               aewald, e, pota, potb, pgrad);
 
             if CONSTEXPR (do_a)
                atomic_add(1, nep, offset);
@@ -234,10 +233,9 @@ static void epolarChgpen_acc1(const real (*uind)[3])
             r2, xr, yr, zr, dscale, wscale,                    //
             ci, dix, diy, diz, corei, vali, alphai,            //
             qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy, uiz, //
-            rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z],
-            corek, valk, alphak, rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ],
-            rpole[k][MPL_PME_YY], rpole[k][MPL_PME_YZ], rpole[k][MPL_PME_ZZ], uind[k][0],
-            uind[k][1], uind[k][2], f, 0, e, pota, potb, pgrad);
+            rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], corek, valk, alphak,
+            rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY],
+            rpole[k][MPL_PME_YZ], rpole[k][MPL_PME_ZZ], uind[k][0], uind[k][1], uind[k][2], f, 0, e, pota, potb, pgrad);
 
          if CONSTEXPR (do_a)
             if (dscale == -1 and e != 0)
@@ -307,12 +305,12 @@ static void epolarChgpen_acc1(const real (*uind)[3])
          real qiyz = rpole[i][MPL_PME_YZ];
          real qizz = rpole[i][MPL_PME_ZZ];
 
-         real tep1 = diz * ufld[i][1] - diy * ufld[i][2] + qixz * dufld[i][1] - qixy * dufld[i][3] +
-            2 * qiyz * (dufld[i][2] - dufld[i][5]) + (qizz - qiyy) * dufld[i][4];
-         real tep2 = dix * ufld[i][2] - diz * ufld[i][0] - qiyz * dufld[i][1] + qixy * dufld[i][4] +
-            2 * qixz * (dufld[i][5] - dufld[i][0]) + (qixx - qizz) * dufld[i][3];
-         real tep3 = diy * ufld[i][0] - dix * ufld[i][1] + qiyz * dufld[i][3] - qixz * dufld[i][4] +
-            2 * qixy * (dufld[i][0] - dufld[i][2]) + (qiyy - qixx) * dufld[i][1];
+         real tep1 = diz * ufld[i][1] - diy * ufld[i][2] + qixz * dufld[i][1] - qixy * dufld[i][3]
+            + 2 * qiyz * (dufld[i][2] - dufld[i][5]) + (qizz - qiyy) * dufld[i][4];
+         real tep2 = dix * ufld[i][2] - diz * ufld[i][0] - qiyz * dufld[i][1] + qixy * dufld[i][4]
+            + 2 * qixz * (dufld[i][5] - dufld[i][0]) + (qixx - qizz) * dufld[i][3];
+         real tep3 = diy * ufld[i][0] - dix * ufld[i][1] + qiyz * dufld[i][3] - qixz * dufld[i][4]
+            + 2 * qixy * (dufld[i][0] - dufld[i][2]) + (qiyy - qixx) * dufld[i][1];
 
          trqx[i] += tep1;
          trqy[i] += tep2;
@@ -347,8 +345,7 @@ static void epolarChgpenEwaldRecipSelf_acc1(const real (*gpu_uind)[3], bool use_
       #pragma acc parallel loop independent async deviceptr(fuind,fphi,ep)
       for (int i = 0; i < n; ++i) {
          int offset = i & (bufsize - 1);
-         real e = 0.5f * f *
-            (fuind[i][0] * fphi[i][1] + fuind[i][1] * fphi[i][2] + fuind[i][2] * fphi[i][3]);
+         real e = 0.5f * f * (fuind[i][0] * fphi[i][1] + fuind[i][1] * fphi[i][2] + fuind[i][2] * fphi[i][3]);
          atomic_add(e, ep, offset);
       }
    }
@@ -437,15 +434,12 @@ static void epolarChgpenEwaldRecipSelf_acc1(const real (*gpu_uind)[3], bool use_
       real uiz = gpu_uind[i][2];
 
       if CONSTEXPR (do_g) {
-         real tep1 = cmp[i][3] * cphidp[i][2] - cmp[i][2] * cphidp[i][3] +
-            2 * (cmp[i][6] - cmp[i][5]) * cphidp[i][9] + cmp[i][8] * cphidp[i][7] +
-            cmp[i][9] * cphidp[i][5] - cmp[i][7] * cphidp[i][8] - cmp[i][9] * cphidp[i][6];
-         real tep2 = cmp[i][1] * cphidp[i][3] - cmp[i][3] * cphidp[i][1] +
-            2 * (cmp[i][4] - cmp[i][6]) * cphidp[i][8] + cmp[i][7] * cphidp[i][9] +
-            cmp[i][8] * cphidp[i][6] - cmp[i][8] * cphidp[i][4] - cmp[i][9] * cphidp[i][7];
-         real tep3 = cmp[i][2] * cphidp[i][1] - cmp[i][1] * cphidp[i][2] +
-            2 * (cmp[i][5] - cmp[i][4]) * cphidp[i][7] + cmp[i][7] * cphidp[i][4] +
-            cmp[i][9] * cphidp[i][8] - cmp[i][7] * cphidp[i][5] - cmp[i][8] * cphidp[i][9];
+         real tep1 = cmp[i][3] * cphidp[i][2] - cmp[i][2] * cphidp[i][3] + 2 * (cmp[i][6] - cmp[i][5]) * cphidp[i][9]
+            + cmp[i][8] * cphidp[i][7] + cmp[i][9] * cphidp[i][5] - cmp[i][7] * cphidp[i][8] - cmp[i][9] * cphidp[i][6];
+         real tep2 = cmp[i][1] * cphidp[i][3] - cmp[i][3] * cphidp[i][1] + 2 * (cmp[i][4] - cmp[i][6]) * cphidp[i][8]
+            + cmp[i][7] * cphidp[i][9] + cmp[i][8] * cphidp[i][6] - cmp[i][8] * cphidp[i][4] - cmp[i][9] * cphidp[i][7];
+         real tep3 = cmp[i][2] * cphidp[i][1] - cmp[i][1] * cphidp[i][2] + 2 * (cmp[i][5] - cmp[i][4]) * cphidp[i][7]
+            + cmp[i][7] * cphidp[i][4] + cmp[i][9] * cphidp[i][8] - cmp[i][7] * cphidp[i][5] - cmp[i][8] * cphidp[i][9];
 
          // self term
 
@@ -519,42 +513,24 @@ static void epolarChgpenEwaldRecipSelf_acc1(const real (*gpu_uind)[3], bool use_
          real vxz = 0;
          real vyz = 0;
 
-         vxx = vxx - cmp[i][1] * cphidp[i][1] -
-            0.5f * ((gpu_uind[i][0] + gpu_uind[i][0]) * cphi[i][1]);
-         vxy = vxy - 0.5f * (cphidp[i][1] * cmp[i][2] + cphidp[i][2] * cmp[i][1]) -
-            0.25f *
-               ((gpu_uind[i][1] + gpu_uind[i][1]) * cphi[i][1] +
-                  (gpu_uind[i][0] + gpu_uind[i][0]) * cphi[i][2]);
-         vxz = vxz - 0.5f * (cphidp[i][1] * cmp[i][3] + cphidp[i][3] * cmp[i][1]) -
-            0.25f *
-               ((gpu_uind[i][2] + gpu_uind[i][2]) * cphi[i][1] +
-                  (gpu_uind[i][0] + gpu_uind[i][0]) * cphi[i][3]);
-         vyy = vyy - cmp[i][2] * cphidp[i][2] -
-            0.5f * ((gpu_uind[i][1] + gpu_uind[i][1]) * cphi[i][2]);
-         vyz = vyz - 0.5f * (cphidp[i][2] * cmp[i][3] + cphidp[i][3] * cmp[i][2]) -
-            0.25f *
-               ((gpu_uind[i][2] + gpu_uind[i][2]) * cphi[i][2] +
-                  (gpu_uind[i][1] + gpu_uind[i][1]) * cphi[i][3]);
-         vzz = vzz - cmp[i][3] * cphidp[i][3] -
-            0.5f * ((gpu_uind[i][2] + gpu_uind[i][2]) * cphi[i][3]);
-         vxx = vxx - 2 * cmp[i][4] * cphidp[i][4] - cmp[i][7] * cphidp[i][7] -
-            cmp[i][8] * cphidp[i][8];
-         vxy = vxy - (cmp[i][4] + cmp[i][5]) * cphidp[i][7] -
-            0.5f *
-               (cmp[i][7] * (cphidp[i][5] + cphidp[i][4]) + cmp[i][8] * cphidp[i][9] +
-                  cmp[i][9] * cphidp[i][8]);
-         vxz = vxz - (cmp[i][4] + cmp[i][6]) * cphidp[i][8] -
-            0.5f *
-               (cmp[i][8] * (cphidp[i][4] + cphidp[i][6]) + cmp[i][7] * cphidp[i][9] +
-                  cmp[i][9] * cphidp[i][7]);
-         vyy = vyy - 2 * cmp[i][5] * cphidp[i][5] - cmp[i][7] * cphidp[i][7] -
-            cmp[i][9] * cphidp[i][9];
-         vyz = vyz - (cmp[i][5] + cmp[i][6]) * cphidp[i][9] -
-            0.5f *
-               (cmp[i][9] * (cphidp[i][5] + cphidp[i][6]) + cmp[i][7] * cphidp[i][8] +
-                  cmp[i][8] * cphidp[i][7]);
-         vzz = vzz - 2 * cmp[i][6] * cphidp[i][6] - cmp[i][8] * cphidp[i][8] -
-            cmp[i][9] * cphidp[i][9];
+         vxx = vxx - cmp[i][1] * cphidp[i][1] - 0.5f * ((gpu_uind[i][0] + gpu_uind[i][0]) * cphi[i][1]);
+         vxy = vxy - 0.5f * (cphidp[i][1] * cmp[i][2] + cphidp[i][2] * cmp[i][1])
+            - 0.25f * ((gpu_uind[i][1] + gpu_uind[i][1]) * cphi[i][1] + (gpu_uind[i][0] + gpu_uind[i][0]) * cphi[i][2]);
+         vxz = vxz - 0.5f * (cphidp[i][1] * cmp[i][3] + cphidp[i][3] * cmp[i][1])
+            - 0.25f * ((gpu_uind[i][2] + gpu_uind[i][2]) * cphi[i][1] + (gpu_uind[i][0] + gpu_uind[i][0]) * cphi[i][3]);
+         vyy = vyy - cmp[i][2] * cphidp[i][2] - 0.5f * ((gpu_uind[i][1] + gpu_uind[i][1]) * cphi[i][2]);
+         vyz = vyz - 0.5f * (cphidp[i][2] * cmp[i][3] + cphidp[i][3] * cmp[i][2])
+            - 0.25f * ((gpu_uind[i][2] + gpu_uind[i][2]) * cphi[i][2] + (gpu_uind[i][1] + gpu_uind[i][1]) * cphi[i][3]);
+         vzz = vzz - cmp[i][3] * cphidp[i][3] - 0.5f * ((gpu_uind[i][2] + gpu_uind[i][2]) * cphi[i][3]);
+         vxx = vxx - 2 * cmp[i][4] * cphidp[i][4] - cmp[i][7] * cphidp[i][7] - cmp[i][8] * cphidp[i][8];
+         vxy = vxy - (cmp[i][4] + cmp[i][5]) * cphidp[i][7]
+            - 0.5f * (cmp[i][7] * (cphidp[i][5] + cphidp[i][4]) + cmp[i][8] * cphidp[i][9] + cmp[i][9] * cphidp[i][8]);
+         vxz = vxz - (cmp[i][4] + cmp[i][6]) * cphidp[i][8]
+            - 0.5f * (cmp[i][8] * (cphidp[i][4] + cphidp[i][6]) + cmp[i][7] * cphidp[i][9] + cmp[i][9] * cphidp[i][7]);
+         vyy = vyy - 2 * cmp[i][5] * cphidp[i][5] - cmp[i][7] * cphidp[i][7] - cmp[i][9] * cphidp[i][9];
+         vyz = vyz - (cmp[i][5] + cmp[i][6]) * cphidp[i][9]
+            - 0.5f * (cmp[i][9] * (cphidp[i][5] + cphidp[i][6]) + cmp[i][7] * cphidp[i][8] + cmp[i][8] * cphidp[i][7]);
+         vzz = vzz - 2 * cmp[i][6] * cphidp[i][6] - cmp[i][8] * cphidp[i][8] - cmp[i][9] * cphidp[i][9];
 
          // if (poltyp .eq. 'MUTUAL')
          vxx = vxx - (cphid[1] * gpu_uind[i][0]);
@@ -621,8 +597,7 @@ static void epolarChgpenEwaldRecipSelf_acc1(const real (*gpu_uind)[3], bool use_
                if ((k1 + k2 + k3) & 1)
                   expterm = 0; // end if ((k1 + k2 + k3) % 2 != 0)
 
-            real struc2 =
-               d->qgrid[2 * i] * p->qgrid[2 * i] + d->qgrid[2 * i + 1] * p->qgrid[2 * i + 1];
+            real struc2 = d->qgrid[2 * i] * p->qgrid[2 * i] + d->qgrid[2 * i + 1] * p->qgrid[2 * i + 1];
             real eterm = 0.5f * f * expterm * struc2;
             real vterm = (2 / hsq) * (1 - term) * eterm;
 

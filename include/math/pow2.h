@@ -55,7 +55,8 @@ namespace tinker {
 /// \brief Non-constexpr `floorLog2(int)`.
 inline int floorLog2(int val)
 {
-   if (val == 0) return 0;
+   if (val == 0)
+      return 0;
    int c = __builtin_clz(val);
    return 8 * sizeof(int) - 1 - c;
 }
@@ -64,7 +65,8 @@ inline int floorLog2(int val)
 /// \brief Non-constexpr `floorLog2(long long)`.
 inline int floorLog2(long long val)
 {
-   if (val == 0) return 0;
+   if (val == 0)
+      return 0;
    int c = __builtin_clzll(val);
    return 8 * sizeof(long long) - 1 - c;
 }

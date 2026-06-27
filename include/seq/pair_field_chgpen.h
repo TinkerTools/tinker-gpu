@@ -9,13 +9,44 @@ namespace tinker {
 #pragma acc routine seq
 template <class ETYP>
 SEQ_CUDA
-void pair_dfield_chgpen(real r2, real xr, real yr, real zr, real dscale,
-   real ci, real dix, real diy, real diz, real corei, real vali, real alphai,
-   real qixx, real qixy, real qixz, real qiyy, real qiyz, real qizz, real ck,
-   real dkx, real dky, real dkz, real corek, real valk, real alphak, real qkxx,
-   real qkxy, real qkxz, real qkyy, real qkyz, real qkzz, real aewald,
-   real& restrict fidx, real& restrict fidy, real& restrict fidz,
-   real& restrict fkdx, real& restrict fkdy, real& restrict fkdz)
+void pair_dfield_chgpen(real r2,
+                        real xr,
+                        real yr,
+                        real zr,
+                        real dscale,
+                        real ci,
+                        real dix,
+                        real diy,
+                        real diz,
+                        real corei,
+                        real vali,
+                        real alphai,
+                        real qixx,
+                        real qixy,
+                        real qixz,
+                        real qiyy,
+                        real qiyz,
+                        real qizz,
+                        real ck,
+                        real dkx,
+                        real dky,
+                        real dkz,
+                        real corek,
+                        real valk,
+                        real alphak,
+                        real qkxx,
+                        real qkxy,
+                        real qkxz,
+                        real qkyy,
+                        real qkyz,
+                        real qkzz,
+                        real aewald,
+                        real& restrict fidx,
+                        real& restrict fidy,
+                        real& restrict fidz,
+                        real& restrict fkdx,
+                        real& restrict fkdy,
+                        real& restrict fkdz)
 {
    real r = REAL_SQRT(r2);
    real invr1 = REAL_RECIP(r);
@@ -26,7 +57,8 @@ void pair_dfield_chgpen(real r2, real xr, real yr, real zr, real dscale,
 
    damp_dir(dmpi, dmpk, r, alphai, alphak);
 
-   if CONSTEXPR (eq<ETYP, EWALD>()) damp_ewald<4>(bn, r, invr1, rr2, aewald);
+   if CONSTEXPR (eq<ETYP, EWALD>())
+      damp_ewald<4>(bn, r, invr1, rr2, aewald);
 
    real rr1 = invr1;
    real rr3 = rr1 * rr2;
@@ -88,13 +120,30 @@ void pair_dfield_chgpen(real r2, real xr, real yr, real zr, real dscale,
 #pragma acc routine seq
 template <class ETYP>
 SEQ_CUDA
-void pair_ufield_chgpen(real r2, real xr, real yr, real zr, real wscale, //
-   real uindi0, real uindi1, real uindi2,                                //
-   real corei, real vali, real alphai,                                   //
-   real uindk0, real uindk1, real uindk2,                                //
-   real corek, real valk, real alphak,                                   //
-   real aewald, real& restrict fidx, real& restrict fidy, real& restrict fidz,
-   real& restrict fkdx, real& restrict fkdy, real& restrict fkdz)
+void pair_ufield_chgpen(real r2,
+                        real xr,
+                        real yr,
+                        real zr,
+                        real wscale, //
+                        real uindi0,
+                        real uindi1,
+                        real uindi2, //
+                        real corei,
+                        real vali,
+                        real alphai, //
+                        real uindk0,
+                        real uindk1,
+                        real uindk2, //
+                        real corek,
+                        real valk,
+                        real alphak, //
+                        real aewald,
+                        real& restrict fidx,
+                        real& restrict fidy,
+                        real& restrict fidz,
+                        real& restrict fkdx,
+                        real& restrict fkdy,
+                        real& restrict fkdz)
 {
    real r = REAL_SQRT(r2);
    real invr1 = REAL_RECIP(r);
