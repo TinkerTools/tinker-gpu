@@ -74,7 +74,8 @@ void testMdInit(double t = 0,  ///< Temperature in Kelvin.
 /// \brief Determine whether file exists and deletes it.
 bool fileExistsAndDelete(const std::string& fname);
 
-struct AtomData {
+struct AtomData
+{
    int atom_type;
    double x, y, z;
 };

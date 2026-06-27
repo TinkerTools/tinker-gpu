@@ -655,7 +655,8 @@ void epolar0DotProd(const real (*uind)[3], const real (*udirp)[3])
 }
 
 TINKER_FVOID2(acc1, cu1, epolarPairwiseExtfield, const real (*)[3]);
-void epolarPairwiseExtfield(int vers, const real (*uind)[3]) {
+void epolarPairwiseExtfield(int vers, const real (*uind)[3])
+{
    if (extfld::use_exfld and (vers & calc::analyz)) {
       TINKER_FCALL2(acc1, cu1, epolarPairwiseExtfield, uind);
    }

@@ -246,7 +246,7 @@ std::vector<ModelFrame> readAmoebaCoordinateFile(const std::string& fname)
       std::istringstream header_stream(line);
       int natom;
       std::string dummy;
-      header_stream >> natom >> dummy;  // "9 AMOEBA Water"
+      header_stream >> natom >> dummy; // "9 AMOEBA Water"
       if (!header_stream)
          break;
 

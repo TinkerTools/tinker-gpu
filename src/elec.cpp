@@ -823,7 +823,8 @@ void exfield(int vers, int useDipole)
    if (not extfld::use_exfld)
       return;
 
-   if (bound::use_wrap) bounds();
+   if (bound::use_wrap)
+      bounds();
 
    if (useDipole)
       TINKER_FCALL2(acc1, cu1, exfieldDipole, vers);

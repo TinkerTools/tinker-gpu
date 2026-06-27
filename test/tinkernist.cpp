@@ -125,7 +125,8 @@ TEST_CASE("TinkerNIST-DCD", "[ff][tinkerNIST]")
 
    TestFile fx1(TINKER9_DIRSTR "/test/file/tinkernist/water30.xyz");
    TestFile fd1(TINKER9_DIRSTR "/test/file/tinkernist/water30.dyn");
-   static const std::string dcdkey = "save-ucharge\nsave-ustatic\nsave-uinduce\nsave-udirect\nsave-defield\nsave-tefield\nsave-velocity\ndcd-archive\n";
+   static const std::string dcdkey = "save-ucharge\nsave-ustatic\nsave-uinduce\nsave-udirect\nsave-defield\nsave-"
+                                     "tefield\nsave-velocity\ndcd-archive\n";
    TestFile fk1(TINKER9_DIRSTR "/test/file/tinkernist/water30.key", "", dcdkey);
    TestFile fp1(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
    const char* xn = "water30.xyz";
@@ -170,8 +171,8 @@ TEST_CASE("TinkerNIST-DCD", "[ff][tinkerNIST]")
    mdsaveSynchronize();
    inform::iwrite = old;
 
-   bool dcdExists   = fileExistsAndDelete(fn + ".dcd");
-   bool dcdvExists  = fileExistsAndDelete(fn + ".dcdv");
+   bool dcdExists = fileExistsAndDelete(fn + ".dcd");
+   bool dcdvExists = fileExistsAndDelete(fn + ".dcdv");
    bool dcducExists = fileExistsAndDelete(fn + ".dcduc");
    bool dcdusExists = fileExistsAndDelete(fn + ".dcdus");
    bool dcduiExists = fileExistsAndDelete(fn + ".dcdui");
@@ -197,7 +198,8 @@ TEST_CASE("TinkerNIST-SAVE1", "[ff][tinkerNIST]")
 
    TestFile fx1(TINKER9_DIRSTR "/test/file/tinkernist/water30.xyz");
    TestFile fd1(TINKER9_DIRSTR "/test/file/tinkernist/water30.dyn");
-   static const std::string savekey = "save-ucharge\nsave-ustatic\nsave-uinduce\nsave-udirect\nsave-defield\nsave-tefield\nsave-velocity\n";
+   static const std::string
+      savekey = "save-ucharge\nsave-ustatic\nsave-uinduce\nsave-udirect\nsave-defield\nsave-tefield\nsave-velocity\n";
    TestFile fk1(TINKER9_DIRSTR "/test/file/tinkernist/water30.key", "", savekey + nodyn);
    TestFile fp1(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
    const char* xn = "water30.xyz";
@@ -211,22 +213,22 @@ TEST_CASE("TinkerNIST-SAVE1", "[ff][tinkerNIST]")
    fileExistsAndDelete(fn + ".def");
    fileExistsAndDelete(fn + ".tef");
 
-   auto arc_ref  = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist.arc");
-   auto vel_ref  = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist.vel");
+   auto arc_ref = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist.arc");
+   auto vel_ref = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist.vel");
    auto uchg_ref = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist.uchg");
    auto ustc_ref = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist.ustc");
    auto uind_ref = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist.uind");
    auto udir_ref = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist.udir");
-   auto def_ref  = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist.def");
-   auto tef_ref  = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist.tef");
-   const double eps_arc  = 0.001;
-   const double eps_vel  = 0.002;
+   auto def_ref = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist.def");
+   auto tef_ref = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist.tef");
+   const double eps_arc = 0.001;
+   const double eps_vel = 0.002;
    const double eps_uchg = 0.001;
    const double eps_ustc = 0.001;
    const double eps_uind = 0.001;
    const double eps_udir = 0.001;
-   const double eps_def  = 0.001;
-   const double eps_tef  = 0.001;
+   const double eps_def = 0.001;
+   const double eps_tef = 0.001;
 
    const char* argv[] = {"dummy", xn};
    int argc = 2;
@@ -259,14 +261,14 @@ TEST_CASE("TinkerNIST-SAVE1", "[ff][tinkerNIST]")
    mdsaveSynchronize();
    inform::iwrite = old;
 
-   auto arc_tst  = readAmoebaCoordinateFile(fn + ".arc");
-   auto vel_tst  = readAmoebaCoordinateFile(fn + ".vel");
+   auto arc_tst = readAmoebaCoordinateFile(fn + ".arc");
+   auto vel_tst = readAmoebaCoordinateFile(fn + ".vel");
    auto uchg_tst = readAmoebaCoordinateFile(fn + ".uchg");
    auto ustc_tst = readAmoebaCoordinateFile(fn + ".ustc");
    auto uind_tst = readAmoebaCoordinateFile(fn + ".uind");
    auto udir_tst = readAmoebaCoordinateFile(fn + ".udir");
-   auto def_tst  = readAmoebaCoordinateFile(fn + ".def");
-   auto tef_tst  = readAmoebaCoordinateFile(fn + ".tef");
+   auto def_tst = readAmoebaCoordinateFile(fn + ".def");
+   auto tef_tst = readAmoebaCoordinateFile(fn + ".tef");
 
    for (int istep = 0; istep < nsteps; ++istep) {
       /// arc
@@ -329,7 +331,7 @@ TEST_CASE("TinkerNIST-SAVE1", "[ff][tinkerNIST]")
          compare_def(i);
          compare_tef(i);
       }
-      for (int i = n-j; i < n; ++i) {
+      for (int i = n - j; i < n; ++i) {
          compare_arc(i);
          compare_vel(i);
          compare_uchg(i);
@@ -341,14 +343,14 @@ TEST_CASE("TinkerNIST-SAVE1", "[ff][tinkerNIST]")
       }
    }
 
-   bool arcExists  = fileExistsAndDelete(fn + ".arc");
-   bool velExists  = fileExistsAndDelete(fn + ".vel");
+   bool arcExists = fileExistsAndDelete(fn + ".arc");
+   bool velExists = fileExistsAndDelete(fn + ".vel");
    bool uchgExists = fileExistsAndDelete(fn + ".uchg");
    bool ustcExists = fileExistsAndDelete(fn + ".ustc");
    bool uindExists = fileExistsAndDelete(fn + ".uind");
    bool udirExists = fileExistsAndDelete(fn + ".udir");
-   bool defExists  = fileExistsAndDelete(fn + ".def");
-   bool tefExists  = fileExistsAndDelete(fn + ".tef");
+   bool defExists = fileExistsAndDelete(fn + ".def");
+   bool tefExists = fileExistsAndDelete(fn + ".tef");
    REQUIRE(arcExists == true);
    REQUIRE(velExists == true);
    REQUIRE(uchgExists == true);
@@ -368,7 +370,8 @@ TEST_CASE("TinkerNIST-SAVE2", "[ff][tinkerNIST]")
 
    TestFile fx1(TINKER9_DIRSTR "/test/file/tinkernist/water30_2.xyz");
    TestFile fd1(TINKER9_DIRSTR "/test/file/tinkernist/water30_2.dyn");
-   static const std::string savekey = "save-ucharge\nsave-ustatic\nsave-uinduce\nsave-udirect\nsave-defield\nsave-tefield\nsave-velocity\n";
+   static const std::string
+      savekey = "save-ucharge\nsave-ustatic\nsave-uinduce\nsave-udirect\nsave-defield\nsave-tefield\nsave-velocity\n";
    TestFile fk1(TINKER9_DIRSTR "/test/file/tinkernist/water30_2.key", "", savekey + nodyn);
    TestFile fp1(TINKER9_DIRSTR "/test/file/commit_aad9340c/water21.prm");
    const char* xn = "water30_2.xyz";
@@ -382,22 +385,22 @@ TEST_CASE("TinkerNIST-SAVE2", "[ff][tinkerNIST]")
    fileExistsAndDelete(fn + ".def");
    fileExistsAndDelete(fn + ".tef");
 
-   auto arc_ref  = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist_2.arc");
-   auto vel_ref  = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist_2.vel");
+   auto arc_ref = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist_2.arc");
+   auto vel_ref = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist_2.vel");
    auto uchg_ref = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist_2.uchg");
    auto ustc_ref = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist_2.ustc");
    auto uind_ref = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist_2.uind");
    auto udir_ref = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist_2.udir");
-   auto def_ref  = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist_2.def");
-   auto tef_ref  = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist_2.tef");
-   const double eps_arc  = 0.001;
-   const double eps_vel  = 0.002;
+   auto def_ref = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist_2.def");
+   auto tef_ref = readAmoebaCoordinateFile(TINKER9_DIRSTR "/test/ref/tinkernist_2.tef");
+   const double eps_arc = 0.001;
+   const double eps_vel = 0.002;
    const double eps_uchg = 0.001;
    const double eps_ustc = 0.001;
    const double eps_uind = 0.001;
    const double eps_udir = 0.001;
-   const double eps_def  = 0.001;
-   const double eps_tef  = 0.001;
+   const double eps_def = 0.001;
+   const double eps_tef = 0.001;
 
    const char* argv[] = {"dummy", xn};
    int argc = 2;
@@ -430,14 +433,14 @@ TEST_CASE("TinkerNIST-SAVE2", "[ff][tinkerNIST]")
    mdsaveSynchronize();
    inform::iwrite = old;
 
-   auto arc_tst  = readAmoebaCoordinateFile(fn + ".arc");
-   auto vel_tst  = readAmoebaCoordinateFile(fn + ".vel");
+   auto arc_tst = readAmoebaCoordinateFile(fn + ".arc");
+   auto vel_tst = readAmoebaCoordinateFile(fn + ".vel");
    auto uchg_tst = readAmoebaCoordinateFile(fn + ".uchg");
    auto ustc_tst = readAmoebaCoordinateFile(fn + ".ustc");
    auto uind_tst = readAmoebaCoordinateFile(fn + ".uind");
    auto udir_tst = readAmoebaCoordinateFile(fn + ".udir");
-   auto def_tst  = readAmoebaCoordinateFile(fn + ".def");
-   auto tef_tst  = readAmoebaCoordinateFile(fn + ".tef");
+   auto def_tst = readAmoebaCoordinateFile(fn + ".def");
+   auto tef_tst = readAmoebaCoordinateFile(fn + ".tef");
 
    for (int istep = 0; istep < nsteps; ++istep) {
       /// arc
@@ -500,7 +503,7 @@ TEST_CASE("TinkerNIST-SAVE2", "[ff][tinkerNIST]")
          compare_def(i);
          compare_tef(i);
       }
-      for (int i = n-j; i < n; ++i) {
+      for (int i = n - j; i < n; ++i) {
          compare_arc(i);
          compare_vel(i);
          compare_uchg(i);
@@ -512,14 +515,14 @@ TEST_CASE("TinkerNIST-SAVE2", "[ff][tinkerNIST]")
       }
    }
 
-   bool arcExists  = fileExistsAndDelete(fn + ".arc");
-   bool velExists  = fileExistsAndDelete(fn + ".vel");
+   bool arcExists = fileExistsAndDelete(fn + ".arc");
+   bool velExists = fileExistsAndDelete(fn + ".vel");
    bool uchgExists = fileExistsAndDelete(fn + ".uchg");
    bool ustcExists = fileExistsAndDelete(fn + ".ustc");
    bool uindExists = fileExistsAndDelete(fn + ".uind");
    bool udirExists = fileExistsAndDelete(fn + ".udir");
-   bool defExists  = fileExistsAndDelete(fn + ".def");
-   bool tefExists  = fileExistsAndDelete(fn + ".tef");
+   bool defExists = fileExistsAndDelete(fn + ".def");
+   bool tefExists = fileExistsAndDelete(fn + ".tef");
    REQUIRE(arcExists == true);
    REQUIRE(velExists == true);
    REQUIRE(uchgExists == true);
@@ -539,7 +542,9 @@ TEST_CASE("TinkerNIST-SAVE-ONLY", "[ff][tinkerNIST]")
 
    TestFile fx1(TINKER9_DIRSTR "/test/file/tinkernist/water30.xyz");
    TestFile fd1(TINKER9_DIRSTR "/test/file/tinkernist/water30.dyn");
-   static const std::string savekey = "save-only -4 102\nsave-ucharge\nsave-ustatic\nsave-uinduce\nsave-udirect\nsave-defield\nsave-tefield\nsave-velocity\n";
+   static const std::string savekey = "save-only -4 "
+                                      "102\nsave-ucharge\nsave-ustatic\nsave-uinduce\nsave-udirect\nsave-defield\nsave-"
+                                      "tefield\nsave-velocity\n";
    TestFile fk1(TINKER9_DIRSTR "/test/file/tinkernist/water30.key", "", savekey + nodyn);
    TestFile fp1(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
    const char* xn = "water30.xyz";
@@ -584,14 +589,14 @@ TEST_CASE("TinkerNIST-SAVE-ONLY", "[ff][tinkerNIST]")
    mdsaveSynchronize();
    inform::iwrite = old;
 
-   auto arc_tst  = readAmoebaCoordinateFile(fn + ".arc");
-   auto vel_tst  = readAmoebaCoordinateFile(fn + ".vel");
+   auto arc_tst = readAmoebaCoordinateFile(fn + ".arc");
+   auto vel_tst = readAmoebaCoordinateFile(fn + ".vel");
    auto uchg_tst = readAmoebaCoordinateFile(fn + ".uchg");
    auto ustc_tst = readAmoebaCoordinateFile(fn + ".ustc");
    auto uind_tst = readAmoebaCoordinateFile(fn + ".uind");
    auto udir_tst = readAmoebaCoordinateFile(fn + ".udir");
-   auto def_tst  = readAmoebaCoordinateFile(fn + ".def");
-   auto tef_tst  = readAmoebaCoordinateFile(fn + ".tef");
+   auto def_tst = readAmoebaCoordinateFile(fn + ".def");
+   auto tef_tst = readAmoebaCoordinateFile(fn + ".tef");
 
    for (int istep = 0; istep < nsteps; ++istep) {
       REQUIRE(arc_tst[0].size() == 99);
@@ -604,14 +609,14 @@ TEST_CASE("TinkerNIST-SAVE-ONLY", "[ff][tinkerNIST]")
       REQUIRE(tef_tst[0].size() == 99);
    }
 
-   bool arcExists  = fileExistsAndDelete(fn + ".arc");
-   bool velExists  = fileExistsAndDelete(fn + ".vel");
+   bool arcExists = fileExistsAndDelete(fn + ".arc");
+   bool velExists = fileExistsAndDelete(fn + ".vel");
    bool uchgExists = fileExistsAndDelete(fn + ".uchg");
    bool ustcExists = fileExistsAndDelete(fn + ".ustc");
    bool uindExists = fileExistsAndDelete(fn + ".uind");
    bool udirExists = fileExistsAndDelete(fn + ".udir");
-   bool defExists  = fileExistsAndDelete(fn + ".def");
-   bool tefExists  = fileExistsAndDelete(fn + ".tef");
+   bool defExists = fileExistsAndDelete(fn + ".def");
+   bool tefExists = fileExistsAndDelete(fn + ".tef");
    REQUIRE(arcExists == true);
    REQUIRE(velExists == true);
    REQUIRE(uchgExists == true);
@@ -625,10 +630,9 @@ TEST_CASE("TinkerNIST-SAVE-ONLY", "[ff][tinkerNIST]")
    testEnd();
 }
 
-std::vector<std::array<double,3>>
-read_logfile_1(const std::string& filename, const std::string& label)
+std::vector<std::array<double, 3>> read_logfile_1(const std::string& filename, const std::string& label)
 {
-   std::vector<std::array<double,3>> vectors;
+   std::vector<std::array<double, 3>> vectors;
    std::ifstream file(filename);
    std::string line;
    while (std::getline(file, line)) {
@@ -643,10 +647,9 @@ read_logfile_1(const std::string& filename, const std::string& label)
    return vectors;
 }
 
-std::vector<std::array<double,3>>
-read_logfile_2(const std::string& filename, const std::string& label)
+std::vector<std::array<double, 3>> read_logfile_2(const std::string& filename, const std::string& label)
 {
-   std::vector<std::array<double,3>> vectors;
+   std::vector<std::array<double, 3>> vectors;
    std::ifstream file(filename);
    std::string line;
    while (std::getline(file, line)) {
@@ -731,51 +734,51 @@ TEST_CASE("TinkerNIST-SAVE-SYSTEM", "[ff][tinkerNIST]")
    dup2(saved_stdout_fd, fileno(stdout));
    close(saved_stdout_fd);
 
-   std::vector<std::array<double,3>> uchg_ref;
-   std::vector<std::array<double,3>> ustc_ref;
-   std::vector<std::array<double,3>> uind_ref;
-   std::vector<std::array<double,3>> auchg_ref;
-   std::vector<std::array<double,3>> austc_ref;
-   std::vector<std::array<double,3>> auind_ref;
-   std::vector<std::array<double,3>> avelo_ref;
-   uchg_ref.push_back({6.892510,-27.773255,75.057906});
-   uchg_ref.push_back({6.828811,-27.794699,74.920880});
-   ustc_ref.push_back({-7.366166,-7.871300,6.450486});
-   ustc_ref.push_back({-7.348372,-7.888462,6.419733});
-   uind_ref.push_back({-26.743482,-16.250646,4.786944});
-   uind_ref.push_back({-26.846484,-16.328934,4.642692});
-   auchg_ref.push_back({ 303.701119, 230.038309, 292.209284});
-   auchg_ref.push_back({-331.940017,-259.883598,-267.693160});
-   auchg_ref.push_back({ 203.333866, 139.690946, 202.363634});
-   auchg_ref.push_back({-168.202458,-137.618912,-151.821853});
-   auchg_ref.push_back({ 303.710240, 230.037088, 292.181659});
-   auchg_ref.push_back({-331.966875,-259.926399,-267.830151});
-   auchg_ref.push_back({ 203.312572, 139.706841, 202.374912});
-   auchg_ref.push_back({-168.227126,-137.612229,-151.805540});
-   austc_ref.push_back({-6.783206,-7.362798, 6.004690});
-   austc_ref.push_back({-0.582960,-0.508502, 0.445796});
-   austc_ref.push_back({ 0.000000, 0.000000, 0.000000});
-   austc_ref.push_back({ 0.000000, 0.000000, 0.000000});
-   austc_ref.push_back({-6.766177,-7.383621, 5.971236});
-   austc_ref.push_back({-0.582195,-0.504841, 0.448497});
-   austc_ref.push_back({ 0.000000, 0.000000, 0.000000});
-   austc_ref.push_back({ 0.000000, 0.000000, 0.000000});
-   auind_ref.push_back({-13.626743,-10.888829, 4.352743});
+   std::vector<std::array<double, 3>> uchg_ref;
+   std::vector<std::array<double, 3>> ustc_ref;
+   std::vector<std::array<double, 3>> uind_ref;
+   std::vector<std::array<double, 3>> auchg_ref;
+   std::vector<std::array<double, 3>> austc_ref;
+   std::vector<std::array<double, 3>> auind_ref;
+   std::vector<std::array<double, 3>> avelo_ref;
+   uchg_ref.push_back({6.892510, -27.773255, 75.057906});
+   uchg_ref.push_back({6.828811, -27.794699, 74.920880});
+   ustc_ref.push_back({-7.366166, -7.871300, 6.450486});
+   ustc_ref.push_back({-7.348372, -7.888462, 6.419733});
+   uind_ref.push_back({-26.743482, -16.250646, 4.786944});
+   uind_ref.push_back({-26.846484, -16.328934, 4.642692});
+   auchg_ref.push_back({303.701119, 230.038309, 292.209284});
+   auchg_ref.push_back({-331.940017, -259.883598, -267.693160});
+   auchg_ref.push_back({203.333866, 139.690946, 202.363634});
+   auchg_ref.push_back({-168.202458, -137.618912, -151.821853});
+   auchg_ref.push_back({303.710240, 230.037088, 292.181659});
+   auchg_ref.push_back({-331.966875, -259.926399, -267.830151});
+   auchg_ref.push_back({203.312572, 139.706841, 202.374912});
+   auchg_ref.push_back({-168.227126, -137.612229, -151.805540});
+   austc_ref.push_back({-6.783206, -7.362798, 6.004690});
+   austc_ref.push_back({-0.582960, -0.508502, 0.445796});
+   austc_ref.push_back({0.000000, 0.000000, 0.000000});
+   austc_ref.push_back({0.000000, 0.000000, 0.000000});
+   austc_ref.push_back({-6.766177, -7.383621, 5.971236});
+   austc_ref.push_back({-0.582195, -0.504841, 0.448497});
+   austc_ref.push_back({0.000000, 0.000000, 0.000000});
+   austc_ref.push_back({0.000000, 0.000000, 0.000000});
+   auind_ref.push_back({-13.626743, -10.888829, 4.352743});
    auind_ref.push_back({-11.936671, -7.998449, 2.410177});
-   auind_ref.push_back({  0.049248, -0.011254,-0.005858});
-   auind_ref.push_back({ -1.229316,  2.647885,-1.970117});
-   auind_ref.push_back({-13.665637,-10.910517, 4.225972});
+   auind_ref.push_back({0.049248, -0.011254, -0.005858});
+   auind_ref.push_back({-1.229316, 2.647885, -1.970117});
+   auind_ref.push_back({-13.665637, -10.910517, 4.225972});
    auind_ref.push_back({-11.981849, -8.039010, 2.342266});
-   auind_ref.push_back({  0.048904, -0.010808,-0.005464});
-   auind_ref.push_back({ -1.247902,  2.631401,-1.920081});
-   avelo_ref.push_back({-0.245765,  3.852261,  13.515902});
-   avelo_ref.push_back({-9.901128,-29.294194, -93.776943});
-   avelo_ref.push_back({-4.357503,  3.194936,   2.389992});
-   avelo_ref.push_back({ 5.175468, -1.274002,  -3.399699});
-   avelo_ref.push_back({-0.326293,  3.941636,  14.252432});
-   avelo_ref.push_back({-4.246289,-28.927602,-104.687128});
-   avelo_ref.push_back({-4.468945,  3.446065,   2.327113});
-   avelo_ref.push_back({ 5.131407, -1.477522,  -3.369982});
+   auind_ref.push_back({0.048904, -0.010808, -0.005464});
+   auind_ref.push_back({-1.247902, 2.631401, -1.920081});
+   avelo_ref.push_back({-0.245765, 3.852261, 13.515902});
+   avelo_ref.push_back({-9.901128, -29.294194, -93.776943});
+   avelo_ref.push_back({-4.357503, 3.194936, 2.389992});
+   avelo_ref.push_back({5.175468, -1.274002, -3.399699});
+   avelo_ref.push_back({-0.326293, 3.941636, 14.252432});
+   avelo_ref.push_back({-4.246289, -28.927602, -104.687128});
+   avelo_ref.push_back({-4.468945, 3.446065, 2.327113});
+   avelo_ref.push_back({5.131407, -1.477522, -3.369982});
 
    auto uchg_tst = read_logfile_1(outputfn, " System Charge Dipole");
    auto ustc_tst = read_logfile_1(outputfn, " System Static Dipole");
@@ -795,7 +798,7 @@ TEST_CASE("TinkerNIST-SAVE-SYSTEM", "[ff][tinkerNIST]")
       }
    }
 
-   for (int istep = 0; istep < nsteps*4; ++istep) {
+   for (int istep = 0; istep < nsteps * 4; ++istep) {
       for (int i = 0; i < 3; ++i) {
          COMPARE_REALS(auchg_ref[istep][i], auchg_tst[istep][i], eps_u);
          COMPARE_REALS(austc_ref[istep][i], austc_tst[istep][i], eps_u);
@@ -869,16 +872,16 @@ TEST_CASE("TinkerNIST-EXC-MOMENT", "[ff][tinkerNIST]")
    dup2(saved_stdout_fd, fileno(stdout));
    close(saved_stdout_fd);
 
-   std::vector<std::array<double,3>> uchg_ref;
-   std::vector<std::array<double,3>> ustc_ref;
-   std::vector<std::array<double,3>> uind_ref;
-   uchg_ref.push_back({-28.238899,-29.845290, 24.516125});
-   uchg_ref.push_back({-28.256635,-29.889311, 24.351508});
-   ustc_ref.push_back({-7.366166,-7.871300,6.450486});
-   ustc_ref.push_back({-7.348372,-7.888462,6.419733});
-   uind_ref.push_back({-25.563414,-18.887278, 6.762920});
-   uind_ref.push_back({-25.647485,-18.949528, 6.568238});
-      
+   std::vector<std::array<double, 3>> uchg_ref;
+   std::vector<std::array<double, 3>> ustc_ref;
+   std::vector<std::array<double, 3>> uind_ref;
+   uchg_ref.push_back({-28.238899, -29.845290, 24.516125});
+   uchg_ref.push_back({-28.256635, -29.889311, 24.351508});
+   ustc_ref.push_back({-7.366166, -7.871300, 6.450486});
+   ustc_ref.push_back({-7.348372, -7.888462, 6.419733});
+   uind_ref.push_back({-25.563414, -18.887278, 6.762920});
+   uind_ref.push_back({-25.647485, -18.949528, 6.568238});
+
    auto uchg_tst = read_logfile_1(outputfn, " System Charge Dipole");
    auto ustc_tst = read_logfile_1(outputfn, " System Static Dipole");
    auto uind_tst = read_logfile_1(outputfn, " System Induced Dipole");

@@ -457,7 +457,7 @@ TEST_CASE("External-Fields-Dynamic-Freq", "[ff][extfield]")
    VerletIntegrator vvi(ThermostatEnum::NONE, BarostatEnum::NONE);
    for (int istep = 1; istep <= nsteps; ++istep) {
       if (extfld::use_exfld and extfld::use_exfreq) {
-         double phs = sin(extfld::exfreq * (istep-1) * dt_ps);
+         double phs = sin(extfld::exfreq * (istep - 1) * dt_ps);
          for (int i = 0; i < 3; i++) {
             extfld::texfld[i] = phs * extfld::exfld[i];
          }

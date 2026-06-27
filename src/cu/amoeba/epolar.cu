@@ -30,14 +30,15 @@ void epolar0DotProd_cu(const real (*gpu_uind)[3], const real (*gpu_udirp)[3])
 }
 
 __global__
-static void epolarPairwiseExtfield_cu1(CountBuffer restrict nep, EnergyBuffer restrict ep, const real (*uind)[3], int n, real f, real ex1,
-   real ex2, real ex3)
+static void epolarPairwiseExtfield_cu1(CountBuffer restrict nep, EnergyBuffer restrict ep, const real (*uind)[3], int n,
+   real f, real ex1, real ex2, real ex3)
 {
    int ithread = ITHREAD;
    for (int i = ithread; i < n; i += STRIDE) {
       real e = uind[i][0] * ex1 + uind[i][1] * ex2 + uind[i][2] * ex3;
       atomic_add(f * e, ep, ithread);
-      if (e != 0) atomic_add(1, nep, ithread);
+      if (e != 0)
+         atomic_add(1, nep, ithread);
    }
 }
 

@@ -26,7 +26,8 @@ void epolar0DotProd_acc(const real (*gpu_uind)[3], const real (*gpu_udirp)[3])
    }
 }
 
-void epolarPairwiseExtfield_acc(const real (*uind)[3]) {
+void epolarPairwiseExtfield_acc(const real (*uind)[3])
+{
    const real f = -0.5 * electric / dielec;
 
    auto bufsize = bufferSize();
@@ -40,7 +41,8 @@ void epolarPairwiseExtfield_acc(const real (*uind)[3]) {
       int offset = i & (bufsize - 1);
       real e = uind[i][0] * ex1 + uind[i][1] * ex2 + uind[i][2] * ex3;
       atomic_add(f * e, ep, offset);
-      if (e != 0) atomic_add(1, nep, offset);
+      if (e != 0)
+         atomic_add(1, nep, offset);
    }
 }
 }

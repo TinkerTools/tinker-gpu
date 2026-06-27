@@ -114,7 +114,7 @@ void mdIntegrateData(RcOp op)
       }
       // only allow Montecarlo barostat for NPT + extfield simulation
       if (bath::isothermal and bath::isobaric and extfld::use_exfld) {
-         if (barostat!=BarostatEnum::MONTECARLO) {
+         if (barostat != BarostatEnum::MONTECARLO) {
             TINKER_THROW("NPT with External Field Should Use MonteCarlo Barostat.");
          }
       }
@@ -164,7 +164,7 @@ void mdPropagate(int nsteps, time_prec dt_ps)
 {
    for (int istep = 1; istep <= nsteps; ++istep) {
       if (extfld::use_exfld and extfld::use_exfreq) {
-         double phs = sin(extfld::exfreq * (istep-1) * dt_ps);
+         double phs = sin(extfld::exfreq * (istep - 1) * dt_ps);
          for (int i = 0; i < 3; i++) {
             extfld::texfld[i] = phs * extfld::exfld[i];
          }
@@ -183,7 +183,8 @@ void mdPropagate(int nsteps, time_prec dt_ps)
       mdrest(istep);
    }
    mdsaveSynchronize();
-   if (!output::dynsave) tinker_f_prtdyn();
+   if (!output::dynsave)
+      tinker_f_prtdyn();
 }
 
 const TimeScaleConfig& respaTSConfig()

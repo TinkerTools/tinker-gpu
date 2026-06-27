@@ -38,12 +38,15 @@ static std::future<void> fut_dup_then_write;
 
 static bool mdsaveUseUind()
 {
-   return (static_cast<bool>(output::uindsave) or static_cast<bool>(output::tefsave) or static_cast<bool>(output::usyssave)) and use(Potent::POLAR);
+   return (static_cast<bool>(output::uindsave) or static_cast<bool>(output::tefsave)
+             or static_cast<bool>(output::usyssave))
+      and use(Potent::POLAR);
 }
 
 static bool mdsaveUseUstc()
 {
-   return static_cast<bool>(output::ustcsave) or static_cast<bool>(output::uchgsave) or static_cast<bool>(output::usyssave);
+   return static_cast<bool>(output::ustcsave) or static_cast<bool>(output::uchgsave)
+      or static_cast<bool>(output::usyssave);
 }
 
 static bool mdsaveUseUdir()
@@ -270,13 +273,17 @@ void mdsaveData(RcOp op)
       if (mdsaveUseUind())
          darray::deallocate(dup_buf_uind);
 
-      if (mdsaveUseUstc()) darray::deallocate(dup_buf_rpole);
+      if (mdsaveUseUstc())
+         darray::deallocate(dup_buf_rpole);
 
-      if (mdsaveUseUdir()) darray::deallocate(dup_buf_udir);
+      if (mdsaveUseUdir())
+         darray::deallocate(dup_buf_udir);
 
-      if (mdsaveUseExpolUdir()) darray::deallocate(dup_buf_polinv);
+      if (mdsaveUseExpolUdir())
+         darray::deallocate(dup_buf_polinv);
 
-      if (mdsaveUseExpolTef()) darray::deallocate(dup_buf_polscale);
+      if (mdsaveUseExpolTef())
+         darray::deallocate(dup_buf_polscale);
 
       darray::deallocate(dup_buf_x, dup_buf_y, dup_buf_z);
       darray::deallocate(dup_buf_vx, dup_buf_vy, dup_buf_vz);
