@@ -38,6 +38,7 @@ void finish()
 #include "ff/energy.h"
 #include "ff/molecule.h"
 #include "ff/nblist.h"
+#include "md/metadyn.h"
 #include "md/misc.h"
 #include "md/osrw.h"
 #include "md/pq.h"
@@ -65,6 +66,7 @@ void deviceData(RcOp op)
 
    RcMan energy42{energyData, op};
    RcMan osrw42{osrwData, op};
+   RcMan metadyn42{metadynData, op};
 
    // Neighbor lists must be initialized after potential initialization.
    // xred, yred, and zred need to be initialized in vdw (Halgren 14-7)

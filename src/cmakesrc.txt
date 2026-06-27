@@ -52,6 +52,7 @@ mathtrimatexp.cpp
 md/barostat.cpp
 md/integrator.cpp
 md/lflpiston.cpp
+md/metadyn.cpp
 md/osrw.cpp
 md/propagator.cpp
 md/thermostat.cpp

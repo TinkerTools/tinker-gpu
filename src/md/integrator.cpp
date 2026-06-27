@@ -1,6 +1,7 @@
 #include "md/integrator.h"
 #include "ff/energy.h"
 #include "md/lflpiston.h"
+#include "md/metadyn.h"
 #include "md/misc.h"
 #include "md/pq.h"
 #include "md/rattle.h"
@@ -88,6 +89,7 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
       m_prop->rattle(dt);
       copyPosToXyz(true);
       energy(vers1);
+      metadynApplyBias(istep, vers1);
       if (vers1 & calc::virial)
          if (not atomic)
             hcVirial();
@@ -135,6 +137,7 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
 
       // slow force
       energy(vers1, RESPA_SLOW, respaTSConfig());
+      metadynApplyBias(istep, vers1);
       darray::copy(g::q0, n, gx2, gx);
       darray::copy(g::q0, n, gy2, gy);
       darray::copy(g::q0, n, gz2, gz);
@@ -431,7 +434,7 @@ void Nhc06Integrator::kickoff()
 
 Nhc06Integrator::Nhc06Integrator(int nrspa)
    : BasicIntegrator(nrspa, PropagatorEnum::m_LOGV, //
-        ThermostatEnum::m_NHC2006, BarostatEnum::NHC2006)
+      ThermostatEnum::m_NHC2006, BarostatEnum::NHC2006)
 {
    if (useRattle())
       TINKER_THROW("Constraints under NH-NPT require the ROLL algorithm.");
@@ -462,7 +465,7 @@ void LP22Integrator::kickoff()
 
 LP22Integrator::LP22Integrator(int nrspa)
    : BasicIntegrator(nrspa, PropagatorEnum::m_LOGV, //
-        ThermostatEnum::m_LP2022, BarostatEnum::LP2022)
+      ThermostatEnum::m_LP2022, BarostatEnum::LP2022)
 {
    this->kickoff();
 }
@@ -483,16 +486,14 @@ LeapFrogLPIntegrator::LeapFrogLPIntegrator()
    : BasicIntegrator()
 {
    darray::allocate(n, &leapfrog_x, &leapfrog_y, &leapfrog_z);
-   darray::allocate(n, &leapfrog_vx, &leapfrog_vy, &leapfrog_vz, &leapfrog_vxold, &leapfrog_vyold,
-      &leapfrog_vzold);
+   darray::allocate(n, &leapfrog_vx, &leapfrog_vy, &leapfrog_vz, &leapfrog_vxold, &leapfrog_vyold, &leapfrog_vzold);
    this->kickoff();
 }
 
 LeapFrogLPIntegrator::~LeapFrogLPIntegrator()
 {
    darray::deallocate(leapfrog_x, leapfrog_y, leapfrog_z);
-   darray::deallocate(
-      leapfrog_vx, leapfrog_vy, leapfrog_vz, leapfrog_vxold, leapfrog_vyold, leapfrog_vzold);
+   darray::deallocate(leapfrog_vx, leapfrog_vy, leapfrog_vz, leapfrog_vxold, leapfrog_vyold, leapfrog_vzold);
 }
 
 void LeapFrogLPIntegrator::dynamic(int istep, time_prec dt)
