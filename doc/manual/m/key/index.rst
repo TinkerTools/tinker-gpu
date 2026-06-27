@@ -49,6 +49,7 @@ modifiers, and usage examples.
    free-energy
    hippo-force-field
    mathematical-algorithms
+   metadynamics
    molecular-dynamics-ensembles
    neural-network-potential
    output-control

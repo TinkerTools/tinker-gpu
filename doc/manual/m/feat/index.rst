@@ -7,3 +7,4 @@ Features & Methods
    potent-vdw
    integrators
    nn
+   metadynamics

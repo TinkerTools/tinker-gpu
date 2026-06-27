@@ -6,7 +6,7 @@
 .. include:: m/replace.rst
 
 Tinker-GPU User Manual
-=====================
+======================
 
 .. toctree::
    :caption: Contents
