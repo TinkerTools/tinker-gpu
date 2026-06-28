@@ -638,6 +638,7 @@ foreach (var
    info9
    minimize9
    testgrad9
+   testvir9
    )
    add_custom_command (TARGET __t9_symlink POST_BUILD
       COMMAND

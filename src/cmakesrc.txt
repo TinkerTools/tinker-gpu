@@ -81,4 +81,5 @@ xbar.cpp
 xdynamic.cpp
 xminimize.cpp
 xtestgrad.cpp
+xtestvir.cpp
 )
