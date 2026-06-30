@@ -372,11 +372,10 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             must_wait = true;
             reduceSum2OnDevice(ev_dptr->v_ele, vir_buf_elec, bufsize, g::q0);
          }
-         // To be implemented for NN intermolecular virial
-         // if (ecore_nnintermol and vir_buf_nnintermol) {
-         //    must_wait = true;
-         //    reduceSum2OnDevice(ev_dptr->v_nnintermol, vir_buf_nnintermol, bufsize, g::q0);
-         // }
+         if (ecore_nnintermol and vir_buf_nnintermol) {
+            must_wait = true;
+            reduceSum2OnDevice(ev_dptr->v_nnintermol, vir_buf_nnintermol, bufsize, g::q0);
+         }
       }
    }
    if (must_wait) {
@@ -426,12 +425,17 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             for (int iv = 0; iv < 9; ++iv)
                virial_elec[iv] += v2ele[iv];
          }
-         // To be implemented for NN intermolecular virial
-         // if (ecore_nnintermol and vir_buf_nnintermol) {
-         // }
+         if (ecore_nnintermol and vir_buf_nnintermol) {
+            virial_prec vnn[VirialBufferTraits::N], v2nn[9];
+            for (int iv = 0; iv < (int)VirialBufferTraits::N; ++iv)
+               vnn[iv] = toFloatingPoint<virial_prec>(ev_hobj.v_nnintermol[iv]);
+            virialReshape(v2nn, vnn);
+            for (int iv = 0; iv < 9; ++iv)
+               virial_nnintermol[iv] += v2nn[iv];
+         }
       }
       for (int iv = 0; iv < 9; ++iv)
-         vir[iv] = virial_valence[iv] + virial_vdw[iv] + virial_elec[iv];
+         vir[iv] = virial_valence[iv] + virial_vdw[iv] + virial_elec[iv] + virial_nnintermol[iv];
    }
    if (do_g) {
       if (ecore_vdw and gx_vdw)

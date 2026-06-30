@@ -97,8 +97,13 @@ public:
    void deallocate();
    void initialize();
    void forward(int vers, const int ngrps_nn, const int* restrict grps_nn, EnergyBuffer restrict enn); //
-   void
-   gradient(int vers, const int ngrps_nn, const int* restrict grps_nn, grad_prec* restrict denn_x, grad_prec* restrict denn_y, grad_prec* restrict denn_z); //
+   void gradient(int vers,
+                 const int ngrps_nn,
+                 const int* restrict grps_nn,
+                 grad_prec* restrict denn_x,
+                 grad_prec* restrict denn_y,
+                 grad_prec* restrict denn_z,
+                 VirialBuffer restrict vir_enn); //
 };
 
 class LinearLayer : public NeuralNetworkBaseLayer
@@ -225,13 +230,14 @@ using cuda_real3 = ::float3;
       int naev, real *restrict iaev, int laev, int natomic_covered, const int *restrict atomic2species, const int *restrict atomid_global2local, real R_m_c,   \
       int R_m_d, const real *restrict R_m, int eta_m, real R_q_c, int R_q_d, const real *restrict R_q, int eta_q, int theta_p_d, const real *restrict theta_p, \
       int zeta_p, /* gradient data */ const real *dZp, grad_prec *restrict denn_x, grad_prec *restrict denn_y, grad_prec *restrict denn_z,                     \
-      const int *restrict nblist_rad, const int *restrict nblist_ang, const int *restrict atomid_local2global, EnergyBuffer restrict ebuf, real nnlambda
+      VirialBuffer restrict vir_enn, size_t bufsize, const int *restrict nblist_rad, const int *restrict nblist_ang, const int *restrict atomid_local2global,  \
+      EnergyBuffer restrict ebuf, real nnlambda
 // /* gradient data */ real** dZx, real** dZy, real** dZz
 
-#define AEV_ARGS                                                                                                                                             \
-   /* basic atom info */ n, x, y, z, grplist, atomic, /* neighbor list */ nakpl, iakpl, niak, iak, lst, sorted, max_nb, /* box info */ TINKER_IMAGE_ARGS,    \
-      /* nn parameters */ ngrps_nn, grps_nn, /* aev parameters */ naev, iaev, laev, natomic_covered, atomic2species, atomid_global2local, R_m_c, R_m_d, R_m, \
-      eta_m, R_q_c, R_q_d, R_q, eta_q, theta_p_d, theta_p, zeta_p, /* gradient data */ dZp, denn_x, denn_y, denn_z, nblist_rad, nblist_ang,                  \
+#define AEV_ARGS                                                                                                                                              \
+   /* basic atom info */ n, x, y, z, grplist, atomic, /* neighbor list */ nakpl, iakpl, niak, iak, lst, sorted, max_nb, /* box info */ TINKER_IMAGE_ARGS,     \
+      /* nn parameters */ ngrps_nn, grps_nn, /* aev parameters */ naev, iaev, laev, natomic_covered, atomic2species, atomid_global2local, R_m_c, R_m_d, R_m,  \
+      eta_m, R_q_c, R_q_d, R_q, eta_q, theta_p_d, theta_p, zeta_p, /* gradient data */ dZp, denn_x, denn_y, denn_z, vir_enn, bufsize, nblist_rad, nblist_ang, \
       atomid_local2global, ebuf, nnlambda
 // /* gradient data */ dZx, dZy, dZz
 

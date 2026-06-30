@@ -30,6 +30,7 @@ matexp.cpp
 nacl.cpp
 nblist.cpp
 nh.cpp
+nn.cpp
 opbend.cpp
 osrw.cpp
 partialcharge.cpp

@@ -359,17 +359,17 @@ void AtomicEnvironmentVectorLayer::forward(int vers, const int ngrps_nn, const i
       (*nnspatial_v2_unit).niak, (*nnspatial_v2_unit).iak, (*nnspatial_v2_unit).lst, (*nnspatial_v2_unit).sorted,
       max_nb, TINKER_IMAGE_ARGS_CU, ngrps_nn, grps_nn, naev, iaev, laev, natomic_covered, atomic2species,
       atomid_global2local, R_m_c, R_m_d, R_m, eta_m, R_q_c, R_q_d, R_q, eta_q, theta_p_d, theta_p, zeta_p, nullptr,
-      nullptr, nullptr, nullptr, nblist_rad, nblist_ang, atomid_local2global, enn, nnlambda);
+      nullptr, nullptr, nullptr, nullptr, bufferSize(), nblist_rad, nblist_ang, atomid_local2global, enn, nnlambda);
 }
 
 void AtomicEnvironmentVectorLayer::gradient(int vers, const int ngrps_nn, const int* restrict grps_nn,
-   grad_prec* restrict denn_x, grad_prec* restrict denn_y, grad_prec* restrict denn_z)
+   grad_prec* restrict denn_x, grad_prec* restrict denn_y, grad_prec* restrict denn_z, VirialBuffer restrict vir_enn)
 {
    aev_cu(vers, n, x, y, z, grp.grplist, atomic, (*nnspatial_v2_unit).nakpl, (*nnspatial_v2_unit).iakpl,
       (*nnspatial_v2_unit).niak, (*nnspatial_v2_unit).iak, (*nnspatial_v2_unit).lst, (*nnspatial_v2_unit).sorted,
       max_nb, TINKER_IMAGE_ARGS_CU, ngrps_nn, grps_nn, naev, iaev, laev, natomic_covered, atomic2species,
       atomid_global2local, R_m_c, R_m_d, R_m, eta_m, R_q_c, R_q_d, R_q, eta_q, theta_p_d, theta_p, zeta_p, dZp, denn_x,
-      denn_y, denn_z, nblist_rad, nblist_ang, atomid_local2global, nullptr, nnlambda);
+      denn_y, denn_z, vir_enn, bufferSize(), nblist_rad, nblist_ang, atomid_local2global, nullptr, nnlambda);
 }
 
 LinearLayer::LinearLayer(const std::vector<real>& prms)
@@ -651,7 +651,7 @@ void NeuralNetworkPotential::gradient(int vers, const int ngrps_nn, const int* r
       networks[i]->gradient(vers);
    }
    // multiplied by the gradients of aev and added to the global gradients array at the same time
-   aev->gradient(vers, ngrps_nn, grps_nn, denn_x, denn_y, denn_z);
+   aev->gradient(vers, ngrps_nn, grps_nn, denn_x, denn_y, denn_z, vir_enn);
 }
 
 }

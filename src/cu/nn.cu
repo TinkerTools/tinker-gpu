@@ -19,10 +19,11 @@ void ref_nblist_cu1(NBLIST_PARAMS)
    // coordinates: xi, yi, zi; atomic numbers: ai; group ids: gi;
    // __shared__ real xi[BLOCK_DIM], yi[BLOCK_DIM], zi[BLOCK_DIM], ai[BLOCK_DIM], gi[BLOCK_DIM];
    real xi, yi, zi;
-   int ai, gi;
+   // int ai;
+   int gi;
    // real dZp_irow[laev];
    __shared__ real xj[BLOCK_DIM], yj[BLOCK_DIM], zj[BLOCK_DIM];
-   __shared__ int aj[BLOCK_DIM], gj[BLOCK_DIM];
+   // __shared__ int aj[BLOCK_DIM], gj[BLOCK_DIM];
    __shared__ int incl_block[BLOCK_DIM / WARP_SIZE];
 
    for (int task_num = 0; task_num < 2; task_num++) {
@@ -64,7 +65,7 @@ void ref_nblist_cu1(NBLIST_PARAMS)
          xi = x[i];
          yi = y[i];
          zi = z[i];
-         ai = atomic[i];
+         // ai = atomic[i];
 
          int jid, atomj;
          if (task_num == 0) {
@@ -75,7 +76,7 @@ void ref_nblist_cu1(NBLIST_PARAMS)
             atomj = max(lst[jid], 0);
          }
          int j = sorted[atomj].unsorted;
-         gj[threadIdx.x] = grplist[j];
+         // gj[threadIdx.x] = grplist[j];
          // xj[threadIdx.x] = sorted[atomj].x;
          // yj[threadIdx.x] = sorted[atomj].y;
          // zj[threadIdx.x] = sorted[atomj].z;
@@ -186,6 +187,7 @@ void aev_cu1(AEV_PARAMS)
       if (j == -1) {
          continue;
       }
+      int offset = nb & (bufsize - 1);
 
       real xi = x[i];
       real yi = y[i];
@@ -366,6 +368,15 @@ void aev_cu1(AEV_PARAMS)
                   atomic_add(dGA_ijkpq_dxk, denn_x, k);
                   atomic_add(dGA_ijkpq_dyk, denn_y, k);
                   atomic_add(dGA_ijkpq_dzk, denn_z, k);
+                  if CONSTEXPR (do_v) {
+                     real vxx = xrk * dGA_ijkpq_dxk;
+                     real vyx = yrk * dGA_ijkpq_dxk;
+                     real vzx = zrk * dGA_ijkpq_dxk;
+                     real vyy = yrk * dGA_ijkpq_dyk;
+                     real vzy = zrk * dGA_ijkpq_dyk;
+                     real vzz = zrk * dGA_ijkpq_dzk;
+                     atomic_add(vxx, vyx, vzx, vyy, vzy, vzz, vir_enn, offset);
+                  }
                }
             }
          }
@@ -383,6 +394,15 @@ void aev_cu1(AEV_PARAMS)
          atomic_add(dxj, denn_x, j);
          atomic_add(dyj, denn_y, j);
          atomic_add(dzj, denn_z, j);
+         if CONSTEXPR (do_v) {
+            real vxx = xrj * dxj;
+            real vyx = yrj * dxj;
+            real vzx = zrj * dxj;
+            real vyy = yrj * dyj;
+            real vzy = zrj * dyj;
+            real vzz = zrj * dzj;
+            atomic_add(vxx, vyx, vzx, vyy, vzy, vzz, vir_enn, offset);
+         }
       }
    }
 
@@ -395,6 +415,7 @@ void aev_cu1(AEV_PARAMS)
       if (j == -1) {
          continue;
       }
+      int offset = nb & (bufsize - 1);
 
       real xi = x[i];
       real yi = y[i];
@@ -459,6 +480,15 @@ void aev_cu1(AEV_PARAMS)
          atomic_add(dxj, denn_x, j);
          atomic_add(dyj, denn_y, j);
          atomic_add(dzj, denn_z, j);
+         if CONSTEXPR (do_v) {
+            real vxx = xrj * dxj;
+            real vyx = yrj * dxj;
+            real vzx = zrj * dxj;
+            real vyy = yrj * dyj;
+            real vzy = zrj * dyj;
+            real vzz = zrj * dzj;
+            atomic_add(vxx, vyx, vzx, vyy, vzy, vzz, vir_enn, offset);
+         }
       }
    }
 }
@@ -482,9 +512,9 @@ template <class Ver>
 __global__
 void celu_cu1(CELU_PARAMS)
 {
-   constexpr bool do_e = Ver::e;
+   // constexpr bool do_e = Ver::e;
    // constexpr bool do_a = Ver::a;
-   constexpr bool do_g = Ver::g;
+   // constexpr bool do_g = Ver::g;
    // constexpr bool do_v = Ver::v;
    const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
    const int stride = blockDim.x * gridDim.x;

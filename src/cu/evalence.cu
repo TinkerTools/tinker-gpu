@@ -863,7 +863,6 @@ void ennvalence_cu2(int vers)
 {
    // auto rc_a = rc_flag & calc::analyz;
    auto do_e = vers & calc::energy;
-   auto do_v = vers & calc::virial;
    auto do_g = vers & calc::grad;
    for (int i = 0; i < nnps.size(); i++) {
       if (nnps[i].type == "valence") {
@@ -871,10 +870,7 @@ void ennvalence_cu2(int vers)
             nnps[i].forward(calc::energy, ngrps_nnvalence, grps_nnvalence, ennval);
          }
          if (do_g)
-            nnps[i].gradient(calc::grad, ngrps_nnvalence, grps_nnvalence, dennval_x, dennval_y, dennval_z, vir_ennval);
-         // TODO implement virial for nnvalence
-         // if (do_v)
-         //    some code;
+            nnps[i].gradient(vers, ngrps_nnvalence, grps_nnvalence, dennval_x, dennval_y, dennval_z, vir_ennval);
       }
    }
 }
@@ -1047,9 +1043,9 @@ void evalence_cu(int vers)
          energy_valence += energy_ennval;
       }
       if (do_v) {
-         // virialReduce(virial_eb, vir_eb);
-         // for (int iv = 0; iv < 9; ++iv)
-         //    virial_valence[iv] += virial_eb[iv];
+         virialReduce(virial_ennval, vir_ennval);
+         for (int iv = 0; iv < 9; ++iv)
+            virial_valence[iv] += virial_ennval[iv];
       }
       if (do_g)
          sumGradient(gx, gy, gz, dennval_x, dennval_y, dennval_z);

@@ -103,7 +103,6 @@ void ennmetal_cu(int vers)
 {
    // auto rc_a = rc_flag & calc::analyz;
    auto do_e = vers & calc::energy;
-   auto do_v = vers & calc::virial;
    auto do_g = vers & calc::grad;
    for (int i = 0; i < nnps.size(); i++) {
       if (nnps[i].type == "metal") {
@@ -111,10 +110,7 @@ void ennmetal_cu(int vers)
             nnps[i].forward(calc::energy, ngrps_nnmetal, grps_nnmetal, ennmet);
          }
          if (do_g)
-            nnps[i].gradient(calc::grad, ngrps_nnmetal, grps_nnmetal, dennmet_x, dennmet_y, dennmet_z, vir_ennmet);
-         // TODO implement virial for nnmetal
-         // if (do_v)
-         //    some code;
+            nnps[i].gradient(vers, ngrps_nnmetal, grps_nnmetal, dennmet_x, dennmet_y, dennmet_z, vir_ennmet);
       }
    }
 }
@@ -156,9 +152,10 @@ void ennintermol_cu(int vers)
          energy_nnintermol += energy_ennmet;
       }
       if (do_v) {
-         // virialReduce(virial_eb, vir_eb);
-         // for (int iv = 0; iv < 9; ++iv)
-         //    virial_valence[iv] += virial_eb[iv];
+         virialReduce(virial_ennmet, vir_ennmet);
+         for (int iv = 0; iv < 9; ++iv) {
+            virial_nnintermol[iv] += virial_ennmet[iv];
+         }
       }
       if (do_g) {
          sumGradient(gx_nnintermol, gy_nnintermol, gz_nnintermol, dennmet_x, dennmet_y, dennmet_z);
