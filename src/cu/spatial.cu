@@ -486,6 +486,7 @@ void spatialStep5(const int* restrict bnum, const int* restrict iakpl_rev, int n
    // tranditional AMOEBA terms.
    for (int wy = iwarp; wy < (nblist4nn ? nak : nak - 1); wy += nwarp) {
       int atomi = wy * WARP_SIZE + ilane;
+      atomi = min(atomi, n - 1);
       real xi = sorted[atomi].x;
       real yi = sorted[atomi].y;
       real zi = sorted[atomi].z;

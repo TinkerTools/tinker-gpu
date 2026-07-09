@@ -109,13 +109,17 @@ void ref_nblist_cu1(NBLIST_PARAMS)
                if (atomic2species[atomic[j]] == -1) { // remove the atoms not in atomic_covered
                   incl_ij = false;
                }
-               x = atomid_global2local[i];
-               y = atomid_global2local[j];
-               tri = xy_to_tri(max(x, y), min(x, y));
                // only use topo flags when topo_cutoff is set to > 0.
                if (topo_cutoff > 0) {
-                  int incl_topo = topo_flags[tri / WARP_SIZE] & (1 << (tri & (WARP_SIZE - 1)));
-                  incl_ij = incl_ij and incl_topo;
+                  x = atomid_global2local[i];
+                  y = atomid_global2local[j];
+                  if (y == -1) {                      // make sure j is also in nnatoms for NN valence term.
+                     incl_ij = false;
+                  } else {
+                     tri = xy_to_tri(max(x, y), min(x, y));
+                     int incl_topo = topo_flags[tri / WARP_SIZE] & (1 << (tri & (WARP_SIZE - 1)));
+                     incl_ij = incl_ij and incl_topo;
+                  }
                }
             }
 
