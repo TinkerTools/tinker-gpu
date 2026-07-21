@@ -1,3 +1,5 @@
+#include "ff/dlmda.h"
+#include "ff/evdw.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/pme.h"
@@ -7,12 +9,15 @@
 #include "seq/launch.h"
 #include "seq/pair_mpole.h"
 #include "seq/triangle.h"
+#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/extfld.hh>
+#include <tinker/detail/mutant.hh>
 
 namespace tinker {
 #include "empole_cu1.cc"
+#include "empoledlmda_cu1.cc"
 
-template <class Ver, class ETYP>
+template <class Ver, class ETYP, class LTYP>
 static void empole_cu()
 {
    constexpr bool do_e = Ver::e;
@@ -37,42 +42,65 @@ static void empole_cu()
       }
    }
    int ngrid = gpuGridSize(BLOCK_DIM);
-   empole_cu1<Ver, ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, vir_em, demx, demy, demz,
-      off, st.si1.bit0, nmdpuexclude, mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl,
-      st.niak, st.iak, st.lst, trqx, trqy, trqz, rpole, f, aewald);
+   if CONSTEXPR (eq<LTYP, DLMDA>()) {
+      empoledlmda_cu1<Ver, ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, demdl_buf, d2emdl2_buf,
+         vir_em, demvirdl_buf, demx, demy, demz, dfmdlx, dfmdly, dfmdlz, off, st.si1.bit0, nmdpuexclude, mdpuexclude,
+         mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, trqx, trqy, trqz,
+         dltrqx, dltrqy, dltrqz, rpole, mut, f, aewald, mutant::elambda);
+   } else {
+      empole_cu1<Ver, ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, vir_em, demx, demy, demz,
+         off, st.si1.bit0, nmdpuexclude, mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl,
+         st.niak, st.iak, st.lst, trqx, trqy, trqz, rpole, f, aewald);
+   }
 }
 
 void empoleNonEwald_cu(int vers)
 {
-   if (vers == calc::v0) {
-      empole_cu<calc::V0, NON_EWALD>();
-   } else if (vers == calc::v1) {
-      empole_cu<calc::V1, NON_EWALD>();
-   } else if (vers == calc::v3) {
-      empole_cu<calc::V3, NON_EWALD>();
-   } else if (vers == calc::v4) {
-      empole_cu<calc::V4, NON_EWALD>();
-   } else if (vers == calc::v5) {
-      empole_cu<calc::V5, NON_EWALD>();
-   } else if (vers == calc::v6) {
-      empole_cu<calc::V6, NON_EWALD>();
+   if (dlmda::use_dlmda) {
+      if (vers == calc::v0) {
+         empole_cu<calc::V0, NON_EWALD,DLMDA>();
+      } else if (vers == calc::v1) {
+         empole_cu<calc::V1, NON_EWALD,DLMDA>();
+      } else if (vers == calc::v3) {
+         empole_cu<calc::V3, NON_EWALD,DLMDA>();
+      } else if (vers == calc::v4) {
+         empole_cu<calc::V4, NON_EWALD,DLMDA>();
+      } else if (vers == calc::v5) {
+         empole_cu<calc::V5, NON_EWALD,DLMDA>();
+      } else if (vers == calc::v6) {
+         empole_cu<calc::V6, NON_EWALD,DLMDA>();
+      }
+   } else {
+      if (vers == calc::v0) {
+         empole_cu<calc::V0, NON_EWALD,NON_DLMDA>();
+      } else if (vers == calc::v1) {
+         empole_cu<calc::V1, NON_EWALD,NON_DLMDA>();
+      } else if (vers == calc::v3) {
+         empole_cu<calc::V3, NON_EWALD,NON_DLMDA>();
+      } else if (vers == calc::v4) {
+         empole_cu<calc::V4, NON_EWALD,NON_DLMDA>();
+      } else if (vers == calc::v5) {
+         empole_cu<calc::V5, NON_EWALD,NON_DLMDA>();
+      } else if (vers == calc::v6) {
+         empole_cu<calc::V6, NON_EWALD,NON_DLMDA>();
+      }
    }
 }
 
 void empoleEwaldRealSelf_cu(int vers)
 {
    if (vers == calc::v0) {
-      empole_cu<calc::V0, EWALD>();
+      empole_cu<calc::V0, EWALD,NON_DLMDA>();
    } else if (vers == calc::v1) {
-      empole_cu<calc::V1, EWALD>();
+      empole_cu<calc::V1, EWALD,NON_DLMDA>();
    } else if (vers == calc::v3) {
-      empole_cu<calc::V3, EWALD>();
+      empole_cu<calc::V3, EWALD,NON_DLMDA>();
    } else if (vers == calc::v4) {
-      empole_cu<calc::V4, EWALD>();
+      empole_cu<calc::V4, EWALD,NON_DLMDA>();
    } else if (vers == calc::v5) {
-      empole_cu<calc::V5, EWALD>();
+      empole_cu<calc::V5, EWALD,NON_DLMDA>();
    } else if (vers == calc::v6) {
-      empole_cu<calc::V6, EWALD>();
+      empole_cu<calc::V6, EWALD,NON_DLMDA>();
    }
 }
 

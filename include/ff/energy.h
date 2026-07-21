@@ -39,6 +39,9 @@ bool useEnergyVdw();
 /// Logical flag for use of electrostatic terms.
 bool useEnergyElec();
 
+/// Logical flag for use of intermolecular neural network terms.
+bool useEnergyINN();
+
 /// Sets up data on device.
 void egvData(RcOp);
 

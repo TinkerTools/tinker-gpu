@@ -1,27 +1,54 @@
+#include "ff/dlmda.h"
 #include "ff/energy.h"
 #include "math/zero.h"
 #include "tool/externfunc.h"
+#include <tinker/detail/dlmda.hh>
 
 namespace tinker {
 void zeroEGV(int vers)
 {
    size_t bsize = bufferSize();
    if (vers & calc::energy) {
-      zeroOnHost(esum, energy_valence, energy_vdw, energy_elec, energy_nnintermol);
-      // zeroOnDevice3Async(bsize, eng_buf, eng_buf_vdw, eng_buf_elec);
-      zeroOnDevice4Async(bsize, eng_buf, eng_buf_vdw, eng_buf_elec, eng_buf_nnintermol);
+      zeroOnHost(esum, energy_valence, energy_vdw, energy_elec);
+      zeroOnDevice3Async(bsize, eng_buf, eng_buf_vdw, eng_buf_elec);
+
+      if (useEnergyINN()) {
+         zeroOnHost(energy_nnintermol);
+         zeroOnDeviceAsync(bsize, eng_buf_nnintermol);
+      }
+
+      if (dlmda::use_dlmda) {
+         zeroOnHost(dedl, d2edl2);
+         zeroOnDeviceAsync(bsize, dedl_buf);
+         zeroOnDeviceAsync(bsize, d2edl2_buf);
+      }
    }
 
    if (vers & calc::virial) {
       zeroOnHost(vir, virial_valence, virial_vdw, virial_elec, virial_nnintermol);
-      // zeroOnDevice3Async(bsize, vir_buf, vir_buf_vdw, vir_buf_elec);
-      zeroOnDevice4Async(bsize, vir_buf, vir_buf_vdw, vir_buf_elec, vir_buf_nnintermol);
+      zeroOnDevice3Async(bsize, vir_buf, vir_buf_vdw, vir_buf_elec);
+      
+      if (useEnergyINN()) {
+         zeroOnHost(virial_nnintermol);
+         zeroOnDeviceAsync(bsize, vir_buf_nnintermol);
+      }
+
+      if (dlmda::use_dlmda) {
+         zeroOnHost(dvirdl);
+         zeroOnDeviceAsync(bsize, dvirdl_buf);
+      }
    }
 
    if (vers & calc::grad) {
-      // zeroOnDevice9Async(n, gx, gy, gz, gx_vdw, gy_vdw, gz_vdw, gx_elec, gy_elec, gz_elec);
-      zeroOnDevice12Async(n, gx, gy, gz, gx_vdw, gy_vdw, gz_vdw, gx_elec, gy_elec, gz_elec, gx_nnintermol,
-         gy_nnintermol, gz_nnintermol);
+      zeroOnDevice9Async(n, gx, gy, gz, gx_vdw, gy_vdw, gz_vdw, gx_elec, gy_elec, gz_elec);
+
+      if (useEnergyINN()) {
+         zeroOnDevice3Async(n, gx_nnintermol, gy_nnintermol, gz_nnintermol);
+      }
+
+      if (dlmda::use_dlmda) {
+         zeroOnDevice3Async(n, dfsumdlx, dfsumdly, dfsumdlz);
+      }
    }
 }
 }

@@ -7,6 +7,11 @@ std::string tinker_f_version(std::string infile, std::string status);
 // file
 void tinker_f_rewind(int* unit);
 
+/// Flushes a Fortran output unit.
+void tinker_f_flush(int unit);
+
+void tinker_f_flush_output();
+
 void tinker_f_close(int* unit);
 
 void tinker_f_open(int* unit, std::string file, std::string status);

@@ -380,4 +380,20 @@ void torque_cu(int vers, grad_prec* gx, grad_prec* gy, grad_prec* gz)
          x, y, z, zaxis, trqx, trqy, trqz);
    }
 }
+
+void torque_cu(int vers, grad_prec* gx, grad_prec* gy, grad_prec* gz, const real* tqx, const real* tqy,
+   const real* tqz, VirialBuffer vbuf)
+{
+   if (vers & calc::virial) {
+      auto ker = torque_cu1<true>;
+      launch_k1b(g::s0, n, ker,  //
+         n, vbuf, gx, gy, gz,    //
+         x, y, z, zaxis, tqx, tqy, tqz);
+   } else if (vers & calc::grad) {
+      auto ker = torque_cu1<false>;
+      launch_k1s(g::s0, n, ker,  //
+         n, nullptr, gx, gy, gz, //
+         x, y, z, zaxis, tqx, tqy, tqz);
+   }
+}
 }

@@ -1,14 +1,24 @@
 #include "ff/atom.h"
+#include "ff/dlmda.h"
 #include "ff/elec.h"
 #include "ff/modamoeba.h"
 #include "ff/pme.h"
 #include "tool/externfunc.h"
+#include <tinker/detail/dlmda.hh>
 
 namespace tinker {
 TINKER_FVOID2(acc1, cu1, torque, int, grad_prec*, grad_prec*, grad_prec*);
 void torque(int vers, grad_prec* dx, grad_prec* dy, grad_prec* dz)
 {
    TINKER_FCALL2(acc1, cu1, torque, vers, dx, dy, dz);
+}
+
+TINKER_FVOID2(acc1, cu1, torque, int, grad_prec*, grad_prec*, grad_prec*, const real*, const real*,
+   const real*, VirialBuffer);
+void torque(int vers, grad_prec* dx, grad_prec* dy, grad_prec* dz, const real* tqx, const real* tqy,
+   const real* tqz, VirialBuffer vbuf)
+{
+   TINKER_FCALL2(acc1, cu1, torque, vers, dx, dy, dz, tqx, tqy, tqz, vbuf);
 }
 }
 
@@ -27,8 +37,12 @@ static void rotpole()
 
 void mpoleInit(int vers)
 {
-   if (vers & calc::grad)
+   if (vers & calc::grad) {
       darray::zero(g::q0, n, trqx, trqy, trqz);
+      if (dlmda::use_dlmda) {
+         darray::zero(g::q0, n, dltrqx, dltrqy, dltrqz);
+      }
+   }
    if (vers & calc::virial)
       darray::zero(g::q0, bufferSize(), vir_trq);
 

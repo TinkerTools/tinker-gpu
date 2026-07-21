@@ -16,6 +16,7 @@ static const char* helper_name = "help";
 static const char* info_name = "info";
 static const char* minimize_name = "minimize";
 static const char* testgrad_name = "testgrad";
+static const char* testlmda_name = "testlmda";
 static const char* testvir_name = "testvir";
 
 static const std::map<std::string, std::function<void(int, char**)>>& launcher()
@@ -28,6 +29,7 @@ static const std::map<std::string, std::function<void(int, char**)>>& launcher()
       {info_name, xInfo},
       {minimize_name, xMinimize},
       {testgrad_name, xTestgrad},
+      {testlmda_name, xTestlmda},
       {testvir_name, xTestvir},
    };
    return x;

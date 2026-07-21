@@ -1,3 +1,4 @@
+#include "ff/dlmda.h"
 #include "ff/elec.h"
 #include "ff/echarge.h"
 #include "ff/energy.h"
@@ -10,6 +11,7 @@
 #include <tinker/detail/chgpen.hh>
 #include <tinker/detail/chgpot.hh>
 #include <tinker/detail/couple.hh>
+#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/extfld.hh>
 #include <tinker/detail/kchrge.hh>
 #include <tinker/detail/limits.hh>
@@ -59,10 +61,18 @@ static void mpoleData(RcOp op)
    if (op & RcOp::DEALLOC) {
       darray::deallocate(zaxis, pole, rpole, udir, udirp, uind, uinp);
       darray::deallocate(trqx, trqy, trqz, vir_trq);
+      darray::deallocate(poleorig);
+      darray::deallocate(dltrqx, dltrqy, dltrqz);
    }
 
    if (op & RcOp::ALLOC) {
       darray::allocate(n, &zaxis, &pole, &rpole);
+
+      if (dlmda::use_dlmda) {
+         darray::allocate(n, &poleorig);
+      } else {
+         poleorig = nullptr;
+      }
 
       if (use(Potent::POLAR)) {
          darray::allocate(n, &uind, &uinp, &udir, &udirp);
@@ -75,10 +85,14 @@ static void mpoleData(RcOp op)
 
       if (rc_flag & calc::grad) {
          darray::allocate(n, &trqx, &trqy, &trqz);
+         if (dlmda::use_dlmda) darray::allocate(n, &dltrqx, &dltrqy, &dltrqz);
       } else {
          trqx = nullptr;
          trqy = nullptr;
          trqz = nullptr;
+         dltrqx = nullptr;
+         dltrqy = nullptr;
+         dltrqz = nullptr;
       }
       if (rc_flag & calc::virial) {
          darray::allocate(bufferSize(), &vir_trq);
@@ -141,6 +155,25 @@ static void mpoleData(RcOp op)
       }
       darray::copyin(g::q0, n, pole, polebuf.data());
       waitFor(g::q0);
+
+      if (dlmda::use_dlmda) {
+         for (int i = 0; i < n; ++i) {
+            int b1 = MPL_TOTAL * i;
+            int b2 = mpole::maxpole * i;
+            polebuf[b1 + MPL_PME_0] = dlmda::poleorig[b2 + 0];
+            polebuf[b1 + MPL_PME_X] = dlmda::poleorig[b2 + 1];
+            polebuf[b1 + MPL_PME_Y] = dlmda::poleorig[b2 + 2];
+            polebuf[b1 + MPL_PME_Z] = dlmda::poleorig[b2 + 3];
+            polebuf[b1 + MPL_PME_XX] = dlmda::poleorig[b2 + 4];
+            polebuf[b1 + MPL_PME_XY] = dlmda::poleorig[b2 + 5];
+            polebuf[b1 + MPL_PME_XZ] = dlmda::poleorig[b2 + 6];
+            polebuf[b1 + MPL_PME_YY] = dlmda::poleorig[b2 + 8];
+            polebuf[b1 + MPL_PME_YZ] = dlmda::poleorig[b2 + 9];
+            polebuf[b1 + MPL_PME_ZZ] = dlmda::poleorig[b2 + 12];
+         }
+         darray::copyin(g::q0, n, poleorig, polebuf.data());
+         waitFor(g::q0);
+      }
    }
 }
 

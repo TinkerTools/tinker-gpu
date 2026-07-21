@@ -1,4 +1,5 @@
 #include "ff/amoeba/empole.h"
+#include "ff/dlmda.h"
 #include "ff/elec.h"
 #include "ff/energy.h"
 #include "ff/hippo/empole.h"
@@ -7,6 +8,7 @@
 #include "ff/potent.h"
 #include "math/zero.h"
 #include "tool/externfunc.h"
+#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/mplpot.hh>
 
 namespace tinker {
@@ -23,6 +25,9 @@ void empoleData(RcOp op)
       if (rc_a) {
          bufferDeallocate(rc_flag, nem);
          bufferDeallocate(rc_flag, em, vir_em, demx, demy, demz);
+         bufferDeallocate(rc_flag, demdl_buf, demvirdl_buf, dfmdlx, dfmdly, dfmdlz);
+         if (rc_flag & calc::energy)
+            darray::deallocate(d2emdl2_buf);
       }
       nem = nullptr;
       em = nullptr;
@@ -30,6 +35,12 @@ void empoleData(RcOp op)
       demx = nullptr;
       demy = nullptr;
       demz = nullptr;
+      demdl_buf = nullptr;
+      d2emdl2_buf = nullptr;
+      demvirdl_buf = nullptr;
+      dfmdlx = nullptr;
+      dfmdly = nullptr;
+      dfmdlz = nullptr;
    }
 
    if (op & RcOp::ALLOC) {
@@ -39,9 +50,22 @@ void empoleData(RcOp op)
       demx = gx_elec;
       demy = gy_elec;
       demz = gz_elec;
+      if (dlmda::use_dlmda) {
+         demdl_buf = dedl_buf;
+         d2emdl2_buf = d2edl2_buf;
+         demvirdl_buf = dvirdl_buf;
+         dfmdlx = dfsumdlx;
+         dfmdly = dfsumdly;
+         dfmdlz = dfsumdlz;
+      }
       if (rc_a) {
          bufferAllocate(rc_flag, &nem);
          bufferAllocate(rc_flag, &em, &vir_em, &demx, &demy, &demz);
+         if (dlmda::use_dlmda) {
+            bufferAllocate(rc_flag, &demdl_buf, &demvirdl_buf, &dfmdlx, &dfmdly, &dfmdlz);
+            if (rc_flag & calc::energy)
+               darray::allocate(bufferSize(), &d2emdl2_buf);
+         }
       }
    }
 
@@ -97,6 +121,14 @@ void empole(int vers)
          darray::zero(g::q0, bsize, vir_em);
       if (do_g)
          darray::zero(g::q0, n, demx, demy, demz);
+      if (dlmda::use_dlmda) {
+         if (do_e)
+            darray::zero(g::q0, bsize, demdl_buf, d2emdl2_buf);
+         if (do_v)
+            darray::zero(g::q0, bsize, demvirdl_buf);
+         if (do_g)
+            darray::zero(g::q0, n, dfmdlx, dfmdly, dfmdlz);
+      }
    }
 
    mpoleInit(vers);
@@ -106,6 +138,8 @@ void empole(int vers)
       empoleNonEwald(vers);
    exfield(vers, 1);
    torque(vers, demx, demy, demz);
+   if (dlmda::use_dlmda)
+      torque(vers, dfmdlx, dfmdly, dfmdlz, dltrqx, dltrqy, dltrqz, demvirdl_buf);
    if (do_v) {
       VirialBuffer u2 = vir_trq;
       virial_prec v2[9];

@@ -1,0 +1,294 @@
+OUTPUT_DIR: src/cu/amoeba
+KERNEL_NAME: empoledlmda_cu1
+TEMPLATE_PARAMS: template<class Ver, class ETYP>
+CONSTEXPR_FLAGS: |
+  constexpr bool do_e = Ver::e;
+  constexpr bool do_a = Ver::a;
+  constexpr bool do_g = Ver::g;
+  constexpr bool do_v = Ver::v;
+
+COUNT:
+  - nem
+ENERGY:
+  - em
+  - demdl
+  - d2emdl2
+VIRIAL:
+  - vem
+  - demvirdl
+GRADIENT:
+  - gx
+  - gy
+  - gz
+  - dfmdlx
+  - dfmdly
+  - dfmdlz
+
+# CUT_DISTANCE:
+OFF_DISTANCE: 'off'
+
+EXCLUDE_INFO: mdpuinfo
+SCALE_1X_TYPE: real4_const_array,0
+
+EXTRA_PARAMS: |
+  , real* restrict trqx, real* restrict trqy, real* restrict trqz
+  , real* restrict dltrqx, real* restrict dltrqy, real* restrict dltrqz
+  , const real (*restrict rpole)[10], const int* restrict mut
+  , real f, real aewald, real elambda
+# IMPLICIT_PARAMS:
+
+I_VARIABLES:
+  - shared real xi   from:x
+  - shared real yi   from:y
+  - shared real zi   from:z
+  - shared real ci   from:rpole,MPL_PME_0
+  - shared real dix  from:rpole,MPL_PME_X
+  - shared real diy  from:rpole,MPL_PME_Y
+  - shared real diz  from:rpole,MPL_PME_Z
+  - shared real qixx from:rpole,MPL_PME_XX
+  - shared real qixy from:rpole,MPL_PME_XY
+  - shared real qixz from:rpole,MPL_PME_XZ
+  - shared real qiyy from:rpole,MPL_PME_YY
+  - shared real qiyz from:rpole,MPL_PME_YZ
+  - shared real qizz from:rpole,MPL_PME_ZZ
+  - shared int muti from:mut
+K_VARIABLES:
+  - shared   real xk   from:x
+  - shared   real yk   from:y
+  - shared   real zk   from:z
+  - shared   real ck   from:rpole,MPL_PME_0
+  - shared   real dkx  from:rpole,MPL_PME_X
+  - shared   real dky  from:rpole,MPL_PME_Y
+  - shared   real dkz  from:rpole,MPL_PME_Z
+  - register real qkxx from:rpole,MPL_PME_XX
+  - register real qkxy from:rpole,MPL_PME_XY
+  - register real qkxz from:rpole,MPL_PME_XZ
+  - register real qkyy from:rpole,MPL_PME_YY
+  - register real qkyz from:rpole,MPL_PME_YZ
+  - register real qkzz from:rpole,MPL_PME_ZZ
+  - register int mutk from:mut
+I_FORCE:
+  - register real frcxi addto:gx
+  - register real frcyi addto:gy
+  - register real frczi addto:gz
+  - register real dfrcxi addto:dfmdlx
+  - register real dfrcyi addto:dfmdly
+  - register real dfrczi addto:dfmdlz
+  - register real trqxi addto:trqx
+  - register real trqyi addto:trqy
+  - register real trqzi addto:trqz
+  - register real dltrqxi addto:dltrqx
+  - register real dltrqyi addto:dltrqy
+  - register real dltrqzi addto:dltrqz
+K_FORCE:
+  - register real frcxk addto:gx
+  - register real frcyk addto:gy
+  - register real frczk addto:gz
+  - register real dfrcxk addto:dfmdlx
+  - register real dfrcyk addto:dfmdly
+  - register real dfrczk addto:dfmdlz
+  - register real trqxk addto:trqx
+  - register real trqyk addto:trqy
+  - register real trqzk addto:trqz
+  - register real dltrqxk addto:dltrqx
+  - register real dltrqyk addto:dltrqy
+  - register real dltrqzk addto:dltrqz
+
+SCALED_PAIRWISE_INTERACTION: |
+  real xr = @xk@ - @xi@;
+  real yr = @yk@ - @yi@;
+  real zr = @zk@ - @zi@;
+  real r2 = image2(xr, yr, zr);
+  if (r2 <= off * off and incl) {
+    real e, vxx, vyx, vzx, vyy, vzy, vzz;
+    real e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1;
+    real pfrcxi = 0, pfrcyi = 0, pfrczi = 0;
+    real pfrcxk = 0, pfrcyk = 0, pfrczk = 0;
+    real ptrqxi = 0, ptrqyi = 0, ptrqzi = 0;
+    real ptrqxk = 0, ptrqyk = 0, ptrqzk = 0;
+    pair_mpole_v2<Ver, ETYP>(
+      r2, xr, yr, zr, 1,
+      @ci@, @dix@, @diy@, @diz@, @qixx@, @qixy@, @qixz@, @qiyy@, @qiyz@, @qizz@,
+      @ck@, @dkx@, @dky@, @dkz@, @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@,
+      f, aewald,
+      pfrcxi, pfrcyi, pfrczi, pfrcxk, pfrcyk, pfrczk,
+      ptrqxi, ptrqyi, ptrqzi, ptrqxk, ptrqyk, ptrqzk,
+      e, vxx, vyx, vzx, vyy, vzy, vzz);
+    pair_mpole_v2<Ver, NON_EWALD>(
+      r2, xr, yr, zr, scalea - 1,
+      @ci@, @dix@, @diy@, @diz@, @qixx@, @qixy@, @qixz@, @qiyy@, @qiyz@, @qizz@,
+      @ck@, @dkx@, @dky@, @dkz@, @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@,
+      f, aewald,
+      pfrcxi, pfrcyi, pfrczi, pfrcxk, pfrcyk, pfrczk,
+      ptrqxi, ptrqyi, ptrqzi, ptrqxk, ptrqyk, ptrqzk,
+      e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1);
+    if CONSTEXPR (do_e) {
+      e = e + e1;
+    }
+    if CONSTEXPR (do_v) {
+      vxx = vxx + vxx1;
+      vyx = vyx + vyx1;
+      vzx = vzx + vzx1;
+      vyy = vyy + vyy1;
+      vzy = vzy + vzy1;
+      vzz = vzz + vzz1;
+    }
+    real scalelmda = 1;
+    real dlscale = 0;
+    real d2scale = 0;
+    if (@muti@ and @mutk@) {
+      scalelmda = elambda * elambda;
+      dlscale = 2 * elambda;
+      d2scale = 2;
+    } else if (@muti@ or @mutk@) {
+      scalelmda = elambda;
+      dlscale = 1;
+    }
+    if (@muti@ or @mutk@) {
+      if CONSTEXPR (do_e) {
+        demdltl += floatTo<ebuf_prec>(dlscale * e);
+        d2emdl2tl += floatTo<ebuf_prec>(d2scale * e);
+      }
+      if CONSTEXPR (do_g) {
+        @dfrcxi@ += dlscale * pfrcxi;
+        @dfrcyi@ += dlscale * pfrcyi;
+        @dfrczi@ += dlscale * pfrczi;
+        @dfrcxk@ += dlscale * pfrcxk;
+        @dfrcyk@ += dlscale * pfrcyk;
+        @dfrczk@ += dlscale * pfrczk;
+        @dltrqxi@ += dlscale * ptrqxi;
+        @dltrqyi@ += dlscale * ptrqyi;
+        @dltrqzi@ += dlscale * ptrqzi;
+        @dltrqxk@ += dlscale * ptrqxk;
+        @dltrqyk@ += dlscale * ptrqyk;
+        @dltrqzk@ += dlscale * ptrqzk;
+      }
+      if CONSTEXPR (do_v) {
+        demvirdltlxx += floatTo<vbuf_prec>(dlscale * vxx);
+        demvirdltlyx += floatTo<vbuf_prec>(dlscale * vyx);
+        demvirdltlzx += floatTo<vbuf_prec>(dlscale * vzx);
+        demvirdltlyy += floatTo<vbuf_prec>(dlscale * vyy);
+        demvirdltlzy += floatTo<vbuf_prec>(dlscale * vzy);
+        demvirdltlzz += floatTo<vbuf_prec>(dlscale * vzz);
+      }
+    }
+    if CONSTEXPR (do_e) {
+      e *= scalelmda;
+      emtl += floatTo<ebuf_prec>(e);
+      if CONSTEXPR (do_a) {
+        if (scalea != 0 and e != 0)
+          nemtl += 1;
+      }
+    }
+    if CONSTEXPR (do_g) {
+      @frcxi@ += scalelmda*pfrcxi;
+      @frcyi@ += scalelmda*pfrcyi;
+      @frczi@ += scalelmda*pfrczi;
+      @frcxk@ += scalelmda*pfrcxk;
+      @frcyk@ += scalelmda*pfrcyk;
+      @frczk@ += scalelmda*pfrczk;
+      @trqxi@ += scalelmda*ptrqxi;
+      @trqyi@ += scalelmda*ptrqyi;
+      @trqzi@ += scalelmda*ptrqzi;
+      @trqxk@ += scalelmda*ptrqxk;
+      @trqyk@ += scalelmda*ptrqyk;
+      @trqzk@ += scalelmda*ptrqzk;
+    }
+    if CONSTEXPR (do_v) {
+      vemtlxx += floatTo<vbuf_prec>(scalelmda*vxx);
+      vemtlyx += floatTo<vbuf_prec>(scalelmda*vyx);
+      vemtlzx += floatTo<vbuf_prec>(scalelmda*vzx);
+      vemtlyy += floatTo<vbuf_prec>(scalelmda*vyy);
+      vemtlzy += floatTo<vbuf_prec>(scalelmda*vzy);
+      vemtlzz += floatTo<vbuf_prec>(scalelmda*vzz);
+    }
+  } // end if (include)
+FULL_PAIRWISE_INTERACTION: |
+  real xr = @xk@ - @xi@;
+  real yr = @yk@ - @yi@;
+  real zr = @zk@ - @zi@;
+  real r2 = image2(xr, yr, zr);
+  if (r2 <= off * off and incl) {
+    real e, vxx, vyx, vzx, vyy, vzy, vzz;
+    real pfrcxi = 0, pfrcyi = 0, pfrczi = 0;
+    real pfrcxk = 0, pfrcyk = 0, pfrczk = 0;
+    real ptrqxi = 0, ptrqyi = 0, ptrqzi = 0;
+    real ptrqxk = 0, ptrqyk = 0, ptrqzk = 0;
+    pair_mpole_v2<Ver, ETYP>(
+      r2, xr, yr, zr, 1,
+      @ci@, @dix@, @diy@, @diz@, @qixx@, @qixy@, @qixz@, @qiyy@, @qiyz@, @qizz@,
+      @ck@, @dkx@, @dky@, @dkz@, @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@,
+      f, aewald,
+      pfrcxi, pfrcyi, pfrczi, pfrcxk, pfrcyk, pfrczk,
+      ptrqxi, ptrqyi, ptrqzi, ptrqxk, ptrqyk, ptrqzk,
+      e, vxx, vyx, vzx, vyy, vzy, vzz);
+    real scalelmda = 1;
+    real dlscale = 0;
+    real d2scale = 0;
+    if (@muti@ and @mutk@) {
+      scalelmda = elambda * elambda;
+      dlscale = 2 * elambda;
+      d2scale = 2;
+    } else if (@muti@ or @mutk@) {
+      scalelmda = elambda;
+      dlscale = 1;
+    }
+    if (@muti@ or @mutk@) {
+      if CONSTEXPR (do_e) {
+        demdltl += floatTo<ebuf_prec>(dlscale * e);
+        d2emdl2tl += floatTo<ebuf_prec>(d2scale * e);
+      }
+      if CONSTEXPR (do_g) {
+        @dfrcxi@ += dlscale * pfrcxi;
+        @dfrcyi@ += dlscale * pfrcyi;
+        @dfrczi@ += dlscale * pfrczi;
+        @dfrcxk@ += dlscale * pfrcxk;
+        @dfrcyk@ += dlscale * pfrcyk;
+        @dfrczk@ += dlscale * pfrczk;
+        @dltrqxi@ += dlscale * ptrqxi;
+        @dltrqyi@ += dlscale * ptrqyi;
+        @dltrqzi@ += dlscale * ptrqzi;
+        @dltrqxk@ += dlscale * ptrqxk;
+        @dltrqyk@ += dlscale * ptrqyk;
+        @dltrqzk@ += dlscale * ptrqzk;
+      }
+      if CONSTEXPR (do_v) {
+        demvirdltlxx += floatTo<vbuf_prec>(dlscale * vxx);
+        demvirdltlyx += floatTo<vbuf_prec>(dlscale * vyx);
+        demvirdltlzx += floatTo<vbuf_prec>(dlscale * vzx);
+        demvirdltlyy += floatTo<vbuf_prec>(dlscale * vyy);
+        demvirdltlzy += floatTo<vbuf_prec>(dlscale * vzy);
+        demvirdltlzz += floatTo<vbuf_prec>(dlscale * vzz);
+      }
+    }
+    if CONSTEXPR (do_e) {
+      e *= scalelmda;
+      emtl += floatTo<ebuf_prec>(e);
+      if CONSTEXPR (do_a) {
+        if (e != 0)
+          nemtl += 1;
+      }
+    }
+    if CONSTEXPR (do_g) {
+      @frcxi@ += scalelmda*pfrcxi;
+      @frcyi@ += scalelmda*pfrcyi;
+      @frczi@ += scalelmda*pfrczi;
+      @frcxk@ += scalelmda*pfrcxk;
+      @frcyk@ += scalelmda*pfrcyk;
+      @frczk@ += scalelmda*pfrczk;
+      @trqxi@ += scalelmda*ptrqxi;
+      @trqyi@ += scalelmda*ptrqyi;
+      @trqzi@ += scalelmda*ptrqzi;
+      @trqxk@ += scalelmda*ptrqxk;
+      @trqyk@ += scalelmda*ptrqyk;
+      @trqzk@ += scalelmda*ptrqzk;
+    }
+    if CONSTEXPR (do_v) {
+      vemtlxx += floatTo<vbuf_prec>(scalelmda*vxx);
+      vemtlyx += floatTo<vbuf_prec>(scalelmda*vyx);
+      vemtlzx += floatTo<vbuf_prec>(scalelmda*vzx);
+      vemtlyy += floatTo<vbuf_prec>(scalelmda*vyy);
+      vemtlzy += floatTo<vbuf_prec>(scalelmda*vzy);
+      vemtlzz += floatTo<vbuf_prec>(scalelmda*vzz);
+    }
+  } // end if (include)

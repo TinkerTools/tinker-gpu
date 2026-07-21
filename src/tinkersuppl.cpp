@@ -2,6 +2,7 @@
 #include "f/tinkersupplement.h"
 #include "tool/iofortstr.h"
 #include <cassert>
+#include <cstdio>
 #include <cstring>
 
 std::string tinker_f_version(std::string file, std::string status)
@@ -25,6 +26,20 @@ void tinker_f_rewind(int* unit)
 void tinker_f_close(int* unit)
 {
    suppl_close_(unit);
+}
+
+void tinker_f_flush(int unit)
+{
+   suppl_flush_(&unit);
+}
+
+void tinker_f_flush_output()
+{
+   // Push out anything buffered on the C++ side first, then the Fortran side, so
+   // that text already written through either runtime lands in program order.
+   std::fflush(stdout);
+   constexpr int iout = 6; // Fortran preconnected output unit
+   tinker_f_flush(iout);
 }
 
 void tinker_f_open(int* unit, std::string file, std::string status)

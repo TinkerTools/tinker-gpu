@@ -51,6 +51,7 @@ void xHelp(int, char**);     ///< Entry point of the \c help program.
 void xInfo(int, char**);     ///< Entry point of the \c info program.
 void xMinimize(int, char**); ///< Entry point of the \c minimize program.
 void xTestgrad(int, char**); ///< Entry point of the \c testgrad program.
+void xTestlmda(int, char**); ///< Entry point of the \c testlmda program.
 void xTestvir(int, char**);  ///< Entry point of the \c testvir program.
 
 void promo();      ///< Writes a banner message.

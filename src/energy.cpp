@@ -60,6 +60,7 @@ static bool fts(std::string eng, bool& use_flag, unsigned tsflag, const TimeScal
 #include "ff/amoeba/emplar.h"
 #include "ff/amoeba/empole.h"
 #include "ff/amoeba/epolar.h"
+#include "ff/dlmda.h"
 #include "ff/echarge.h"
 #include "ff/echglj.h"
 #include "ff/ennintermol.h"
@@ -75,6 +76,7 @@ static bool fts(std::string eng, bool& use_flag, unsigned tsflag, const TimeScal
 #include "ff/pmestream.h"
 #include "ff/potent.h"
 #include "nn/nn.h"
+#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/mplpot.hh>
 #include <tinker/detail/polpot.hh>
 
@@ -306,10 +308,13 @@ struct DHRc
    EnergyBufferTraits::type e_vdw;
    EnergyBufferTraits::type e_ele;
    EnergyBufferTraits::type e_nnintermol;
+   EnergyBufferTraits::type dedl;
+   EnergyBufferTraits::type d2edl2;
    VirialBufferTraits::type v_val[VirialBufferTraits::N];
    VirialBufferTraits::type v_vdw[VirialBufferTraits::N];
    VirialBufferTraits::type v_ele[VirialBufferTraits::N];
    VirialBufferTraits::type v_nnintermol[VirialBufferTraits::N];
+   VirialBufferTraits::type dvirdl[VirialBufferTraits::N];
 };
 
 static DHRc ev_hobj;
@@ -331,6 +336,8 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
    ev_hobj.e_vdw = 0;
    ev_hobj.e_ele = 0;
    ev_hobj.e_nnintermol = 0;
+   ev_hobj.dedl = 0;
+   ev_hobj.d2edl2 = 0;
    if (do_e) {
       if (!rc_a) {
          size_t bufsize = bufferSize();
@@ -350,6 +357,14 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             must_wait = true;
             reduceSumOnDevice(&ev_dptr->e_nnintermol, eng_buf_nnintermol, bufsize, g::q0);
          }
+         if (dlmda::use_dlmda and dedl_buf) {
+            must_wait = true;
+            reduceSumOnDevice(&ev_dptr->dedl, dedl_buf, bufsize, g::q0);
+         }
+         if (dlmda::use_dlmda and d2edl2_buf) {
+            must_wait = true;
+            reduceSumOnDevice(&ev_dptr->d2edl2, d2edl2_buf, bufsize, g::q0);
+         }
       }
    }
 
@@ -357,6 +372,7 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
    zeroOnHost(ev_hobj.v_vdw);
    zeroOnHost(ev_hobj.v_ele);
    zeroOnHost(ev_hobj.v_nnintermol);
+   zeroOnHost(ev_hobj.dvirdl);
    if (do_v) {
       if (!rc_a) {
          size_t bufsize = bufferSize();
@@ -375,6 +391,10 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
          if (ecore_nnintermol and vir_buf_nnintermol) {
             must_wait = true;
             reduceSum2OnDevice(ev_dptr->v_nnintermol, vir_buf_nnintermol, bufsize, g::q0);
+         }
+         if (dlmda::use_dlmda and dvirdl_buf) {
+            must_wait = true;
+            reduceSum2OnDevice(ev_dptr->dvirdl, dvirdl_buf, bufsize, g::q0);
          }
       }
    }
@@ -395,6 +415,12 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
          }
          if (ecore_nnintermol and eng_buf_nnintermol) {
             energy_nnintermol += toFloatingPoint<energy_prec>(ev_hobj.e_nnintermol);
+         }
+         if (dlmda::use_dlmda and dedl_buf) {
+            dedl += toFloatingPoint<energy_prec>(ev_hobj.dedl);
+         }
+         if (dlmda::use_dlmda and d2edl2_buf) {
+            d2edl2 += toFloatingPoint<energy_prec>(ev_hobj.d2edl2);
          }
       }
       esum = energy_valence + energy_vdw + energy_elec + energy_nnintermol;
@@ -432,6 +458,14 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             virialReshape(v2nn, vnn);
             for (int iv = 0; iv < 9; ++iv)
                virial_nnintermol[iv] += v2nn[iv];
+         }
+         if (dlmda::use_dlmda and dvirdl_buf) {
+            virial_prec vdl[VirialBufferTraits::N], v2dl[9];
+            for (int iv = 0; iv < (int)VirialBufferTraits::N; ++iv)
+               vdl[iv] = toFloatingPoint<virial_prec>(ev_hobj.dvirdl[iv]);
+            virialReshape(v2dl, vdl);
+            for (int iv = 0; iv < 9; ++iv)
+               dvirdl[iv] += v2dl[iv];
          }
       }
       for (int iv = 0; iv < 9; ++iv)
@@ -577,11 +611,13 @@ void egvData(RcOp op)
                darray::deallocate(eng_buf_elec);
             if (useEnergyINN())
                darray::deallocate(eng_buf_nnintermol);
+            if (dlmda::use_dlmda)
+               darray::deallocate(dedl_buf, d2edl2_buf);
          }
       }
 
       if (op & RcOp::ALLOC) {
-         zeroOnHost(eng_buf, eng_buf_vdw, eng_buf_elec, eng_buf_nnintermol);
+         zeroOnHost(eng_buf, eng_buf_vdw, eng_buf_elec, eng_buf_nnintermol, dedl_buf, d2edl2_buf);
          if (!rc_a) {
             auto sz = bufferSize();
             darray::allocate(sz, &eng_buf);
@@ -591,6 +627,8 @@ void egvData(RcOp op)
                darray::allocate(sz, &eng_buf_elec);
             if (useEnergyINN())
                darray::allocate(sz, &eng_buf_nnintermol);
+            if (dlmda::use_dlmda)
+               darray::allocate(sz, &dedl_buf, &d2edl2_buf);
          }
       }
    }
@@ -605,11 +643,13 @@ void egvData(RcOp op)
                darray::deallocate(vir_buf_elec);
             if (useEnergyINN())
                darray::deallocate(vir_buf_nnintermol);
+            if (dlmda::use_dlmda)
+               darray::deallocate(dvirdl_buf);
          }
       }
 
       if (op & RcOp::ALLOC) {
-         zeroOnHost(vir_buf, vir_buf_vdw, vir_buf_elec, vir_buf_nnintermol);
+         zeroOnHost(vir_buf, vir_buf_vdw, vir_buf_elec, vir_buf_nnintermol, dvirdl_buf);
          if (!rc_a) {
             auto sz = bufferSize();
             darray::allocate(sz, &vir_buf);
@@ -619,6 +659,8 @@ void egvData(RcOp op)
                darray::allocate(sz, &vir_buf_elec);
             if (useEnergyINN())
                darray::allocate(sz, &vir_buf_nnintermol);
+            if (dlmda::use_dlmda)
+               darray::allocate(sz, &dvirdl_buf);
          }
       }
    }
@@ -632,11 +674,13 @@ void egvData(RcOp op)
             darray::deallocate(gx_elec, gy_elec, gz_elec);
          if (useEnergyINN())
             darray::deallocate(gx_nnintermol, gy_nnintermol, gz_nnintermol);
+         if (dlmda::use_dlmda)
+            darray::deallocate(dfsumdlx, dfsumdly, dfsumdlz);
       }
 
       if (op & RcOp::ALLOC) {
          zeroOnHost(gx, gy, gz, gx_vdw, gy_vdw, gz_vdw, gx_elec, gy_elec, gz_elec, gx_nnintermol, gy_nnintermol,
-            gz_nnintermol);
+            gz_nnintermol, dfsumdlx, dfsumdly, dfsumdlz);
          darray::allocate(n, &gx, &gy, &gz);
          if (useEnergyVdw())
             darray::allocate(n, &gx_vdw, &gy_vdw, &gz_vdw);
@@ -644,6 +688,8 @@ void egvData(RcOp op)
             darray::allocate(n, &gx_elec, &gy_elec, &gz_elec);
          if (useEnergyINN())
             darray::allocate(n, &gx_nnintermol, &gy_nnintermol, &gz_nnintermol);
+         if (dlmda::use_dlmda)
+            darray::allocate(n, &dfsumdlx, &dfsumdly, &dfsumdlz);
       }
    }
 }

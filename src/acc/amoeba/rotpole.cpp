@@ -1,21 +1,35 @@
 #include "ff/atom.h"
+#include "ff/dlmda.h"
 #include "ff/modamoeba.h"
 #include "math/libfunc.h"
 #include "seq/rotpole.h"
+#include <tinker/detail/dlmda.hh>
 
 namespace tinker {
 void chkpole_acc()
 {
-   #pragma acc parallel loop independent async deviceptr(x,y,z,zaxis,pole)
-   for (int i = 0; i < n; ++i)
-      chkpoleAtomI(i, pole, zaxis, x, y, z);
+   if (dlmda::use_dlmda) {
+      #pragma acc parallel loop independent async deviceptr(x,y,z,zaxis,poleorig)
+      for (int i = 0; i < n; ++i)
+         chkpoleAtomI(i, poleorig, zaxis, x, y, z);
+   } else {
+      #pragma acc parallel loop independent async deviceptr(x,y,z,zaxis,pole)
+      for (int i = 0; i < n; ++i)
+         chkpoleAtomI(i, pole, zaxis, x, y, z);
+   }
 }
 
 void rotpole_acc()
 {
-   #pragma acc parallel loop independent async deviceptr(x,y,z,zaxis,rpole,pole)
-   for (int i = 0; i < n; ++i)
-      rotpoleAtomI(i, rpole, pole, zaxis, x, y, z);
+   if (dlmda::use_dlmda) {
+      #pragma acc parallel loop independent async deviceptr(x,y,z,zaxis,rpole,poleorig)
+      for (int i = 0; i < n; ++i)
+         rotpoleAtomI(i, rpole, poleorig, zaxis, x, y, z);
+   } else {
+      #pragma acc parallel loop independent async deviceptr(x,y,z,zaxis,rpole,pole)
+      for (int i = 0; i < n; ++i)
+         rotpoleAtomI(i, rpole, pole, zaxis, x, y, z);
+   }
 }
 
 void chkrepole_acc()

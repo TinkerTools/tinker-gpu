@@ -8,7 +8,15 @@
 #include "tool/ioprint.h"
 #include <tinker/detail/inform.hh>
 #include <tinker/detail/mdstuf.hh>
+#include <tinker/detail/ost.hh>
 #include <tinker/detail/units.hh>
+
+namespace tinker {
+static int ostVers(int vers)
+{
+   return ost::use_ost ? (vers | calc::energy) : vers;
+}
+}
 
 namespace tinker {
 void BasicIntegrator::plan(int istep)
@@ -29,7 +37,7 @@ void BasicIntegrator::plan(int istep)
    if (mcbaro)
       vers1 &= ~calc::virial;
    // toggle off energy if neither save nor mcbaro
-   if (not save and not mcbaro)
+   if (not save and not mcbaro and not ost::use_ost)
       vers1 &= ~calc::energy;
 }
 
@@ -87,7 +95,7 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
       m_prop->pos(dt);
       m_prop->rattle(dt);
       copyPosToXyz(true);
-      energy(vers1);
+      energy(ostVers(vers1));
       if (vers1 & calc::virial)
          if (not atomic)
             hcVirial();
@@ -99,7 +107,7 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
       for (int ifast = 1; ifast < nrespa; ++ifast) {
          m_prop->pos(dta);
          copyPosToXyz(false);
-         energy(vers1, RESPA_FAST, respaTSConfig());
+         energy(ostVers(vers1), RESPA_FAST, respaTSConfig());
          m_prop->velR0(dta);
          if (vers1 & calc::virial) {
             if (atomic) {
@@ -117,7 +125,7 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
       copyPosToXyz(true);
 
       // fast force
-      energy(vers1, RESPA_FAST, respaTSConfig());
+      energy(ostVers(vers1), RESPA_FAST, respaTSConfig());
       darray::copy(g::q0, n, gx1, gx);
       darray::copy(g::q0, n, gy1, gy);
       darray::copy(g::q0, n, gz1, gz);
@@ -134,7 +142,7 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
       }
 
       // slow force
-      energy(vers1, RESPA_SLOW, respaTSConfig());
+      energy(ostVers(vers1), RESPA_SLOW, respaTSConfig());
       darray::copy(g::q0, n, gx2, gx);
       darray::copy(g::q0, n, gy2, gy);
       darray::copy(g::q0, n, gz2, gz);
@@ -185,7 +193,7 @@ VerletIntegrator::VerletIntegrator(ThermostatEnum te, BarostatEnum be)
 
 void VerletIntegrator::KickOff()
 {
-   energy((calc::grad | calc::virial) & rc_flag);
+   energy(ostVers((calc::grad | calc::virial) & rc_flag));
 }
 }
 
@@ -209,18 +217,18 @@ RespaIntegrator::RespaIntegrator(ThermostatEnum te, BarostatEnum be)
 void RespaIntegrator::KickOff()
 {
    // save fast gradients to gx1 etc.
-   energy(calc::grad, RESPA_FAST, respaTSConfig());
+   energy(ostVers(calc::grad), RESPA_FAST, respaTSConfig());
    darray::copy(g::q0, n, gx1, gx);
    darray::copy(g::q0, n, gy1, gy);
    darray::copy(g::q0, n, gz1, gz);
 
    // save slow gradients to gx2 etc.
-   energy(calc::grad, RESPA_SLOW, respaTSConfig());
+   energy(ostVers(calc::grad), RESPA_SLOW, respaTSConfig());
    darray::copy(g::q0, n, gx2, gx);
    darray::copy(g::q0, n, gy2, gy);
    darray::copy(g::q0, n, gz2, gz);
 
-   energy((calc::grad | calc::virial) & rc_flag);
+   energy(ostVers((calc::grad | calc::virial) & rc_flag));
 }
 }
 
@@ -320,7 +328,7 @@ static void nhc_npt(int istep, time_prec dt)
 {
    int vers1 = rc_flag & calc::vmask;
    bool save = 0 == (istep % inform::iwrite);
-   if (!save)
+   if (!save and !ost::use_ost)
       vers1 &= ~calc::energy;
 
    // set some time values for the dynamics integration
@@ -361,7 +369,7 @@ static void nhc_npt(int istep, time_prec dt)
    mdPosAxbv(eterm2, poly);
    copyPosToXyz(true);
 
-   energy(vers1);
+   energy(ostVers(vers1));
 
    mdVel(dt_2, gx, gy, gz);
 
@@ -397,7 +405,7 @@ void Nhc96Integrator::kickoff()
       gnh[i] = 0;
    }
    qnh[0] *= mdstuf::nfree;
-   energy(calc::grad | calc::virial);
+   energy(ostVers(calc::grad | calc::virial));
 }
 
 Nhc96Integrator::Nhc96Integrator()
@@ -476,7 +484,7 @@ const char* LeapFrogLPIntegrator::name() const
 
 void LeapFrogLPIntegrator::kickoff()
 {
-   energy(calc::energy | calc::grad | calc::virial);
+   energy(ostVers(calc::energy | calc::grad | calc::virial));
 }
 
 LeapFrogLPIntegrator::LeapFrogLPIntegrator()

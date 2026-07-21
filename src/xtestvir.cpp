@@ -3,6 +3,7 @@
 #include "ff/energy.h"
 #include "ff/nblist.h"
 #include "tool/ioprint.h"
+#include "tool/xtesthelper.h"
 #include <array>
 #include <cmath>
 #include <tinker/detail/atoms.hh>
@@ -29,13 +30,6 @@ static double& recip(int row, int col)
    return boxes::recip[col][row];
 }
 
-static void printMatrix(FILE* out, const char* title, int nspace, const double (&m)[3][3])
-{
-   print(out, "\n %s :%*s%13.3f%13.3f%13.3f", title, nspace, "", m[0][0], m[0][1], m[0][2]);
-   print(out, "\n%36s%13.3f%13.3f%13.3f", "", m[1][0], m[1][1], m[1][2]);
-   print(out, "\n%36s%13.3f%13.3f%13.3f\n", "", m[2][0], m[2][1], m[2][2]);
-}
-
 static void syncBoxAndXyz()
 {
    boxData(RcOp::INIT);
@@ -46,10 +40,7 @@ static void syncBoxAndXyz()
 static energy_prec numericalEnergy()
 {
    syncBoxAndXyz();
-   energy(calc::energy);
-   energy_prec eout;
-   copyEnergy(calc::energy, &eout);
-   return eout;
+   return evaluateEnergy();
 }
 
 static void cellang(const std::vector<double>& xf, const std::vector<double>& yf, const std::vector<double>& zf)

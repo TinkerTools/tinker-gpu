@@ -9,6 +9,7 @@
 #include <tinker/detail/atomid.hh>
 #include <tinker/detail/atoms.hh>
 #include <tinker/detail/couple.hh>
+#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/keys.hh>
 #include <tinker/detail/mutant.hh>
 #include <tinker/detail/params.hh>
@@ -31,7 +32,7 @@ static int jcount;
 
 void vdwSoftcoreData(RcOp op)
 {
-   if ((not use(Potent::VDW)) and (not use(Potent::REPULS)) and (not use(Potent::DISP)) and (not use(Potent::CHGTRN)))
+   if ((not use(Potent::VDW)) and (not use(Potent::REPULS)) and (not use(Potent::DISP)) and (not use(Potent::CHGTRN)) and (not (use(Potent::MPOLE) and dlmda::use_dlmda)))
       return;
 
    if (op & RcOp::DEALLOC)
