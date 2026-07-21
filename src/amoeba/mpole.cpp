@@ -50,7 +50,10 @@ void mpoleInit(int vers)
    rotpole();
 
    if (useEwald()) {
-      rpoleToCmp();
+      if (dlmda::use_dlmda)
+         rpoleToCmpDlmda(); // fills both cmp (lambda scaled) and dlcmp (d cmp / d lambda)
+      else
+         rpoleToCmp();
       if (vir_m)
          darray::zero(g::q0, bufferSize(), vir_m);
       if (pltfm_config & Platform::CUDA) {
@@ -58,6 +61,10 @@ void mpoleInit(int vers)
          if (epme_unit.valid()) {
             if (precompute_theta)
                bsplineFill(epme_unit, 3);
+         }
+         if (dlpme_unit.valid()) {
+            if (precompute_theta)
+               bsplineFill(dlpme_unit, 3);
          }
          if (ppme_unit.valid() && (ppme_unit != epme_unit)) {
             if (precompute_theta)

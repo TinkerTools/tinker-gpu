@@ -88,8 +88,13 @@ static void empoleEwaldRealSelf(int vers)
    TINKER_FCALL2(acc1, cu1, empoleEwaldRealSelf, vers);
 }
 
+TINKER_FVOID2(acc0, cu1, empoleEwaldRecipDlmda, int);
 void empoleEwaldRecip(int vers)
 {
+   if (dlmda::use_dlmda) {
+      TINKER_FCALL2(acc0, cu1, empoleEwaldRecipDlmda, vers);
+      return;
+   }
    int use_cf = 0;
    empoleChgpenEwaldRecip(vers, use_cf);
 }

@@ -1,6 +1,8 @@
 #include "ff/amoeba/empole.h"
 #include "ff/box.h"
+#include "ff/dlmda.h"
 #include "ff/elec.h"
+#include "ff/evdw.h"
 #include "ff/modamoeba.h"
 #include "ff/pme.h"
 #include "ff/spatial.h"
@@ -8,6 +10,7 @@
 #include "seq/bsplgen.h"
 #include "seq/launch.h"
 #include "tool/error.h"
+#include <tinker/detail/mutant.hh>
 
 namespace tinker {
 // compute theta values on the fly
@@ -905,11 +908,12 @@ void fphiUind2_cu(PMEUnit pme_u, real (*fdip_phi1)[10], real (*fdip_phi2)[10])
       st.qgrid, recipa, recipb, recipc);
 }
 
-template <bool DO_E, bool DO_V>
+template <bool DO_E, bool DO_V, bool DO_DL>
 __global__
-static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[2], const real* restrict bsmod1,
-   const real* restrict bsmod2, const real* restrict bsmod3, real f, real aewald, TINKER_IMAGE_PARAMS, real box_volume,
-   EnergyBuffer restrict gpu_e, VirialBuffer restrict gpu_vir)
+static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[2], real (*restrict dlqgrid)[2],
+   const real* restrict bsmod1, const real* restrict bsmod2, const real* restrict bsmod3, real f, real aewald,
+   TINKER_IMAGE_PARAMS, real box_volume, EnergyBuffer restrict gpu_e, VirialBuffer restrict gpu_vir,
+   VirialBuffer restrict dl_vir)
 {
    int ithread = threadIdx.x + blockIdx.x * blockDim.x;
    int stride = blockDim.x * gridDim.x;
@@ -934,11 +938,24 @@ static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[
       vctlzy = 0;
       vctlzz = 0;
    }
+   vbuf_prec dvctlxx, dvctlyx, dvctlzx, dvctlyy, dvctlzy, dvctlzz;
+   if CONSTEXPR (DO_V and DO_DL) {
+      dvctlxx = 0;
+      dvctlyx = 0;
+      dvctlzx = 0;
+      dvctlyy = 0;
+      dvctlzy = 0;
+      dvctlzz = 0;
+   }
 
    for (int i = ithread; i < ntot; i += stride) {
       if (i == 0) {
          qgrid[0][0] = 0;
          qgrid[0][1] = 0;
+         if CONSTEXPR (DO_DL) {
+            dlqgrid[0][0] = 0;
+            dlqgrid[0][1] = 0;
+         }
          continue;
       }
 
@@ -958,6 +975,11 @@ static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[
 
       real gridx = qgrid[i][0];
       real gridy = qgrid[i][1];
+      real dlgridx, dlgridy;
+      if CONSTEXPR (DO_DL) {
+         dlgridx = dlqgrid[i][0];
+         dlgridy = dlqgrid[i][1];
+      }
       real term = -pterm * hsq;
       real expterm = 0;
       if (term > -50) {
@@ -989,6 +1011,18 @@ static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[
                vctlyy += floatTo<vbuf_prec>(vyy);
                vctlzy += floatTo<vbuf_prec>(vzy);
                vctlzz += floatTo<vbuf_prec>(vzz);
+
+               if CONSTEXPR (DO_DL) {
+                  real dstruc2dl = 2 * (gridx * dlgridx + gridy * dlgridy);
+                  real dldeterm = 0.5f * f * expterm * dstruc2dl;
+                  real dldvterm = (2 / hsq) * (1 - term) * dldeterm;
+                  dvctlxx += floatTo<vbuf_prec>(h1 * h1 * dldvterm - dldeterm);
+                  dvctlyx += floatTo<vbuf_prec>(h1 * h2 * dldvterm);
+                  dvctlzx += floatTo<vbuf_prec>(h1 * h3 * dldvterm);
+                  dvctlyy += floatTo<vbuf_prec>(h2 * h2 * dldvterm - dldeterm);
+                  dvctlzy += floatTo<vbuf_prec>(h2 * h3 * dldvterm);
+                  dvctlzz += floatTo<vbuf_prec>(h3 * h3 * dldvterm - dldeterm);
+               }
             }
          } // end if (e or v)
       }
@@ -996,6 +1030,10 @@ static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[
       // complete the transformation of the PME grid
       qgrid[i][0] = gridx * expterm;
       qgrid[i][1] = gridy * expterm;
+      if CONSTEXPR (DO_DL) {
+         dlqgrid[i][0] = dlgridx * expterm;
+         dlqgrid[i][1] = dlgridy * expterm;
+      }
    }
 
    if CONSTEXPR (DO_E) {
@@ -1003,14 +1041,21 @@ static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[
    }
    if CONSTEXPR (DO_V) {
       atomic_add(vctlxx, vctlyx, vctlzx, vctlyy, vctlzy, vctlzz, gpu_vir, ithread);
+      if CONSTEXPR (DO_DL) {
+         atomic_add(dvctlxx, dvctlyx, dvctlzx, dvctlyy, dvctlzy, dvctlzz, dl_vir, ithread);
+      }
    }
 }
 
-template <bool DO_E, bool DO_V>
-static void pmeConv_cu2(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
+template <bool DO_E, bool DO_V, bool DO_DL>
+static void pmeConv_cu2(PMEUnit pme_u, PMEUnit dlpme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir,
+   VirialBuffer dl_vir)
 {
    auto& st = *pme_u;
    real(*restrict qgrid)[2] = reinterpret_cast<real(*)[2]>(st.qgrid);
+   real(*restrict dlqgrid)[2] = nullptr;
+   if CONSTEXPR (DO_DL)
+      dlqgrid = reinterpret_cast<real(*)[2]>((*dlpme_u).qgrid);
    const real* bsmod1 = st.bsmod1;
    const real* bsmod2 = st.bsmod2;
    const real* bsmod3 = st.bsmod3;
@@ -1023,52 +1068,103 @@ static void pmeConv_cu2(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
    real aewald = st.aewald;
    real box_volume = boxVolume();
 
-   auto ker = pmeConv_cu1<DO_E, DO_V>;
+   auto ker = pmeConv_cu1<DO_E, DO_V, DO_DL>;
    auto stream = use_pme_stream ? g::spme : g::s0;
    int ngrid = gpuGridSize(BLOCK_DIM);
-   ker<<<ngrid, BLOCK_DIM, 0, stream>>>(n1, n2, n3, qgrid, bsmod1, bsmod2, bsmod3, f, aewald, TINKER_IMAGE_ARGS,
-      box_volume, gpu_e, gpu_vir);
+   ker<<<ngrid, BLOCK_DIM, 0, stream>>>(n1, n2, n3, qgrid, dlqgrid, bsmod1, bsmod2, bsmod3, f, aewald,
+      TINKER_IMAGE_ARGS, box_volume, gpu_e, gpu_vir, dl_vir);
 }
 
 void pmeConv_cu(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
 {
    if (gpu_vir == nullptr) {
       if (gpu_e == nullptr) {
-         pmeConv_cu2<false, false>(pme_u, nullptr, nullptr);
+         pmeConv_cu2<false, false, false>(pme_u, PMEUnit(), nullptr, nullptr, nullptr);
       } else {
-         pmeConv_cu2<true, false>(pme_u, gpu_e, nullptr);
+         pmeConv_cu2<true, false, false>(pme_u, PMEUnit(), gpu_e, nullptr, nullptr);
       }
    } else {
       if (gpu_e == nullptr) {
-         pmeConv_cu2<false, true>(pme_u, nullptr, gpu_vir);
+         pmeConv_cu2<false, true, false>(pme_u, PMEUnit(), nullptr, gpu_vir, nullptr);
       } else {
-         pmeConv_cu2<true, true>(pme_u, gpu_e, gpu_vir);
+         pmeConv_cu2<true, true, false>(pme_u, PMEUnit(), gpu_e, gpu_vir, nullptr);
       }
    }
+}
+
+void pmeConvDlmda_cu(PMEUnit pme_u, PMEUnit dlpme_u, VirialBuffer gpu_vir, VirialBuffer dl_vir)
+{
+   if (gpu_vir == nullptr or dl_vir == nullptr)
+      pmeConv_cu2<false, false, true>(pme_u, dlpme_u, nullptr, nullptr, nullptr);
+   else
+      pmeConv_cu2<false, true, true>(pme_u, dlpme_u, nullptr, gpu_vir, dl_vir);
 }
 }
 
 namespace tinker {
+__device__
+inline void rpoleToCmpAtomI(int i, real (*restrict cmp)[10], const real (*restrict rpole)[MPL_TOTAL])
+{
+   cmp[i][0] = rpole[i][MPL_PME_0];
+   cmp[i][1] = rpole[i][MPL_PME_X];
+   cmp[i][2] = rpole[i][MPL_PME_Y];
+   cmp[i][3] = rpole[i][MPL_PME_Z];
+   cmp[i][4] = rpole[i][MPL_PME_XX];
+   cmp[i][5] = rpole[i][MPL_PME_YY];
+   cmp[i][6] = rpole[i][MPL_PME_ZZ];
+   cmp[i][7] = 2 * rpole[i][MPL_PME_XY];
+   cmp[i][8] = 2 * rpole[i][MPL_PME_XZ];
+   cmp[i][9] = 2 * rpole[i][MPL_PME_YZ];
+}
+
+__device__
+inline void rpoleToCmpDlmdaAtomI(int i, real (*restrict cmp)[10], real (*restrict dlcmp)[10],
+   const real (*restrict rpole)[MPL_TOTAL], const int* restrict mut, real elambda)
+{
+   real m[10];
+   m[0] = rpole[i][MPL_PME_0];
+   m[1] = rpole[i][MPL_PME_X];
+   m[2] = rpole[i][MPL_PME_Y];
+   m[3] = rpole[i][MPL_PME_Z];
+   m[4] = rpole[i][MPL_PME_XX];
+   m[5] = rpole[i][MPL_PME_YY];
+   m[6] = rpole[i][MPL_PME_ZZ];
+   m[7] = 2 * rpole[i][MPL_PME_XY];
+   m[8] = 2 * rpole[i][MPL_PME_XZ];
+   m[9] = 2 * rpole[i][MPL_PME_YZ];
+
+   real scale = mut[i] ? elambda : (real)1;
+   real dscale = mut[i] ? (real)1 : (real)0;
+   #pragma unroll
+   for (int k = 0; k < 10; ++k) {
+      cmp[i][k] = scale * m[k];
+      dlcmp[i][k] = dscale * m[k];
+   }
+}
+
 __global__
 void rpoleToCmp_cu1(int n, real (*restrict cmp)[10], const real (*restrict rpole)[MPL_TOTAL])
 {
-   for (int i = ITHREAD; i < n; i += STRIDE) {
-      cmp[i][0] = rpole[i][MPL_PME_0];
-      cmp[i][1] = rpole[i][MPL_PME_X];
-      cmp[i][2] = rpole[i][MPL_PME_Y];
-      cmp[i][3] = rpole[i][MPL_PME_Z];
-      cmp[i][4] = rpole[i][MPL_PME_XX];
-      cmp[i][5] = rpole[i][MPL_PME_YY];
-      cmp[i][6] = rpole[i][MPL_PME_ZZ];
-      cmp[i][7] = 2 * rpole[i][MPL_PME_XY];
-      cmp[i][8] = 2 * rpole[i][MPL_PME_XZ];
-      cmp[i][9] = 2 * rpole[i][MPL_PME_YZ];
-   }
+   for (int i = ITHREAD; i < n; i += STRIDE)
+      rpoleToCmpAtomI(i, cmp, rpole);
+}
+
+__global__
+void rpoleToCmpDlmda_cu1(int n, real (*restrict cmp)[10], real (*restrict dlcmp)[10],
+   const real (*restrict rpole)[MPL_TOTAL], const int* restrict mut, real elambda)
+{
+   for (int i = ITHREAD; i < n; i += STRIDE)
+      rpoleToCmpDlmdaAtomI(i, cmp, dlcmp, rpole, mut, elambda);
 }
 
 void rpoleToCmp_cu()
 {
    launch_k1s(g::s0, n, rpoleToCmp_cu1, n, cmp, rpole);
+}
+
+void rpoleToCmpDlmda_cu()
+{
+   launch_k1s(g::s0, n, rpoleToCmpDlmda_cu1, n, cmp, dlcmp, rpole, mut, (real)mutant::elambda);
 }
 
 __global__

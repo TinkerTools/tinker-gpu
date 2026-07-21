@@ -53,6 +53,12 @@ TINKER_EXTERN grad_prec* dfvdlz;
 TINKER_EXTERN real* dltrqx;
 TINKER_EXTERN real* dltrqy;
 TINKER_EXTERN real* dltrqz;
+
+// PME reciprocal-space lambda derivative.
+TINKER_EXTERN real (*dlcmp)[10];
+TINKER_EXTERN real (*dlfmp)[10];
+TINKER_EXTERN real (*dlcphi)[10];
+TINKER_EXTERN real (*dlfphi)[20];
 }
 
 extern "C"

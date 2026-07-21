@@ -285,7 +285,7 @@ static void empoleEwaldRecipGeneric_acc()
       pmeConv(pu);
    }
    fftback(pu);
-   fphiMpole(pu);
+   fphiMpole(pu, fphi);
    fphiToCphi(pu, fphi, cphi);
 
    auto& st = *pu;

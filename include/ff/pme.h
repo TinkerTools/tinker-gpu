@@ -75,12 +75,14 @@ void pmeConv(PMEUnit);                 // update grid
 void pmeConv(PMEUnit, VirialBuffer v); // update grid and accumulate vterm
 void pmeConv(PMEUnit, EnergyBuffer e); // update grid and accumulate eterm
 void pmeConv(PMEUnit, EnergyBuffer e, VirialBuffer v);
+void pmeConvDlmda(PMEUnit, PMEUnit, VirialBuffer, VirialBuffer);
 
-void fphiMpole(PMEUnit);
+void fphiMpole(PMEUnit, real (*out_fphi)[20]);
 void fphiUind(PMEUnit, real (*fdip_phi1)[10], real (*fdip_phi2)[10], real (*fdip_sum_phi)[20]);
 void fphiUind2(PMEUnit, real (*fdip_phi1)[10], real (*fdip_phi2)[10]);
 
 void rpoleToCmp();
+void rpoleToCmpDlmda();
 void cmpToFmp(PMEUnit, const real (*cmp)[10], real (*fmp)[10]);
 void cuindToFuind(PMEUnit,
                   const real (*cind)[3],
@@ -104,6 +106,7 @@ TINKER_EXTERN PMEUnit epme_unit;  // electrostatic
 TINKER_EXTERN PMEUnit ppme_unit;  // polarization
 TINKER_EXTERN PMEUnit pvpme_unit; // polarization virial
 TINKER_EXTERN PMEUnit dpme_unit;  // dispersion
+TINKER_EXTERN PMEUnit dlpme_unit; // multipole lambda derivative
 
 TINKER_EXTERN real (*cmp)[10];
 TINKER_EXTERN real (*fmp)[10];

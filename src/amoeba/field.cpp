@@ -27,7 +27,7 @@ void dfieldEwaldRecipSelfP1(real (*field)[3])
    else
       pmeConv(pu);
    fftback(pu);
-   fphiMpole(pu);
+   fphiMpole(pu, fphi);
    fphiToCphi(pu, fphi, cphi);
 
    TINKER_FCALL2(acc1, cu1, dfieldEwaldRecipSelfP2, field);

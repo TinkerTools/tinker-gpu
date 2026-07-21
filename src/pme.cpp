@@ -1,6 +1,7 @@
 #include "ff/pme.h"
 #include "ff/atom.h"
 #include "ff/box.h"
+#include "ff/dlmda.h"
 #include "ff/elec.h"
 #include "ff/hippo/edisp.h"
 #include "ff/nblist.h"
@@ -10,6 +11,7 @@
 #include "tool/error.h"
 #include "tool/externfunc.h"
 #include <tinker/detail/bound.hh>
+#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/ewald.hh>
 #include <tinker/detail/pme.hh>
 #include <tinker/routines.h>
@@ -155,6 +157,7 @@ void pmeData(RcOp op)
    if ((use(Potent::MPOLE) || use(Potent::POLAR)) && useEwald()) {
       if (op & RcOp::DEALLOC) {
          darray::deallocate(cmp, fmp, cphi, fphi);
+         darray::deallocate(dlcmp, dlfmp, dlcphi, dlfphi);
          if (use(Potent::POLAR)) {
             darray::deallocate(fuind, fuinp, fdip_phi1, fdip_phi2, cphidp, fphidp);
             darray::deallocate(vir_m);
@@ -163,6 +166,14 @@ void pmeData(RcOp op)
 
       if (op & RcOp::ALLOC) {
          darray::allocate(n, &cmp, &fmp, &cphi, &fphi);
+         if (dlmda::use_dlmda) {
+            darray::allocate(n, &dlcmp, &dlfmp, &dlcphi, &dlfphi);
+         } else {
+            dlcmp = nullptr;
+            dlfmp = nullptr;
+            dlcphi = nullptr;
+            dlfphi = nullptr;
+         }
          if (use(Potent::POLAR)) {
             darray::allocate(n, &fuind, &fuinp, &fdip_phi1, &fdip_phi2, &cphidp, &fphidp);
             if (rc_flag & calc::virial)
@@ -177,10 +188,16 @@ void pmeData(RcOp op)
 
          // electrostatics
          epme_unit.close();
+         dlpme_unit.close();
          if (use(Potent::MPOLE)) {
             unique_grids = false;
             PME::Params p(ewald::aeewald, pme::nefft1, pme::nefft2, pme::nefft3, pme::bseorder);
             pmeOpAlloc(epme_unit, p, unique_grids);
+            if (dlmda::use_dlmda) {
+               unique_grids = true;
+               pmeOpAlloc(dlpme_unit, p, unique_grids);
+               unique_grids = false;
+            }
          }
 
          // polarization
@@ -198,6 +215,7 @@ void pmeData(RcOp op)
 
       if (op & RcOp::INIT) {
          pmeOpCopyin(epme_unit);
+         pmeOpCopyin(dlpme_unit);
          pmeOpCopyin(ppme_unit);
          pmeOpCopyin(pvpme_unit);
       }
@@ -290,17 +308,23 @@ void pmeConv(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
 {
    TINKER_FCALL2(acc1, cu1, pmeConv, pme_u, gpu_e, gpu_vir);
 }
+
+TINKER_FVOID2(acc0, cu1, pmeConvDlmda, PMEUnit, PMEUnit, VirialBuffer, VirialBuffer);
+void pmeConvDlmda(PMEUnit pme_u, PMEUnit dlpme_u, VirialBuffer gpu_vir, VirialBuffer dl_vir)
+{
+   TINKER_FCALL2(acc0, cu1, pmeConvDlmda, pme_u, dlpme_u, gpu_vir, dl_vir);
+}
 }
 
 namespace tinker {
 TINKER_FVOID2(acc1, cu1, fphiMpole, PMEUnit, real (*)[20]);
-void fphiMpole(PMEUnit pme_u)
+void fphiMpole(PMEUnit pme_u, real (*out_fphi)[20])
 {
    int bso = pme_u->bsorder;
    if (bso != 5)
       TINKER_THROW(format("fphiMpole(): bsorder is %d; must be 5.\n", bso));
 
-   TINKER_FCALL2(acc1, cu1, fphiMpole, pme_u, fphi);
+   TINKER_FCALL2(acc1, cu1, fphiMpole, pme_u, out_fphi);
 }
 
 TINKER_FVOID2(acc1, cu1, fphiUind, PMEUnit, real (*)[10], real (*)[10], real (*)[20]);
@@ -329,6 +353,12 @@ TINKER_FVOID2(acc1, cu1, rpoleToCmp);
 void rpoleToCmp()
 {
    TINKER_FCALL2(acc1, cu1, rpoleToCmp);
+}
+
+TINKER_FVOID2(acc0, cu1, rpoleToCmpDlmda);
+void rpoleToCmpDlmda()
+{
+   TINKER_FCALL2(acc0, cu1, rpoleToCmpDlmda);
 }
 
 TINKER_FVOID2(acc1, cu1, cmpToFmp, PMEUnit, const real (*)[10], real (*)[10]);

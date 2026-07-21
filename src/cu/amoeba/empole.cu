@@ -37,8 +37,13 @@ static void empole_cu()
       aewald = pu->aewald;
 
       if CONSTEXPR (do_e) {
-         launch_k1b(g::s0, n, empoleSelf_cu<do_a>, //
-            nem, em, rpole, n, f, aewald);
+         if CONSTEXPR (eq<LTYP, DLMDA>()) {
+            launch_k1b(g::s0, n, empoleSelfDlmda_cu<do_a>, //
+               nem, em, demdl_buf, d2emdl2_buf, rpole, mut, n, f, aewald, mutant::elambda);
+         } else {
+            launch_k1b(g::s0, n, empoleSelf_cu<do_a>, //
+               nem, em, rpole, n, f, aewald);
+         }
       }
    }
    int ngrid = gpuGridSize(BLOCK_DIM);
@@ -89,18 +94,34 @@ void empoleNonEwald_cu(int vers)
 
 void empoleEwaldRealSelf_cu(int vers)
 {
-   if (vers == calc::v0) {
-      empole_cu<calc::V0, EWALD,NON_DLMDA>();
-   } else if (vers == calc::v1) {
-      empole_cu<calc::V1, EWALD,NON_DLMDA>();
-   } else if (vers == calc::v3) {
-      empole_cu<calc::V3, EWALD,NON_DLMDA>();
-   } else if (vers == calc::v4) {
-      empole_cu<calc::V4, EWALD,NON_DLMDA>();
-   } else if (vers == calc::v5) {
-      empole_cu<calc::V5, EWALD,NON_DLMDA>();
-   } else if (vers == calc::v6) {
-      empole_cu<calc::V6, EWALD,NON_DLMDA>();
+   if (dlmda::use_dlmda) {
+      if (vers == calc::v0) {
+         empole_cu<calc::V0, EWALD,DLMDA>();
+      } else if (vers == calc::v1) {
+         empole_cu<calc::V1, EWALD,DLMDA>();
+      } else if (vers == calc::v3) {
+         empole_cu<calc::V3, EWALD,DLMDA>();
+      } else if (vers == calc::v4) {
+         empole_cu<calc::V4, EWALD,DLMDA>();
+      } else if (vers == calc::v5) {
+         empole_cu<calc::V5, EWALD,DLMDA>();
+      } else if (vers == calc::v6) {
+         empole_cu<calc::V6, EWALD,DLMDA>();
+      }
+   } else {
+      if (vers == calc::v0) {
+         empole_cu<calc::V0, EWALD,NON_DLMDA>();
+      } else if (vers == calc::v1) {
+         empole_cu<calc::V1, EWALD,NON_DLMDA>();
+      } else if (vers == calc::v3) {
+         empole_cu<calc::V3, EWALD,NON_DLMDA>();
+      } else if (vers == calc::v4) {
+         empole_cu<calc::V4, EWALD,NON_DLMDA>();
+      } else if (vers == calc::v5) {
+         empole_cu<calc::V5, EWALD,NON_DLMDA>();
+      } else if (vers == calc::v6) {
+         empole_cu<calc::V6, EWALD,NON_DLMDA>();
+      }
    }
 }
 
