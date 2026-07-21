@@ -105,7 +105,8 @@ void ehal(int vers);
 /// \ingroup vdw
 void ehalReduceXyz();
 /// \ingroup vdw
-void ehalResolveGradient();
+void ehalResolveGradient(const grad_prec* gxred, const grad_prec* gyred, const grad_prec* gzred, grad_prec* devx,
+   grad_prec* devy, grad_prec* devz);
 }
 
 //====================================================================//
@@ -187,6 +188,10 @@ TINKER_EXTERN int njvdw;
 TINKER_EXTERN grad_prec* gxred;
 TINKER_EXTERN grad_prec* gyred;
 TINKER_EXTERN grad_prec* gzred;
+/// \brief Lambda derivatives on Halgren reduced VDW sites, resolved into dfvdlx/y/z.
+TINKER_EXTERN grad_prec* gxred_dlmda;
+TINKER_EXTERN grad_prec* gyred_dlmda;
+TINKER_EXTERN grad_prec* gzred_dlmda;
 TINKER_EXTERN int nvdw14;
 TINKER_EXTERN int (*vdw14ik)[2];
 TINKER_EXTERN int nvexclude;

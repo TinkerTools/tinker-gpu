@@ -1,3 +1,4 @@
+#include "ff/dlmda.h"
 #include "ff/evdw.h"
 #include "ff/image.h"
 #include "ff/spatial.h"
@@ -7,6 +8,7 @@
 #include "seq/launch.h"
 #include "seq/pair_hal.h"
 #include "seq/triangle.h"
+#include <tinker/detail/dlmda.hh>
 
 namespace tinker {
 __global__
@@ -60,7 +62,8 @@ void ehalResolveGradient_cu1(int n, const int* restrict ired, const real* restri
    }
 }
 
-void ehalResolveGradient_cu()
+void ehalResolveGradient_cu(const grad_prec* gxred, const grad_prec* gyred, const grad_prec* gzred, grad_prec* devx,
+   grad_prec* devy, grad_prec* devz)
 {
    launch_k1s(g::s0, n, ehalResolveGradient_cu1, //
       n, ired, kred, gxred, gyred, gzred, devx, devy, devz);
@@ -106,6 +109,7 @@ namespace tinker {
 #define SCALPHA scalpha
 #endif
 #include "ehal_cu1.cc"
+#include "ehaldlmda_cu1.cc"
 
 template <class Ver>
 static void ehal_cu3()
@@ -116,17 +120,30 @@ static void ehal_cu3()
    const real cut = switchCut(Switch::VDW);
    const real off = switchOff(Switch::VDW);
 
-   if CONSTEXPR (do_g)
+   if CONSTEXPR (do_g) {
       darray::zero(g::q0, n, gxred, gyred, gzred);
+      if (dlmda::use_dlmda)
+         darray::zero(g::q0, n, gxred_dlmda, gyred_dlmda, gzred_dlmda);
+   }
 
    int ngrid = gpuGridSize(BLOCK_DIM);
-   auto ker1 = ehal_cu1<Ver>;
-   ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, vir_ev, gxred, gyred, gzred, cut, off,
-      st.si1.bit0, nvexclude, vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak,
-      st.iak, st.lst, njvdw, vlam, vcouple, radmin, epsilon, jvdw, mut);
+   if (dlmda::use_dlmda) {
+      auto ker1 = ehaldlmda_cu1<Ver>;
+      ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, devdl_buf, d2evdl2_buf, vir_ev,
+         devvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0, nvexclude,
+         vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, njvdw,
+         vlam, vcouple, radmin, epsilon, jvdw, mut);
+   } else {
+      auto ker1 = ehal_cu1<Ver>;
+      ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, vir_ev, gxred, gyred, gzred, cut, off,
+         st.si1.bit0, nvexclude, vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak,
+         st.iak, st.lst, njvdw, vlam, vcouple, radmin, epsilon, jvdw, mut);
+   }
 
    if CONSTEXPR (do_g) {
-      ehalResolveGradient();
+      ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);
+      if (dlmda::use_dlmda)
+         ehalResolveGradient(gxred_dlmda, gyred_dlmda, gzred_dlmda, dfvdlx, dfvdly, dfvdlz);
    }
 }
 

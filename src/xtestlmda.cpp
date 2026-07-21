@@ -2,6 +2,7 @@
 #include "ff/dlmda.h"
 #include "ff/egvop.h"
 #include "ff/energy.h"
+#include "ff/evdw.h"
 #include "ff/nblist.h"
 #include "ff/rwcrd.h"
 #include "tool/argkey.h"
@@ -34,18 +35,34 @@ static FdTestOptions readOptions()
       default_lambda_eps, "Lambda");
 }
 
-// Evaluate the potential energy at a given electrostatic lambda value
-static energy_prec energyAtLambda(double elam)
+struct LambdaEnergy
 {
-   mutant::elambda = elam;
+   energy_prec total;
+   energy_prec vdw;
+   energy_prec elec;
+};
+
+static void setLambda(double vlambda, double elambda)
+{
+   mutant::vlambda = vlambda;
+   vlam = vlambda;
+   mutant::elambda = elambda;
+}
+
+// Evaluate the potential energy at a given lambda value
+static LambdaEnergy energyAtLambda(double vlambda, double elambda)
+{
+   setLambda(vlambda, elambda);
    energy(calc::energy);
-   energy_prec eout;
-   copyEnergy(calc::energy, &eout);
+   LambdaEnergy eout;
+   copyEnergy(calc::energy, &eout.total);
+   eout.vdw = energy_vdw;
+   eout.elec = energy_elec;
    return eout;
 }
 
-static void printDerivRow(FILE* out, const char* title, const char* l0, const char* l1, const char* l2,
-   const char* l3, double v0, double v1, double v2, double v3)
+static void printDerivRow(FILE* out, const char* title, const char* l0, const char* l1, const char* l2, const char* l3,
+   double v0, double v1, double v2, double v3)
 {
    print(out, "\n%-36s%14s%14s%14s%14s\n", title, l0, l1, l2, l3);
    print(out, "%36s%14.6f%14.6f%14.6f%14.6f\n", "", v0, v1, v2, v3);
@@ -65,7 +82,7 @@ void xTestlmda(int, char**)
 
    FdTestOptions opts = readOptions();
 
-   int flags = calc::xyz + calc::mass + calc::energy;
+   int flags = calc::xyz + calc::mass + calc::energy + calc::analyz;
    if (opts.analyt or opts.numer)
       flags += calc::grad + calc::virial;
 
@@ -93,13 +110,13 @@ void xTestlmda(int, char**)
       double advirdl[9] = {0};
       std::vector<double> adfx, adfy, adfz;
       if (opts.analyt) {
-         energy(rc_flag);
-         // Only the multipole term is implemented, so the total equals the
-         // multipole contribution and the vdw/polar columns stay zero.
+         energy(calc::v1);
          adedl = dedl;
-         ademdl = dedl;
+         adevdl = devdl;
+         ademdl = demdl;
          ad2edl2 = d2edl2;
-         ad2emdl2 = d2edl2;
+         ad2evdl2 = d2evdl2;
+         ad2emdl2 = d2emdl2;
          for (int k = 0; k < 9; ++k)
             advirdl[k] = dvirdl[k];
          adfx.resize(n);
@@ -115,30 +132,33 @@ void xTestlmda(int, char**)
       std::vector<double> ndfx, ndfy, ndfz;
       if (opts.numer) {
          double el0 = mutant::elambda;
+         double vl0 = mutant::vlambda;
          double eps = opts.eps;
 
          // Scalar first/second derivatives from three energy evaluations.
-         energy_prec e2 = energyAtLambda(el0 + eps);
-         energy_prec e0 = energyAtLambda(el0 - eps);
-         energy_prec e1 = energyAtLambda(el0);
-         ndedl = (e2 - e0) / (2.0 * eps);
-         ndemdl = ndedl;
-         nd2edl2 = (e2 - 2.0 * e1 + e0) / (eps * eps);
-         nd2emdl2 = nd2edl2;
+         LambdaEnergy e2 = energyAtLambda(vl0 + eps, el0 + eps);
+         LambdaEnergy e0 = energyAtLambda(vl0 - eps, el0 - eps);
+         LambdaEnergy e1 = energyAtLambda(vl0, el0);
+         ndedl = (e2.total - e0.total) / (2.0 * eps);
+         ndevdl = (e2.vdw - e0.vdw) / (2.0 * eps);
+         ndemdl = (e2.elec - e0.elec) / (2.0 * eps);
+         nd2edl2 = (e2.total - 2.0 * e1.total + e0.total) / (eps * eps);
+         nd2evdl2 = (e2.vdw - 2.0 * e1.vdw + e0.vdw) / (eps * eps);
+         nd2emdl2 = (e2.elec - 2.0 * e1.elec + e0.elec) / (eps * eps);
 
          // Per-atom force derivative and virial derivative via central
          // difference of the gradient/virial at lambda +/- eps.
          std::vector<double> gpx(n), gpy(n), gpz(n), gmx(n), gmy(n), gmz(n);
 
-         mutant::elambda = el0 + eps;
-         energy(rc_flag);
+         setLambda(vl0 + eps, el0 + eps);
+         energy(calc::v1);
          copyGradient(calc::grad, gpx.data(), gpy.data(), gpz.data());
          double vplus[9];
          for (int k = 0; k < 9; ++k)
             vplus[k] = vir[k];
 
-         mutant::elambda = el0 - eps;
-         energy(rc_flag);
+         setLambda(vl0 - eps, el0 - eps);
+         energy(calc::v1);
          copyGradient(calc::grad, gmx.data(), gmy.data(), gmz.data());
          for (int k = 0; k < 9; ++k)
             ndvirdl[k] = (vplus[k] - vir[k]) / (2.0 * eps);
@@ -153,23 +173,23 @@ void xTestlmda(int, char**)
          }
 
          // Restore the original lambda value.
-         mutant::elambda = el0;
+         setLambda(vl0, el0);
       }
 
       // ---- Output ----------------------------------------------------------
       if (opts.analyt)
-         printDerivRow(out, " Analytical Lambda Derivatives :", "dE/dL", "dEV/dL", "dEM/dL", "dEP/dL", adedl,
-            adevdl, ademdl, adepdl);
+         printDerivRow(out, " Analytical Lambda Derivatives :", "dE/dL", "dEV/dL", "dEM/dL", "dEP/dL", adedl, adevdl,
+            ademdl, adepdl);
       if (opts.numer)
-         printDerivRow(out, " Numerical Lambda Derivatives : ", "dE/dL", "dEV/dL", "dEM/dL", "dEP/dL", ndedl,
-            ndevdl, ndemdl, ndepdl);
+         printDerivRow(out, " Numerical Lambda Derivatives : ", "dE/dL", "dEV/dL", "dEM/dL", "dEP/dL", ndedl, ndevdl,
+            ndemdl, ndepdl);
 
       if (opts.analyt)
-         printDerivRow(out, " Analytical 2nd Lambda Derivatives :", "d2E/dL2", "d2EV/dL2", "d2EM/dL2",
-            "d2EP/dL2", ad2edl2, ad2evdl2, ad2emdl2, ad2epdl2);
+         printDerivRow(out, " Analytical 2nd Lambda Derivatives :", "d2E/dL2", "d2EV/dL2", "d2EM/dL2", "d2EP/dL2",
+            ad2edl2, ad2evdl2, ad2emdl2, ad2epdl2);
       if (opts.numer)
-         printDerivRow(out, " Numerical 2nd Lambda Derivatives : ", "d2E/dL2", "d2EV/dL2", "d2EM/dL2",
-            "d2EP/dL2", nd2edl2, nd2evdl2, nd2emdl2, nd2epdl2);
+         printDerivRow(out, " Numerical 2nd Lambda Derivatives : ", "d2E/dL2", "d2EV/dL2", "d2EM/dL2", "d2EP/dL2",
+            nd2edl2, nd2evdl2, nd2emdl2, nd2epdl2);
 
       // Per-atom lambda gradient breakdown.
       if (opts.analyt or opts.numer) {
@@ -204,11 +224,9 @@ void xTestlmda(int, char**)
          print(out, "\n");
 
          if (opts.analyt)
-            printSummaryRow(out, fmt_summary, "Anlyt", "RMS Gradient over All Atoms", totnorm / rdenom, len3,
-               digits);
+            printSummaryRow(out, fmt_summary, "Anlyt", "RMS Gradient over All Atoms", totnorm / rdenom, len3, digits);
          if (opts.numer)
-            printSummaryRow(out, fmt_summary, "Numer", "RMS Gradient over All Atoms", ntotnorm / rdenom, len3,
-               digits);
+            printSummaryRow(out, fmt_summary, "Numer", "RMS Gradient over All Atoms", ntotnorm / rdenom, len3, digits);
          print(out, "\n");
       }
 

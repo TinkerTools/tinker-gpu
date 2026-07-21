@@ -22,7 +22,8 @@ void ehalReduceXyz_acc()
    }
 }
 
-void ehalResolveGradient_acc()
+void ehalResolveGradient_acc(const grad_prec* gxred, const grad_prec* gyred, const grad_prec* gzred, grad_prec* devx,
+   grad_prec* devy, grad_prec* devz)
 {
    #pragma acc parallel loop independent async\
                deviceptr(ired,kred,gxred,gyred,gzred,devx,devy,devz)
@@ -244,7 +245,7 @@ static void ehal_acc1()
    } // end for (int ii)
 
    if CONSTEXPR (do_g)
-      ehalResolveGradient();
+      ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);
 }
 
 void ehal_acc(int vers)

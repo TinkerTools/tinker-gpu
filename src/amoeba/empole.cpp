@@ -116,6 +116,8 @@ void empole(int vers)
    auto do_g = vers & calc::grad;
 
    zeroOnHost(energy_em, virial_em);
+   if (dlmda::use_dlmda)
+      zeroOnHost(demdl, d2emdl2, demvirdl);
    size_t bsize = bufferSize();
    if (rc_a) {
       if (do_a)
@@ -173,6 +175,27 @@ void empole(int vers)
       }
       if (do_g)
          sumGradient(gx_elec, gy_elec, gz_elec, demx, demy, demz);
+
+      if (dlmda::use_dlmda) {
+         if (do_e) {
+            energy_prec e1 = energyReduce(demdl_buf);
+            demdl += e1;
+            dedl += e1;
+            energy_prec e2 = energyReduce(d2emdl2_buf);
+            d2emdl2 += e2;
+            d2edl2 += e2;
+         }
+         if (do_v) {
+            virial_prec v[9];
+            virialReduce(v, demvirdl_buf);
+            for (int iv = 0; iv < 9; ++iv) {
+               demvirdl[iv] += v[iv];
+               dvirdl[iv] += v[iv];
+            }
+         }
+         if (do_g)
+            sumGradient(dfsumdlx, dfsumdly, dfsumdlz, dfmdlx, dfmdly, dfmdlz);
+      }
    }
 }
 }
