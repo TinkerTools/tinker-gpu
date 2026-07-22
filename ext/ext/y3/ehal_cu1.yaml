@@ -1,6 +1,6 @@
 OUTPUT_DIR: src/cu
 KERNEL_NAME: ehal_cu1
-TEMPLATE_PARAMS: template <class Ver>
+TEMPLATE_PARAMS: template <class Ver, class STYP>
 CONSTEXPR_FLAGS: |
   constexpr bool do_e = Ver::e;
   constexpr bool do_a = Ver::a;
@@ -27,7 +27,8 @@ SCALE_1X_TYPE: real_const_array
 EXTRA_PARAMS: |
   , int njvdw, real vlam, Vdw vcouple
   , const real* restrict radmin, const real* restrict epsilon
-  , const int* restrict jvdw, const int* restrict mut
+  , const int* restrict jvdw, const int* restrict grp
+  , RdtMask rdt_mask
 # IMPLICIT_PARAMS:
 
 I_VARIABLES:
@@ -35,13 +36,13 @@ I_VARIABLES:
   - register real yi   from:y
   - register real zi   from:z
   - register int ijvdw from:jvdw
-  - register int imut  from:mut
+  - register int imut  from:grp
 K_VARIABLES:
   - register real xk   from:x
   - register real yk   from:y
   - register real zk   from:z
   - register int kjvdw from:jvdw
-  - register int kmut  from:mut
+  - register int kmut  from:grp
 I_FORCE:
   - register real fix addto:gx
   - register real fiy addto:gy
@@ -52,19 +53,24 @@ K_FORCE:
   - register real fkz addto:gz
 
 SCALED_PAIRWISE_INTERACTION: |
+  bool include = incl;
+  if CONSTEXPR (eq<STYP, SUBSYS>())
+    include = rdtPairActive(rdt_mask, @imut@, @kmut@);
   real xr = @xi@ - @xk@;
   real yr = @yi@ - @yk@;
   real zr = @zi@ - @zk@;
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  if (r2 <= off * off and include) {
     real r = REAL_SQRT(r2);
     real rv = radmin[@ijvdw@ * njvdw + @kjvdw@];
     real eps = epsilon[@ijvdw@ * njvdw + @kjvdw@];
     real vlambda = 1;
-    if (vcouple == Vdw::DECOUPLE) {
-      vlambda = (@imut@ == @kmut@ ? 1 : vlam);
-    } else if (vcouple == Vdw::ANNIHILATE) {
-      vlambda = (@imut@ || @kmut@ ? vlam : 1);
+    if CONSTEXPR (eq<STYP, NON_SUBSYS>()) {
+      if (vcouple == Vdw::DECOUPLE) {
+        vlambda = (@imut@ == @kmut@ ? 1 : vlam);
+      } else if (vcouple == Vdw::ANNIHILATE) {
+        vlambda = (@imut@ || @kmut@ ? vlam : 1);
+      }
     }
     real e, de;
     pair_hal_v2<do_g, 0>(r, scalea, rv, eps, cut, off, vlambda,
@@ -99,6 +105,8 @@ SCALED_PAIRWISE_INTERACTION: |
     }
   }
 FULL_PAIRWISE_INTERACTION: |
+  if CONSTEXPR (eq<STYP, SUBSYS>())
+    incl = incl and rdtPairActive(rdt_mask, @imut@, @kmut@);
   real xr = @xi@ - @xk@;
   real yr = @yi@ - @yk@;
   real zr = @zi@ - @zk@;
@@ -108,10 +116,12 @@ FULL_PAIRWISE_INTERACTION: |
     real rv = radmin[@ijvdw@ * njvdw + @kjvdw@];
     real eps = epsilon[@ijvdw@ * njvdw + @kjvdw@];
     real vlambda = 1;
-    if (vcouple == Vdw::DECOUPLE) {
-      vlambda = (@imut@ == @kmut@ ? 1 : vlam);
-    } else if (vcouple == Vdw::ANNIHILATE) {
-      vlambda = (@imut@ || @kmut@ ? vlam : 1);
+    if CONSTEXPR (eq<STYP, NON_SUBSYS>()) {
+      if (vcouple == Vdw::DECOUPLE) {
+        vlambda = (@imut@ == @kmut@ ? 1 : vlam);
+      } else if (vcouple == Vdw::ANNIHILATE) {
+        vlambda = (@imut@ || @kmut@ ? vlam : 1);
+      }
     }
     real e, de;
     pair_hal_v2<do_g, 1>(r, 1, rv, eps, cut, off, vlambda,

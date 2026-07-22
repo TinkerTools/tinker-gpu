@@ -1,4 +1,5 @@
 #pragma once
+#include "ff/dlmda.h"
 #include "ff/energybuffer.h"
 #include "tool/rcman.h"
 
@@ -105,6 +106,8 @@ void egauss(int vers);
 /// \f]
 /// \f[ t=5,\ \alpha=0.7 \f]
 void ehal(int vers);
+/// \ingroup vdw
+void ehalSubsys(int vers, RdtMask rdt_mask);
 
 /// \ingroup vdw
 void ehalReduceXyz();

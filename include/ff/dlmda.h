@@ -1,10 +1,24 @@
 #pragma once
 #include "ff/amoeba/mpole.h"
 #include "ff/energybuffer.h"
+#include "tool/rcman.h"
 
 // dlmda
 namespace tinker {
+enum class RdtMask : unsigned
+{
+   ENV = 1,
+   LIGA = 2,
+   LIGB = 4,
+   AE = 3,
+   BE = 5,
+   A = LIGA,
+   B = LIGB,
+   ALL = 7,
+};
+
 void ost_mech();
+void ostData(RcOp op);
 void adtWeight(double lambda, int exponent, double& weight, double& dweight, double& d2weight);
 void adtMix(int vers, bool do_dlmda, int n, size_t buffer_size, double weight1, double dweight1, double d2weight1,
    const EnergyBufferTraits::type* e0, EnergyBuffer e1, EnergyBuffer dedl, EnergyBuffer d2edl2, VirialBuffer v0,
@@ -28,6 +42,7 @@ TINKER_EXTERN bool use_evast;
 TINKER_EXTERN bool use_evrdt;
 
 TINKER_EXTERN int evdtexp;
+TINKER_EXTERN int* rdt_group;
 
 TINKER_EXTERN real (*poleorig)[MPL_TOTAL];
 TINKER_EXTERN real* polarityorig;
@@ -94,6 +109,16 @@ extern "C"
    };
 
    class NON_DLMDA
+   {
+      int foo;
+   };
+
+   class SUBSYS
+   {
+      int foo;
+   };
+
+   class NON_SUBSYS
    {
       int foo;
    };

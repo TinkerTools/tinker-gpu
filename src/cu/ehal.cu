@@ -6,6 +6,7 @@
 #include "math/switch.h"
 #include "seq/add.h"
 #include "seq/launch.h"
+#include "seq/ost.h"
 #include "seq/pair_hal.h"
 #include "seq/triangle.h"
 
@@ -110,8 +111,8 @@ namespace tinker {
 #include "ehal_cu1.cc"
 #include "ehaldlmda_cu1.cc"
 
-template <class Ver>
-static void ehal_cu3()
+template <class Ver, class STYP>
+static void ehal_cu3(RdtMask rdt_mask)
 {
    constexpr bool do_g = Ver::g;
 
@@ -121,45 +122,72 @@ static void ehal_cu3()
 
    if CONSTEXPR (do_g) {
       darray::zero(g::q0, n, gxred, gyred, gzred);
-      if (use_evast)
-         darray::zero(g::q0, n, gxred_dlmda, gyred_dlmda, gzred_dlmda);
+      if CONSTEXPR (eq<STYP, NON_SUBSYS>()) {
+         if (use_evast)
+            darray::zero(g::q0, n, gxred_dlmda, gyred_dlmda, gzred_dlmda);
+      }
    }
 
    int ngrid = gpuGridSize(BLOCK_DIM);
-   if (use_evast) {
-      auto ker1 = ehaldlmda_cu1<Ver>;
-      ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, devdl_buf, d2evdl2_buf, vir_ev,
-         devvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0, nvexclude,
-         vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, njvdw,
-         vlam, vcouple, radmin, epsilon, jvdw, mut);
-   } else {
-      auto ker1 = ehal_cu1<Ver>;
+   if CONSTEXPR (eq<STYP, SUBSYS>()) {
+      auto ker1 = ehal_cu1<Ver, SUBSYS>;
       ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, vir_ev, gxred, gyred, gzred, cut, off,
          st.si1.bit0, nvexclude, vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak,
-         st.iak, st.lst, njvdw, vlam, vcouple, radmin, epsilon, jvdw, mut);
+         st.iak, st.lst, njvdw, vlam, vcouple, radmin, epsilon, jvdw, rdt_group, rdt_mask);
+   } else {
+      if (use_evast) {
+         auto ker1 = ehaldlmda_cu1<Ver>;
+         ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, devdl_buf, d2evdl2_buf, vir_ev,
+            devvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0,
+            nvexclude, vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak,
+            st.lst, njvdw, vlam, vcouple, radmin, epsilon, jvdw, mut);
+      } else {
+         auto ker1 = ehal_cu1<Ver, NON_SUBSYS>;
+         ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, vir_ev, gxred, gyred, gzred, cut,
+            off, st.si1.bit0, nvexclude, vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl,
+            st.niak, st.iak, st.lst, njvdw, vlam, vcouple, radmin, epsilon, jvdw, mut, RdtMask::ALL);
+      }
    }
 
    if CONSTEXPR (do_g) {
       ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);
-      if (use_evast)
-         ehalResolveGradient(gxred_dlmda, gyred_dlmda, gzred_dlmda, dfvdlx, dfvdly, dfvdlz);
+      if CONSTEXPR (eq<STYP, NON_SUBSYS>()) {
+         if (use_evast)
+            ehalResolveGradient(gxred_dlmda, gyred_dlmda, gzred_dlmda, dfvdlx, dfvdly, dfvdlz);
+      }
    }
 }
 
 void ehal_cu(int vers)
 {
    if (vers == calc::v0)
-      ehal_cu3<calc::V0>();
+      ehal_cu3<calc::V0, NON_SUBSYS>(RdtMask::ALL);
    else if (vers == calc::v1)
-      ehal_cu3<calc::V1>();
+      ehal_cu3<calc::V1, NON_SUBSYS>(RdtMask::ALL);
    else if (vers == calc::v3)
-      ehal_cu3<calc::V3>();
+      ehal_cu3<calc::V3, NON_SUBSYS>(RdtMask::ALL);
    else if (vers == calc::v4)
-      ehal_cu3<calc::V4>();
+      ehal_cu3<calc::V4, NON_SUBSYS>(RdtMask::ALL);
    else if (vers == calc::v5)
-      ehal_cu3<calc::V5>();
+      ehal_cu3<calc::V5, NON_SUBSYS>(RdtMask::ALL);
    else if (vers == calc::v6)
-      ehal_cu3<calc::V6>();
+      ehal_cu3<calc::V6, NON_SUBSYS>(RdtMask::ALL);
+}
+
+void ehalSubsys_cu(int vers, RdtMask rdt_mask)
+{
+   if (vers == calc::v0)
+      ehal_cu3<calc::V0, SUBSYS>(rdt_mask);
+   else if (vers == calc::v1)
+      ehal_cu3<calc::V1, SUBSYS>(rdt_mask);
+   else if (vers == calc::v3)
+      ehal_cu3<calc::V3, SUBSYS>(rdt_mask);
+   else if (vers == calc::v4)
+      ehal_cu3<calc::V4, SUBSYS>(rdt_mask);
+   else if (vers == calc::v5)
+      ehal_cu3<calc::V5, SUBSYS>(rdt_mask);
+   else if (vers == calc::v6)
+      ehal_cu3<calc::V6, SUBSYS>(rdt_mask);
 }
 
 }

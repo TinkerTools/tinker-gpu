@@ -524,6 +524,7 @@ void energyData(RcOp op)
 
    RcMan ennmetal42{ennmetalData, op};
 
+   RcMan ost42{ostData, op};
    RcMan vdwsSoftcore42{vdwSoftcoreData, op};
    RcMan evdw42{evdwData, op};
 

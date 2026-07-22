@@ -1,11 +1,34 @@
 #include "ff/dlmda.h"
+#include "ff/atom.h"
+#include "tool/darray.h"
 #include "tool/externfunc.h"
 #include <tinker/detail/dlmda.hh>
 #include <tinker/detail/mutant.hh>
 
 #include <cmath>
+#include <vector>
 
 namespace tinker {
+void ostData(RcOp op)
+{
+   if (!use_rel)
+      return;
+
+   if (op & RcOp::DEALLOC)
+      darray::deallocate(rdt_group);
+
+   if (op & RcOp::ALLOC)
+      darray::allocate(n, &rdt_group);
+
+   if (op & RcOp::INIT) {
+      std::vector<int> group(n);
+      for (int i = 0; i < n; ++i)
+         group[i] = mutant::mutg[i];
+      darray::copyin(g::q0, n, rdt_group, group.data());
+      waitFor(g::q0);
+   }
+}
+
 void ost_mech()
 {
    use_dlmda = dlmda::use_dlmda;

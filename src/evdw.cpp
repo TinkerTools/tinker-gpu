@@ -128,7 +128,7 @@ void evdwData(RcOp op)
 
       elrc_vol = 0;
       vlrc_vol = 0;
-      if (use_evadt)
+      if (use_evdt)
          bufferDeallocate(rc_flag | calc::analyz, ev0, vir_ev0, dev0x, dev0y, dev0z);
       ev0 = nullptr;
       vir_ev0 = nullptr;
@@ -156,9 +156,9 @@ void evdwData(RcOp op)
       else
          assert(false);
 
-      assert(!use_evadt || vdwtyp == Vdw::HAL);
+      assert(!use_evdt || vdwtyp == Vdw::HAL);
 
-      if (use_evadt)
+      if (use_evdt)
          bufferAllocate(rc_flag | calc::analyz, &ev0, &vir_ev0, &dev0x, &dev0y, &dev0z);
 
       FstrView str1 = vdwpot::vdwindex;
@@ -518,6 +518,25 @@ void evdwData(RcOp op)
             elrc1_vol = elrc1 * boxVolume();
             vlrc0_vol = vlrc0 * boxVolume();
             vlrc1_vol = vlrc1 * boxVolume();
+         } else if (use_evrdt) {
+            auto subsystemCorr = [](int la, int lb, int le, double& elrc, double& vlrc) {
+               tinker_f_submask(&la, &lb, &le);
+               tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &elrc, &vlrc);
+            };
+            double elrc_ae = 0, vlrc_ae = 0;
+            double elrc_be = 0, vlrc_be = 0;
+            double elrc_a = 0, vlrc_a = 0;
+            double elrc_b = 0, vlrc_b = 0;
+            subsystemCorr(1, 0, 1, elrc_ae, vlrc_ae);
+            subsystemCorr(0, 1, 1, elrc_be, vlrc_be);
+            subsystemCorr(1, 0, 0, elrc_a, vlrc_a);
+            subsystemCorr(0, 1, 0, elrc_b, vlrc_b);
+            int active = 1;
+            tinker_f_submask(&active, &active, &active);
+            elrc0_vol = (elrc_be + elrc_a) * boxVolume();
+            elrc1_vol = (elrc_ae + elrc_b) * boxVolume();
+            vlrc0_vol = (vlrc_be + vlrc_a) * boxVolume();
+            vlrc1_vol = (vlrc_ae + vlrc_b) * boxVolume();
          }
          double elrc = 0, vlrc = 0;
          tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &elrc, &vlrc);
@@ -729,7 +748,45 @@ void evdw_adt(int vers)
 
 void evdw_rdt(int vers)
 {
-   (void)vers;
+   assert(vdwtyp == Vdw::HAL);
+
+   auto do_e = vers & calc::energy;
+   auto do_v = vers & calc::virial;
+   auto do_g = vers & calc::grad;
+   size_t bsize = bufferSize();
+
+   evdwBegin(vers, true);
+
+   // E0 = E(B+environment) + E(A).
+   ehalSubsys(vers, RdtMask::BE);
+   ehalSubsys(vers, RdtMask::A);
+   if (do_e)
+      darray::copy(g::q0, bsize, ev0, ev);
+   if (do_v)
+      darray::copy(g::q0, bsize, vir_ev0, vir_ev);
+   if (do_g) {
+      darray::copy(g::q0, n, dev0x, devx);
+      darray::copy(g::q0, n, dev0y, devy);
+      darray::copy(g::q0, n, dev0z, devz);
+   }
+
+   // E1 = E(A+environment) + E(B).
+   evdwZeroBuffers(vers, true);
+   ehalSubsys(vers, RdtMask::AE);
+   int bvers = (vers == calc::v3 ? calc::v0 : vers);
+   ehalSubsys(bvers, RdtMask::B);
+
+   double weight1, dweight1, d2weight1;
+   adtWeight(vlam, evdtexp, weight1, dweight1, d2weight1);
+   adtMix(vers, use_dlmda, n, bsize, weight1, dweight1, d2weight1, ev0, ev, devdl_buf, d2evdl2_buf, vir_ev0,
+      vir_ev, devvirdl_buf, dev0x, dev0y, dev0z, devx, devy, devz, dfvdlx, dfvdly, dfvdlz);
+
+   energy_prec rdt_elrc = weight1 * elrc1_vol + (1 - weight1) * elrc0_vol;
+   virial_prec rdt_vlrc = weight1 * vlrc1_vol + (1 - weight1) * vlrc0_vol;
+   energy_prec rdt_delrc = dweight1 * (elrc1_vol - elrc0_vol);
+   energy_prec rdt_d2elrc = d2weight1 * (elrc1_vol - elrc0_vol);
+   virial_prec rdt_dvlrc = dweight1 * (vlrc1_vol - vlrc0_vol);
+   evdwFinish(vers, rdt_elrc, rdt_vlrc, rdt_delrc, rdt_d2elrc, rdt_dvlrc);
 }
 }
 
@@ -768,6 +825,12 @@ TINKER_FVOID2(acc1, cu1, ehal, int);
 void ehal(int vers)
 {
    TINKER_FCALL2(acc1, cu1, ehal, vers);
+}
+
+TINKER_FVOID2(acc0, cu1, ehalSubsys, int, RdtMask);
+void ehalSubsys(int vers, RdtMask rdt_mask)
+{
+   TINKER_FCALL2(acc0, cu1, ehalSubsys, vers, rdt_mask);
 }
 
 TINKER_FVOID2(acc1, cu1, ehalReduceXyz);
