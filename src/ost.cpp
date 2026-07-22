@@ -48,6 +48,7 @@ void ost_mech()
    use_evrdt = use_evdt && use_rel;
 
    emdtexp = dlmda::emdtexp;
+   epdtexp = dlmda::epdtexp;
    evdtexp = dlmda::evdtexp;
 }
 

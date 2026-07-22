@@ -8,7 +8,9 @@
 #include "ff/nblist.h"
 #include "ff/potent.h"
 #include "math/zero.h"
+#include "tool/error.h"
 #include "tool/externfunc.h"
+#include "tool/platform.h"
 #include <tinker/detail/mplpot.hh>
 #include <tinker/detail/mutant.hh>
 
@@ -33,8 +35,8 @@ void empoleData(RcOp op)
       if (rc_a)
          bufferDeallocate(rc_flag, nem);
       if (use_private)
-         bufferDeallocate(rc_flag, em, vir_em, demx, demy, demz);
-      if (rc_a) {
+         bufferDeallocate(rc_flag | calc::analyz, em, vir_em, demx, demy, demz);
+      if (rc_a && use_dlmda) {
          bufferDeallocate(rc_flag, demdl_buf, demvirdl_buf, dfmdlx, dfmdly, dfmdlz);
          if (rc_flag & calc::energy)
             darray::deallocate(d2emdl2_buf);
@@ -79,18 +81,19 @@ void empoleData(RcOp op)
          bufferAllocate(rc_flag, &nem);
       if (use_private)
          bufferAllocate(rc_flag | calc::analyz, &em, &vir_em, &demx, &demy, &demz);
-      if (rc_a) {
-         if (use_dlmda) {
-            bufferAllocate(rc_flag, &demdl_buf, &demvirdl_buf, &dfmdlx, &dfmdly, &dfmdlz);
-            if (rc_flag & calc::energy)
-               darray::allocate(bufferSize(), &d2emdl2_buf);
-         }
+      if (rc_a && use_dlmda) {
+         bufferAllocate(rc_flag, &demdl_buf, &demvirdl_buf, &dfmdlx, &dfmdly, &dfmdlz);
+         if (rc_flag & calc::energy)
+            darray::allocate(bufferSize(), &d2emdl2_buf);
       }
       if (use_emdt)
          bufferAllocate(rc_flag | calc::analyz, &em0, &vir_em0, &dem0x, &dem0y, &dem0z);
    }
 
-   if (op & RcOp::INIT) {}
+   if (op & RcOp::INIT) {
+      if (use_emdt and not(pltfm_config & Platform::CUDA))
+         TINKER_THROW("Electrostatic dual topology requires the CUDA platform.");
+   }
 }
 }
 
@@ -324,5 +327,7 @@ void empole_rdt(int vers)
 
    empoleMixEndpoints(vers);
    empoleFinish(vers, true);
+
+   mpoleInitState(calc::v0, RdtMask::ALL, rdt_group, false);
 }
 }

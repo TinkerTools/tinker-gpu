@@ -6,7 +6,18 @@
 
 namespace tinker {
 SEQ_ROUTINE
-inline void chkpoleAtomI(int i, real (*restrict pole)[MPL_TOTAL], LocalFrame* zaxis, const real* restrict x, const real* restrict y, const real* restrict z)
+inline void chkpoleInvertI(int i, real (*restrict pole)[MPL_TOTAL])
+{
+   // y -> -y
+   pole[i][MPL_PME_Y] = -pole[i][MPL_PME_Y];
+   // xy -> -xy
+   // yz -> -yz
+   pole[i][MPL_PME_XY] = -pole[i][MPL_PME_XY];
+   pole[i][MPL_PME_YZ] = -pole[i][MPL_PME_YZ];
+}
+
+SEQ_ROUTINE
+inline void chkpoleAtomI(int i, real (*restrict pole)[MPL_TOTAL], real (*restrict pole2)[MPL_TOTAL], LocalFrame* zaxis, const real* restrict x, const real* restrict y, const real* restrict z)
 {
    int polaxe = zaxis[i].polaxe;
    bool check = ((polaxe != LFRM_Z_THEN_X) or (zaxis[i].yaxis) == 0) ? false : true;
@@ -37,14 +48,17 @@ inline void chkpoleAtomI(int i, real (*restrict pole)[MPL_TOTAL], LocalFrame* za
 
       if ((k < 0 && vol > 0) or (k > 0 && vol < 0)) {
          zaxis[i].yaxis = -k;
-         // y -> -y
-         pole[i][MPL_PME_Y] = -pole[i][MPL_PME_Y];
-         // xy -> -xy
-         // yz -> -yz
-         pole[i][MPL_PME_XY] = -pole[i][MPL_PME_XY];
-         pole[i][MPL_PME_YZ] = -pole[i][MPL_PME_YZ];
+         chkpoleInvertI(i, pole);
+         if (pole2)
+            chkpoleInvertI(i, pole2);
       }
    }
+}
+
+SEQ_ROUTINE
+inline void chkpoleAtomI(int i, real (*restrict pole)[MPL_TOTAL], LocalFrame* zaxis, const real* restrict x, const real* restrict y, const real* restrict z)
+{
+   chkpoleAtomI(i, pole, nullptr, zaxis, x, y, z);
 }
 }
 

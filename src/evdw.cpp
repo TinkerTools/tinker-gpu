@@ -4,8 +4,10 @@
 #include "ff/nblist.h"
 #include "ff/potent.h"
 #include "math/zero.h"
+#include "tool/error.h"
 #include "tool/externfunc.h"
 #include "tool/iofortstr.h"
+#include "tool/platform.h"
 #include "tool/iotext.h"
 #include <tinker/detail/atomid.hh>
 #include <tinker/detail/atoms.hh>
@@ -43,7 +45,7 @@ static virial_prec vlrc1_vol;
 void vdwSoftcoreData(RcOp op)
 {
    if ((not use(Potent::VDW)) and (not use(Potent::REPULS)) and (not use(Potent::DISP)) and (not use(Potent::CHGTRN))
-      and (not(use(Potent::MPOLE) and (use_emast || use_emdt))))
+      and (not(use(Potent::MPOLE) and (use_emast || use_emdt))) and (not(use(Potent::POLAR) and use_epdt)))
       return;
 
    if (op & RcOp::DEALLOC)
@@ -156,7 +158,12 @@ void evdwData(RcOp op)
       else
          assert(false);
 
-      assert(!use_evdt || vdwtyp == Vdw::HAL);
+      if (use_evdt) {
+         if (vdwtyp != Vdw::HAL)
+            TINKER_THROW("Van der Waals dual topology requires the BUFFERED-14-7 potential.");
+         if (not(pltfm_config & Platform::CUDA))
+            TINKER_THROW("Van der Waals dual topology requires the CUDA platform.");
+      }
 
       if (use_evdt)
          bufferAllocate(rc_flag | calc::analyz, &ev0, &vir_ev0, &dev0x, &dev0y, &dev0z);

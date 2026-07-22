@@ -1,4 +1,5 @@
 #include "ff/cumodamoeba.h"
+#include "ff/dlmda.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/pme.h"
@@ -11,6 +12,30 @@
 #include <tinker/detail/extfld.hh>
 
 namespace tinker {
+__global__
+static void polarState_cu1(int n, real* restrict polarity, real* restrict polarity_inv,
+   const real* restrict polarityorig, RdtMask mask, const int* restrict group)
+{
+   constexpr real polmin = 1.0e-16;
+   unsigned active_mask = static_cast<unsigned>(mask);
+   for (int i = ITHREAD; i < n; i += STRIDE) {
+      unsigned atom_mask = static_cast<unsigned>(RdtMask::ENV);
+      if (group[i] == 1)
+         atom_mask = static_cast<unsigned>(RdtMask::LIGA);
+      else if (group[i] == 2)
+         atom_mask = static_cast<unsigned>(RdtMask::LIGB);
+
+      auto pol = (active_mask & atom_mask) ? polarityorig[i] : real(0);
+      polarity[i] = pol;
+      polarity_inv[i] = real(1) / (pol > polmin ? pol : polmin);
+   }
+}
+
+void polarState_cu(RdtMask mask, const int* group)
+{
+   launch_k1s(g::s0, n, polarState_cu1, n, polarity, polarity_inv, polarityorig, mask, group);
+}
+
 __global__
 static void epolar0DotProd_cu1(int n, real f, EnergyBuffer restrict ep, const real (*restrict gpu_uind)[3],
    const real (*restrict gpu_udirp)[3], const real* restrict polarity_inv)

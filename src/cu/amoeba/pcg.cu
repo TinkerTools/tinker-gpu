@@ -1,5 +1,6 @@
 #include "ff/amoeba/induce.h"
 #include "ff/cuinduce.h"
+#include "ff/dlmda.h"
 #include "ff/modamoeba.h"
 #include "ff/switch.h"
 #include "seq/launch.h"
@@ -26,7 +27,7 @@ void induceMutualPcg1_cu(real (*uind)[3], real (*uinp)[3])
 
    const bool sparse_prec = polpcg::pcgprec and (switchOff(Switch::USOLVE) > 0);
    bool dirguess = polpcg::pcgguess;
-   bool predict = polpred != UPred::NONE;
+   bool predict = !use_epdt && polpred != UPred::NONE;
    if (predict and nualt < maxualt) {
       predict = false;
       dirguess = true;

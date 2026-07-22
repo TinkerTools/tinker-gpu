@@ -1,5 +1,6 @@
 #include "ff/amoeba/induce.h"
 #include "ff/atom.h"
+#include "ff/dlmda.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/nblist.h"
@@ -55,7 +56,7 @@ void induceMutualPcg1_acc(real (*uind)[3], real (*uinp)[3])
    // or just use diagonal matrix preconditioner
    const bool sparse_prec = polpcg::pcgprec and (switchOff(Switch::USOLVE) > 0);
    bool dirguess = polpcg::pcgguess;
-   bool predict = polpred != UPred::NONE;
+   bool predict = !use_epdt && polpred != UPred::NONE;
    if (predict and nualt < maxualt) {
       predict = false;
       dirguess = true;

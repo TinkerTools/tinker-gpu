@@ -1,26 +1,41 @@
 #include "ff/amoeba/epolar.h"
 #include "ff/amoeba/empole.h"
 #include "ff/amoeba/induce.h"
+#include "ff/dlmda.h"
 #include "ff/elec.h"
 #include "ff/energy.h"
+#include "ff/evdw.h"
 #include "ff/hippo/cflux.h"
 #include "ff/hippo/epolar.h"
 #include "ff/modamoeba.h"
 #include "ff/nblist.h"
 #include "ff/potent.h"
 #include "math/zero.h"
+#include "tool/error.h"
 #include "tool/externfunc.h"
 #include "tool/iofortstr.h"
 #include "tool/ioprint.h"
+#include "tool/platform.h"
 #include <tinker/detail/couple.hh>
+#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/extfld.hh>
 #include <tinker/detail/mplpot.hh>
+#include <tinker/detail/mutant.hh>
 #include <tinker/detail/polar.hh>
 #include <tinker/detail/polgrp.hh>
 #include <tinker/detail/polpot.hh>
 #include <tinker/detail/uprior.hh>
 
+#include <cassert>
+
 namespace tinker {
+static EnergyBuffer ep0;
+static VirialBuffer vir_ep0;
+static grad_prec* dep0x;
+static grad_prec* dep0y;
+static grad_prec* dep0z;
+static unsigned polar_active_mask;
+
 TINKER_FVOID2(cpp0, cu1, epolarDataBinding, RcOp);
 void epolarData(RcOp op)
 {
@@ -30,6 +45,7 @@ void epolarData(RcOp op)
       return;
 
    auto rc_a = rc_flag & calc::analyz;
+   auto use_private = rc_a || use_epdt;
 
    if (op & RcOp::DEALLOC) {
       njpolar = 0;
@@ -42,20 +58,41 @@ void epolarData(RcOp op)
       ndpuexclude = 0;
       darray::deallocate(dpuexclude, dpuexclude_scale);
 
-      darray::deallocate(polarity, thole, pdamp, polarity_inv);
+      darray::deallocate(polarity, thole, pdamp, polarity_inv, polarityorig);
       if (polpot::use_tholed)
          darray::deallocate(dirdamp);
 
       if (rc_a) {
          bufferDeallocate(rc_flag, nep);
-         bufferDeallocate(rc_flag, ep, vir_ep, depx, depy, depz);
       }
+      if (use_private) {
+         bufferDeallocate(rc_flag | calc::analyz, ep, vir_ep, depx, depy, depz);
+      }
+      if (rc_a && use_dlmda) {
+         bufferDeallocate(rc_flag, depdl_buf, depvirdl_buf, dfpdlx, dfpdly, dfpdlz);
+         if (rc_flag & calc::energy)
+            darray::deallocate(d2epdl2_buf);
+      }
+      if (use_epdt)
+         bufferDeallocate(rc_flag | calc::analyz, ep0, vir_ep0, dep0x, dep0y, dep0z);
       nep = nullptr;
       ep = nullptr;
       vir_ep = nullptr;
       depx = nullptr;
       depy = nullptr;
       depz = nullptr;
+      depdl_buf = nullptr;
+      d2epdl2_buf = nullptr;
+      depvirdl_buf = nullptr;
+      dfpdlx = nullptr;
+      dfpdly = nullptr;
+      dfpdlz = nullptr;
+      ep0 = nullptr;
+      vir_ep0 = nullptr;
+      dep0x = nullptr;
+      dep0y = nullptr;
+      dep0z = nullptr;
+      polar_active_mask = 0;
 
       darray::deallocate(ufld, dufld);
       darray::deallocate(work01_, work02_, work03_, work04_, work05_);
@@ -398,6 +435,10 @@ void epolarData(RcOp op)
       darray::allocate(njpolar * njpolar, &thlval);
 
       darray::allocate(n, &polarity, &thole, &pdamp, &polarity_inv);
+      if (use_epdt)
+         darray::allocate(n, &polarityorig);
+      else
+         polarityorig = nullptr;
       if (polpot::use_tholed)
          darray::allocate(n, &dirdamp);
 
@@ -407,10 +448,27 @@ void epolarData(RcOp op)
       depx = gx_elec;
       depy = gy_elec;
       depz = gz_elec;
+      if (use_dlmda) {
+         depdl_buf = dedl_buf;
+         d2epdl2_buf = d2edl2_buf;
+         depvirdl_buf = dvirdl_buf;
+         dfpdlx = dfsumdlx;
+         dfpdly = dfsumdly;
+         dfpdlz = dfsumdlz;
+      }
       if (rc_a) {
          bufferAllocate(rc_flag, &nep);
-         bufferAllocate(rc_flag, &ep, &vir_ep, &depx, &depy, &depz);
       }
+      if (use_private) {
+         bufferAllocate(rc_flag | calc::analyz, &ep, &vir_ep, &depx, &depy, &depz);
+      }
+      if (rc_a && use_dlmda) {
+         bufferAllocate(rc_flag, &depdl_buf, &depvirdl_buf, &dfpdlx, &dfpdly, &dfpdlz);
+         if (rc_flag & calc::energy)
+            darray::allocate(bufferSize(), &d2epdl2_buf);
+      }
+      if (use_epdt)
+         bufferAllocate(rc_flag | calc::analyz, &ep0, &vir_ep0, &dep0x, &dep0y, &dep0z);
 
       if (rc_flag & calc::grad) {
          darray::allocate(n, &ufld, &dufld);
@@ -484,6 +542,17 @@ void epolarData(RcOp op)
    }
 
    if (op & RcOp::INIT) {
+      if (use_epdt) {
+         if (not(pltfm_config & Platform::CUDA))
+            TINKER_THROW("Polarization dual topology requires the CUDA platform.");
+         if (mplpot::use_chgpen)
+            TINKER_THROW("Polarization dual topology does not support charge penetration.");
+         if (polpot::use_tholed)
+            TINKER_THROW("Polarization dual topology does not support the AMOEBA+ (tholed) model.");
+         if (use(Potent::CHGFLX))
+            TINKER_THROW("Polarization dual topology does not support charge flux.");
+      }
+
       std::vector<int> jpolarvec(n);
       for (int i = 0; i < n; ++i)
          jpolarvec[i] = polar::jpolar[i] - 1;
@@ -502,12 +571,38 @@ void epolarData(RcOp op)
       darray::copyin(g::q0, n, thole, polar::thole);
       darray::copyin(g::q0, n, pdamp, polar::pdamp);
       darray::copyin(g::q0, n, polarity_inv, pinvbuf.data());
+      if (use_epdt)
+         darray::copyin(g::q0, n, polarityorig, dlmda::polarityorig);
       if (polpot::use_tholed)
          darray::copyin(g::q0, n, dirdamp, polar::tholed);
       waitFor(g::q0);
+
+      polar_active_mask = 0;
+      if (use_epdt) {
+         for (int i = 0; i < n; ++i) {
+            if (dlmda::polarityorig[i] == 0)
+               continue;
+            auto atom_mask = RdtMask::ENV;
+            if (use_rel) {
+               if (mutant::mutg[i] == 1)
+                  atom_mask = RdtMask::LIGA;
+               else if (mutant::mutg[i] == 2)
+                  atom_mask = RdtMask::LIGB;
+            } else if (mutant::mut[i]) {
+               atom_mask = RdtMask::LIGA;
+            }
+            polar_active_mask |= static_cast<unsigned>(atom_mask);
+         }
+      }
    }
 
    TINKER_FCALL2(cpp0, cu1, epolarDataBinding, op);
+}
+
+TINKER_FVOID2(acc0, cu1, polarState, RdtMask, const int*);
+static void polarState(RdtMask mask, const int* group)
+{
+   TINKER_FCALL2(acc0, cu1, polarState, mask, group);
 }
 }
 
@@ -571,30 +666,20 @@ static void epolarEwald(int vers)
    }
 }
 
+static void epolarBegin(int vers, bool dual);
+static void epolarKernel(int vers, bool use_cfgrad);
+static void epolarFinish(int vers, bool dual);
+
 void epolar(int vers)
 {
-   auto rc_a = rc_flag & calc::analyz;
-   auto do_a = vers & calc::analyz;
-   auto do_e = vers & calc::energy;
+   assert(!use_epdt);
+
    auto do_v = vers & calc::virial;
    auto do_g = vers & calc::grad;
    bool use_cf = use(Potent::CHGFLX);
    bool use_cfgrad = use_cf and static_cast<bool>(do_g);
 
-   zeroOnHost(energy_ep, virial_ep);
-   size_t bsize = bufferSize();
-   if (rc_a) {
-      if (do_a)
-         darray::zero(g::q0, bsize, nep);
-      if (do_e)
-         darray::zero(g::q0, bsize, ep);
-      if (do_v) {
-         darray::zero(g::q0, bsize, vir_ep);
-      }
-      if (do_g) {
-         darray::zero(g::q0, n, depx, depy, depz);
-      }
-   }
+   epolarBegin(vers, false);
 
    if (use_cf)
       alterchg();
@@ -602,17 +687,7 @@ void epolar(int vers)
    if (use_cfgrad)
       cfluxZeroPot();
 
-   if (useEwald()) {
-      if (polpot::use_tholed)
-         epolarAplusEwald(vers, use_cfgrad);
-      else
-         epolarEwald(vers);
-   } else {
-      if (polpot::use_tholed)
-         epolarAplusNonEwald(vers, use_cfgrad);
-      else
-         epolarNonEwald(vers);
-   }
+   epolarKernel(vers, use_cfgrad);
    epolarPairwiseExtfield(vers, uind);
    torque(vers, depx, depy, depz);
    if (use_cfgrad)
@@ -627,25 +702,210 @@ void epolar(int vers)
       }
    }
 
-   if (rc_a) {
-      if (do_e) {
-         EnergyBuffer u = ep;
-         energy_prec e = energyReduce(u);
-         energy_ep += e;
-         energy_elec += e;
-      }
+   epolarFinish(vers, false);
+}
+
+static void epolarZeroWork(int vers)
+{
+   auto do_a = vers & calc::analyz;
+   auto do_e = vers & calc::energy;
+   auto do_v = vers & calc::virial;
+   auto do_g = vers & calc::grad;
+   size_t bsize = bufferSize();
+
+   if (do_a)
+      darray::zero(g::q0, bsize, nep);
+   if (do_e)
+      darray::zero(g::q0, bsize, ep);
+   if (do_v)
+      darray::zero(g::q0, bsize, vir_ep);
+   if (do_g)
+      darray::zero(g::q0, n, depx, depy, depz);
+}
+
+static void epolarBegin(int vers, bool dual)
+{
+   if (dual) {
+      assert(pltfm_config & Platform::CUDA);
+      assert(!mplpot::use_chgpen);
+      assert(!polpot::use_tholed);
+      assert(!use(Potent::CHGFLX));
+   }
+
+   auto rc_a = rc_flag & calc::analyz;
+   auto do_e = vers & calc::energy;
+   auto do_v = vers & calc::virial;
+   auto do_g = vers & calc::grad;
+   size_t bsize = bufferSize();
+
+   zeroOnHost(energy_ep, virial_ep);
+   if (use_dlmda)
+      zeroOnHost(depdl, d2epdl2, depvirdl);
+   if (rc_a || dual)
+      epolarZeroWork(vers);
+   if (dual && rc_a && use_dlmda) {
+      if (do_e)
+         darray::zero(g::q0, bsize, depdl_buf, d2epdl2_buf);
+      if (do_v)
+         darray::zero(g::q0, bsize, depvirdl_buf);
+      if (do_g)
+         darray::zero(g::q0, n, dfpdlx, dfpdly, dfpdlz);
+   }
+}
+
+static bool epolarStateHasActiveSite(RdtMask mask)
+{
+   return static_cast<unsigned>(mask) & polar_active_mask;
+}
+
+static void epolarKernel(int vers, bool use_cfgrad)
+{
+   if (useEwald()) {
+      if (polpot::use_tholed)
+         epolarAplusEwald(vers, use_cfgrad);
+      else
+         epolarEwald(vers);
+   } else {
+      if (polpot::use_tholed)
+         epolarAplusNonEwald(vers, use_cfgrad);
+      else
+         epolarNonEwald(vers);
+   }
+}
+
+static void epolarState(int vers, RdtMask mask, const int* group, bool first_state)
+{
+   mpoleInitState(vers, mask, group, first_state, true);
+   polarState(mask, group);
+
+   if (epolarStateHasActiveSite(mask)) {
+      epolarKernel(vers, false);
+      epolarPairwiseExtfield(vers, uind);
+      torque(vers, depx, depy, depz, trqx, trqy, trqz, vir_ep);
+   } else {
+      darray::zero(g::q0, n, uind, uinp);
+   }
+}
+
+static void epolarSaveEndpoint0(int vers)
+{
+   size_t bsize = bufferSize();
+   if (vers & calc::energy)
+      darray::copy(g::q0, bsize, ep0, ep);
+   if (vers & calc::virial)
+      darray::copy(g::q0, bsize, vir_ep0, vir_ep);
+   if (vers & calc::grad) {
+      darray::copy(g::q0, n, dep0x, depx);
+      darray::copy(g::q0, n, dep0y, depy);
+      darray::copy(g::q0, n, dep0z, depz);
+   }
+}
+
+static void epolarMixEndpoints(int vers)
+{
+   double weight1, dweight1, d2weight1;
+   adtWeight(dlmda::plambda, epdtexp, weight1, dweight1, d2weight1);
+   adtMix(vers, use_dlmda, n, bufferSize(), weight1, dweight1, d2weight1, ep0, ep, depdl_buf,
+      d2epdl2_buf, vir_ep0, vir_ep, depvirdl_buf, dep0x, dep0y, dep0z, depx, depy, depz, dfpdlx,
+      dfpdly, dfpdlz);
+}
+
+static void epolarFinish(int vers, bool dual)
+{
+   auto rc_a = rc_flag & calc::analyz;
+   auto do_e = vers & calc::energy;
+   auto do_v = vers & calc::virial;
+   auto do_g = vers & calc::grad;
+   size_t bsize = bufferSize();
+
+   if (dual && !rc_a) {
+      if (do_e)
+         sumEnergyBuffer(bsize, eng_buf_elec, ep);
       if (do_v) {
-         VirialBuffer u1 = vir_ep;
-         virial_prec v1[9];
-         virialReduce(v1, u1);
-         for (int iv = 0; iv < 9; ++iv) {
-            virial_ep[iv] = v1[iv];
-            virial_elec[iv] += v1[iv];
-         }
+         auto size = bsize * VirialBufferTraits::value;
+         sumVirialBuffer(size, vir_buf_elec, vir_ep);
       }
       if (do_g)
          sumGradient(gx_elec, gy_elec, gz_elec, depx, depy, depz);
    }
+
+   if (rc_a) {
+      if (do_e) {
+         auto e = energyReduce(ep);
+         energy_ep += e;
+         energy_elec += e;
+      }
+      if (do_v) {
+         virial_prec v[9];
+         virialReduce(v, vir_ep);
+         for (int iv = 0; iv < 9; ++iv) {
+            // epolar() has already folded vir_trq into virial_ep by this point.
+            virial_ep[iv] += v[iv];
+            virial_elec[iv] += v[iv];
+         }
+      }
+      if (do_g)
+         sumGradient(gx_elec, gy_elec, gz_elec, depx, depy, depz);
+
+      if (dual && use_dlmda) {
+         if (do_e) {
+            auto e1 = energyReduce(depdl_buf);
+            depdl += e1;
+            dedl += e1;
+            auto e2 = energyReduce(d2epdl2_buf);
+            d2epdl2 += e2;
+            d2edl2 += e2;
+         }
+         if (do_v) {
+            virial_prec v[9];
+            virialReduce(v, depvirdl_buf);
+            for (int iv = 0; iv < 9; ++iv) {
+               depvirdl[iv] += v[iv];
+               dvirdl[iv] += v[iv];
+            }
+         }
+         if (do_g)
+            sumGradient(dfsumdlx, dfsumdly, dfsumdlz, dfpdlx, dfpdly, dfpdlz);
+      }
+   }
+}
+
+void epolar_adt(int vers)
+{
+   epolarBegin(vers, true);
+
+   epolarState(vers, RdtMask::ENV, mut, true);
+   epolarSaveEndpoint0(vers);
+
+   epolarZeroWork(vers);
+   epolarState(vers, RdtMask::ALL, mut, false);
+
+   epolarMixEndpoints(vers);
+   epolarFinish(vers, true);
+}
+
+void epolar_rdt(int vers)
+{
+   epolarBegin(vers, true);
+
+   // E0 = E(B+environment) + E(A).
+   epolarState(vers, RdtMask::BE, rdt_group, true);
+   epolarState(vers, RdtMask::A, rdt_group, false);
+   epolarSaveEndpoint0(vers);
+
+   // E1 = E(A+environment) + E(B).
+   epolarZeroWork(vers);
+   epolarState(vers, RdtMask::AE, rdt_group, false);
+   int bvers = (vers == calc::v3 ? calc::v0 : vers);
+   epolarState(bvers, RdtMask::B, rdt_group, false);
+
+   epolarMixEndpoints(vers);
+   epolarFinish(vers, true);
+
+   // The last state evaluated above leaves rpole and polarity masked down to
+   // ligand B; restore the full system for whatever runs next.
+   mpoleInitState(calc::v0, RdtMask::ALL, rdt_group, false);
+   polarState(RdtMask::ALL, rdt_group);
 }
 
 TINKER_FVOID2(acc1, cu1, epolar0DotProd, const real (*)[3], const real (*)[3]);

@@ -1,4 +1,5 @@
 #include "ff/atom.h"
+#include "ff/dlmda.h"
 #include "ff/modamoeba.h"
 #include "ff/nblist.h"
 #include "ff/potent.h"
@@ -28,7 +29,7 @@ TINKER_FVOID2(acc1, cu1, ulspredSaveP1, real (*)[3], real (*)[3], //
    const real (*)[3], const real (*)[3]);
 void ulspredSave(const real (*uind)[3], const real (*uinp)[3])
 {
-   if (polpred == UPred::NONE)
+   if (polpred == UPred::NONE || use_epdt)
       return;
 
    // clang-format off

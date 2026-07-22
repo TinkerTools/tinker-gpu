@@ -3,6 +3,7 @@
 #include "ff/egvop.h"
 #include "ff/energy.h"
 #include "ff/evdw.h"
+#include "ff/modamoeba.h"
 #include "ff/nblist.h"
 #include "ff/rwcrd.h"
 #include "tool/argkey.h"
@@ -39,25 +40,28 @@ struct LambdaEnergy
 {
    energy_prec total;
    energy_prec vdw;
-   energy_prec elec;
+   energy_prec mpole;
+   energy_prec polar;
 };
 
-static void setLambda(double vlambda, double elambda)
+static void setLambda(double vlambda, double elambda, double plambda)
 {
    mutant::vlambda = vlambda;
    vlam = vlambda;
    mutant::elambda = elambda;
+   dlmda::plambda = plambda;
 }
 
 // Evaluate the potential energy at a given lambda value
-static LambdaEnergy energyAtLambda(double vlambda, double elambda)
+static LambdaEnergy energyAtLambda(double vlambda, double elambda, double plambda)
 {
-   setLambda(vlambda, elambda);
+   setLambda(vlambda, elambda, plambda);
    energy(calc::energy);
    LambdaEnergy eout;
    copyEnergy(calc::energy, &eout.total);
    eout.vdw = energy_vdw;
-   eout.elec = energy_elec;
+   eout.mpole = energy_em;
+   eout.polar = energy_ep;
    return eout;
 }
 
@@ -113,9 +117,11 @@ void xTestlmda(int, char**)
          adedl = dedl;
          adevdl = devdl;
          ademdl = demdl;
+         adepdl = depdl;
          ad2edl2 = d2edl2;
          ad2evdl2 = d2evdl2;
          ad2emdl2 = d2emdl2;
+         ad2epdl2 = d2epdl2;
          for (int k = 0; k < 9; ++k)
             advirdl[k] = dvirdl[k];
          adfx.resize(n);
@@ -132,31 +138,34 @@ void xTestlmda(int, char**)
       if (opts.numer) {
          double el0 = mutant::elambda;
          double vl0 = mutant::vlambda;
+         double pl0 = dlmda::plambda;
          double eps = opts.eps;
 
          // Scalar first/second derivatives from three energy evaluations.
-         LambdaEnergy e2 = energyAtLambda(vl0 + eps, el0 + eps);
-         LambdaEnergy e0 = energyAtLambda(vl0 - eps, el0 - eps);
-         LambdaEnergy e1 = energyAtLambda(vl0, el0);
+         LambdaEnergy e2 = energyAtLambda(vl0 + eps, el0 + eps, pl0 + eps);
+         LambdaEnergy e0 = energyAtLambda(vl0 - eps, el0 - eps, pl0 - eps);
+         LambdaEnergy e1 = energyAtLambda(vl0, el0, pl0);
          ndedl = (e2.total - e0.total) / (2.0 * eps);
          ndevdl = (e2.vdw - e0.vdw) / (2.0 * eps);
-         ndemdl = (e2.elec - e0.elec) / (2.0 * eps);
+         ndemdl = (e2.mpole - e0.mpole) / (2.0 * eps);
+         ndepdl = (e2.polar - e0.polar) / (2.0 * eps);
          nd2edl2 = (e2.total - 2.0 * e1.total + e0.total) / (eps * eps);
          nd2evdl2 = (e2.vdw - 2.0 * e1.vdw + e0.vdw) / (eps * eps);
-         nd2emdl2 = (e2.elec - 2.0 * e1.elec + e0.elec) / (eps * eps);
+         nd2emdl2 = (e2.mpole - 2.0 * e1.mpole + e0.mpole) / (eps * eps);
+         nd2epdl2 = (e2.polar - 2.0 * e1.polar + e0.polar) / (eps * eps);
 
          // Per-atom force derivative and virial derivative via central
          // difference of the gradient/virial at lambda +/- eps.
          std::vector<double> gpx(n), gpy(n), gpz(n), gmx(n), gmy(n), gmz(n);
 
-         setLambda(vl0 + eps, el0 + eps);
+         setLambda(vl0 + eps, el0 + eps, pl0 + eps);
          energy(calc::v1);
          copyGradient(calc::grad, gpx.data(), gpy.data(), gpz.data());
          double vplus[9];
          for (int k = 0; k < 9; ++k)
             vplus[k] = vir[k];
 
-         setLambda(vl0 - eps, el0 - eps);
+         setLambda(vl0 - eps, el0 - eps, pl0 - eps);
          energy(calc::v1);
          copyGradient(calc::grad, gmx.data(), gmy.data(), gmz.data());
          for (int k = 0; k < 9; ++k)
@@ -172,7 +181,7 @@ void xTestlmda(int, char**)
          }
 
          // Restore the original lambda value.
-         setLambda(vl0, el0);
+         setLambda(vl0, el0, pl0);
       }
 
       // ---- Output ----------------------------------------------------------

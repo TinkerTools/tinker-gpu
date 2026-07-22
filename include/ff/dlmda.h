@@ -41,6 +41,7 @@ TINKER_EXTERN bool use_evast;
 TINKER_EXTERN bool use_evrdt;
 
 TINKER_EXTERN int emdtexp;
+TINKER_EXTERN int epdtexp;
 TINKER_EXTERN int evdtexp;
 TINKER_EXTERN int* rdt_group;
 

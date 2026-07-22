@@ -91,11 +91,13 @@ void mpoleInit(int vers)
       mpoleInitEwald(use_emast, true, true);
 }
 
-void mpoleInitState(int vers, RdtMask mask, const int* group, bool prepare_splines)
+void mpoleInitState(int vers, RdtMask mask, const int* group, bool first_state, bool polar)
 {
    mpoleInitBuffers(vers, false);
+   if (first_state)
+      chkpole();
    rotpoleState(mask, group);
    if (useEwald())
-      mpoleInitEwald(false, prepare_splines, false);
+      mpoleInitEwald(false, first_state, first_state && polar);
 }
 }
