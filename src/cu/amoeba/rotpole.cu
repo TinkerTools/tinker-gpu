@@ -45,6 +45,30 @@ void rotpole_cu()
    }
 }
 
+__global__
+static void maskRpole_cu1(int n, real (*restrict rpole)[MPL_TOTAL], RdtMask mask,
+   const int* restrict group)
+{
+   unsigned active_mask = static_cast<unsigned>(mask);
+   for (int i = ITHREAD; i < n; i += STRIDE) {
+      unsigned atom_mask = static_cast<unsigned>(RdtMask::ENV);
+      if (group[i] == 1)
+         atom_mask = static_cast<unsigned>(RdtMask::LIGA);
+      else if (group[i] == 2)
+         atom_mask = static_cast<unsigned>(RdtMask::LIGB);
+      if ((active_mask & atom_mask) == 0)
+         for (int j = 0; j < MPL_TOTAL; ++j)
+            rpole[i][j] = 0;
+   }
+}
+
+void rotpoleState_cu(RdtMask mask, const int* group)
+{
+   launch_k1s(g::s0, n, chkpole_cu1, n, poleorig, zaxis, x, y, z);
+   launch_k1s(g::s0, n, rotpole_cu1, n, rpole, poleorig, zaxis, x, y, z);
+   launch_k1s(g::s0, n, maskRpole_cu1, n, rpole, mask, group);
+}
+
 void rotrepole_cu()
 {
    launch_k1s(g::s0, n, rotpole_cu1, n, rrepole, repole, zaxis, x, y, z);

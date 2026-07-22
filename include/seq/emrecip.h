@@ -1,16 +1,8 @@
 #pragma once
 #include "ff/energybuffer.h"
 #include "ff/precision.h"
-#include "seq/launch.h"
 
 namespace tinker {
-static __global__
-void emrecipAddVirial_cu(size_t size, VirialBuffer restrict dst, const VirialBuffer restrict src)
-{
-   for (size_t i = ITHREAD; i < size; i += STRIDE)
-      dst[0][i] += src[0][i];
-}
-
 /// \addtogroup pme
 /// \{
 ///

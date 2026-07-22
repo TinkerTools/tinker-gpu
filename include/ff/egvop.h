@@ -1,4 +1,5 @@
 #pragma once
+#include "ff/energybuffer.h"
 #include "ff/precision.h"
 #include "tool/rcman.h"
 
@@ -8,6 +9,12 @@ namespace tinker {
 
 /// Zero out all of the counts, energies, gradients, and virials on device.
 void zeroEGV(int vers = rc_flag);
+
+/// `dst += src` for an energy buffer.
+void sumEnergyBuffer(size_t size, EnergyBuffer dst, const EnergyBufferTraits::type* src);
+
+/// `dst += src` for `size` flattened virial-buffer elements.
+void sumVirialBuffer(size_t size, VirialBuffer dst, const VirialBuffer src);
 
 /// `g0 *= scale`.
 void scaleGradient(double scale, grad_prec* g0x, grad_prec* g0y, grad_prec* g0z);

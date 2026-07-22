@@ -1,6 +1,7 @@
 #include "ff/amoeba/empole.h"
 #include "ff/dlmda.h"
 #include "ff/elec.h"
+#include "ff/egvop.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/pme.h"
@@ -113,7 +114,7 @@ static void empoleEwaldRecipDlmdaGeneric_cu()
       if (vir_m) {
          pmeConvDlmda(pu, dlpu, vir_m, demvirdl_buf);
          auto size = bufferSize() * VirialBufferTraits::value;
-         launch_k1s(g::s0, size, emrecipAddVirial_cu, size, vir_em, vir_m);
+         sumVirialBuffer(size, vir_em, vir_m);
       } else {
          pmeConvDlmda(pu, dlpu, vir_em, demvirdl_buf);
       }

@@ -93,6 +93,8 @@ static bool amoeba_emplar(int vers)
       return false;
    if (vers & calc::analyz)
       return false;
+   if (use_emdt)
+      return false;
    return use(Potent::MPOLE) and use(Potent::POLAR) and (mlistVersion() & Nbl::SPATIAL);
 }
 
@@ -267,8 +269,14 @@ void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
       }
 
    if (amoeba_empole(vers))
-      if (tscfg("empole", ecore_ele))
-         empole(vers);
+      if (tscfg("empole", ecore_ele)) {
+         if (use_emadt)
+            empole_adt(vers);
+         else if (use_emrdt)
+            empole_rdt(vers);
+         else
+            empole(vers);
+      }
    if (amoeba_epolar(vers))
       if (tscfg("epolar", ecore_ele))
          epolar(vers);

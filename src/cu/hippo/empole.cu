@@ -1,3 +1,4 @@
+#include "ff/egvop.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/modhippo.h"
@@ -263,7 +264,7 @@ static void empoleEwaldRecipGeneric_cu()
       if (vir_m) {
          pmeConv(pu, vir_m);
          auto size = bufferSize() * VirialBufferTraits::value;
-         launch_k1s(g::s0, size, emrecipAddVirial_cu, size, vir_em, vir_m);
+         sumVirialBuffer(size, vir_em, vir_m);
       } else {
          pmeConv(pu, vir_em);
       }

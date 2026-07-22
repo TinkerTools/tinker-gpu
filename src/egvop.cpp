@@ -53,6 +53,20 @@ void zeroEGV(int vers)
 }
 
 namespace tinker {
+TINKER_FVOID2(acc0, cu1, sumEnergyBuffer, size_t, EnergyBuffer, const EnergyBufferTraits::type*);
+void sumEnergyBuffer(size_t size, EnergyBuffer dst, const EnergyBufferTraits::type* src)
+{
+   TINKER_FCALL2(acc0, cu1, sumEnergyBuffer, size, dst, src);
+}
+
+TINKER_FVOID2(acc0, cu1, sumVirialBuffer, size_t, VirialBuffer, const VirialBuffer);
+void sumVirialBuffer(size_t size, VirialBuffer dst, const VirialBuffer src)
+{
+   TINKER_FCALL2(acc0, cu1, sumVirialBuffer, size, dst, src);
+}
+}
+
+namespace tinker {
 TINKER_FVOID2(acc1, cu0, scaleGradient, double, grad_prec*, grad_prec*, grad_prec*);
 void scaleGradient(double scale, grad_prec* g0x, grad_prec* g0y, grad_prec* g0z)
 {
