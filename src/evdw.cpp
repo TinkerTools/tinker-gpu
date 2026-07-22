@@ -10,7 +10,6 @@
 #include <tinker/detail/atomid.hh>
 #include <tinker/detail/atoms.hh>
 #include <tinker/detail/couple.hh>
-#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/keys.hh>
 #include <tinker/detail/mutant.hh>
 #include <tinker/detail/params.hh>
@@ -31,10 +30,20 @@ static std::vector<new_type> jvec;
 static std::vector<new_type> jvdwbuf;
 static int jcount;
 
+static EnergyBuffer ev0;
+static VirialBuffer vir_ev0;
+static grad_prec* dev0x;
+static grad_prec* dev0y;
+static grad_prec* dev0z;
+static energy_prec elrc0_vol;
+static energy_prec elrc1_vol;
+static virial_prec vlrc0_vol;
+static virial_prec vlrc1_vol;
+
 void vdwSoftcoreData(RcOp op)
 {
    if ((not use(Potent::VDW)) and (not use(Potent::REPULS)) and (not use(Potent::DISP)) and (not use(Potent::CHGTRN))
-      and (not(use(Potent::MPOLE) and dlmda::use_dlmda)))
+      and (not(use(Potent::MPOLE) and use_emast)))
       return;
 
    if (op & RcOp::DEALLOC)
@@ -78,7 +87,7 @@ void evdwData(RcOp op)
 
       if (vdwtyp == Vdw::HAL) {
          darray::deallocate(ired, kred, xred, yred, zred, gxred, gyred, gzred);
-         if (dlmda::use_dlmda)
+         if (use_evast)
             darray::deallocate(gxred_dlmda, gyred_dlmda, gzred_dlmda);
       }
 
@@ -95,7 +104,7 @@ void evdwData(RcOp op)
       if (rc_a) {
          bufferDeallocate(rc_flag, nev);
          bufferDeallocate(rc_flag, ev, vir_ev, devx, devy, devz);
-         if (dlmda::use_dlmda) {
+         if (use_dlmda) {
             bufferDeallocate(rc_flag, devdl_buf, devvirdl_buf, dfvdlx, dfvdly, dfvdlz);
             if (rc_flag & calc::energy)
                darray::deallocate(d2evdl2_buf);
@@ -119,6 +128,17 @@ void evdwData(RcOp op)
 
       elrc_vol = 0;
       vlrc_vol = 0;
+      if (use_evadt)
+         bufferDeallocate(rc_flag | calc::analyz, ev0, vir_ev0, dev0x, dev0y, dev0z);
+      ev0 = nullptr;
+      vir_ev0 = nullptr;
+      dev0x = nullptr;
+      dev0y = nullptr;
+      dev0z = nullptr;
+      elrc0_vol = 0;
+      elrc1_vol = 0;
+      vlrc0_vol = 0;
+      vlrc1_vol = 0;
    }
 
    if (op & RcOp::ALLOC) {
@@ -135,6 +155,11 @@ void evdwData(RcOp op)
          vdwtyp = Vdw::GAUSS;
       else
          assert(false);
+
+      assert(!use_evadt || vdwtyp == Vdw::HAL);
+
+      if (use_evadt)
+         bufferAllocate(rc_flag | calc::analyz, &ev0, &vir_ev0, &dev0x, &dev0y, &dev0z);
 
       FstrView str1 = vdwpot::vdwindex;
       if (str1 == "CLASS")
@@ -172,7 +197,7 @@ void evdwData(RcOp op)
          darray::allocate(n, &ired, &kred, &xred, &yred, &zred);
          if (rc_flag & calc::grad) {
             darray::allocate(n, &gxred, &gyred, &gzred);
-            if (dlmda::use_dlmda)
+            if (use_evast)
                darray::allocate(n, &gxred_dlmda, &gyred_dlmda, &gzred_dlmda);
          } else {
             gxred = nullptr;
@@ -398,7 +423,7 @@ void evdwData(RcOp op)
       devx = gx_vdw;
       devy = gy_vdw;
       devz = gz_vdw;
-      if (dlmda::use_dlmda) {
+      if (use_dlmda) {
          devdl_buf = dedl_buf;
          d2evdl2_buf = d2edl2_buf;
          devvirdl_buf = dvirdl_buf;
@@ -409,7 +434,7 @@ void evdwData(RcOp op)
       if (rc_a) {
          bufferAllocate(rc_flag, &nev);
          bufferAllocate(rc_flag, &ev, &vir_ev, &devx, &devy, &devz);
-         if (dlmda::use_dlmda) {
+         if (use_dlmda) {
             bufferAllocate(rc_flag, &devdl_buf, &devvirdl_buf, &dfvdlx, &dfvdly, &dfvdlz);
             if (rc_flag & calc::energy)
                darray::allocate(bufferSize(), &d2evdl2_buf);
@@ -480,6 +505,20 @@ void evdwData(RcOp op)
 
       // Initialize elrc and vlrc.
       if (vdwpot::use_vcorr) {
+         if (use_evadt) {
+            double vlambda_orig = mutant::vlambda;
+            double elrc0 = 0, vlrc0 = 0;
+            double elrc1 = 0, vlrc1 = 0;
+            mutant::vlambda = 0;
+            tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &elrc0, &vlrc0);
+            mutant::vlambda = 1;
+            tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &elrc1, &vlrc1);
+            mutant::vlambda = vlambda_orig;
+            elrc0_vol = elrc0 * boxVolume();
+            elrc1_vol = elrc1 * boxVolume();
+            vlrc0_vol = vlrc0 * boxVolume();
+            vlrc1_vol = vlrc1 * boxVolume();
+         }
          double elrc = 0, vlrc = 0;
          tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &elrc, &vlrc);
          elrc_vol = elrc * boxVolume();
@@ -487,23 +526,23 @@ void evdwData(RcOp op)
       } else {
          elrc_vol = 0;
          vlrc_vol = 0;
+         elrc0_vol = 0;
+         elrc1_vol = 0;
+         vlrc0_vol = 0;
+         vlrc1_vol = 0;
       }
    }
 }
 
-void evdw(int vers)
+static void evdwZeroBuffers(int vers, bool force)
 {
    auto rc_a = rc_flag & calc::analyz;
    auto do_a = vers & calc::analyz;
    auto do_e = vers & calc::energy;
    auto do_v = vers & calc::virial;
    auto do_g = vers & calc::grad;
-
-   zeroOnHost(energy_ev, virial_ev);
-   if (dlmda::use_dlmda)
-      zeroOnHost(devdl, d2evdl2, devvirdl);
    size_t bsize = bufferSize();
-   if (rc_a) {
+   if (force or rc_a) {
       if (do_a)
          darray::zero(g::q0, bsize, nev);
       if (do_e)
@@ -512,16 +551,33 @@ void evdw(int vers)
          darray::zero(g::q0, bsize, vir_ev);
       if (do_g)
          darray::zero(g::q0, n, devx, devy, devz);
-      if (dlmda::use_dlmda) {
-         if (do_e)
-            darray::zero(g::q0, bsize, devdl_buf, d2evdl2_buf);
-         if (do_v)
-            darray::zero(g::q0, bsize, devvirdl_buf);
-         if (do_g)
-            darray::zero(g::q0, n, dfvdlx, dfvdly, dfvdlz);
-      }
    }
+}
 
+static void evdwBegin(int vers, bool force)
+{
+   auto rc_a = rc_flag & calc::analyz;
+   auto do_e = vers & calc::energy;
+   auto do_v = vers & calc::virial;
+   auto do_g = vers & calc::grad;
+
+   zeroOnHost(energy_ev, virial_ev);
+   if (use_dlmda)
+      zeroOnHost(devdl, d2evdl2, devvirdl);
+   evdwZeroBuffers(vers, force);
+   if (rc_a and use_dlmda) {
+      size_t bsize = bufferSize();
+      if (do_e)
+         darray::zero(g::q0, bsize, devdl_buf, d2evdl2_buf);
+      if (do_v)
+         darray::zero(g::q0, bsize, devvirdl_buf);
+      if (do_g)
+         darray::zero(g::q0, n, dfvdlx, dfvdly, dfvdlz);
+   }
+}
+
+static void evdwKernel(int vers)
+{
    if (vdwtyp == Vdw::LJ)
       elj(vers);
    else if (vdwtyp == Vdw::BUCK)
@@ -534,23 +590,51 @@ void evdw(int vers)
       egauss(vers);
    else
       assert(false);
+}
+
+static void evdwFinish(int vers, energy_prec elrcv, virial_prec vlrcv, energy_prec delrcv = 0, energy_prec d2elrcv = 0,
+   virial_prec dvlrcv = 0)
+{
+   auto rc_a = rc_flag & calc::analyz;
+   auto do_e = vers & calc::energy;
+   auto do_v = vers & calc::virial;
+   auto do_g = vers & calc::grad;
 
    if (do_e) {
-      if (elrc_vol != 0) {
-         energy_prec corr = elrc_vol / boxVolume();
+      if (elrcv != 0) {
+         energy_prec corr = elrcv / boxVolume();
          energy_ev += corr;
          energy_vdw += corr;
       }
+      if (use_dlmda and delrcv != 0) {
+         energy_prec corr = delrcv / boxVolume();
+         devdl += corr;
+         dedl += corr;
+      }
+      if (use_dlmda and d2elrcv != 0) {
+         energy_prec corr = d2elrcv / boxVolume();
+         d2evdl2 += corr;
+         d2edl2 += corr;
+      }
    }
    if (do_v) {
-      if (vlrc_vol != 0) {
-         virial_prec term = vlrc_vol / boxVolume();
+      if (vlrcv != 0) {
+         virial_prec term = vlrcv / boxVolume();
          virial_ev[0] += term; // xx
          virial_ev[4] += term; // yy
          virial_ev[8] += term; // zz
          virial_vdw[0] += term;
          virial_vdw[4] += term;
          virial_vdw[8] += term;
+      }
+      if (use_dlmda and dvlrcv != 0) {
+         virial_prec term = dvlrcv / boxVolume();
+         devvirdl[0] += term;
+         devvirdl[4] += term;
+         devvirdl[8] += term;
+         dvirdl[0] += term;
+         dvirdl[4] += term;
+         dvirdl[8] += term;
       }
    }
    if (rc_a) {
@@ -572,7 +656,7 @@ void evdw(int vers)
       if (do_g)
          sumGradient(gx_vdw, gy_vdw, gz_vdw, devx, devy, devz);
 
-      if (dlmda::use_dlmda) {
+      if (use_dlmda) {
          if (do_e) {
             energy_prec e1 = energyReduce(devdl_buf);
             devdl += e1;
@@ -593,6 +677,59 @@ void evdw(int vers)
             sumGradient(dfsumdlx, dfsumdly, dfsumdlz, dfvdlx, dfvdly, dfvdlz);
       }
    }
+}
+
+void evdw(int vers)
+{
+   evdwBegin(vers, false);
+   evdwKernel(vers);
+   evdwFinish(vers, elrc_vol, vlrc_vol);
+}
+
+void evdw_adt(int vers)
+{
+   assert(vdwtyp == Vdw::HAL);
+
+   auto do_e = vers & calc::energy;
+   auto do_v = vers & calc::virial;
+   auto do_g = vers & calc::grad;
+   size_t bsize = bufferSize();
+   real vlam_orig = vlam;
+
+   evdwBegin(vers, true);
+   vlam = 0;
+   evdwKernel(vers);
+   if (do_e)
+      darray::copy(g::q0, bsize, ev0, ev);
+   if (do_v)
+      darray::copy(g::q0, bsize, vir_ev0, vir_ev);
+   if (do_g) {
+      darray::copy(g::q0, n, dev0x, devx);
+      darray::copy(g::q0, n, dev0y, devy);
+      darray::copy(g::q0, n, dev0z, devz);
+   }
+
+   evdwZeroBuffers(vers, true);
+   vlam = 1;
+   evdwKernel(vers);
+   vlam = vlam_orig;
+
+   double weight1, dweight1, d2weight1;
+   adtWeight(vlam_orig, evdtexp, weight1, dweight1, d2weight1);
+   adtMix(vers, use_dlmda, n, bsize, weight1, dweight1, d2weight1, ev0, ev, devdl_buf, d2evdl2_buf, vir_ev0,
+      vir_ev, devvirdl_buf, dev0x, dev0y, dev0z, devx, devy, devz, dfvdlx, dfvdly, dfvdlz);
+
+   energy_prec adt_elrc = weight1 * elrc1_vol + (1 - weight1) * elrc0_vol;
+   virial_prec adt_vlrc = weight1 * vlrc1_vol + (1 - weight1) * vlrc0_vol;
+   energy_prec adt_delrc = dweight1 * (elrc1_vol - elrc0_vol);
+   energy_prec adt_d2elrc = d2weight1 * (elrc1_vol - elrc0_vol);
+   virial_prec adt_dvlrc = dweight1 * (vlrc1_vol - vlrc0_vol);
+   evdwFinish(vers, adt_elrc, adt_vlrc, adt_delrc, adt_d2elrc, adt_dvlrc);
+}
+
+void evdw_rdt(int vers)
+{
+   (void)vers;
 }
 }
 

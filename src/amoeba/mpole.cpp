@@ -4,7 +4,6 @@
 #include "ff/modamoeba.h"
 #include "ff/pme.h"
 #include "tool/externfunc.h"
-#include <tinker/detail/dlmda.hh>
 
 namespace tinker {
 TINKER_FVOID2(acc1, cu1, torque, int, grad_prec*, grad_prec*, grad_prec*);
@@ -39,7 +38,7 @@ void mpoleInit(int vers)
 {
    if (vers & calc::grad) {
       darray::zero(g::q0, n, trqx, trqy, trqz);
-      if (dlmda::use_dlmda) {
+      if (use_emast) {
          darray::zero(g::q0, n, dltrqx, dltrqy, dltrqz);
       }
    }
@@ -50,7 +49,7 @@ void mpoleInit(int vers)
    rotpole();
 
    if (useEwald()) {
-      if (dlmda::use_dlmda)
+      if (use_emast)
          rpoleToCmpDlmda(); // fills both cmp (lambda scaled) and dlcmp (d cmp / d lambda)
       else
          rpoleToCmp();

@@ -3,12 +3,11 @@
 #include "ff/modamoeba.h"
 #include "math/libfunc.h"
 #include "seq/rotpole.h"
-#include <tinker/detail/dlmda.hh>
 
 namespace tinker {
 void chkpole_acc()
 {
-   if (dlmda::use_dlmda) {
+   if (use_emast) {
       #pragma acc parallel loop independent async deviceptr(x,y,z,zaxis,poleorig)
       for (int i = 0; i < n; ++i)
          chkpoleAtomI(i, poleorig, zaxis, x, y, z);
@@ -21,7 +20,7 @@ void chkpole_acc()
 
 void rotpole_acc()
 {
-   if (dlmda::use_dlmda) {
+   if (use_emast) {
       #pragma acc parallel loop independent async deviceptr(x,y,z,zaxis,rpole,poleorig)
       for (int i = 0; i < n; ++i)
          rotpoleAtomI(i, rpole, poleorig, zaxis, x, y, z);

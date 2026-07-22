@@ -8,7 +8,6 @@
 #include "seq/launch.h"
 #include "seq/pair_hal.h"
 #include "seq/triangle.h"
-#include <tinker/detail/dlmda.hh>
 
 namespace tinker {
 __global__
@@ -122,12 +121,12 @@ static void ehal_cu3()
 
    if CONSTEXPR (do_g) {
       darray::zero(g::q0, n, gxred, gyred, gzred);
-      if (dlmda::use_dlmda)
+      if (use_evast)
          darray::zero(g::q0, n, gxred_dlmda, gyred_dlmda, gzred_dlmda);
    }
 
    int ngrid = gpuGridSize(BLOCK_DIM);
-   if (dlmda::use_dlmda) {
+   if (use_evast) {
       auto ker1 = ehaldlmda_cu1<Ver>;
       ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, devdl_buf, d2evdl2_buf, vir_ev,
          devvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0, nvexclude,
@@ -142,7 +141,7 @@ static void ehal_cu3()
 
    if CONSTEXPR (do_g) {
       ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);
-      if (dlmda::use_dlmda)
+      if (use_evast)
          ehalResolveGradient(gxred_dlmda, gyred_dlmda, gzred_dlmda, dfvdlx, dfvdly, dfvdlz);
    }
 }
@@ -162,4 +161,5 @@ void ehal_cu(int vers)
    else if (vers == calc::v6)
       ehal_cu3<calc::V6>();
 }
+
 }

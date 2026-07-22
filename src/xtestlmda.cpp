@@ -74,11 +74,10 @@ void xTestlmda(int, char**)
    int ixyz;
    tinker_f_getcart(&ixyz);
    tinker_f_mechanic();
+   dlmda::use_dlmda = 1;
    mechanic2();
 
    auto out = stdout;
-
-   dlmda::use_dlmda = 1;
 
    FdTestOptions opts = readOptions();
 

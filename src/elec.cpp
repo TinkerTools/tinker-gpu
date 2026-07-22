@@ -68,7 +68,7 @@ static void mpoleData(RcOp op)
    if (op & RcOp::ALLOC) {
       darray::allocate(n, &zaxis, &pole, &rpole);
 
-      if (dlmda::use_dlmda) {
+      if (use_dlmda) {
          darray::allocate(n, &poleorig);
       } else {
          poleorig = nullptr;
@@ -85,7 +85,7 @@ static void mpoleData(RcOp op)
 
       if (rc_flag & calc::grad) {
          darray::allocate(n, &trqx, &trqy, &trqz);
-         if (dlmda::use_dlmda) darray::allocate(n, &dltrqx, &dltrqy, &dltrqz);
+         if (use_emast) darray::allocate(n, &dltrqx, &dltrqy, &dltrqz);
       } else {
          trqx = nullptr;
          trqy = nullptr;
@@ -156,7 +156,7 @@ static void mpoleData(RcOp op)
       darray::copyin(g::q0, n, pole, polebuf.data());
       waitFor(g::q0);
 
-      if (dlmda::use_dlmda) {
+      if (use_dlmda) {
          for (int i = 0; i < n; ++i) {
             int b1 = MPL_TOTAL * i;
             int b2 = mpole::maxpole * i;

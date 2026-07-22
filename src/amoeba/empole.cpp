@@ -8,7 +8,6 @@
 #include "ff/potent.h"
 #include "math/zero.h"
 #include "tool/externfunc.h"
-#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/mplpot.hh>
 
 namespace tinker {
@@ -50,7 +49,7 @@ void empoleData(RcOp op)
       demx = gx_elec;
       demy = gy_elec;
       demz = gz_elec;
-      if (dlmda::use_dlmda) {
+      if (use_dlmda) {
          demdl_buf = dedl_buf;
          d2emdl2_buf = d2edl2_buf;
          demvirdl_buf = dvirdl_buf;
@@ -61,7 +60,7 @@ void empoleData(RcOp op)
       if (rc_a) {
          bufferAllocate(rc_flag, &nem);
          bufferAllocate(rc_flag, &em, &vir_em, &demx, &demy, &demz);
-         if (dlmda::use_dlmda) {
+         if (use_dlmda) {
             bufferAllocate(rc_flag, &demdl_buf, &demvirdl_buf, &dfmdlx, &dfmdly, &dfmdlz);
             if (rc_flag & calc::energy)
                darray::allocate(bufferSize(), &d2emdl2_buf);
@@ -91,7 +90,7 @@ static void empoleEwaldRealSelf(int vers)
 TINKER_FVOID2(acc0, cu1, empoleEwaldRecipDlmda, int);
 void empoleEwaldRecip(int vers)
 {
-   if (dlmda::use_dlmda) {
+   if (use_emast) {
       TINKER_FCALL2(acc0, cu1, empoleEwaldRecipDlmda, vers);
       return;
    }
@@ -116,7 +115,7 @@ void empole(int vers)
    auto do_g = vers & calc::grad;
 
    zeroOnHost(energy_em, virial_em);
-   if (dlmda::use_dlmda)
+   if (use_dlmda)
       zeroOnHost(demdl, d2emdl2, demvirdl);
    size_t bsize = bufferSize();
    if (rc_a) {
@@ -128,7 +127,7 @@ void empole(int vers)
          darray::zero(g::q0, bsize, vir_em);
       if (do_g)
          darray::zero(g::q0, n, demx, demy, demz);
-      if (dlmda::use_dlmda) {
+      if (use_dlmda) {
          if (do_e)
             darray::zero(g::q0, bsize, demdl_buf, d2emdl2_buf);
          if (do_v)
@@ -145,7 +144,7 @@ void empole(int vers)
       empoleNonEwald(vers);
    exfield(vers, 1);
    torque(vers, demx, demy, demz);
-   if (dlmda::use_dlmda)
+   if (use_emast)
       torque(vers, dfmdlx, dfmdly, dfmdlz, dltrqx, dltrqy, dltrqz, demvirdl_buf);
    if (do_v) {
       VirialBuffer u2 = vir_trq;
@@ -176,7 +175,7 @@ void empole(int vers)
       if (do_g)
          sumGradient(gx_elec, gy_elec, gz_elec, demx, demy, demz);
 
-      if (dlmda::use_dlmda) {
+      if (use_dlmda) {
          if (do_e) {
             energy_prec e1 = energyReduce(demdl_buf);
             demdl += e1;

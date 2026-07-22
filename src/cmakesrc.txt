@@ -67,6 +67,7 @@ mod.cpp
 molecule.cpp
 nblist.cpp
 nn.cpp
+ost.cpp
 platform.cpp
 pme.cpp
 potent.cpp

@@ -1,3 +1,4 @@
+#include "ff/dlmda.h"
 #include "md/osrw.h"
 #include "tool/tinkersuppl.h"
 
@@ -7,5 +8,6 @@ void mechanic2()
    tinker_f_flush_output();
 
    osrw_mech();
+   ost_mech();
 }
 }

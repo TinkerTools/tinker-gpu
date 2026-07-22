@@ -2,7 +2,6 @@
 #include "ff/modamoeba.h"
 #include "seq/launch.h"
 #include "seq/rotpole.h"
-#include <tinker/detail/dlmda.hh>
 
 namespace tinker {
 __global__
@@ -15,7 +14,7 @@ void chkpole_cu1(int n, real (*restrict pole)[MPL_TOTAL], LocalFrame* zaxis, con
 
 void chkpole_cu()
 {
-   if (dlmda::use_dlmda) {
+   if (use_emast) {
       launch_k1s(g::s0, n, chkpole_cu1, n, poleorig, zaxis, x, y, z);
    } else {
       launch_k1s(g::s0, n, chkpole_cu1, n, pole, zaxis, x, y, z);
@@ -39,7 +38,7 @@ void rotpole_cu1(int n, real (*restrict rpole)[MPL_TOTAL], const real (*restrict
 
 void rotpole_cu()
 {
-   if (dlmda::use_dlmda) {
+   if (use_emast) {
       launch_k1s(g::s0, n, rotpole_cu1, n, rpole, poleorig, zaxis, x, y, z);
    } else {
       launch_k1s(g::s0, n, rotpole_cu1, n, rpole, pole, zaxis, x, y, z);

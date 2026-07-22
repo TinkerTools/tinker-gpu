@@ -64,6 +64,10 @@ void vdwSoftcoreData(RcOp);
 void evdwData(RcOp);
 /// \ingroup vdw
 void evdw(int vers);
+/// \ingroup vdw
+void evdw_adt(int vers);
+/// \ingroup vdw
+void evdw_rdt(int vers);
 
 /// \ingroup vdw
 /// \brief Lennard-Jones 12-6 potential.

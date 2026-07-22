@@ -40,6 +40,7 @@ mdpq.cu
 mdpt.cu
 minimize.cu
 nn.cu
+ost.cu
 pme.cu
 rattle.cu
 spatial.cu

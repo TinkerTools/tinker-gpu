@@ -9,7 +9,6 @@
 #include "seq/launch.h"
 #include "seq/pair_mpole.h"
 #include "seq/triangle.h"
-#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/extfld.hh>
 #include <tinker/detail/mutant.hh>
 
@@ -61,7 +60,7 @@ static void empole_cu()
 
 void empoleNonEwald_cu(int vers)
 {
-   if (dlmda::use_dlmda) {
+   if (use_emast) {
       if (vers == calc::v0) {
          empole_cu<calc::V0, NON_EWALD,DLMDA>();
       } else if (vers == calc::v1) {
@@ -94,7 +93,7 @@ void empoleNonEwald_cu(int vers)
 
 void empoleEwaldRealSelf_cu(int vers)
 {
-   if (dlmda::use_dlmda) {
+   if (use_emast) {
       if (vers == calc::v0) {
          empole_cu<calc::V0, EWALD,DLMDA>();
       } else if (vers == calc::v1) {

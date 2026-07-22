@@ -2,7 +2,6 @@
 #include "ff/energy.h"
 #include "math/zero.h"
 #include "tool/externfunc.h"
-#include <tinker/detail/dlmda.hh>
 
 namespace tinker {
 void zeroEGV(int vers)
@@ -17,7 +16,7 @@ void zeroEGV(int vers)
          zeroOnDeviceAsync(bsize, eng_buf_nnintermol);
       }
 
-      if (dlmda::use_dlmda) {
+      if (use_dlmda) {
          zeroOnHost(dedl, d2edl2);
          zeroOnDeviceAsync(bsize, dedl_buf);
          zeroOnDeviceAsync(bsize, d2edl2_buf);
@@ -33,7 +32,7 @@ void zeroEGV(int vers)
          zeroOnDeviceAsync(bsize, vir_buf_nnintermol);
       }
 
-      if (dlmda::use_dlmda) {
+      if (use_dlmda) {
          zeroOnHost(dvirdl);
          zeroOnDeviceAsync(bsize, dvirdl_buf);
       }
@@ -46,7 +45,7 @@ void zeroEGV(int vers)
          zeroOnDevice3Async(n, gx_nnintermol, gy_nnintermol, gz_nnintermol);
       }
 
-      if (dlmda::use_dlmda) {
+      if (use_dlmda) {
          zeroOnDevice3Async(n, dfsumdlx, dfsumdly, dfsumdlz);
       }
    }

@@ -11,7 +11,6 @@
 #include "tool/error.h"
 #include "tool/externfunc.h"
 #include <tinker/detail/bound.hh>
-#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/ewald.hh>
 #include <tinker/detail/pme.hh>
 #include <tinker/routines.h>
@@ -166,7 +165,7 @@ void pmeData(RcOp op)
 
       if (op & RcOp::ALLOC) {
          darray::allocate(n, &cmp, &fmp, &cphi, &fphi);
-         if (dlmda::use_dlmda) {
+         if (use_emast) {
             darray::allocate(n, &dlcmp, &dlfmp, &dlcphi, &dlfphi);
          } else {
             dlcmp = nullptr;
@@ -193,7 +192,7 @@ void pmeData(RcOp op)
             unique_grids = false;
             PME::Params p(ewald::aeewald, pme::nefft1, pme::nefft2, pme::nefft3, pme::bseorder);
             pmeOpAlloc(epme_unit, p, unique_grids);
-            if (dlmda::use_dlmda) {
+            if (use_emast) {
                unique_grids = true;
                pmeOpAlloc(dlpme_unit, p, unique_grids);
                unique_grids = false;

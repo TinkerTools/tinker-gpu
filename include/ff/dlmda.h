@@ -4,6 +4,31 @@
 
 // dlmda
 namespace tinker {
+void ost_mech();
+void adtWeight(double lambda, int exponent, double& weight, double& dweight, double& d2weight);
+void adtMix(int vers, bool do_dlmda, int n, size_t buffer_size, double weight1, double dweight1, double d2weight1,
+   const EnergyBufferTraits::type* e0, EnergyBuffer e1, EnergyBuffer dedl, EnergyBuffer d2edl2, VirialBuffer v0,
+   VirialBuffer v1, VirialBuffer dvdl, const grad_prec* gx0, const grad_prec* gy0, const grad_prec* gz0,
+   grad_prec* gx1, grad_prec* gy1, grad_prec* gz1, grad_prec* dgxdl, grad_prec* dgydl, grad_prec* dgzdl);
+
+TINKER_EXTERN bool use_dlmda;
+TINKER_EXTERN bool use_emdt;
+TINKER_EXTERN bool use_epdt;
+TINKER_EXTERN bool use_evdt;
+TINKER_EXTERN bool use_plmda;
+
+TINKER_EXTERN bool use_rel;
+TINKER_EXTERN bool use_emadt;
+TINKER_EXTERN bool use_emast;
+TINKER_EXTERN bool use_emrdt;
+TINKER_EXTERN bool use_epadt;
+TINKER_EXTERN bool use_eprdt;
+TINKER_EXTERN bool use_evadt;
+TINKER_EXTERN bool use_evast;
+TINKER_EXTERN bool use_evrdt;
+
+TINKER_EXTERN int evdtexp;
+
 TINKER_EXTERN real (*poleorig)[MPL_TOTAL];
 TINKER_EXTERN real* polarityorig;
 
