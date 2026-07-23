@@ -603,10 +603,13 @@ static void epolarNonEwald(int vers)
       TINKER_FCALL2(acc1, cu1, epolarNonEwald, ver2, uind, uinp);
 }
 
-TINKER_FVOID2(acc1, cu1, epolarEwaldRecipSelf, int, const real (*)[3], const real (*)[3], AccumRef);
-void epolarEwaldRecipSelf(int vers, AccumRef egvp)
+TINKER_FVOID2(acc1, cu1, epolarEwaldRecipSelf, int, const real (*)[3], const real (*)[3],
+   EnergyBuffer, VirialBuffer, grad_prec*, grad_prec*, grad_prec*);
+void epolarEwaldRecipSelf(int vers, EnergyBuffer out_e, VirialBuffer out_v,
+   grad_prec* out_gx, grad_prec* out_gy, grad_prec* out_gz)
 {
-   TINKER_FCALL2(acc1, cu1, epolarEwaldRecipSelf, vers, uind, uinp, egvp);
+   TINKER_FCALL2(acc1, cu1, epolarEwaldRecipSelf, vers, uind, uinp,
+      out_e, out_v, out_gx, out_gy, out_gz);
 }
 
 TINKER_FVOID2(acc1, cu1, epolarEwaldReal, int, const real (*)[3], const real (*)[3]);
@@ -635,7 +638,8 @@ static void epolarEwald(int vers)
       epolar0DotProd(uind, udirp, ep);
    if (vers != calc::v0) {
       epolarEwaldReal(ver2);
-      epolarEwaldRecipSelf(ver2, ep_buf.ref());
+      AccumRef out = ep_buf.ref();
+      epolarEwaldRecipSelf(ver2, out.e, out.v, out.gx, out.gy, out.gz);
    }
 }
 

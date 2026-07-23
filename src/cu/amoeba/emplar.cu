@@ -554,7 +554,8 @@ static void emplarEwald_cu()
    // empole recip
    empoleEwaldRecip(Ver::value);
    // epolar recip self; must toggle off the calc::energy flag
-   epolarEwaldRecipSelf(Ver::value & ~calc::energy, em_buf.ref());
+   AccumRef out = em_buf.ref();
+   epolarEwaldRecipSelf(Ver::value & ~calc::energy, out.e, out.v, out.gx, out.gy, out.gz);
 
    // epolar energy
    if CONSTEXPR (Ver::e)

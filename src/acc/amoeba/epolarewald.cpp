@@ -357,7 +357,8 @@ static void epolarEwaldReal_acc1(const real (*uind)[3], const real (*uinp)[3])
 }
 
 template <class Ver>
-static void epolarEwaldRecipSelf_acc1(const real (*gpu_uind)[3], const real (*gpu_uinp)[3], AccumRef egvp)
+static void epolarEwaldRecipSelf_acc1(const real (*gpu_uind)[3], const real (*gpu_uinp)[3],
+   EnergyBuffer out_e, VirialBuffer out_v, grad_prec* out_gx, grad_prec* out_gy, grad_prec* out_gz)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;
@@ -372,14 +373,6 @@ static void epolarEwaldRecipSelf_acc1(const real (*gpu_uind)[3], const real (*gp
    const real aewald = st.aewald;
 
    const real f = electric / dielec;
-
-   // The destination is a parameter so emplar can route the polarization
-   // virial and gradient into the multipole buffers.
-   auto* out_e = egvp.e;
-   auto out_v = egvp.v;
-   auto* out_gx = egvp.gx;
-   auto* out_gy = egvp.gy;
-   auto* out_gz = egvp.gz;
 
    auto bufsize = bufferSize();
 
@@ -692,20 +685,21 @@ void epolarEwaldReal_acc(int vers, const real (*uind)[3], const real (*uinp)[3])
    }
 }
 
-void epolarEwaldRecipSelf_acc(int vers, const real (*uind)[3], const real (*uinp)[3], AccumRef egvp)
+void epolarEwaldRecipSelf_acc(int vers, const real (*uind)[3], const real (*uinp)[3],
+   EnergyBuffer out_e, VirialBuffer out_v, grad_prec* out_gx, grad_prec* out_gy, grad_prec* out_gz)
 {
    if (vers == calc::v0) {
-      epolarEwaldRecipSelf_acc1<calc::V0>(uind, uinp, egvp);
+      epolarEwaldRecipSelf_acc1<calc::V0>(uind, uinp, out_e, out_v, out_gx, out_gy, out_gz);
    } else if (vers == calc::v1) {
-      epolarEwaldRecipSelf_acc1<calc::V1>(uind, uinp, egvp);
+      epolarEwaldRecipSelf_acc1<calc::V1>(uind, uinp, out_e, out_v, out_gx, out_gy, out_gz);
    } else if (vers == calc::v3) {
-      epolarEwaldRecipSelf_acc1<calc::V3>(uind, uinp, egvp);
+      epolarEwaldRecipSelf_acc1<calc::V3>(uind, uinp, out_e, out_v, out_gx, out_gy, out_gz);
    } else if (vers == calc::v4) {
-      epolarEwaldRecipSelf_acc1<calc::V4>(uind, uinp, egvp);
+      epolarEwaldRecipSelf_acc1<calc::V4>(uind, uinp, out_e, out_v, out_gx, out_gy, out_gz);
    } else if (vers == calc::v5) {
-      epolarEwaldRecipSelf_acc1<calc::V5>(uind, uinp, egvp);
+      epolarEwaldRecipSelf_acc1<calc::V5>(uind, uinp, out_e, out_v, out_gx, out_gy, out_gz);
    } else if (vers == calc::v6) {
-      epolarEwaldRecipSelf_acc1<calc::V6>(uind, uinp, egvp);
+      epolarEwaldRecipSelf_acc1<calc::V6>(uind, uinp, out_e, out_v, out_gx, out_gy, out_gz);
    }
 }
 }
