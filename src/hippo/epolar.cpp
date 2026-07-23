@@ -150,7 +150,7 @@ static void epolarChgpenNonEwald(int vers, int use_cf)
 
    induce2(uind);
    if (edot)
-      epolar0DotProd(uind, udir);
+      epolar0DotProd(uind, udir, ep);
    if (vers != calc::v0)
       TINKER_FCALL2(acc1, cu1, epolarChgpenNonEwald, ver2, use_cf, uind);
 }
@@ -186,7 +186,7 @@ static void epolarChgpenEwald(int vers, int use_cf)
 
    induce2(uind);
    if (edot)
-      epolar0DotProd(uind, udir);
+      epolar0DotProd(uind, udir, ep);
    if (vers != calc::v0) {
       epolarChgpenEwaldReal(ver2, use_cf);
       epolarChgpenEwaldRecipSelf(ver2, use_cf);
@@ -289,7 +289,7 @@ void epolarAplusEwald(int vers, int use_cf)
 
    induce2(uind);
    if (edot)
-      epolar0DotProd(uind, udir);
+      epolar0DotProd(uind, udir, ep);
    if (vers != calc::v0) {
       epolarAplusEwaldReal(ver2, use_cf);
       epolarAplusEwaldRecipSelf(ver2, use_cf);
@@ -310,7 +310,7 @@ void epolarAplusNonEwald(int vers, int use_cf)
 
    induce2(uind);
    if (edot)
-      epolar0DotProd(uind, udir);
+      epolar0DotProd(uind, udir, ep);
    if (vers != calc::v0)
       TINKER_FCALL2(acc1, cu1, epolarAplusNonEwald, ver2, use_cf, uind);
 }

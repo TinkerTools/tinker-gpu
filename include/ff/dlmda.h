@@ -1,6 +1,7 @@
 #pragma once
 #include "ff/amoeba/mpole.h"
 #include "ff/energybuffer.h"
+#include "ff/termbuf.h"
 #include "tool/rcman.h"
 
 // dlmda
@@ -47,6 +48,14 @@ TINKER_EXTERN int* rdt_group;
 
 TINKER_EXTERN real (*poleorig)[MPL_TOTAL];
 TINKER_EXTERN real* polarityorig;
+
+// lambda derivative accumulators.
+TINKER_EXTERN TermBuffer em_dl;
+TINKER_EXTERN TermBuffer ep_dl;
+TINKER_EXTERN TermBuffer ev_dl;
+TINKER_EXTERN DualEndpoint em_snap;
+TINKER_EXTERN DualEndpoint ep_snap;
+TINKER_EXTERN DualEndpoint ev_snap;
 
 TINKER_EXTERN EnergyBuffer dedl_buf;
 TINKER_EXTERN EnergyBuffer demdl_buf;

@@ -7,6 +7,7 @@
 #include "ff/modamoeba.h"
 #include "ff/nblist.h"
 #include "ff/potent.h"
+#include "ff/termbuf.h"
 #include "math/zero.h"
 #include "tool/error.h"
 #include "tool/externfunc.h"
@@ -15,12 +16,6 @@
 #include <tinker/detail/mutant.hh>
 
 namespace tinker {
-static EnergyBuffer em0;
-static VirialBuffer vir_em0;
-static grad_prec* dem0x;
-static grad_prec* dem0y;
-static grad_prec* dem0z;
-
 void empoleData(RcOp op)
 {
    if (not use(Potent::MPOLE))
@@ -29,65 +24,27 @@ void empoleData(RcOp op)
       return;
 
    auto rc_a = rc_flag & calc::analyz;
-   auto use_private = rc_a || use_emdt;
 
    if (op & RcOp::DEALLOC) {
       if (rc_a)
          bufferDeallocate(rc_flag, nem);
-      if (use_private)
-         bufferDeallocate(rc_flag | calc::analyz, em, vir_em, demx, demy, demz);
-      if (rc_a && use_dlmda) {
-         bufferDeallocate(rc_flag, demdl_buf, demvirdl_buf, dfmdlx, dfmdly, dfmdlz);
-         if (rc_flag & calc::energy)
-            darray::deallocate(d2emdl2_buf);
-      }
-      if (use_emdt)
-         bufferDeallocate(rc_flag | calc::analyz, em0, vir_em0, dem0x, dem0y, dem0z);
+      em_buf.manage(op, rc_flag, {}, {}, false);
+      em_dl.manage(op, rc_flag, {}, {}, false);
+      em_snap.manage(op, rc_flag, false);
       nem = nullptr;
-      em = nullptr;
-      vir_em = nullptr;
-      demx = nullptr;
-      demy = nullptr;
-      demz = nullptr;
-      demdl_buf = nullptr;
-      d2emdl2_buf = nullptr;
-      demvirdl_buf = nullptr;
-      dfmdlx = nullptr;
-      dfmdly = nullptr;
-      dfmdlz = nullptr;
-      em0 = nullptr;
-      vir_em0 = nullptr;
-      dem0x = nullptr;
-      dem0y = nullptr;
-      dem0z = nullptr;
    }
 
    if (op & RcOp::ALLOC) {
       nem = nullptr;
-      em = eng_buf_elec;
-      vir_em = vir_buf_elec;
-      demx = gx_elec;
-      demy = gy_elec;
-      demz = gz_elec;
-      if (use_dlmda) {
-         demdl_buf = dedl_buf;
-         d2emdl2_buf = d2edl2_buf;
-         demvirdl_buf = dvirdl_buf;
-         dfmdlx = dfsumdlx;
-         dfmdly = dfsumdly;
-         dfmdlz = dfsumdlz;
-      }
+      em_buf.manage(op, rc_flag, {&em, &vir_em, &demx, &demy, &demz},
+         {eng_buf_elec, vir_buf_elec, gx_elec, gy_elec, gz_elec}, rc_a or use_emdt, //
+         {&energy_em, &virial_em}, {&energy_elec, &virial_elec});
+      em_dl.manage(op, rc_flag, {&demdl_buf, &demvirdl_buf, &dfmdlx, &dfmdly, &dfmdlz, &d2emdl2_buf},
+         {dedl_buf, dvirdl_buf, dfsumdlx, dfsumdly, dfsumdlz, d2edl2_buf}, rc_a and use_dlmda, //
+         {&demdl, &demvirdl, &d2emdl2}, {&dedl, &dvirdl, &d2edl2});
+      em_snap.manage(op, rc_flag, use_emdt);
       if (rc_a)
          bufferAllocate(rc_flag, &nem);
-      if (use_private)
-         bufferAllocate(rc_flag | calc::analyz, &em, &vir_em, &demx, &demy, &demz);
-      if (rc_a && use_dlmda) {
-         bufferAllocate(rc_flag, &demdl_buf, &demvirdl_buf, &dfmdlx, &dfmdly, &dfmdlz);
-         if (rc_flag & calc::energy)
-            darray::allocate(bufferSize(), &d2emdl2_buf);
-      }
-      if (use_emdt)
-         bufferAllocate(rc_flag | calc::analyz, &em0, &vir_em0, &dem0x, &dem0y, &dem0z);
    }
 
    if (op & RcOp::INIT) {
@@ -131,46 +88,22 @@ static void empoleEwald(int vers)
 }
 
 namespace tinker {
-static void empoleZeroWork(int vers)
-{
-   auto do_a = vers & calc::analyz;
-   auto do_e = vers & calc::energy;
-   auto do_v = vers & calc::virial;
-   auto do_g = vers & calc::grad;
-   size_t bsize = bufferSize();
-
-   if (do_a)
-      darray::zero(g::q0, bsize, nem);
-   if (do_e)
-      darray::zero(g::q0, bsize, em);
-   if (do_v)
-      darray::zero(g::q0, bsize, vir_em);
-   if (do_g)
-      darray::zero(g::q0, n, demx, demy, demz);
-}
-
-static void empoleBegin(int vers, bool dual)
+void empoleZeroWork(int vers)
 {
    auto rc_a = rc_flag & calc::analyz;
-   auto do_e = vers & calc::energy;
-   auto do_v = vers & calc::virial;
-   auto do_g = vers & calc::grad;
+   auto do_a = vers & calc::analyz;
+   if (rc_a and do_a)
+      darray::zero(g::q0, bufferSize(), nem);
+   em_buf.zero(vers);
+}
 
+void empoleBegin(int vers)
+{
    zeroOnHost(energy_em, virial_em);
    if (use_dlmda)
       zeroOnHost(demdl, d2emdl2, demvirdl);
-   size_t bsize = bufferSize();
-   if (rc_a || dual) {
-      empoleZeroWork(vers);
-      if (rc_a && use_dlmda) {
-         if (do_e)
-            darray::zero(g::q0, bsize, demdl_buf, d2emdl2_buf);
-         if (do_v)
-            darray::zero(g::q0, bsize, demvirdl_buf);
-         if (do_g)
-            darray::zero(g::q0, n, dfmdlx, dfmdly, dfmdlz);
-      }
-   }
+   empoleZeroWork(vers);
+   em_dl.zero(vers);
 }
 
 static void empoleKernel(int vers)
@@ -189,70 +122,17 @@ static void empoleState(int vers, RdtMask mask, const int* group, bool prepare_s
    torque(vers, demx, demy, demz, trqx, trqy, trqz, vir_em);
 }
 
-static void empoleFinish(int vers, bool dual)
+void empoleFinish(int vers)
 {
-   auto rc_a = rc_flag & calc::analyz;
-   auto do_e = vers & calc::energy;
-   auto do_v = vers & calc::virial;
-   auto do_g = vers & calc::grad;
-   size_t bsize = bufferSize();
-
-   if (dual && !rc_a) {
-      if (do_e)
-         sumEnergyBuffer(bsize, eng_buf_elec, em);
-      if (do_v) {
-         auto size = bsize * VirialBufferTraits::value;
-         sumVirialBuffer(size, vir_buf_elec, vir_em);
-      }
-      if (do_g)
-         sumGradient(gx_elec, gy_elec, gz_elec, demx, demy, demz);
-   }
-
-   if (rc_a) {
-      if (do_e) {
-         energy_prec e = energyReduce(em);
-         energy_em += e;
-         energy_elec += e;
-      }
-      if (do_v) {
-         virial_prec v[9];
-         virialReduce(v, vir_em);
-         for (int iv = 0; iv < 9; ++iv) {
-            virial_em[iv] += v[iv];
-            virial_elec[iv] += v[iv];
-         }
-      }
-      if (do_g)
-         sumGradient(gx_elec, gy_elec, gz_elec, demx, demy, demz);
-
-      if (use_dlmda) {
-         if (do_e) {
-            energy_prec e1 = energyReduce(demdl_buf);
-            demdl += e1;
-            dedl += e1;
-            energy_prec e2 = energyReduce(d2emdl2_buf);
-            d2emdl2 += e2;
-            d2edl2 += e2;
-         }
-         if (do_v) {
-            virial_prec v[9];
-            virialReduce(v, demvirdl_buf);
-            for (int iv = 0; iv < 9; ++iv) {
-               demvirdl[iv] += v[iv];
-               dvirdl[iv] += v[iv];
-            }
-         }
-         if (do_g)
-            sumGradient(dfsumdlx, dfsumdly, dfsumdlz, dfmdlx, dfmdly, dfmdlz);
-      }
-   }
+   em_buf.flush(vers);
+   em_dl.flush(vers);
 }
 
 void empole(int vers)
 {
    auto do_v = vers & calc::virial;
 
-   empoleBegin(vers, false);
+   empoleBegin(vers);
 
    mpoleInit(vers);
    empoleKernel(vers);
@@ -270,35 +150,22 @@ void empole(int vers)
       }
    }
 
-   empoleFinish(vers, false);
+   empoleFinish(vers);
 }
 
-static void empoleSaveEndpoint0(int vers)
+void empoleSaveEndpoint0(int vers)
 {
-   size_t bsize = bufferSize();
-   if (vers & calc::energy)
-      darray::copy(g::q0, bsize, em0, em);
-   if (vers & calc::virial)
-      darray::copy(g::q0, bsize, vir_em0, vir_em);
-   if (vers & calc::grad) {
-      darray::copy(g::q0, n, dem0x, demx);
-      darray::copy(g::q0, n, dem0y, demy);
-      darray::copy(g::q0, n, dem0z, demz);
-   }
+   em_snap.save(vers, em_buf);
 }
 
-static void empoleMixEndpoints(int vers)
+void empoleMixEndpoints(int vers)
 {
-   double weight1, dweight1, d2weight1;
-   adtWeight(mutant::elambda, emdtexp, weight1, dweight1, d2weight1);
-   adtMix(vers, use_dlmda, n, bufferSize(), weight1, dweight1, d2weight1, em0, em, demdl_buf,
-      d2emdl2_buf, vir_em0, vir_em, demvirdl_buf, dem0x, dem0y, dem0z, demx, demy, demz, dfmdlx,
-      dfmdly, dfmdlz);
+   em_snap.mix(vers, mutant::elambda, emdtexp, use_dlmda, em_buf, em_dl);
 }
 
 void empole_adt(int vers)
 {
-   empoleBegin(vers, true);
+   empoleBegin(vers);
 
    empoleState(vers, RdtMask::ENV, mut, true);
    empoleSaveEndpoint0(vers);
@@ -307,12 +174,12 @@ void empole_adt(int vers)
    empoleState(vers, RdtMask::ALL, mut, false);
 
    empoleMixEndpoints(vers);
-   empoleFinish(vers, true);
+   empoleFinish(vers);
 }
 
 void empole_rdt(int vers)
 {
-   empoleBegin(vers, true);
+   empoleBegin(vers);
 
    // E0 = E(B+environment) + E(A).
    empoleState(vers, RdtMask::BE, rdt_group, true);
@@ -326,7 +193,7 @@ void empole_rdt(int vers)
    empoleState(bvers, RdtMask::B, rdt_group, false);
 
    empoleMixEndpoints(vers);
-   empoleFinish(vers, true);
+   empoleFinish(vers);
 
    mpoleInitState(calc::v0, RdtMask::ALL, rdt_group, false);
 }

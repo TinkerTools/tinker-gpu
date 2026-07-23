@@ -87,15 +87,9 @@ static bool ecore_nnintermol;
 
 static bool amoeba_emplar(int vers)
 {
-   if (mplpot::use_chgpen)
-      return false;
-   if (rc_flag & calc::analyz)
-      return false;
    if (vers & calc::analyz)
       return false;
-   if (use_emdt || use_epdt)
-      return false;
-   return use(Potent::MPOLE) and use(Potent::POLAR) and (mlistVersion() & Nbl::SPATIAL);
+   return useEmplar();
 }
 
 static bool amoeba_empole(int vers)
@@ -287,8 +281,14 @@ void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             epolar(vers);
       }
    if (amoeba_emplar(vers))
-      if (tscfg("emplar", ecore_ele))
-         emplar(vers);
+      if (tscfg("emplar", ecore_ele)) {
+         if (use_emadt)
+            emplar_adt(vers);
+         else if (use_emrdt)
+            emplar_rdt(vers);
+         else
+            emplar(vers);
+      }
 
    if (hippo_empole(vers))
       if (tscfg("empoleChgpen", ecore_ele))
@@ -551,8 +551,8 @@ void energyData(RcOp op)
    // Must follow evdw_data() and echarge_data().
    RcMan echglj42{echgljData, op};
 
-   // empoleData() must be in front of epolarData().
    RcMan empole42{empoleData, op};
+   RcMan emplar42{emplarData, op};
    RcMan epolar42{epolarData, op};
 
    // HIPPO

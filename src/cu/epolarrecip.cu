@@ -1,4 +1,5 @@
 #include "ff/elec.h"
+#include "ff/termbuf.h"
 #include "ff/modamoeba.h"
 #include "ff/modhippo.h"
 #include "ff/pme.h"
@@ -412,7 +413,7 @@ void epolarEwaldRecipSelfVirial_cu5(int ntot, int nff, VirialBuffer restrict vir
 
 namespace tinker {
 template <class Ver>
-static void epolarEwaldRecipSelf_cu1(const real (*gpu_uind)[3], const real (*gpu_uinp)[3])
+static void epolarEwaldRecipSelf_cu1(const real (*gpu_uind)[3], const real (*gpu_uinp)[3], AccumRef egvp)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;
@@ -433,7 +434,7 @@ static void epolarEwaldRecipSelf_cu1(const real (*gpu_uind)[3], const real (*gpu
 
    cuindToFuind(pu, gpu_uind, gpu_uinp, fuind, fuinp);
    if CONSTEXPR (do_e) {
-      launch_k1b(g::s0, n, epolarEwaldRecipSelfEp_cu, n, ep, f, fuind, fphi);
+      launch_k1b(g::s0, n, epolarEwaldRecipSelfEp_cu, n, egvp.e, f, fuind, fphi);
    }
    gridUind(pu, fuind, fuinp);
    fftfront(pu);
@@ -446,7 +447,7 @@ static void epolarEwaldRecipSelf_cu1(const real (*gpu_uind)[3], const real (*gpu
 
    if CONSTEXPR (do_g) {
       launch_k1s(g::s0, n, epolarEwaldRecipSelfDep_cu,  //
-         n, f, depx, depy, depz,                        //
+         n, f, egvp.gx, egvp.gy, egvp.gz,                        //
          fmp, fphi, fuind, fuinp, fphid, fphip, fphidp, //
          nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS);
    }
@@ -468,19 +469,19 @@ static void epolarEwaldRecipSelf_cu1(const real (*gpu_uind)[3], const real (*gpu
    real term = f * aewald * aewald * aewald * 4 / 3 / sqrtpi;
    real fterm = -2 * f * aewald * aewald * aewald / 3 / sqrtpi;
    launch_k1b(g::s0, n, epolarEwaldRecipSelfEptrq_cu<do_e, do_g, do_a>, //
-      n, term, fterm, nep, ep, trqx, trqy, trqz, nullptr,               //
+      n, term, fterm, nep, egvp.e, trqx, trqy, trqz, nullptr,               //
       rpole, cmp, gpu_uind, gpu_uinp, cphidp);
 
    // recip virial
 
    if CONSTEXPR (do_v) {
       auto size = bufferSize() * VirialBufferTraits::value;
-      launch_k1s(g::s0, size, epolarEwaldRecipSelfVirial_cu1, size, vir_ep, vir_m);
+      launch_k1s(g::s0, size, epolarEwaldRecipSelfVirial_cu1, size, egvp.v, vir_m);
 
       darray::scale(g::q0, n, f, cphi, fphid, fphip);
 
       launch_k1b(g::s0, n, epolarEwaldRecipSelfVirial_cu2,    //
-         n, vir_ep,                                           //
+         n, egvp.v,                                           //
          cmp, gpu_uind, gpu_uinp, fphid, fphip, cphi, cphidp, //
          nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS);
 
@@ -505,25 +506,25 @@ static void epolarEwaldRecipSelf_cu1(const real (*gpu_uind)[3], const real (*gpu
       real box_volume = boxVolume();
       real volterm = pi * box_volume;
       launch_k1b(g::s0, ntot, epolarEwaldRecipSelfVirial_cu5, //
-         ntot, nff, vir_ep, f, volterm, pterm, d, p,          //
+         ntot, nff, egvp.v, f, volterm, pterm, d, p,          //
          nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS);
    }
 }
 
-void epolarEwaldRecipSelf_cu(int vers, const real (*uind)[3], const real (*uinp)[3])
+void epolarEwaldRecipSelf_cu(int vers, const real (*uind)[3], const real (*uinp)[3], AccumRef egvp)
 {
    if (vers == calc::v0) {
-      epolarEwaldRecipSelf_cu1<calc::V0>(uind, uinp);
+      epolarEwaldRecipSelf_cu1<calc::V0>(uind, uinp, egvp);
    } else if (vers == calc::v1) {
-      epolarEwaldRecipSelf_cu1<calc::V1>(uind, uinp);
+      epolarEwaldRecipSelf_cu1<calc::V1>(uind, uinp, egvp);
    } else if (vers == calc::v3) {
-      epolarEwaldRecipSelf_cu1<calc::V3>(uind, uinp);
+      epolarEwaldRecipSelf_cu1<calc::V3>(uind, uinp, egvp);
    } else if (vers == calc::v4) {
-      epolarEwaldRecipSelf_cu1<calc::V4>(uind, uinp);
+      epolarEwaldRecipSelf_cu1<calc::V4>(uind, uinp, egvp);
    } else if (vers == calc::v5) {
-      epolarEwaldRecipSelf_cu1<calc::V5>(uind, uinp);
+      epolarEwaldRecipSelf_cu1<calc::V5>(uind, uinp, egvp);
    } else if (vers == calc::v6) {
-      epolarEwaldRecipSelf_cu1<calc::V6>(uind, uinp);
+      epolarEwaldRecipSelf_cu1<calc::V6>(uind, uinp, egvp);
    }
 }
 }

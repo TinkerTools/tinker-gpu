@@ -1,6 +1,7 @@
 #pragma once
 #include "ff/amoeba/mpole.h"
 #include "ff/energybuffer.h"
+#include "ff/termbuf.h"
 
 // mpole
 namespace tinker {
@@ -14,6 +15,7 @@ TINKER_EXTERN real* trqz;
 TINKER_EXTERN VirialBuffer vir_trq;
 
 TINKER_EXTERN CountBuffer nem;
+TINKER_EXTERN TermBuffer em_buf;
 TINKER_EXTERN EnergyBuffer em;
 TINKER_EXTERN VirialBuffer vir_em;
 TINKER_EXTERN grad_prec* demx;
@@ -52,6 +54,7 @@ TINKER_EXTERN real (*uind)[3];
 TINKER_EXTERN real (*uinp)[3];
 
 TINKER_EXTERN CountBuffer nep;
+TINKER_EXTERN TermBuffer ep_buf;
 TINKER_EXTERN EnergyBuffer ep;
 TINKER_EXTERN VirialBuffer vir_ep;
 TINKER_EXTERN grad_prec* depx;

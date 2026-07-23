@@ -76,6 +76,7 @@ rcman.cpp
 rwcrd.cpp
 spatial.cpp
 switch.cpp
+termbuf.cpp
 tinkersuppl.cpp
 xanalyze.cpp
 xbar.cpp

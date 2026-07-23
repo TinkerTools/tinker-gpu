@@ -2,6 +2,7 @@
 #include "ff/dlmda.h"
 #include "ff/energybuffer.h"
 #include "ff/precision.h"
+#include "ff/termbuf.h"
 #include "tool/rcman.h"
 
 namespace tinker {
@@ -18,4 +19,10 @@ void torque(int vers, grad_prec* dx, grad_prec* dy, grad_prec* dz, const real* t
 void mpoleInit(int vers);
 void mpoleInitState(int vers, RdtMask mask, const int* group, bool first_state, bool polar = false);
 /// \}
+
+void empoleBegin(int vers);
+void empoleZeroWork(int vers);
+void empoleSaveEndpoint0(int vers);
+void empoleMixEndpoints(int vers);
+void empoleFinish(int vers);
 }

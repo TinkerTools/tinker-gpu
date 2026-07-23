@@ -178,6 +178,7 @@ TINKER_EXTERN real* atom_rad;
 TINKER_EXTERN real* atom_eps;
 
 TINKER_EXTERN CountBuffer nev;
+TINKER_EXTERN TermBuffer ev_buf;
 TINKER_EXTERN EnergyBuffer ev;
 TINKER_EXTERN VirialBuffer vir_ev;
 TINKER_EXTERN grad_prec* devx;

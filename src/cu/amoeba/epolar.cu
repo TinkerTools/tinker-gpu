@@ -48,10 +48,10 @@ static void epolar0DotProd_cu1(int n, real f, EnergyBuffer restrict ep, const re
    }
 }
 
-void epolar0DotProd_cu(const real (*gpu_uind)[3], const real (*gpu_udirp)[3])
+void epolar0DotProd_cu(const real (*gpu_uind)[3], const real (*gpu_udirp)[3], EnergyBuffer eout)
 {
    const real f = -0.5 * electric / dielec;
-   launch_k1b(g::s0, n, epolar0DotProd_cu1, n, f, ep, gpu_uind, gpu_udirp, polarity_inv);
+   launch_k1b(g::s0, n, epolar0DotProd_cu1, n, f, eout, gpu_uind, gpu_udirp, polarity_inv);
 }
 
 __global__

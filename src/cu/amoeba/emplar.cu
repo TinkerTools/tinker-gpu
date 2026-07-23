@@ -554,11 +554,11 @@ static void emplarEwald_cu()
    // empole recip
    empoleEwaldRecip(Ver::value);
    // epolar recip self; must toggle off the calc::energy flag
-   epolarEwaldRecipSelf(Ver::value & ~calc::energy);
+   epolarEwaldRecipSelf(Ver::value & ~calc::energy, em_buf.ref());
 
    // epolar energy
    if CONSTEXPR (Ver::e)
-      epolar0DotProd(uind, udirp);
+      epolar0DotProd(uind, udirp, em_buf.ref().e);
 }
 
 template <class Ver>
@@ -570,7 +570,7 @@ static void emplarNonEwald_cu()
    // empole and epolar
    emplar_cu<Ver, NON_EWALD>(uind, uinp);
    if CONSTEXPR (Ver::e)
-      epolar0DotProd(uind, udirp);
+      epolar0DotProd(uind, udirp, em_buf.ref().e);
 }
 
 void emplar_cu(int vers)

@@ -4,6 +4,7 @@
 #include "ff/nblist.h"
 #include "ff/pme.h"
 #include "ff/switch.h"
+#include "ff/termbuf.h"
 #include "seq/pair_polar.h"
 #include "tool/gpucard.h"
 
@@ -356,7 +357,7 @@ static void epolarEwaldReal_acc1(const real (*uind)[3], const real (*uinp)[3])
 }
 
 template <class Ver>
-static void epolarEwaldRecipSelf_acc1(const real (*gpu_uind)[3], const real (*gpu_uinp)[3])
+static void epolarEwaldRecipSelf_acc1(const real (*gpu_uind)[3], const real (*gpu_uinp)[3], AccumRef egvp)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;
@@ -372,6 +373,14 @@ static void epolarEwaldRecipSelf_acc1(const real (*gpu_uind)[3], const real (*gp
 
    const real f = electric / dielec;
 
+   // The destination is a parameter so emplar can route the polarization
+   // virial and gradient into the multipole buffers.
+   auto* out_e = egvp.e;
+   auto out_v = egvp.v;
+   auto* out_gx = egvp.gx;
+   auto* out_gy = egvp.gy;
+   auto* out_gz = egvp.gz;
+
    auto bufsize = bufferSize();
 
    auto* fphid = fdip_phi1;
@@ -379,11 +388,11 @@ static void epolarEwaldRecipSelf_acc1(const real (*gpu_uind)[3], const real (*gp
 
    cuindToFuind(pu, gpu_uind, gpu_uinp, fuind, fuinp);
    if CONSTEXPR (do_e) {
-      #pragma acc parallel loop independent async deviceptr(fuind,fphi,ep)
+      #pragma acc parallel loop independent async deviceptr(fuind,fphi,out_e)
       for (int i = 0; i < n; ++i) {
          int offset = i & (bufsize - 1);
          real e = 0.5f * f * (fuind[i][0] * fphi[i][1] + fuind[i][1] * fphi[i][2] + fuind[i][2] * fphi[i][3]);
-         atomic_add(e, ep, offset);
+         atomic_add(e, out_e, offset);
       }
    }
    gridUind(pu, fuind, fuinp);
@@ -396,7 +405,7 @@ static void epolarEwaldRecipSelf_acc1(const real (*gpu_uind)[3], const real (*gp
    // increment the dipole polarization gradient contributions
 
    if CONSTEXPR (do_g) {
-      #pragma acc parallel loop independent async deviceptr(depx,depy,depz,\
+      #pragma acc parallel loop independent async deviceptr(out_gx,out_gy,out_gz,\
                fmp,fphi,fuind,fuinp,fphid,fphip,fphidp)\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)
       for (int i = 0; i < n; ++i) {
@@ -436,9 +445,9 @@ static void epolarEwaldRecipSelf_acc1(const real (*gpu_uind)[3], const real (*gp
          real h1 = recipa.x * f1 + recipb.x * f2 + recipc.x * f3;
          real h2 = recipa.y * f1 + recipb.y * f2 + recipc.y * f3;
          real h3 = recipa.z * f1 + recipb.z * f2 + recipc.z * f3;
-         atomic_add(h1 * f, depx, i);
-         atomic_add(h2 * f, depy, i);
-         atomic_add(h3 * f, depz, i);
+         atomic_add(h1 * f, out_gx, i);
+         atomic_add(h2 * f, out_gy, i);
+         atomic_add(h3 * f, out_gz, i);
       } // end for (int i)
    }
 
@@ -459,7 +468,7 @@ static void epolarEwaldRecipSelf_acc1(const real (*gpu_uind)[3], const real (*gp
    real term = f * aewald * aewald * aewald * 4 / 3 / sqrtpi;
    real fterm = -2 * f * aewald * aewald * aewald / 3 / sqrtpi;
    #pragma acc parallel loop independent async\
-               deviceptr(ep,nep,trqx,trqy,trqz,\
+               deviceptr(out_e,nep,trqx,trqy,trqz,\
                rpole,cmp,gpu_uind,gpu_uinp,cphidp)
    for (int i = 0; i < n; ++i) {
       int offset = i & (bufsize - 1);
@@ -494,7 +503,7 @@ static void epolarEwaldRecipSelf_acc1(const real (*gpu_uind)[3], const real (*gp
          uiy = gpu_uind[i][1];
          uiz = gpu_uind[i][2];
          real uii = dix * uix + diy * uiy + diz * uiz;
-         atomic_add(fterm * uii, ep, offset);
+         atomic_add(fterm * uii, out_e, offset);
       }
       if CONSTEXPR (do_a)
          atomic_add(1, nep, offset);
@@ -504,16 +513,16 @@ static void epolarEwaldRecipSelf_acc1(const real (*gpu_uind)[3], const real (*gp
 
    if CONSTEXPR (do_v) {
       auto size = bufferSize() * VirialBufferTraits::value;
-      #pragma acc parallel loop independent async deviceptr(vir_ep,vir_m)
+      #pragma acc parallel loop independent async deviceptr(out_v,vir_m)
       for (int i = 0; i < (int)size; ++i) {
-         vir_ep[0][i] -= vir_m[0][i];
+         out_v[0][i] -= vir_m[0][i];
       }
 
       darray::scale(g::q0, n, f, cphi, fphid, fphip);
 
       #pragma acc parallel loop independent async\
                   present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-                  deviceptr(vir_ep,cmp,\
+                  deviceptr(out_v,cmp,\
                   gpu_uind,gpu_uinp,fphid,fphip,cphi,cphidp)
       for (int i = 0; i < n; ++i) {
          real cphid[4], cphip[4];
@@ -586,7 +595,7 @@ static void epolarEwaldRecipSelf_acc1(const real (*gpu_uind)[3], const real (*gp
          vzz = vzz - 0.5f * (cphid[3] * gpu_uinp[i][2] + cphip[3] * gpu_uind[i][2]);
          // end if
 
-         atomic_add(vxx, vxy, vxz, vyy, vyz, vzz, vir_ep, i & (bufsize - 1));
+         atomic_add(vxx, vxy, vxz, vyy, vyz, vzz, out_v, i & (bufsize - 1));
       }
 
       // qgrip: pvu_qgrid
@@ -620,7 +629,7 @@ static void epolarEwaldRecipSelf_acc1(const real (*gpu_uind)[3], const real (*gp
       real pterm = (pi / aewald) * (pi / aewald);
       real box_volume = boxVolume();
 
-      #pragma acc parallel loop independent async deviceptr(d,p,vir_ep)\
+      #pragma acc parallel loop independent async deviceptr(d,p,out_v)\
                   present(lvec1,lvec2,lvec3,recipa,recipb,recipc)
       for (int i = 1; i < ntot; ++i) {
          const real volterm = pi * box_volume;
@@ -660,7 +669,7 @@ static void epolarEwaldRecipSelf_acc1(const real (*gpu_uind)[3], const real (*gp
             real vyz = h2 * h3 * vterm;
             real vzz = (h3 * h3 * vterm - eterm);
 
-            atomic_add(vxx, vxy, vxz, vyy, vyz, vzz, vir_ep, i & (bufsize - 1));
+            atomic_add(vxx, vxy, vxz, vyy, vyz, vzz, out_v, i & (bufsize - 1));
          }
       }
    }
@@ -683,20 +692,20 @@ void epolarEwaldReal_acc(int vers, const real (*uind)[3], const real (*uinp)[3])
    }
 }
 
-void epolarEwaldRecipSelf_acc(int vers, const real (*uind)[3], const real (*uinp)[3])
+void epolarEwaldRecipSelf_acc(int vers, const real (*uind)[3], const real (*uinp)[3], AccumRef egvp)
 {
    if (vers == calc::v0) {
-      epolarEwaldRecipSelf_acc1<calc::V0>(uind, uinp);
+      epolarEwaldRecipSelf_acc1<calc::V0>(uind, uinp, egvp);
    } else if (vers == calc::v1) {
-      epolarEwaldRecipSelf_acc1<calc::V1>(uind, uinp);
+      epolarEwaldRecipSelf_acc1<calc::V1>(uind, uinp, egvp);
    } else if (vers == calc::v3) {
-      epolarEwaldRecipSelf_acc1<calc::V3>(uind, uinp);
+      epolarEwaldRecipSelf_acc1<calc::V3>(uind, uinp, egvp);
    } else if (vers == calc::v4) {
-      epolarEwaldRecipSelf_acc1<calc::V4>(uind, uinp);
+      epolarEwaldRecipSelf_acc1<calc::V4>(uind, uinp, egvp);
    } else if (vers == calc::v5) {
-      epolarEwaldRecipSelf_acc1<calc::V5>(uind, uinp);
+      epolarEwaldRecipSelf_acc1<calc::V5>(uind, uinp, egvp);
    } else if (vers == calc::v6) {
-      epolarEwaldRecipSelf_acc1<calc::V6>(uind, uinp);
+      epolarEwaldRecipSelf_acc1<calc::V6>(uind, uinp, egvp);
    }
 }
 }
