@@ -17,7 +17,7 @@ void zeroEGV(int vers)
       }
 
       if (use_dlmda) {
-         zeroOnHost(dedl, d2edl2);
+         zeroOnHost(dedl, demdl, depdl, devdl, d2edl2, d2emdl2, d2epdl2, d2evdl2);
          zeroOnDeviceAsync(bsize, dedl_buf);
          zeroOnDeviceAsync(bsize, d2edl2_buf);
       }
@@ -33,7 +33,7 @@ void zeroEGV(int vers)
       }
 
       if (use_dlmda) {
-         zeroOnHost(dvirdl);
+         zeroOnHost(dvirdl, demvirdl, depvirdl, devvirdl);
          zeroOnDeviceAsync(bsize, dvirdl_buf);
       }
    }
