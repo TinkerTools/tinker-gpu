@@ -40,6 +40,12 @@ static void rotpoleState(RdtMask mask, const int* group)
    TINKER_FCALL2(acc0, cu1, rotpoleState, mask, group);
 }
 
+TINKER_FVOID2(acc0, cu1, mpoleScale, real);
+void mpoleScale(real factor)
+{
+   TINKER_FCALL2(acc0, cu1, mpoleScale, factor);
+}
+
 static void mpoleInitBuffers(int vers, bool use_vir_trq)
 {
    if (vers & calc::grad) {

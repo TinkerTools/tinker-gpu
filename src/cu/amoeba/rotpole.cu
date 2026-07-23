@@ -1,4 +1,5 @@
 #include "ff/dlmda.h"
+#include "ff/evdw.h"
 #include "ff/modamoeba.h"
 #include "seq/launch.h"
 #include "seq/rotpole.h"
@@ -69,5 +70,22 @@ void rotpoleState_cu(RdtMask mask, const int* group)
 void rotrepole_cu()
 {
    launch_k1s(g::s0, n, rotpole_cu1, n, rrepole, repole, zaxis, x, y, z);
+}
+
+__global__
+static void mpoleScale_cu1(int n, real (*restrict pole)[MPL_TOTAL],
+   const real (*restrict poleorig)[MPL_TOTAL], const int* restrict mut, real factor)
+{
+   for (int i = ITHREAD; i < n; i += STRIDE) {
+      if (mut[i]) {
+         for (int j = 0; j < MPL_TOTAL; ++j)
+            pole[i][j] = factor * poleorig[i][j];
+      }
+   }
+}
+
+void mpoleScale_cu(real factor)
+{
+   launch_k1s(g::s0, n, mpoleScale_cu1, n, pole, poleorig, mut, factor);
 }
 }

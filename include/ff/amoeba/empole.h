@@ -18,6 +18,7 @@ void torque(int vers, grad_prec* dx, grad_prec* dy, grad_prec* dz, const real* t
    const real* tqz, VirialBuffer vbuf);
 void mpoleInit(int vers);
 void mpoleInitState(int vers, RdtMask mask, const int* group, bool first_state, bool polar = false);
+void mpoleScale(real factor);
 /// \}
 
 void empoleBegin(int vers);

@@ -41,7 +41,8 @@ static virial_prec vlrc1_vol;
 void vdwSoftcoreData(RcOp op)
 {
    if ((not use(Potent::VDW)) and (not use(Potent::REPULS)) and (not use(Potent::DISP)) and (not use(Potent::CHGTRN))
-      and (not(use(Potent::MPOLE) and (use_emast || use_emdt))) and (not(use(Potent::POLAR) and use_epdt)))
+      and (not(use(Potent::MPOLE) and (use_emast || use_emdt)))
+      and (not(use(Potent::POLAR) and (use_epdt || use_plmda))))
       return;
 
    if (op & RcOp::DEALLOC)

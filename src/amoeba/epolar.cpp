@@ -406,7 +406,7 @@ void epolarData(RcOp op)
       darray::allocate(njpolar * njpolar, &thlval);
 
       darray::allocate(n, &polarity, &thole, &pdamp, &polarity_inv);
-      if (use_epdt)
+      if (use_epdt || use_plmda)
          darray::allocate(n, &polarityorig);
       else
          polarityorig = nullptr;
@@ -508,6 +508,17 @@ void epolarData(RcOp op)
             TINKER_THROW("Polarization dual topology does not support charge flux.");
       }
 
+      if (use_plmda) {
+         if (not(pltfm_config & Platform::CUDA))
+            TINKER_THROW("A decoupled polarization lambda requires the CUDA platform.");
+         if (mplpot::use_chgpen)
+            TINKER_THROW("A decoupled polarization lambda does not support charge penetration.");
+         if (polpot::use_tholed)
+            TINKER_THROW("A decoupled polarization lambda does not support the AMOEBA+ (tholed) model.");
+         if (use(Potent::CHGFLX))
+            TINKER_THROW("A decoupled polarization lambda does not support charge flux.");
+      }
+
       std::vector<int> jpolarvec(n);
       for (int i = 0; i < n; ++i)
          jpolarvec[i] = polar::jpolar[i] - 1;
@@ -518,15 +529,22 @@ void epolarData(RcOp op)
       udiag = polpot::uaccel;
 
       const double polmin = 1.0e-16;
+      std::vector<double> polbuf(n);
+      for (int i = 0; i < n; ++i) {
+         if (use_plmda and mutant::mut[i])
+            polbuf[i] = dlmda::plambda * dlmda::polarityorig[i];
+         else
+            polbuf[i] = polar::polarity[i];
+      }
       std::vector<double> pinvbuf(n);
       for (int i = 0; i < n; ++i) {
-         pinvbuf[i] = 1.0 / std::max(polar::polarity[i], polmin);
+         pinvbuf[i] = 1.0 / std::max(polbuf[i], polmin);
       }
-      darray::copyin(g::q0, n, polarity, polar::polarity);
+      darray::copyin(g::q0, n, polarity, polbuf.data());
       darray::copyin(g::q0, n, thole, polar::thole);
       darray::copyin(g::q0, n, pdamp, polar::pdamp);
       darray::copyin(g::q0, n, polarity_inv, pinvbuf.data());
-      if (use_epdt)
+      if (use_epdt || use_plmda)
          darray::copyin(g::q0, n, polarityorig, dlmda::polarityorig);
       if (polpot::use_tholed)
          darray::copyin(g::q0, n, dirdamp, polar::tholed);
@@ -636,6 +654,9 @@ void epolar(int vers)
 
    epolarBegin(vers);
 
+   if (use_plmda)
+      mpoleScale(dlmda::plambda);
+
    if (use_cf)
       alterchg();
    mpoleInit(vers);
@@ -656,6 +677,9 @@ void epolar(int vers)
          virial_elec[iv] += v2[iv];
       }
    }
+
+   if (use_plmda)
+      mpoleScale(mutant::elambda);
 
    epolarFinish(vers);
 }

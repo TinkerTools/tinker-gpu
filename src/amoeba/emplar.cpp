@@ -26,7 +26,7 @@ static int emplar_flag = -1;
 /// compare double
 static bool doubleEq(double a, double b)
 {
-   constexpr double eps = 1.0e-12;
+   constexpr double eps = 1.0e-6;
    return std::fabs(a - b) <= eps;
 }
 
@@ -56,6 +56,8 @@ static bool emplarDualMatched()
 static bool emplarDecide()
 {
    if (mplpot::use_chgpen)
+      return false;
+   if (use_plmda)
       return false;
    if (rc_flag & calc::analyz)
       return false;
