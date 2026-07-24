@@ -156,18 +156,18 @@ const Fixture kFixtures[] = {
    {"116_water_exf_rdt_p00", "water2", false, true, false, true, "exf"},
    {"117_water_exf_adt_m05p10", "water2", true, true, false, true, "exf"},
    {"118_water_exf_rdt_m05p05", "water2", true, true, false, true, "exf"},
-   {"119_water_adt_ye_m10p10", "water2", true, true, false, true, "emplar"},
-   {"120_water_adt_ne_m10p10", "water2", true, true, false, true, "emplar"},
-   {"121_water_adt_ye_m05p05", "water2", true, true, false, true, "emplar"},
-   {"122_water_adt_ne_m05p05", "water2", true, true, false, true, "emplar"},
-   {"123_water_adt_ye_m00p00", "water2", true, true, false, true, "emplar"},
-   {"124_water_adt_ne_m00p00", "water2", true, true, false, true, "emplar"},
-   {"125_water_rdt_ye_m10p10", "water2", true, true, false, true, "emplar"},
-   {"126_water_rdt_ne_m10p10", "water2", true, true, false, true, "emplar"},
-   {"127_water_rdt_ye_m05p05", "water2", true, true, false, true, "emplar"},
-   {"128_water_rdt_ne_m05p05", "water2", true, true, false, true, "emplar"},
-   {"129_water_rdt_ye_m00p00", "water2", true, true, false, true, "emplar"},
-   {"130_water_rdt_ne_m00p00", "water2", true, true, false, true, "emplar"},
+   {"119_water_adt_ye_m10p10v05", "water2", true, true, false, true, "emplar"},
+   {"120_water_adt_ne_m10p10v05", "water2", true, true, false, true, "emplar"},
+   {"121_water_adt_ye_m05p05v00", "water2", true, true, false, true, "emplar"},
+   {"122_water_adt_ne_m05p05v00", "water2", true, true, false, true, "emplar"},
+   {"123_water_adt_ye_m00p00v10", "water2", true, true, false, true, "emplar"},
+   {"124_water_adt_ne_m00p00v10", "water2", true, true, false, true, "emplar"},
+   {"125_water_rdt_ye_m10p10v05", "water2", true, true, false, true, "emplar"},
+   {"126_water_rdt_ne_m10p10v05", "water2", true, true, false, true, "emplar"},
+   {"127_water_rdt_ye_m05p05v00", "water2", true, true, false, true, "emplar"},
+   {"128_water_rdt_ne_m05p05v00", "water2", true, true, false, true, "emplar"},
+   {"129_water_rdt_ye_m00p00v10", "water2", true, true, false, true, "emplar"},
+   {"130_water_rdt_ne_m00p00v10", "water2", true, true, false, true, "emplar"},
 };
 
 // Reference lambda-derivative block parsed out of the analyze-style ref file.
@@ -266,7 +266,7 @@ void runFixture(const Fixture& fx)
    const double eps_v = testGetEps(2.0e-3, 1.0e-3);
    const double eps_l = testGetEps(1.0e-3, 1.0e-4);
 
-   rc_flag = calc::xyz | calc::vmask;
+   rc_flag = calc::xyz | calc::mass | calc::vmask;
 
    // Replicate testBeginWithArgs, but toggle the Fortran-side use_dlmda before
    // mechanic2() so the lambda-derivative buffers get allocated (see xtestlmda).
@@ -451,34 +451,34 @@ TEST_CASE("MUTATE-098_water_inv_adt_l00", "[ff][mutate][inv]") { runFixture(kFix
 TEST_CASE("MUTATE-099_water_inv_rdt_l10", "[ff][mutate][inv]") { runFixture(kFixtures[98]); }
 TEST_CASE("MUTATE-100_water_inv_rdt_l05", "[ff][mutate][inv]") { runFixture(kFixtures[99]); }
 TEST_CASE("MUTATE-101_water_inv_rdt_l00", "[ff][mutate][inv]") { runFixture(kFixtures[100]); }
-// TEST_CASE("MUTATE-102_water_exf_ast_m10", "[ff][mutate][exf]") { runFixture(kFixtures[101]); }
-// TEST_CASE("MUTATE-103_water_exf_ast_m05", "[ff][mutate][exf]") { runFixture(kFixtures[102]); }
-// TEST_CASE("MUTATE-104_water_exf_ast_m00", "[ff][mutate][exf]") { runFixture(kFixtures[103]); }
-// TEST_CASE("MUTATE-105_water_exf_adt_m10", "[ff][mutate][exf]") { runFixture(kFixtures[104]); }
-// TEST_CASE("MUTATE-106_water_exf_adt_m05", "[ff][mutate][exf]") { runFixture(kFixtures[105]); }
-// TEST_CASE("MUTATE-107_water_exf_adt_m00", "[ff][mutate][exf]") { runFixture(kFixtures[106]); }
-// TEST_CASE("MUTATE-108_water_exf_rdt_m10", "[ff][mutate][exf]") { runFixture(kFixtures[107]); }
-// TEST_CASE("MUTATE-109_water_exf_rdt_m05", "[ff][mutate][exf]") { runFixture(kFixtures[108]); }
-// TEST_CASE("MUTATE-110_water_exf_rdt_m00", "[ff][mutate][exf]") { runFixture(kFixtures[109]); }
-// TEST_CASE("MUTATE-111_water_exf_adt_p10", "[ff][mutate][exf]") { runFixture(kFixtures[110]); }
-// TEST_CASE("MUTATE-112_water_exf_adt_p05", "[ff][mutate][exf]") { runFixture(kFixtures[111]); }
-// TEST_CASE("MUTATE-113_water_exf_adt_p00", "[ff][mutate][exf]") { runFixture(kFixtures[112]); }
-// TEST_CASE("MUTATE-114_water_exf_rdt_p10", "[ff][mutate][exf]") { runFixture(kFixtures[113]); }
-// TEST_CASE("MUTATE-115_water_exf_rdt_p05", "[ff][mutate][exf]") { runFixture(kFixtures[114]); }
-// TEST_CASE("MUTATE-116_water_exf_rdt_p00", "[ff][mutate][exf]") { runFixture(kFixtures[115]); }
-// TEST_CASE("MUTATE-117_water_exf_adt_m05p10", "[ff][mutate][exf]") { runFixture(kFixtures[116]); }
-// TEST_CASE("MUTATE-118_water_exf_rdt_m05p05", "[ff][mutate][exf]") { runFixture(kFixtures[117]); }
-// TEST_CASE("MUTATE-119_water_adt_ye_m10p10", "[ff][mutate][emplar]") { runFixture(kFixtures[118]); }
-// TEST_CASE("MUTATE-120_water_adt_ne_m10p10", "[ff][mutate][emplar]") { runFixture(kFixtures[119]); }
-// TEST_CASE("MUTATE-121_water_adt_ye_m05p05", "[ff][mutate][emplar]") { runFixture(kFixtures[120]); }
-// TEST_CASE("MUTATE-122_water_adt_ne_m05p05", "[ff][mutate][emplar]") { runFixture(kFixtures[121]); }
-// TEST_CASE("MUTATE-123_water_adt_ye_m00p00", "[ff][mutate][emplar]") { runFixture(kFixtures[122]); }
-// TEST_CASE("MUTATE-124_water_adt_ne_m00p00", "[ff][mutate][emplar]") { runFixture(kFixtures[123]); }
-// TEST_CASE("MUTATE-125_water_rdt_ye_m10p10", "[ff][mutate][emplar]") { runFixture(kFixtures[124]); }
-// TEST_CASE("MUTATE-126_water_rdt_ne_m10p10", "[ff][mutate][emplar]") { runFixture(kFixtures[125]); }
-// TEST_CASE("MUTATE-127_water_rdt_ye_m05p05", "[ff][mutate][emplar]") { runFixture(kFixtures[126]); }
-// TEST_CASE("MUTATE-128_water_rdt_ne_m05p05", "[ff][mutate][emplar]") { runFixture(kFixtures[127]); }
-// TEST_CASE("MUTATE-129_water_rdt_ye_m00p00", "[ff][mutate][emplar]") { runFixture(kFixtures[128]); }
-// TEST_CASE("MUTATE-130_water_rdt_ne_m00p00", "[ff][mutate][emplar]") { runFixture(kFixtures[129]); }
+TEST_CASE("MUTATE-102_water_exf_ast_m10", "[ff][mutate][exf]") { runFixture(kFixtures[101]); }
+TEST_CASE("MUTATE-103_water_exf_ast_m05", "[ff][mutate][exf]") { runFixture(kFixtures[102]); }
+TEST_CASE("MUTATE-104_water_exf_ast_m00", "[ff][mutate][exf]") { runFixture(kFixtures[103]); }
+TEST_CASE("MUTATE-105_water_exf_adt_m10", "[ff][mutate][exf]") { runFixture(kFixtures[104]); }
+TEST_CASE("MUTATE-106_water_exf_adt_m05", "[ff][mutate][exf]") { runFixture(kFixtures[105]); }
+TEST_CASE("MUTATE-107_water_exf_adt_m00", "[ff][mutate][exf]") { runFixture(kFixtures[106]); }
+TEST_CASE("MUTATE-108_water_exf_rdt_m10", "[ff][mutate][exf]") { runFixture(kFixtures[107]); }
+TEST_CASE("MUTATE-109_water_exf_rdt_m05", "[ff][mutate][exf]") { runFixture(kFixtures[108]); }
+TEST_CASE("MUTATE-110_water_exf_rdt_m00", "[ff][mutate][exf]") { runFixture(kFixtures[109]); }
+TEST_CASE("MUTATE-111_water_exf_adt_p10", "[ff][mutate][exf]") { runFixture(kFixtures[110]); }
+TEST_CASE("MUTATE-112_water_exf_adt_p05", "[ff][mutate][exf]") { runFixture(kFixtures[111]); }
+TEST_CASE("MUTATE-113_water_exf_adt_p00", "[ff][mutate][exf]") { runFixture(kFixtures[112]); }
+TEST_CASE("MUTATE-114_water_exf_rdt_p10", "[ff][mutate][exf]") { runFixture(kFixtures[113]); }
+TEST_CASE("MUTATE-115_water_exf_rdt_p05", "[ff][mutate][exf]") { runFixture(kFixtures[114]); }
+TEST_CASE("MUTATE-116_water_exf_rdt_p00", "[ff][mutate][exf]") { runFixture(kFixtures[115]); }
+TEST_CASE("MUTATE-117_water_exf_adt_m05p10", "[ff][mutate][exf]") { runFixture(kFixtures[116]); }
+TEST_CASE("MUTATE-118_water_exf_rdt_m05p05", "[ff][mutate][exf]") { runFixture(kFixtures[117]); }
+TEST_CASE("MUTATE-119_water_adt_ye_m10p10v05", "[ff][mutate][emplar]") { runFixture(kFixtures[118]); }
+TEST_CASE("MUTATE-120_water_adt_ne_m10p10v05", "[ff][mutate][emplar]") { runFixture(kFixtures[119]); }
+TEST_CASE("MUTATE-121_water_adt_ye_m05p05v00", "[ff][mutate][emplar]") { runFixture(kFixtures[120]); }
+TEST_CASE("MUTATE-122_water_adt_ne_m05p05v00", "[ff][mutate][emplar]") { runFixture(kFixtures[121]); }
+TEST_CASE("MUTATE-123_water_adt_ye_m00p00v10", "[ff][mutate][emplar]") { runFixture(kFixtures[122]); }
+TEST_CASE("MUTATE-124_water_adt_ne_m00p00v10", "[ff][mutate][emplar]") { runFixture(kFixtures[123]); }
+TEST_CASE("MUTATE-125_water_rdt_ye_m10p10v05", "[ff][mutate][emplar]") { runFixture(kFixtures[124]); }
+TEST_CASE("MUTATE-126_water_rdt_ne_m10p10v05", "[ff][mutate][emplar]") { runFixture(kFixtures[125]); }
+TEST_CASE("MUTATE-127_water_rdt_ye_m05p05v00", "[ff][mutate][emplar]") { runFixture(kFixtures[126]); }
+TEST_CASE("MUTATE-128_water_rdt_ne_m05p05v00", "[ff][mutate][emplar]") { runFixture(kFixtures[127]); }
+TEST_CASE("MUTATE-129_water_rdt_ye_m00p00v10", "[ff][mutate][emplar]") { runFixture(kFixtures[128]); }
+TEST_CASE("MUTATE-130_water_rdt_ne_m00p00v10", "[ff][mutate][emplar]") { runFixture(kFixtures[129]); }
 
 #endif

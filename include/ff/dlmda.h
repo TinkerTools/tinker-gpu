@@ -20,6 +20,7 @@ enum class RdtMask : unsigned
 
 void ost_mech();
 void ostData(RcOp op);
+void ostData2(RcOp op);
 void adtWeight(double lambda, int exponent, double& weight, double& dweight, double& d2weight);
 void adtMix(int vers, bool do_dlmda, int n, size_t buffer_size, double weight1, double dweight1, double d2weight1,
    const EnergyBufferTraits::type* e0, EnergyBuffer e1, EnergyBuffer dedl, EnergyBuffer d2edl2, VirialBuffer v0,

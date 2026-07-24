@@ -13,6 +13,7 @@ chglj.cpp
 chgtrn.cpp
 disp.cpp
 emhippo.cpp
+eost.cpp
 ephippo.cpp
 expol.cpp
 extfield.cpp

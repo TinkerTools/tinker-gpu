@@ -203,8 +203,10 @@ void testMdInit(double t, double atm)
    if (t > 0) {
       bath::kelvin = t;
       bath::isothermal = 1;
-   } else
+   } else {
+      bath::kelvin = 0;
       bath::isothermal = 0;
+   }
 
    if (atm > 0) {
       bath::atmsph = atm;

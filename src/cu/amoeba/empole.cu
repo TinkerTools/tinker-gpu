@@ -184,6 +184,85 @@ void exfieldDipole_cu(int vers)
 }
 
 __global__
+static void exfieldDipoleDlmda_cu1(CountBuffer restrict nem, EnergyBuffer restrict em, EnergyBuffer restrict demdl,
+   VirialBuffer vir_em, VirialBuffer restrict demvirdl,                                //
+   grad_prec* restrict demx, grad_prec* restrict demy, grad_prec* restrict demz,       //
+   grad_prec* restrict dfmdlx, grad_prec* restrict dfmdly, grad_prec* restrict dfmdlz, //
+   real* restrict trqx, real* restrict trqy, real* restrict trqz,                      //
+   real* restrict dltrqx, real* restrict dltrqy, real* restrict dltrqz,                //
+   int vers, int n, real f, real ef1, real ef2, real ef3, const real (*restrict rpole)[10],
+   const int* restrict mut, real elambda, const real* restrict x, const real* restrict y, const real* restrict z)
+{
+   bool do_e = vers & calc::energy;
+   bool do_a = vers & calc::analyz;
+   bool do_g = vers & calc::grad;
+   bool do_v = vers & calc::virial;
+
+   int ithread = ITHREAD;
+   for (int ii = ithread; ii < n; ii += STRIDE) {
+      real xi = x[ii], yi = y[ii], zi = z[ii];
+      real ci = rpole[ii][0], dix = rpole[ii][1], diy = rpole[ii][2], diz = rpole[ii][3];
+
+      // the mutated sites carry multipoles scaled by elambda
+      bool muti = mut[ii];
+      real s = muti ? elambda : 1;
+
+      if (do_e) {
+         real phi = xi * ef1 + yi * ef2 + zi * ef3; // negative potential
+         real e = -f * (ci * phi + dix * ef1 + diy * ef2 + diz * ef3);
+         if (muti)
+            atomic_add(e, demdl, ithread);
+         atomic_add(s * e, em, ithread);
+         if (do_a)
+            atomic_add(1, nem, ithread);
+      }
+      if (do_g) {
+         // unscaled torque due to the dipole
+         real tx = f * (diy * ef3 - diz * ef2);
+         real ty = f * (diz * ef1 - dix * ef3);
+         real tz = f * (dix * ef2 - diy * ef1);
+         atomic_add(s * tx, trqx, ii);
+         atomic_add(s * ty, trqy, ii);
+         atomic_add(s * tz, trqz, ii);
+         // unscaled gradient and virial due to the monopole
+         real frx = -f * ef1 * ci;
+         real fry = -f * ef2 * ci;
+         real frz = -f * ef3 * ci;
+         atomic_add(s * frx, demx, ii);
+         atomic_add(s * fry, demy, ii);
+         atomic_add(s * frz, demz, ii);
+         if (muti) {
+            atomic_add(tx, dltrqx, ii);
+            atomic_add(ty, dltrqy, ii);
+            atomic_add(tz, dltrqz, ii);
+            atomic_add(frx, dfmdlx, ii);
+            atomic_add(fry, dfmdly, ii);
+            atomic_add(frz, dfmdlz, ii);
+         }
+         if (do_v) {
+            real vxx = xi * frx;
+            real vyy = yi * fry;
+            real vzz = zi * frz;
+            real vxy = (yi * frx + xi * fry) / 2;
+            real vxz = (zi * frx + xi * frz) / 2;
+            real vyz = (zi * fry + yi * frz) / 2;
+            atomic_add(s * vxx, s * vxy, s * vxz, s * vyy, s * vyz, s * vzz, vir_em, ithread);
+            if (muti)
+               atomic_add(vxx, vxy, vxz, vyy, vyz, vzz, demvirdl, ithread);
+         }
+      }
+   }
+}
+
+void exfieldDipoleDlmda_cu(int vers)
+{
+   real f = electric / dielec;
+   real ef1 = extfld::texfld[0], ef2 = extfld::texfld[1], ef3 = extfld::texfld[2];
+   launch_k1b(g::s0, n, exfieldDipoleDlmda_cu1, nem, em, demdl_buf, vir_em, demvirdl_buf, demx, demy, demz, dfmdlx,
+      dfmdly, dfmdlz, trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, vers, n, f, ef1, ef2, ef3, rpole, mut, elam, x, y, z);
+}
+
+__global__
 static void extfieldModifyDField_cu1(real (*restrict field)[3], real (*restrict fieldp)[3], int n, real ex1, real ex2,
    real ex3)
 {

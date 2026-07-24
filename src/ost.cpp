@@ -5,6 +5,7 @@
 #include "ff/elec.h"
 #include "ff/evdw.h"
 #include "tool/darray.h"
+#include "tool/error.h"
 #include "tool/externfunc.h"
 #include <tinker/detail/dlmda.hh>
 #include <tinker/detail/mutant.hh>
@@ -34,6 +35,16 @@ void ostData(RcOp op)
          group[i] = mutant::mutg[i];
       darray::copyin(g::q0, n, rdt_group, group.data());
       waitFor(g::q0);
+   }
+}
+
+void ostData2(RcOp op)
+{
+   if (op & RcOp::INIT) {
+      bool lambda_dynamics = use_dlmda or use_ost or use_meta or use_emdt //
+         or use_epdt or use_evdt or use_plmda or use_rel;
+      if (lambda_dynamics and not(pltfm_config & Platform::CUDA))
+         TINKER_THROW("OST  --  Lambda dynamics requires the CUDA platform");
    }
 }
 
@@ -99,6 +110,52 @@ void ost_mech()
    ostvlmda1 = ost::ostvlmda1;
 
    ostlambda = ost::ostlambda;
+
+   // OST / metadynamics lambda-dynamics state
+   use_ostdyn = use_ost;
+   use_metadyn = use_meta;
+   ostinterpol = (ost::ostinterpol != 0);
+   fastkernel = (ost::fastkernel != 0);
+
+   iost = ost::iost;
+   iosthist = ost::iosthist;
+   ostnequil = ost::ostnequil;
+   ostnavg = ost::ostnavg;
+   nlmda = ost::nlmda;
+   nflmda = ost::nflmda;
+   fli0 = ost::fli0;
+   nosthist = 0;
+   sizeosthist = 0;
+   nmetahist = 0;
+   sizemetahist = 0;
+
+   wlmda = ost::wlmda;
+   wlmda2 = ost::wlmda2;
+   wflmda = ost::wflmda;
+   wflmda2 = ost::wflmda2;
+   wlhist = ost::wlhist;
+   wfhist = ost::wfhist;
+   maxwlhist = ost::maxwlhist;
+   maxwfhist = ost::maxwfhist;
+   hbias = ost::hbias;
+   oststdev = ost::oststdev;
+   osteqratio = ost::osteqratio;
+
+   osttheta = ost::osttheta;
+   ostvtheta = ost::ostvtheta;
+   ostmass = ost::ostmass;
+   ostfriction = ost::ostfriction;
+   ostdt = ost::ostdt;
+
+   ostdedl = 0;
+   ostdgdl = 0;
+   ostddgdl = 0;
+   deffdl = 0;
+   ostlambdaavg = 0;
+   ostlambdastd = 0;
+   ostdedlavg = 0;
+   ostdedlstd = 0;
+   eosttot = 0;
 }
 
 void adtWeight(double lambda, int exponent, double& weight, double& dweight, double& d2weight)

@@ -852,6 +852,7 @@ void elecData(RcOp op)
 
 TINKER_FVOID2(acc1, cu1, exfieldCharge, int);
 TINKER_FVOID2(acc1, cu1, exfieldDipole, int);
+TINKER_FVOID2(acc0, cu1, exfieldDipoleDlmda, int);
 void exfield(int vers, int useDipole)
 {
    if (not extfld::use_exfld)
@@ -860,10 +861,14 @@ void exfield(int vers, int useDipole)
    if (bound::use_bounds)
       bounds();
 
-   if (useDipole)
-      TINKER_FCALL2(acc1, cu1, exfieldDipole, vers);
-   else
+   if (useDipole) {
+      if (use_emast)
+         TINKER_FCALL2(acc0, cu1, exfieldDipoleDlmda, vers);
+      else
+         TINKER_FCALL2(acc1, cu1, exfieldDipole, vers);
+   } else {
       TINKER_FCALL2(acc1, cu1, exfieldCharge, vers);
+   }
 }
 
 TINKER_FVOID2(acc1, cu1, extfieldModifyDField, real (*)[3], real (*)[3]);

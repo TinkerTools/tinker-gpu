@@ -49,10 +49,7 @@ void empoleData(RcOp op)
          bufferAllocate(rc_flag, &nem);
    }
 
-   if (op & RcOp::INIT) {
-      if (use_emdt and not(pltfm_config & Platform::CUDA))
-         TINKER_THROW("Electrostatic dual topology requires the CUDA platform.");
-   }
+   if (op & RcOp::INIT) {}
 }
 }
 

@@ -499,8 +499,6 @@ void epolarData(RcOp op)
 
    if (op & RcOp::INIT) {
       if (use_epdt) {
-         if (not(pltfm_config & Platform::CUDA))
-            TINKER_THROW("Polarization dual topology requires the CUDA platform.");
          if (mplpot::use_chgpen)
             TINKER_THROW("Polarization dual topology does not support charge penetration.");
          if (polpot::use_tholed)
@@ -510,8 +508,6 @@ void epolarData(RcOp op)
       }
 
       if (use_plmda) {
-         if (not(pltfm_config & Platform::CUDA))
-            TINKER_THROW("A decoupled polarization lambda requires the CUDA platform.");
          if (mplpot::use_chgpen)
             TINKER_THROW("A decoupled polarization lambda does not support charge penetration.");
          if (polpot::use_tholed)

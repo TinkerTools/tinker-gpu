@@ -134,13 +134,6 @@ void evdwData(RcOp op)
       else
          assert(false);
 
-      if (use_evdt) {
-         if (vdwtyp != Vdw::HAL)
-            TINKER_THROW("Van der Waals dual topology requires the BUFFERED-14-7 potential.");
-         if (not(pltfm_config & Platform::CUDA))
-            TINKER_THROW("Van der Waals dual topology requires the CUDA platform.");
-      }
-
       ev_snap.manage(op, rc_flag, use_evdt);
 
       FstrView str1 = vdwpot::vdwindex;

@@ -11,12 +11,6 @@
 #include <tinker/detail/mdstuf.hh>
 #include <tinker/detail/units.hh>
 
-namespace tinker {
-static int ostVers(int vers)
-{
-   return use_ost ? (vers | calc::energy) : vers;
-}
-}
 
 namespace tinker {
 void BasicIntegrator::plan(int istep)
@@ -96,6 +90,11 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
       m_prop->rattle(dt);
       copyPosToXyz(true);
       energy(ostVers(vers1));
+      // propagate the lambda particle
+      if (use_ostdyn)
+         eostDyn(istep, vers1);
+      else if (use_metadyn)
+         eMetaDyn(istep);
       if (vers1 & calc::virial)
          if (not atomic)
             hcVirial();
@@ -143,6 +142,11 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
 
       // slow force
       energy(ostVers(vers1), RESPA_SLOW, respaTSConfig());
+      // propagate the lambda particle
+      if (use_ostdyn)
+         eostDyn(istep, vers1);
+      else if (use_metadyn)
+         eMetaDyn(istep);
       darray::copy(g::q0, n, gx2, gx);
       darray::copy(g::q0, n, gy2, gy);
       darray::copy(g::q0, n, gz2, gz);
@@ -370,6 +374,12 @@ static void nhc_npt(int istep, time_prec dt)
    copyPosToXyz(true);
 
    energy(ostVers(vers1));
+
+   // propagate the lambda particle.
+   if (use_ostdyn)
+      eostDyn(istep, vers1);
+   else if (use_metadyn)
+      eMetaDyn(istep);
 
    mdVel(dt_2, gx, gy, gz);
 
