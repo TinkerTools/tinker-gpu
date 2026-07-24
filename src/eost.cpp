@@ -34,6 +34,9 @@ std::vector<double> fkernel, fsumkernel, pfkernel;
 // metadynamics gaussian history (1-based)
 std::vector<double> metalhist, metahhist, metawhist;
 
+// bias evaluated by eostBias
+double bgbias, bdgdl, bdgdfl, bostlmda, bdfdl;
+
 void ostAvgStd()
 {
    ostlambdaavg = 0;
@@ -515,18 +518,6 @@ void resizeMeta()
 // See src/acc/eost.cpp and src/cu/eost.cu. Enable together with those files.
 //   TINKER_FVOID2(acc0, cu1, eostBiasGrid, /* grid ptrs, sample, outputs */);
 
-// Apply the bias energy/force/virial coupling term: the g bias depends on
-// dU/dlambda, whose gradient/virial are dfsumdl*/dvirdl, so this is the OSRW
-// second-order Cartesian force. Runs on device via sumGradient.
-void applyBiasForceVirial(int vers, double dgdfl)
-{
-   if ((vers & calc::grad) && dfsumdlx)
-      sumGradient(dgdfl, gx, gy, gz, dfsumdlx, dfsumdly, dfsumdlz);
-   if (vers & calc::virial)
-      for (int k = 0; k < 9; ++k)
-         vir[k] += dgdfl * dvirdl[k];
-}
-
 // addgkernelhist / addkernelhist -- spread one saved source over the grid; the
 // merged worker is addKernelHistImpl (eost.f:1409 / 1507).
 void addGkernelHist(int ihist)
@@ -609,6 +600,12 @@ void eostData(RcOp op)
    }
 
    if (op & RcOp::INIT) {
+      bgbias = 0;
+      bdgdl = 0;
+      bdgdfl = 0;
+      bostlmda = 0;
+      bdfdl = 0;
+
       // Mirror the Fortran mutate allocation/initialization (mutate.f:505).
       if (use_ost) {
          sizeosthist = 10000;
@@ -641,32 +638,53 @@ void eostData(RcOp op)
    }
 }
 
-void eostDyn(int istep, int vers)
+void eostBias(int vers)
+{
+   using namespace eost;
+
+   ostdedl = dedl;
+
+   if (use_metadyn) {
+      eMetaBias(ostlambda, bgbias, bdgdl);
+      // Vbias depends on lambda alone, so it carries no Cartesian force/virial.
+      if (vers & calc::energy)
+         esum += bgbias;
+      return;
+   }
+   if (not use_ostdyn)
+      return;
+
+   // Evaluate the g bias and the f (free-energy) term at the current state.
+   if (ostinterpol)
+      egkernelInterpolate(bgbias, bdgdl, bdgdfl);
+   else
+      egkernel(bgbias, bdgdl, bdgdfl);
+   efkernel(bostlmda, bdfdl);
+
+   if (vers & calc::energy)
+      esum += bgbias - bostlmda;
+
+   // The g bias depends on dU/dlambda, whose gradient/virial are dfsumdl* and
+   // dvirdl, so these are the OSRW second-order Cartesian terms. The force term
+   // runs on device via sumGradient.
+   if ((vers & calc::grad) && dfsumdlx)
+      sumGradient(bdgdfl, gx, gy, gz, dfsumdlx, dfsumdly, dfsumdlz);
+   if (vers & calc::virial)
+      for (int k = 0; k < 9; ++k)
+         vir[k] += bdgdfl * dvirdl[k];
+}
+
+void eostDyn(int istep)
 {
    using namespace eost;
    int im = istep % iosthist;
    int isamp = (im == 0) ? iosthist : im;
 
-   // Evaluate the g bias and the f (free-energy) term. Matching eost.f, the
-   // g kernel is evaluated using ostdedl from the *previous* step (ostdedl is
-   // refreshed below), so the ordering here is deliberate.
-   double egbias, dgdl, dgdfl;
-   if (ostinterpol)
-      egkernelInterpolate(egbias, dgdl, dgdfl);
-   else
-      egkernel(egbias, dgdl, dgdfl);
-   double eostlmda, dfdl;
-   efkernel(eostlmda, dfdl);
-
-   // bias energy and the effective lambda force.
-   esum += egbias - eostlmda;
-   ostdedl = dedl;
-   ostdgdl = dgdl + dgdfl * d2edl2;
-   ostddgdl = dfdl;
+   // effective lambda force, from the bias eostBias evaluated this step
+   // (eostBias also refreshed ostdedl).
+   ostdgdl = bdgdl + bdgdfl * d2edl2;
+   ostddgdl = bdfdl;
    deffdl = ostdedl + ostdgdl - ostddgdl;
-
-   // bias Cartesian force/virial (device force term reuses sumGradient).
-   applyBiasForceVirial(vers, dgdfl);
 
    // buffer this step's sample.
    ostllist[isamp] = ostlambda;
@@ -719,11 +737,9 @@ void eMetaDyn(int istep)
    int im = istep % iosthist;
    int navg = iosthist / 2;
 
-   double vbias, dvdl;
-   eMetaBias(ostlambda, vbias, dvdl);
-   esum += vbias;
-   ostdedl = dedl;
-   deffdl = ostdedl + dvdl;
+   // effective lambda force, from the bias eostBias evaluated this step
+   // (eostBias also refreshed ostdedl).
+   deffdl = ostdedl + bdgdl;
 
    if (im == 0 || im > navg)
       ostlambdaavg += ostlambda / (double)navg;

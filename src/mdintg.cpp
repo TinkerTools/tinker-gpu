@@ -226,6 +226,8 @@ const TimeScaleConfig& respaTSConfig()
       {"edisp", slow},
       {"erepel", slow},
       {"ehippo", slow},
+
+      {"eost", slow},
    };
    return tsconfig;
 }

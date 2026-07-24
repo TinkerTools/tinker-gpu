@@ -39,6 +39,8 @@ const TimeScaleConfig& defaultTSConfig()
       {"edisp", 0},
       {"erepel", 0},
       {"ehippo", 0},
+
+      {"eost", 0},
    };
    return tsconfig;
 }
@@ -503,8 +505,12 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
          sumGradient(gx, gy, gz, gx_nnintermol, gy_nnintermol, gz_nnintermol);
    }
 
-   if (use_dlmda and (use_ost or use_meta))
+   if (use_dlmda and (use_ost or use_meta)) {
       lmdachain(vers);
+      bool ecore_ost = false;
+      if (fts("eost", ecore_ost, tsflag, tsconfig))
+         eostBias(vers);
+   }
 }
 
 void energy(int vers)

@@ -114,6 +114,8 @@ void ost_mech()
    // OST / metadynamics lambda-dynamics state
    use_ostdyn = use_ost;
    use_metadyn = use_meta;
+   ost::use_ostdyn = use_ost;
+   ost::use_metadyn = use_meta;
    ostinterpol = (ost::ostinterpol != 0);
    fastkernel = (ost::fastkernel != 0);
 

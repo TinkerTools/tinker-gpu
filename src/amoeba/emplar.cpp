@@ -55,6 +55,8 @@ static bool emplarDecide()
       return false;
    if (use_plmda)
       return false;
+   if (use_emast)
+      return false;
    if (rc_flag & calc::analyz)
       return false;
    if (not(use(Potent::MPOLE) and use(Potent::POLAR)))
@@ -125,6 +127,7 @@ static void emplarBegin(int vers)
 {
    empoleBegin(vers);
    zeroOnHost(energy_ep, virial_ep);
+   ep_dl.zero(vers);
 }
 
 static void emplarMixEndpoints(int vers)

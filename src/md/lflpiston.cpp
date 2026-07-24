@@ -366,7 +366,7 @@ void lf_lpiston_npt(int istep, time_prec dt_ps)
 
    // propagate the lambda particle.
    if (use_ostdyn)
-      eostDyn(istep, vers1);
+      eostDyn(istep);
    else if (use_metadyn)
       eMetaDyn(istep);
 

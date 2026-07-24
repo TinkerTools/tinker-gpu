@@ -92,7 +92,7 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
       energy(ostVers(vers1));
       // propagate the lambda particle
       if (use_ostdyn)
-         eostDyn(istep, vers1);
+         eostDyn(istep);
       else if (use_metadyn)
          eMetaDyn(istep);
       if (vers1 & calc::virial)
@@ -144,7 +144,7 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
       energy(ostVers(vers1), RESPA_SLOW, respaTSConfig());
       // propagate the lambda particle
       if (use_ostdyn)
-         eostDyn(istep, vers1);
+         eostDyn(istep);
       else if (use_metadyn)
          eMetaDyn(istep);
       darray::copy(g::q0, n, gx2, gx);
@@ -377,7 +377,7 @@ static void nhc_npt(int istep, time_prec dt)
 
    // propagate the lambda particle.
    if (use_ostdyn)
-      eostDyn(istep, vers1);
+      eostDyn(istep);
    else if (use_metadyn)
       eMetaDyn(istep);
 

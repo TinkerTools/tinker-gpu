@@ -22,8 +22,11 @@ void lmdachain(int vers);
 /// Allocates/initializes the host-side OST histogram and kernel storage.
 void eostData(RcOp op);
 
+/// Evaluates the OST bias at the current lambda and dU/dlambda.
+void eostBias(int vers);
+
 /// Orthogonal-space tempering driver (eost.f:eostdyn).
-void eostDyn(int istep, int vers);
+void eostDyn(int istep);
 
 /// One-dimensional lambda metadynamics driver (eost.f:emetadyn).
 void eMetaDyn(int istep);

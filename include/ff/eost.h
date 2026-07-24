@@ -24,6 +24,9 @@ extern std::vector<double> fkernel, fsumkernel, pfkernel;
 // metadynamics gaussian history (1-based)
 extern std::vector<double> metalhist, metahhist, metawhist;
 
+// bias evaluated by eostBias.
+extern double bgbias, bdgdl, bdgdfl, bostlmda, bdfdl;
+
 // column-major grid index for 1-based (i in 1..nlmda, j in 1..nflmda)
 inline int gidx(int i, int j)
 {

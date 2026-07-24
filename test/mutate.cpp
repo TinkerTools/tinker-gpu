@@ -287,13 +287,25 @@ void runFixture(const Fixture& fx)
    if (fx.dolmda)
       lr = readLmdaRef(refpath, n);
 
+   // Per-atom lambda gradient (dfsumdl*) vs reference. Valid whenever calc::grad
+   // is requested, since lmdachain builds dfsumdl* under its do_g branch.
+   auto checkLmdaGrad = [&]() {
+      std::vector<double> lx(n), ly(n), lz(n);
+      copyGradient(calc::grad, lx.data(), ly.data(), lz.data(), dfsumdlx, dfsumdly, dfsumdlz);
+      for (int i = 0; i < n; ++i) {
+         COMPARE_REALS(lx[i], lr.lgrad[i][0], eps_g);
+         COMPARE_REALS(ly[i], lr.lgrad[i][1], eps_g);
+         COMPARE_REALS(lz[i], lr.lgrad[i][2], eps_g);
+      }
+   };
+
    // Repeat the full check battery twice against the built system.
    for (int irun = 0; irun < 2; ++irun) {
-      // level 0 -- total potential energy
+      // v0
       energy(calc::v0);
       COMPARE_REALS(esum, ref_e, eps_e);
 
-      // level 1 -- energy, Cartesian gradient, virial
+      // v1
       energy(calc::v1);
       COMPARE_REALS(esum, ref_e, eps_e);
       COMPARE_GRADIENT(ref_g, eps_g);
@@ -301,7 +313,6 @@ void runFixture(const Fixture& fx)
          for (int j = 0; j < 3; ++j)
             COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-      // level 4 -- lambda derivatives produced by the level-1 gradient call
       if (fx.dolmda) {
          COMPARE_REALS(dedl, lr.dedl[0], eps_l);
          COMPARE_REALS(devdl, lr.dedl[1], eps_l);
@@ -311,19 +322,13 @@ void runFixture(const Fixture& fx)
          COMPARE_REALS(d2evdl2, lr.d2edl2[1], eps_l);
          COMPARE_REALS(d2emdl2, lr.d2edl2[2], eps_l);
          COMPARE_REALS(d2epdl2, lr.d2edl2[3], eps_l);
-         std::vector<double> lx(n), ly(n), lz(n);
-         copyGradient(calc::grad, lx.data(), ly.data(), lz.data(), dfsumdlx, dfsumdly, dfsumdlz);
-         for (int i = 0; i < n; ++i) {
-            COMPARE_REALS(lx[i], lr.lgrad[i][0], eps_g);
-            COMPARE_REALS(ly[i], lr.lgrad[i][1], eps_g);
-            COMPARE_REALS(lz[i], lr.lgrad[i][2], eps_g);
-         }
+         checkLmdaGrad();
          for (int i = 0; i < 3; ++i)
             for (int j = 0; j < 3; ++j)
                COMPARE_REALS(dvirdl[i * 3 + j], lr.dvdl[i][j], eps_v);
       }
 
-      // level 3 -- total and named AMOEBA energy components
+      // v3
       energy(calc::v3);
       COMPARE_REALS(esum, ref_e, eps_e);
       double eng;
@@ -342,6 +347,41 @@ void runFixture(const Fixture& fx)
          ref.getEnergyCountByName("Van der Waals", eng, cnt);
          COMPARE_COUNT(nev, cnt);
          COMPARE_ENERGY(ev, eng, eps_e);
+      }
+
+      // v4
+      energy(calc::v4);
+      COMPARE_REALS(esum, ref_e, eps_e);
+      COMPARE_GRADIENT(ref_g, eps_g);
+      if (fx.dolmda) {
+         COMPARE_REALS(dedl, lr.dedl[0], eps_l);
+         COMPARE_REALS(devdl, lr.dedl[1], eps_l);
+         COMPARE_REALS(demdl, lr.dedl[2], eps_l);
+         COMPARE_REALS(depdl, lr.dedl[3], eps_l);
+         COMPARE_REALS(d2edl2, lr.d2edl2[0], eps_l);
+         COMPARE_REALS(d2evdl2, lr.d2edl2[1], eps_l);
+         COMPARE_REALS(d2emdl2, lr.d2edl2[2], eps_l);
+         COMPARE_REALS(d2epdl2, lr.d2edl2[3], eps_l);
+         checkLmdaGrad();
+      }
+
+      // level 5 -- gradient only (no energy, no virial)
+      energy(calc::v5);
+      COMPARE_GRADIENT(ref_g, eps_g);
+      if (fx.dolmda)
+         checkLmdaGrad();
+
+      // level 6 -- gradient + virial (no energy)
+      energy(calc::v6);
+      COMPARE_GRADIENT(ref_g, eps_g);
+      for (int i = 0; i < 3; ++i)
+         for (int j = 0; j < 3; ++j)
+            COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
+      if (fx.dolmda) {
+         checkLmdaGrad();
+         for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j)
+               COMPARE_REALS(dvirdl[i * 3 + j], lr.dvdl[i][j], eps_v);
       }
    }
 
