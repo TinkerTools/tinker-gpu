@@ -6,6 +6,7 @@
 #include "ff/hippo/empole.h"
 #include "ff/modamoeba.h"
 #include "ff/nblist.h"
+#include "ff/ost.h"
 #include "ff/potent.h"
 #include "ff/termbuf.h"
 #include "math/zero.h"
@@ -40,8 +41,9 @@ void empoleData(RcOp op)
          {eng_buf_elec, vir_buf_elec, gx_elec, gy_elec, gz_elec}, rc_a or use_emdt, //
          {&energy_em, &virial_em}, {&energy_elec, &virial_elec});
       em_dl.manage(op, rc_flag, {&demdl_buf, &demvirdl_buf, &dfmdlx, &dfmdly, &dfmdlz, &d2emdl2_buf},
-         {dedl_buf, dvirdl_buf, dfsumdlx, dfsumdly, dfsumdlz, d2edl2_buf}, rc_a and use_dlmda, //
-         {&demdl, &demvirdl, &d2emdl2}, {&dedl, &dvirdl, &d2edl2});
+         {dedl_buf, dvirdl_buf, dfsumdlx, dfsumdly, dfsumdlz, d2edl2_buf},
+         (rc_a or use_ost or use_meta) and use_dlmda, //
+         {&demdl, &demvirdl, &d2emdl2}, {&dedl, &dvirdl, &d2edl2}, use_ost or use_meta);
       em_snap.manage(op, rc_flag, use_emdt);
       if (rc_a)
          bufferAllocate(rc_flag, &nem);
@@ -160,7 +162,7 @@ void empoleSaveEndpoint0(int vers)
 
 void empoleMixEndpoints(int vers)
 {
-   em_snap.mix(vers, mutant::elambda, emdtexp, use_dlmda, em_buf, em_dl);
+   em_snap.mix(vers, elam, emdtexp, use_dlmda, em_buf, em_dl);
 }
 
 void empole_adt(int vers)

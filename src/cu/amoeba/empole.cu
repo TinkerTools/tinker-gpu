@@ -1,4 +1,5 @@
 #include "ff/dlmda.h"
+#include "ff/elec.h"
 #include "ff/evdw.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
@@ -10,7 +11,6 @@
 #include "seq/pair_mpole.h"
 #include "seq/triangle.h"
 #include <tinker/detail/extfld.hh>
-#include <tinker/detail/mutant.hh>
 
 namespace tinker {
 #include "empole_cu1.cc"
@@ -38,7 +38,7 @@ static void empole_cu()
       if CONSTEXPR (do_e) {
          if CONSTEXPR (eq<LTYP, DLMDA>()) {
             launch_k1b(g::s0, n, empoleSelfDlmda_cu<do_a>, //
-               nem, em, demdl_buf, d2emdl2_buf, rpole, mut, n, f, aewald, mutant::elambda);
+               nem, em, demdl_buf, d2emdl2_buf, rpole, mut, n, f, aewald, elam);
          } else {
             launch_k1b(g::s0, n, empoleSelf_cu<do_a>, //
                nem, em, rpole, n, f, aewald);
@@ -50,7 +50,7 @@ static void empole_cu()
       empoledlmda_cu1<Ver, ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, demdl_buf, d2emdl2_buf,
          vir_em, demvirdl_buf, demx, demy, demz, dfmdlx, dfmdly, dfmdlz, off, st.si1.bit0, nmdpuexclude, mdpuexclude,
          mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, trqx, trqy, trqz,
-         dltrqx, dltrqy, dltrqz, rpole, mut, f, aewald, mutant::elambda);
+         dltrqx, dltrqy, dltrqz, rpole, mut, f, aewald, elam);
    } else {
       empole_cu1<Ver, ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, vir_em, demx, demy, demz,
          off, st.si1.bit0, nmdpuexclude, mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl,

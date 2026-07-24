@@ -10,7 +10,6 @@
 #include "seq/bsplgen.h"
 #include "seq/launch.h"
 #include "tool/error.h"
-#include <tinker/detail/mutant.hh>
 
 namespace tinker {
 // compute theta values on the fly
@@ -1164,7 +1163,7 @@ void rpoleToCmp_cu()
 
 void rpoleToCmpDlmda_cu()
 {
-   launch_k1s(g::s0, n, rpoleToCmpDlmda_cu1, n, cmp, dlcmp, rpole, mut, (real)mutant::elambda);
+   launch_k1s(g::s0, n, rpoleToCmpDlmda_cu1, n, cmp, dlcmp, rpole, mut, elam);
 }
 
 __global__

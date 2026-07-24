@@ -1,6 +1,7 @@
 #include "ff/atom.h"
 #include "ff/dlmda.h"
 #include "ff/egvop.h"
+#include "ff/elec.h"
 #include "ff/energy.h"
 #include "ff/evdw.h"
 #include "ff/modamoeba.h"
@@ -49,7 +50,9 @@ static void setLambda(double vlambda, double elambda, double plambda)
    mutant::vlambda = vlambda;
    vlam = vlambda;
    mutant::elambda = elambda;
+   elam = elambda;
    dlmda::plambda = plambda;
+   plam = plambda;
 }
 
 // Evaluate the potential energy at a given lambda value
@@ -136,9 +139,9 @@ void xTestlmda(int, char**)
       double ndvirdl[9] = {0};
       std::vector<double> ndfx, ndfy, ndfz;
       if (opts.numer) {
-         double el0 = mutant::elambda;
-         double vl0 = mutant::vlambda;
-         double pl0 = dlmda::plambda;
+         double el0 = elam;
+         double vl0 = vlam;
+         double pl0 = plam;
          double eps = opts.eps;
 
          // Scalar first/second derivatives from three energy evaluations.

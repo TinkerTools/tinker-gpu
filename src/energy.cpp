@@ -70,6 +70,7 @@ static bool fts(std::string eng, bool& use_flag, unsigned tsflag, const TimeScal
 #include "ff/hippo/edisp.h"
 #include "ff/hippo/empole.h"
 #include "ff/hippo/epolar.h"
+#include "ff/ost.h"
 #include "ff/hippo/erepel.h"
 #include "ff/molecule.h"
 #include "ff/nblist.h"
@@ -342,6 +343,9 @@ static DHRc* ev_dptr;
 
 void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
 {
+   if (use_dlmda and (use_ost or use_meta))
+      mapSubLambda();
+
    zeroEGV(vers);
    energy_core(vers, tsflag, tsconfig);
 
@@ -498,6 +502,9 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
       if (ecore_nnintermol and gx_nnintermol)
          sumGradient(gx, gy, gz, gx_nnintermol, gy_nnintermol, gz_nnintermol);
    }
+
+   if (use_dlmda and (use_ost or use_meta))
+      lmdachain(vers);
 }
 
 void energy(int vers)

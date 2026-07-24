@@ -2,6 +2,7 @@
 #include "ff/dlmda.h"
 #include "ff/energy.h"
 #include "ff/nblist.h"
+#include "ff/ost.h"
 #include "ff/potent.h"
 #include "ff/termbuf.h"
 #include "math/zero.h"
@@ -403,8 +404,9 @@ void evdwData(RcOp op)
          {eng_buf_vdw, vir_buf_vdw, gx_vdw, gy_vdw, gz_vdw}, rc_a or use_evdt, //
          {&energy_ev, &virial_ev}, {&energy_vdw, &virial_vdw});
       ev_dl.manage(op, rc_flag, {&devdl_buf, &devvirdl_buf, &dfvdlx, &dfvdly, &dfvdlz, &d2evdl2_buf},
-         {dedl_buf, dvirdl_buf, dfsumdlx, dfsumdly, dfsumdlz, d2edl2_buf}, rc_a and use_dlmda, //
-         {&devdl, &devvirdl, &d2evdl2}, {&dedl, &dvirdl, &d2edl2});
+         {dedl_buf, dvirdl_buf, dfsumdlx, dfsumdly, dfsumdlz, d2edl2_buf},
+         (rc_a or use_ost or use_meta) and use_dlmda, //
+         {&devdl, &devvirdl, &d2evdl2}, {&dedl, &dvirdl, &d2edl2}, use_ost or use_meta);
       if (rc_a)
          bufferAllocate(rc_flag, &nev);
    }

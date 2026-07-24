@@ -42,7 +42,7 @@ static void pchgData(RcOp op)
          pchgbuf[i] = kchrge::chg[itype];
          double el;
          if (mutant::mut[i])
-            el = mutant::elambda;
+            el = elam;
          else
             el = 1;
          pchgbuf[i] *= el;
@@ -842,6 +842,7 @@ void elecData(RcOp op)
       electric = chgpot::electric;
       dielec = chgpot::dielec;
       elam = mutant::elambda;
+      plam = dlmda::plambda;
    }
    RcMan pchg42{pchgData, op};
    RcMan pole42{mpoleData, op};

@@ -9,6 +9,7 @@
 #include "ff/hippo/epolar.h"
 #include "ff/modamoeba.h"
 #include "ff/nblist.h"
+#include "ff/ost.h"
 #include "ff/potent.h"
 #include "ff/termbuf.h"
 #include "math/zero.h"
@@ -419,8 +420,8 @@ void epolarData(RcOp op)
          {&energy_ep, &virial_ep}, {&energy_elec, &virial_elec});
       ep_dl.manage(op, rc_flag, {&depdl_buf, &depvirdl_buf, &dfpdlx, &dfpdly, &dfpdlz, &d2epdl2_buf},
          {dedl_buf, dvirdl_buf, dfsumdlx, dfsumdly, dfsumdlz, d2edl2_buf},
-         rc_a and use_dlmda and use_epdt, //
-         {&depdl, &depvirdl, &d2epdl2}, {&dedl, &dvirdl, &d2edl2});
+         (rc_a or use_ost or use_meta) and use_dlmda and use_epdt, //
+         {&depdl, &depvirdl, &d2epdl2}, {&dedl, &dvirdl, &d2edl2}, use_ost or use_meta);
       ep_snap.manage(op, rc_flag, use_epdt);
       if (rc_a)
          bufferAllocate(rc_flag, &nep);
@@ -532,7 +533,7 @@ void epolarData(RcOp op)
       std::vector<double> polbuf(n);
       for (int i = 0; i < n; ++i) {
          if (use_plmda and mutant::mut[i])
-            polbuf[i] = dlmda::plambda * dlmda::polarityorig[i];
+            polbuf[i] = plam * dlmda::polarityorig[i];
          else
             polbuf[i] = polar::polarity[i];
       }
@@ -659,7 +660,7 @@ void epolar(int vers)
    epolarBegin(vers);
 
    if (use_plmda)
-      mpoleScale(dlmda::plambda);
+      mpoleScale(plam);
 
    if (use_cf)
       alterchg();
@@ -683,7 +684,7 @@ void epolar(int vers)
    }
 
    if (use_plmda)
-      mpoleScale(mutant::elambda);
+      mpoleScale(elam);
 
    epolarFinish(vers);
 }
@@ -747,7 +748,7 @@ static void epolarSaveEndpoint0(int vers)
 
 static void epolarMixEndpoints(int vers)
 {
-   ep_snap.mix(vers, dlmda::plambda, epdtexp, use_dlmda, ep_buf, ep_dl);
+   ep_snap.mix(vers, plam, epdtexp, use_dlmda, ep_buf, ep_dl);
 }
 
 static void epolarFinish(int vers)

@@ -7,18 +7,15 @@
 #include "ff/evdw.h"
 #include "ff/modamoeba.h"
 #include "ff/nblist.h"
+#include "ff/ost.h"
 #include "ff/potent.h"
 #include "math/zero.h"
 #include "tool/error.h"
 #include "tool/externfunc.h"
-#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/mplpot.hh>
-#include <tinker/detail/mutant.hh>
-#include <tinker/detail/ost.hh>
 
 #include <cassert>
 #include <cmath>
-#include <cstring>
 
 namespace tinker {
 static int emplar_flag = -1;
@@ -35,21 +32,20 @@ static bool emplarDualMatched()
 {
    if (emdtexp != epdtexp)
       return false;
-   if (not doubleEq(mutant::elambda, dlmda::plambda))
+   if (not doubleEq(elam, plam))
       return false;
    if (not use_dlmda)
       return true;
 
-   if (std::strncmp(ost::ostpmap, ost::ostemap, 3) != 0)
+   if (ostpmap != ostemap)
       return false;
 
-   if (std::strncmp(ost::ostemap, "EXP", 3) == 0) {
-      return ost::ostepexp == ost::ostemexp;
-   } else if (std::strncmp(ost::ostemap, "INV", 3) == 0) {
-      return ost::ostinvepn == ost::ostinvemn and doubleEq(ost::ostinvepeps, ost::ostinvemeps);
+   if (ostemap == Ostmap::EXP) {
+      return ostepexp == ostemexp;
+   } else if (ostemap == Ostmap::INV) {
+      return ostinvepn == ostinvemn and doubleEq(ostinvepeps, ostinvemeps);
    } else {
-      return doubleEq(ost::ostplmda0, ost::ostelmda0)
-         and doubleEq(ost::ostplmda1, ost::ostelmda1);
+      return doubleEq(ostplmda0, ostelmda0) and doubleEq(ostplmda1, ostelmda1);
    }
 }
 
@@ -133,7 +129,7 @@ static void emplarBegin(int vers)
 
 static void emplarMixEndpoints(int vers)
 {
-   if (not doubleEq(mutant::elambda, dlmda::plambda))
+   if (not doubleEq(elam, plam))
       TINKER_THROW("The electrostatic and polarization lambda values have drifted apart; "
                    "the fused multipole/polarization dual topology needs them to be equal.");
    empoleMixEndpoints(vers);

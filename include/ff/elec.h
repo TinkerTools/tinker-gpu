@@ -82,6 +82,7 @@ void extfieldModifyDField(real (*field)[3], ///< Permanent field.
 TINKER_EXTERN real electric;
 TINKER_EXTERN real dielec;
 TINKER_EXTERN real elam;
+TINKER_EXTERN real plam;
 
 /// \}
 }

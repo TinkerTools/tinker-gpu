@@ -1,5 +1,6 @@
 #include "md/integrator.h"
 #include "ff/energy.h"
+#include "ff/ost.h"
 #include "md/lflpiston.h"
 #include "md/misc.h"
 #include "md/pq.h"
@@ -8,13 +9,12 @@
 #include "tool/ioprint.h"
 #include <tinker/detail/inform.hh>
 #include <tinker/detail/mdstuf.hh>
-#include <tinker/detail/ost.hh>
 #include <tinker/detail/units.hh>
 
 namespace tinker {
 static int ostVers(int vers)
 {
-   return ost::use_ost ? (vers | calc::energy) : vers;
+   return use_ost ? (vers | calc::energy) : vers;
 }
 }
 
@@ -36,8 +36,8 @@ void BasicIntegrator::plan(int istep)
    // toggle off virial for MC barostat
    if (mcbaro)
       vers1 &= ~calc::virial;
-   // toggle off energy if neither save nor mcbaro
-   if (not save and not mcbaro and not ost::use_ost)
+   // toggle off energy if neither save, mcbaro, nor use_ost
+   if (not save and not mcbaro and not use_ost)
       vers1 &= ~calc::energy;
 }
 
@@ -328,7 +328,7 @@ static void nhc_npt(int istep, time_prec dt)
 {
    int vers1 = rc_flag & calc::vmask;
    bool save = 0 == (istep % inform::iwrite);
-   if (!save and !ost::use_ost)
+   if (!save and !use_ost)
       vers1 &= ~calc::energy;
 
    // set some time values for the dynamics integration

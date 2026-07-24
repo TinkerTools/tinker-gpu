@@ -16,6 +16,7 @@
 #include "ff/modhippo.h"
 #include "ff/molecule.h"
 #include "ff/nblist.h"
+#include "ff/ost.h"
 #include "ff/pme.h"
 #include "ff/spatial.h"
 
