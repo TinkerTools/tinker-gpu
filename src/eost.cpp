@@ -15,7 +15,6 @@
 #include <vector>
 
 namespace tinker {
-namespace eost {
 // saved gaussian history (1-based, element 0 unused)
 std::vector<int> osthist;
 std::vector<int> ostnext;
@@ -568,11 +567,8 @@ void updateKernels()
       addKernelHist(nosthist);
 }
 
-} // namespace eost
-
 void eostData(RcOp op)
 {
-   using namespace eost;
    if (!(use_ost || use_meta))
       return;
 
@@ -640,8 +636,6 @@ void eostData(RcOp op)
 
 void eostBias(int vers)
 {
-   using namespace eost;
-
    ostdedl = dedl;
 
    if (use_metadyn) {
@@ -676,7 +670,6 @@ void eostBias(int vers)
 
 void eostDyn(int istep)
 {
-   using namespace eost;
    int im = istep % iosthist;
    int isamp = (im == 0) ? iosthist : im;
 
@@ -733,7 +726,6 @@ void eostDyn(int istep)
 
 void eMetaDyn(int istep)
 {
-   using namespace eost;
    int im = istep % iosthist;
    int navg = iosthist / 2;
 

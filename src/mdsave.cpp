@@ -1,6 +1,8 @@
 #include "ff/energy.h"
+#include "ff/eost.h"
 #include "ff/modamoeba.h"
 #include "ff/modhippo.h"
+#include "ff/ost.h"
 #include "ff/potent.h"
 #include "md/misc.h"
 #include "md/pq.h"
@@ -17,6 +19,7 @@
 #include <tinker/detail/files.hh>
 #include <tinker/detail/moldyn.hh>
 #include <tinker/detail/mpole.hh>
+#include <tinker/detail/ost.hh>
 #include <tinker/detail/output.hh>
 #include <tinker/detail/polar.hh>
 #include <tinker/detail/polpot.hh>
@@ -77,6 +80,104 @@ static Box dup_buf_box;
 static pos_prec *dup_buf_x, *dup_buf_y, *dup_buf_z;
 static vel_prec *dup_buf_vx, *dup_buf_vy, *dup_buf_vz;
 static grad_prec *dup_buf_gx, *dup_buf_gy, *dup_buf_gz;
+static bool ost_snap_active;
+static double s_ostlambda, s_ostdedl, s_ostdgdl, s_ostddgdl, s_eosttot;
+static double s_ostlambdaavg, s_ostdedlavg, s_osttheta, s_ostvtheta;
+static int s_nosthist, s_sizeosthist, s_ost_first;
+static std::vector<int> s_khist;
+static std::vector<double> s_lhist, s_fhist, s_hhist, s_wlhist, s_wfhist;
+static int s_nmetahist, s_sizemetahist, s_meta_first;
+static std::vector<double> s_mlhist, s_mhhist, s_mwhist;
+
+static void mdsaveDupOst()
+{
+   ost_snap_active = use_ostdyn or use_metadyn;
+   if (not ost_snap_active)
+      return;
+
+   s_ostlambda = ostlambda;
+   s_ostdedl = ostdedl;
+   s_ostdgdl = ostdgdl;
+   s_ostddgdl = ostddgdl;
+   s_eosttot = eosttot;
+   s_ostlambdaavg = ostlambdaavg;
+   s_ostdedlavg = ostdedlavg;
+   s_osttheta = osttheta;
+   s_ostvtheta = ostvtheta;
+
+   s_khist.clear(), s_lhist.clear(), s_fhist.clear();
+   s_hhist.clear(), s_wlhist.clear(), s_wfhist.clear();
+   s_nosthist = nosthist;
+   s_sizeosthist = sizeosthist;
+   s_ost_first = ost::nosthistsave + 1; // saves are serialized, so this is stable
+   if (use_ostdyn) {
+      for (int k = s_ost_first; k <= s_nosthist; ++k) {
+         s_khist.push_back(osthist[k]);
+         s_lhist.push_back(ostlhist[k]);
+         s_fhist.push_back(ostfhist[k]);
+         s_hhist.push_back(osthhist[k]);
+         s_wlhist.push_back(ostwlhist[k]);
+         s_wfhist.push_back(ostwfhist[k]);
+      }
+   }
+
+   s_mlhist.clear(), s_mhhist.clear(), s_mwhist.clear();
+   s_nmetahist = nmetahist;
+   s_sizemetahist = sizemetahist;
+   s_meta_first = ost::nmethistsave + 1; // saves are serialized, so this is stable
+   if (use_metadyn) {
+      for (int k = s_meta_first; k <= s_nmetahist; ++k) {
+         s_mlhist.push_back(metalhist[k]);
+         s_mhhist.push_back(metahhist[k]);
+         s_mwhist.push_back(metawhist[k]);
+      }
+   }
+}
+
+static void mdsaveWriteOst()
+{
+   if (not ost_snap_active)
+      return;
+
+   ost::ostlambda = s_ostlambda;
+   ost::ostdedl = s_ostdedl;
+   ost::ostdgdl = s_ostdgdl;
+   ost::ostddgdl = s_ostddgdl;
+   ost::eosttot = s_eosttot;
+   ost::ostlambdaavg = s_ostlambdaavg;
+   ost::ostdedlavg = s_ostdedlavg;
+   ost::osttheta = s_osttheta;
+   ost::ostvtheta = s_ostvtheta;
+
+   if (use_ostdyn) {
+      // grow the Fortran arrays to match the engine, preserving existing entries
+      while (ost::sizeosthist < s_sizeosthist)
+         tinker_f_resizeosthist();
+      ost::nosthist = s_nosthist;
+      for (int i = 0; i < (int)s_khist.size(); ++i) {
+         int j = s_ost_first - 1 + i;
+         ost::osthist[j] = s_khist[i];
+         ost::ostlhist[j] = s_lhist[i];
+         ost::ostfhist[j] = s_fhist[i];
+         ost::osthhist[j] = s_hhist[i];
+         ost::ostwlhist[j] = s_wlhist[i];
+         ost::ostwfhist[j] = s_wfhist[i];
+      }
+      // Fortran saveost advances nosthistsave after appending this slice.
+   }
+
+   if (use_metadyn) {
+      while (ost::sizemetahist < s_sizemetahist)
+         tinker_f_resizemeta();
+      ost::nmetahist = s_nmetahist;
+      for (int i = 0; i < (int)s_mlhist.size(); ++i) {
+         int j = s_meta_first - 1 + i;
+         ost::metalhist[j] = s_mlhist[i];
+         ost::metahhist[j] = s_mhhist[i];
+         ost::metawhist[j] = s_mwhist[i];
+      }
+   }
+}
 
 static void mdsaveDupThenWrite(int istep, time_prec dt)
 {
@@ -119,6 +220,8 @@ static void mdsaveDupThenWrite(int istep, time_prec dt)
 
    if (mdsaveUseExpolTef())
       darray::copy(g::q0, 9 * n, &dup_buf_polscale[0][0][0], &polscale[0][0][0]);
+
+   mdsaveDupOst();
 
       // Record mdsave_begin_event when g::s0 is available.
       // g::s1 will wait until mdsave_begin_event is recorded.
@@ -230,6 +333,8 @@ static void mdsaveDupThenWrite(int istep, time_prec dt)
    check_rt(cudaStreamWaitEvent(g::s0, mdsave_end_event, 0));
 #endif
 
+   mdsaveWriteOst();
+
    double dt1 = dt;
    double epot1 = epot;
    double eksum1 = eksum;
@@ -288,6 +393,11 @@ void mdsaveData(RcOp op)
       darray::deallocate(dup_buf_x, dup_buf_y, dup_buf_z);
       darray::deallocate(dup_buf_vx, dup_buf_vy, dup_buf_vz);
       darray::deallocate(dup_buf_gx, dup_buf_gy, dup_buf_gz);
+
+      ost_snap_active = false;
+      s_khist.clear(), s_lhist.clear(), s_fhist.clear();
+      s_hhist.clear(), s_wlhist.clear(), s_wfhist.clear();
+      s_mlhist.clear(), s_mhhist.clear(), s_mwhist.clear();
    }
 
    if (op & RcOp::ALLOC) {
@@ -334,6 +444,7 @@ void mdsaveData(RcOp op)
    if (op & RcOp::INIT) {
       idle_dup = false;
       idle_write = true;
+      ost_snap_active = false;
    }
 }
 }

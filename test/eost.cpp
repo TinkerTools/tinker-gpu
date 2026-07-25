@@ -11,7 +11,7 @@
 #include <vector>
 
 // Faithful 1:1 port of the Fortran OST unit-test suite tinker/test/test_eost.f.
-// It seeds the OST histogram/kernel state (namespace tinker::eost) with
+// It seeds the OST histogram/kernel state (namespace tinker) with
 // deterministic inputs and checks each engine routine against hand-computed
 // values. Pure host math -- no molecular system, no GPU; only kelvin is set.
 //
@@ -20,7 +20,6 @@
 // there -- do not adjust the expected values.
 
 using namespace tinker;
-using namespace tinker::eost;
 
 namespace {
 // 2-D accessors so the port reads like the Fortran gkernel(i,j) etc.

@@ -5,7 +5,6 @@
 
 // Internal OST engine state and routines
 namespace tinker {
-namespace eost {
 // saved gaussian history (1-based, element 0 unused)
 extern std::vector<int> osthist;
 extern std::vector<int> ostnext;
@@ -84,5 +83,4 @@ double etotFkernel();
 void eMetaBias(double lambda, double& vbias, double& dvdl);
 double metaDeltaG();
 void resizeMeta();
-}
 }
