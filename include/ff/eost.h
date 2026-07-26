@@ -7,6 +7,7 @@
 namespace tinker {
 // saved gaussian history (1-based, element 0 unused)
 extern std::vector<int> osthist;
+extern std::vector<int> ostihist; // iost/step stamp per deposited OST gaussian
 extern std::vector<int> ostnext;
 extern std::vector<int> osthead; // (nlmda x nflmda), column-major
 extern std::vector<double> ostlhist, ostfhist, osthhist, ostwlhist, ostwfhist;
@@ -22,6 +23,7 @@ extern std::vector<double> fkernel, fsumkernel, pfkernel;
 
 // metadynamics gaussian history (1-based)
 extern std::vector<double> metalhist, metahhist, metawhist;
+extern std::vector<int> metaihist; // iost/step stamp per deposited metadynamics gaussian
 
 // bias evaluated by eostBias.
 extern double bgbias, bdgdl, bdgdfl, bostlmda, bdfdl;
@@ -64,7 +66,7 @@ inline int flambdaBin(double dudl)
 }
 
 // engine routines (defined in src/eost.cpp)
-void ostAvgStd();
+void avgStd(const std::vector<double>& list, double& avg, double& std);
 void buildOstIndex();
 void resizeOstHist();
 void ensureFlambda(double dudl);

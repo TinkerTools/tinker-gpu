@@ -82,30 +82,33 @@ static vel_prec *dup_buf_vx, *dup_buf_vy, *dup_buf_vz;
 static grad_prec *dup_buf_gx, *dup_buf_gy, *dup_buf_gz;
 static bool ost_snap_active;
 static double s_ostlambda, s_ostdedl, s_ostdgdl, s_ostddgdl, s_eosttot;
-static double s_ostlambdaavg, s_ostdedlavg, s_osttheta, s_ostvtheta;
+static double s_osttheta, s_ostvtheta;
+static int s_iost, s_nflmda, s_fli0;
 static int s_nosthist, s_sizeosthist, s_ost_first;
-static std::vector<int> s_khist;
+static std::vector<int> s_khist, s_ihist;
 static std::vector<double> s_lhist, s_fhist, s_hhist, s_wlhist, s_wfhist;
 static int s_nmetahist, s_sizemetahist, s_meta_first;
 static std::vector<double> s_mlhist, s_mhhist, s_mwhist;
+static std::vector<int> s_mihist;
 
-static void mdsaveDupOst()
+static void mdsaveDupOst(int istep)
 {
    ost_snap_active = use_ostdyn or use_metadyn;
    if (not ost_snap_active)
       return;
 
+   s_iost = istep;
+   s_nflmda = nflmda;
+   s_fli0 = fli0;
    s_ostlambda = ostlambda;
    s_ostdedl = ostdedl;
    s_ostdgdl = ostdgdl;
    s_ostddgdl = ostddgdl;
    s_eosttot = eosttot;
-   s_ostlambdaavg = ostlambdaavg;
-   s_ostdedlavg = ostdedlavg;
    s_osttheta = osttheta;
    s_ostvtheta = ostvtheta;
 
-   s_khist.clear(), s_lhist.clear(), s_fhist.clear();
+   s_khist.clear(), s_ihist.clear(), s_lhist.clear(), s_fhist.clear();
    s_hhist.clear(), s_wlhist.clear(), s_wfhist.clear();
    s_nosthist = nosthist;
    s_sizeosthist = sizeosthist;
@@ -113,6 +116,7 @@ static void mdsaveDupOst()
    if (use_ostdyn) {
       for (int k = s_ost_first; k <= s_nosthist; ++k) {
          s_khist.push_back(osthist[k]);
+         s_ihist.push_back(ostihist[k]);
          s_lhist.push_back(ostlhist[k]);
          s_fhist.push_back(ostfhist[k]);
          s_hhist.push_back(osthhist[k]);
@@ -121,7 +125,7 @@ static void mdsaveDupOst()
       }
    }
 
-   s_mlhist.clear(), s_mhhist.clear(), s_mwhist.clear();
+   s_mlhist.clear(), s_mhhist.clear(), s_mwhist.clear(), s_mihist.clear();
    s_nmetahist = nmetahist;
    s_sizemetahist = sizemetahist;
    s_meta_first = ost::nmethistsave + 1; // saves are serialized, so this is stable
@@ -130,6 +134,7 @@ static void mdsaveDupOst()
          s_mlhist.push_back(metalhist[k]);
          s_mhhist.push_back(metahhist[k]);
          s_mwhist.push_back(metawhist[k]);
+         s_mihist.push_back(metaihist[k]);
       }
    }
 }
@@ -139,13 +144,14 @@ static void mdsaveWriteOst()
    if (not ost_snap_active)
       return;
 
+   ost::iost = s_iost;
+   ost::nflmda = s_nflmda;
+   ost::fli0 = s_fli0;
    ost::ostlambda = s_ostlambda;
    ost::ostdedl = s_ostdedl;
    ost::ostdgdl = s_ostdgdl;
    ost::ostddgdl = s_ostddgdl;
    ost::eosttot = s_eosttot;
-   ost::ostlambdaavg = s_ostlambdaavg;
-   ost::ostdedlavg = s_ostdedlavg;
    ost::osttheta = s_osttheta;
    ost::ostvtheta = s_ostvtheta;
 
@@ -157,6 +163,7 @@ static void mdsaveWriteOst()
       for (int i = 0; i < (int)s_khist.size(); ++i) {
          int j = s_ost_first - 1 + i;
          ost::osthist[j] = s_khist[i];
+         ost::ostihist[j] = s_ihist[i];
          ost::ostlhist[j] = s_lhist[i];
          ost::ostfhist[j] = s_fhist[i];
          ost::osthhist[j] = s_hhist[i];
@@ -175,6 +182,7 @@ static void mdsaveWriteOst()
          ost::metalhist[j] = s_mlhist[i];
          ost::metahhist[j] = s_mhhist[i];
          ost::metawhist[j] = s_mwhist[i];
+         ost::metaihist[j] = s_mihist[i];
       }
    }
 }
@@ -221,7 +229,7 @@ static void mdsaveDupThenWrite(int istep, time_prec dt)
    if (mdsaveUseExpolTef())
       darray::copy(g::q0, 9 * n, &dup_buf_polscale[0][0][0], &polscale[0][0][0]);
 
-   mdsaveDupOst();
+   mdsaveDupOst(istep);
 
       // Record mdsave_begin_event when g::s0 is available.
       // g::s1 will wait until mdsave_begin_event is recorded.
@@ -395,9 +403,9 @@ void mdsaveData(RcOp op)
       darray::deallocate(dup_buf_gx, dup_buf_gy, dup_buf_gz);
 
       ost_snap_active = false;
-      s_khist.clear(), s_lhist.clear(), s_fhist.clear();
+      s_khist.clear(), s_ihist.clear(), s_lhist.clear(), s_fhist.clear();
       s_hhist.clear(), s_wlhist.clear(), s_wfhist.clear();
-      s_mlhist.clear(), s_mhhist.clear(), s_mwhist.clear();
+      s_mlhist.clear(), s_mhhist.clear(), s_mwhist.clear(), s_mihist.clear();
    }
 
    if (op & RcOp::ALLOC) {

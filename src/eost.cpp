@@ -17,6 +17,7 @@
 namespace tinker {
 // saved gaussian history (1-based, element 0 unused)
 std::vector<int> osthist;
+std::vector<int> ostihist; // iost/step stamp per deposited OST gaussian
 std::vector<int> ostnext;
 std::vector<int> osthead; // (nlmda x nflmda), column-major
 std::vector<double> ostlhist, ostfhist, osthhist, ostwlhist, ostwfhist;
@@ -32,31 +33,24 @@ std::vector<double> fkernel, fsumkernel, pfkernel;
 
 // metadynamics gaussian history (1-based)
 std::vector<double> metalhist, metahhist, metawhist;
+std::vector<int> metaihist; // iost/step stamp per deposited metadynamics gaussian
 
 // bias evaluated by eostBias
 double bgbias, bdgdl, bdgdfl, bostlmda, bdfdl;
 
-void ostAvgStd()
+void avgStd(const std::vector<double>& list, double& avg, double& std)
 {
-   ostlambdaavg = 0;
-   ostdedlavg = 0;
-   for (int i = ostnequil + 1; i <= iosthist; ++i) {
-      ostlambdaavg += ostllist[i];
-      ostdedlavg += ostflist[i];
-   }
-   ostlambdaavg /= (double)ostnavg;
-   ostdedlavg /= (double)ostnavg;
+   avg = 0.0;
+   for (int i = ostnequil + 1; i <= iosthist; ++i)
+      avg += list[i];
+   avg /= (double)ostnavg;
 
-   ostlambdastd = 0;
-   ostdedlstd = 0;
+   std = 0.0;
    for (int i = ostnequil + 1; i <= iosthist; ++i) {
-      double dl = ostllist[i] - ostlambdaavg;
-      double df = ostflist[i] - ostdedlavg;
-      ostlambdastd += dl * dl;
-      ostdedlstd += df * df;
+      double d = list[i] - avg;
+      std += d * d;
    }
-   ostlambdastd = std::sqrt(ostlambdastd / (double)ostnavg);
-   ostdedlstd = std::sqrt(ostdedlstd / (double)ostnavg);
+   std = std::sqrt(std / (double)ostnavg);
 }
 
 // buildostindex -- rebuild the packed bins and linked-list lookup from the saved
@@ -84,6 +78,7 @@ void resizeOstHist()
    int newsize = 2 * sizeosthist;
    sizeosthist = newsize;
    osthist.resize(newsize + 1, 0);
+   ostihist.resize(newsize + 1, 0);
    ostnext.resize(newsize + 1, 0);
    ostlhist.resize(newsize + 1, 0.0);
    ostfhist.resize(newsize + 1, 0.0);
@@ -510,6 +505,7 @@ void resizeMeta()
    metalhist.resize(newsize + 1, 0.0);
    metahhist.resize(newsize + 1, 0.0);
    metawhist.resize(newsize + 1, 0.0);
+   metaihist.resize(newsize + 1, 0);
 }
 
 // Device scaffold (disabled). A future GPU port of the bicubic-Hermite bias
@@ -574,6 +570,7 @@ void eostData(RcOp op)
 
    if (op & RcOp::DEALLOC) {
       osthist.clear();
+      ostihist.clear();
       ostnext.clear();
       osthead.clear();
       ostlhist.clear();
@@ -593,6 +590,7 @@ void eostData(RcOp op)
       metalhist.clear();
       metahhist.clear();
       metawhist.clear();
+      metaihist.clear();
    }
 
    if (op & RcOp::INIT) {
@@ -607,6 +605,7 @@ void eostData(RcOp op)
          sizeosthist = 10000;
          nosthist = 0;
          osthist.assign(sizeosthist + 1, 0);
+         ostihist.assign(sizeosthist + 1, 0);
          ostnext.assign(sizeosthist + 1, 0);
          osthead.assign((size_t)nlmda * nflmda, 0);
          ostllist.assign(iosthist + 1, 0.0);
@@ -630,6 +629,8 @@ void eostData(RcOp op)
          metalhist.assign(sizemetahist + 1, 0.0);
          metahhist.assign(sizemetahist + 1, 0.0);
          metawhist.assign(sizemetahist + 1, 0.0);
+         metaihist.assign(sizemetahist + 1, 0);
+         ostllist.assign(iosthist + 1, 0.0);
       }
    }
 }
@@ -685,7 +686,8 @@ void eostDyn(int istep)
 
    // deposit a new histogram gaussian every iosthist steps.
    if (im == 0) {
-      ostAvgStd();
+      avgStd(ostllist, ostlambdaavg, ostlambdastd);
+      avgStd(ostflist, ostdedlavg, ostdedlstd);
       int ilmda = lambdaBin(ostlambdaavg);
       maxwlhist = std::max(maxwlhist, wlhist);
       maxwfhist = std::max(maxwfhist, wfhist);
@@ -698,6 +700,7 @@ void eostDyn(int istep)
       int k;
       ijToK(ilmda, iflmda, nlmda, k);
       osthist[nosthist] = k;
+      ostihist[nosthist] = istep;
       ostlhist[nosthist] = ostlambdaavg;
       ostfhist[nosthist] = ostdedlavg;
       osthhist[nosthist] = hbias;
@@ -713,11 +716,6 @@ void eostDyn(int istep)
          buildFkernel();
       }
       eosttot = etotFkernel();
-
-      ostlambdaavg = 0;
-      ostdedlavg = 0;
-      ostlambdastd = 0;
-      ostdedlstd = 0;
    }
 
    // propagate the lambda particle for the next step.
@@ -727,24 +725,26 @@ void eostDyn(int istep)
 void eMetaDyn(int istep)
 {
    int im = istep % iosthist;
-   int navg = iosthist / 2;
+   int isamp = (im == 0) ? iosthist : im;
 
    // effective lambda force, from the bias eostBias evaluated this step
    // (eostBias also refreshed ostdedl).
    deffdl = ostdedl + bdgdl;
 
-   if (im == 0 || im > navg)
-      ostlambdaavg += ostlambda / (double)navg;
+   // buffer this step's sample.
+   ostllist[isamp] = ostlambda;
 
+   // deposit a new metadynamics gaussian every iosthist steps.
    if (im == 0) {
+      avgStd(ostllist, ostlambdaavg, ostlambdastd);
       nmetahist = nmetahist + 1;
       if (nmetahist > sizemetahist)
          resizeMeta();
       metalhist[nmetahist] = ostlambdaavg;
       metahhist[nmetahist] = hbias;
       metawhist[nmetahist] = wlmda;
+      metaihist[nmetahist] = istep;
       eosttot = metaDeltaG();
-      ostlambdaavg = 0;
    }
 
    ostLangevin();

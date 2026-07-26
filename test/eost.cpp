@@ -75,6 +75,7 @@ void resetost(int nl, int nf, int nhist)
    ostinterpol = false;
 
    osthist.assign(sizeosthist + 1, 0);
+   ostihist.assign(sizeosthist + 1, 0);
    ostnext.assign(sizeosthist + 1, 0);
    ostlhist.assign(sizeosthist + 1, 0.0);
    ostfhist.assign(sizeosthist + 1, 0.0);
@@ -101,6 +102,7 @@ void resetmeta(int nhist)
    metalhist.assign(sizemetahist + 1, 0.0);
    metahhist.assign(sizemetahist + 1, 0.0);
    metawhist.assign(sizemetahist + 1, 0.0);
+   metaihist.assign(sizemetahist + 1, 0);
 }
 
 // sethist -- store one gaussian history entry and its packed bin
@@ -188,6 +190,7 @@ TEST_CASE("EOST-resize", "[ff][eost]")
    nosthist = 2;
    for (int i = 1; i <= 2; ++i) {
       osthist[i] = 10 + i;
+      ostihist[i] = 100 + i;
       ostnext[i] = i - 1;
       ostlhist[i] = 0.25 * (double)i;
       ostfhist[i] = -3.0 + 2.0 * (double)i;
@@ -201,6 +204,7 @@ TEST_CASE("EOST-resize", "[ff][eost]")
       CAPTURE(i);
       if (i <= 2) {
          COMPARE_INTS(osthist[i], 10 + i);
+         COMPARE_INTS(ostihist[i], 100 + i);
          COMPARE_INTS(ostnext[i], i - 1);
          COMPARE_REALS(ostlhist[i], 0.25 * (double)i, 1.0e-12);
          COMPARE_REALS(ostfhist[i], -3.0 + 2.0 * (double)i, 1.0e-12);
@@ -209,6 +213,7 @@ TEST_CASE("EOST-resize", "[ff][eost]")
          COMPARE_REALS(ostwfhist[i], 1.0, 1.0e-12);
       } else {
          COMPARE_INTS(osthist[i], 0);
+         COMPARE_INTS(ostihist[i], 0);
          COMPARE_INTS(ostnext[i], 0);
          COMPARE_REALS(ostlhist[i], 0.0, 1.0e-12);
          COMPARE_REALS(ostfhist[i], 0.0, 1.0e-12);
@@ -625,7 +630,8 @@ TEST_CASE("EOST-avgstd", "[ff][eost]")
       ostllist[i] = (double)i;
       ostflist[i] = 2.0 * (double)i;
    }
-   ostAvgStd();
+   avgStd(ostllist, ostlambdaavg, ostlambdastd);
+   avgStd(ostflist, ostdedlavg, ostdedlstd);
    double stdref = std::sqrt(1.25);
    COMPARE_REALS(ostlambdaavg, 4.5, 1.0e-12);
    COMPARE_REALS(ostdedlavg, 9.0, 1.0e-12);
@@ -759,8 +765,42 @@ TEST_CASE("EOST-meta", "[ff][eost]")
    metalhist[2] = 0.25;
    metahhist[2] = 3.0;
    metawhist[2] = 0.125;
+   metaihist[2] = 42;
    resizeMeta();
    COMPARE_INTS(sizemetahist, 4);
    COMPARE_REALS(metalhist[2], 0.25, 1.0e-12);
    COMPARE_REALS(metalhist[3], 0.0, 1.0e-12);
+   COMPARE_INTS(metaihist[2], 42);
+   COMPARE_INTS(metaihist[3], 0);
+}
+
+TEST_CASE("EOST-metadyn", "[ff][eost]")
+{
+   // drive eMetaDyn across one full interval and check the deposited gaussian.
+   resetost(5, 5, 1);
+   resetmeta(2);
+   iosthist = 4;
+   ostnequil = 2;
+   ostnavg = 2;
+   hbias = 2.0;
+   wlmda = 0.25;
+   ostdedl = 0.0;
+   ostdt = 0.0; // no-op ostLangevin, so the sampled lambda values stay controlled
+
+   // sampled lambda per step; avgStd averages the post-equilibration slice
+   // (indices ostnequil+1..iosthist = 3..4) divided by ostnavg = 2.
+   double lam[5] = {0.0, 0.1, 0.2, 0.4, 0.6};
+   for (int istep = 1; istep <= iosthist; ++istep) {
+      ostlambda = lam[istep];
+      eMetaDyn(istep);
+      if (istep < iosthist)
+         COMPARE_INTS(nmetahist, 0); // no deposit before the interval boundary
+   }
+
+   double avgref = (lam[3] + lam[4]) / (double)ostnavg; // 0.5
+   COMPARE_INTS(nmetahist, 1);
+   COMPARE_REALS(metalhist[1], avgref, 1.0e-12);
+   COMPARE_REALS(metahhist[1], hbias, 1.0e-12);
+   COMPARE_REALS(metawhist[1], wlmda, 1.0e-12);
+   COMPARE_INTS(metaihist[1], iosthist); // step stamp at the deposit boundary
 }
