@@ -78,6 +78,7 @@ rwcrd.cpp
 spatial.cpp
 switch.cpp
 termbuf.cpp
+thermint.cpp
 tinkersuppl.cpp
 xanalyze.cpp
 xbar.cpp

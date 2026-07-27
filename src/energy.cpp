@@ -1,4 +1,6 @@
 #include "ff/energy.h"
+#include "ff/ost.h"
+#include "ff/thermint.h"
 #include "tool/error.h"
 
 namespace tinker {
@@ -345,8 +347,13 @@ static DHRc* ev_dptr;
 
 void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
 {
-   if (use_dlmda and (use_ost or use_meta))
-      mapSubLambda();
+   if (use_dlmda) {
+      // whichever method owns the main lambda drives the sub-lambda maps.
+      if (use_ost or use_meta)
+         mapSubLambda(ostlambda);
+      else if (use_ti)
+         mapSubLambda(tilmda);
+   }
 
    zeroEGV(vers);
    energy_core(vers, tsflag, tsconfig);
@@ -505,11 +512,13 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
          sumGradient(gx, gy, gz, gx_nnintermol, gy_nnintermol, gz_nnintermol);
    }
 
-   if (use_dlmda and (use_ost or use_meta)) {
+   if (use_dlmda and (use_ost or use_meta or use_ti)) {
       lmdachain(vers);
-      bool ecore_ost = false;
-      if (fts("eost", ecore_ost, tsflag, tsconfig))
-         eostBias(vers);
+      if (use_ost or use_meta) {
+         bool ecore_ost = false;
+         if (fts("eost", ecore_ost, tsflag, tsconfig))
+            eostBias(vers);
+      }
    }
 }
 
@@ -553,6 +562,7 @@ void energyData(RcOp op)
 
    RcMan ost42{ostData, op};
    RcMan eost42{eostData, op};
+   RcMan ti42{thermintData, op};
    RcMan vdwsSoftcore42{vdwSoftcoreData, op};
    RcMan evdw42{evdwData, op};
 

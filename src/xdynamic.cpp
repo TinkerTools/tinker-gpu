@@ -1,4 +1,5 @@
 #include "ff/atom.h"
+#include "ff/thermint.h"
 #include "md/misc.h"
 #include "tool/argkey.h"
 #include "tool/iofortstr.h"
@@ -171,6 +172,10 @@ void xDynamic(int, char**)
 
    rc_flag = flags;
    initialize();
+
+   // the lambda window geometry needs both nstep and the initialized modules.
+   if (use_ti)
+      init_tidyn(nstep);
 
    auto t_start = std::chrono::steady_clock::now();
    mdPropagate(nstep, dt);

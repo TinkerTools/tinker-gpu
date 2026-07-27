@@ -95,6 +95,8 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
          eostDyn(istep);
       else if (use_metadyn)
          eMetaDyn(istep);
+      else if (use_ti)
+         etidyn(istep);
       if (vers1 & calc::virial)
          if (not atomic)
             hcVirial();
@@ -147,6 +149,8 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
          eostDyn(istep);
       else if (use_metadyn)
          eMetaDyn(istep);
+      else if (use_ti)
+         etidyn(istep);
       darray::copy(g::q0, n, gx2, gx);
       darray::copy(g::q0, n, gy2, gy);
       darray::copy(g::q0, n, gz2, gz);
@@ -380,6 +384,8 @@ static void nhc_npt(int istep, time_prec dt)
       eostDyn(istep);
    else if (use_metadyn)
       eMetaDyn(istep);
+   else if (use_ti)
+      etidyn(istep);
 
    mdVel(dt_2, gx, gy, gz);
 

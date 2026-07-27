@@ -19,6 +19,7 @@
 #include "ff/ost.h"
 #include "ff/pme.h"
 #include "ff/spatial.h"
+#include "ff/thermint.h"
 
 #include "md/lflpiston.h"
 #include "md/misc.h"

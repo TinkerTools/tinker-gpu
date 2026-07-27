@@ -279,39 +279,39 @@ static void sublmdaTaper(const char* mode, double x, double& taper, double& dtap
    d2taper = 20.0 * c5 * x3 + 12.0 * c4 * x2 + 6.0 * c3 * x + 2.0 * c2;
 }
 
-// Maps one sub-lambda from ostlambda given its mapping type.
-static void mapOne(Ostmap map, const char* tmode, int expExp, int invN, double invEps, double& value,
-   double& dvalue, double& d2value)
+// Maps one sub-lambda from main lambda to its mapping type.
+static void mapOne(double lambda, Ostmap map, const char* tmode, int expExp, int invN, double invEps,
+   double& value, double& dvalue, double& d2value)
 {
    if (map == Ostmap::EXP) {
-      sublmdaExp(ostlambda, expExp, value, dvalue, d2value);
+      sublmdaExp(lambda, expExp, value, dvalue, d2value);
    } else if (map == Ostmap::INV) {
-      sublmdaInvPower(ostlambda, invN, invEps, value, dvalue, d2value);
+      sublmdaInvPower(lambda, invN, invEps, value, dvalue, d2value);
    } else {
       // quintic taper or quantized map: sublambda = 1 - taper.
       double taper, dtaper, d2taper;
-      sublmdaTaper(tmode, ostlambda, taper, dtaper, d2taper);
+      sublmdaTaper(tmode, lambda, taper, dtaper, d2taper);
       value = 1.0 - taper;
       dvalue = -dtaper;
       d2value = -d2taper;
    }
 }
 
-void mapSubLambda()
+void mapSubLambda(double lambda)
 {
    // Map the main lambda to the sub-lambdas
    double pval, eval, vval;
-   mapOne(ostpmap, "OSTPOL", ostepexp, ostinvepn, ostinvepeps, pval, dpldlmda, d2pldlmda2);
-   mapOne(ostemap, "OSTELE", ostemexp, ostinvemn, ostinvemeps, eval, deldlmda, d2eldlmda2);
-   mapOne(ostvmap, "OSTVDW", ostevexp, ostinvevn, ostinveveps, vval, dvldlmda, d2vldlmda2);
+   mapOne(lambda, ostpmap, "OSTPOL", ostepexp, ostinvepn, ostinvepeps, pval, dpldlmda, d2pldlmda2);
+   mapOne(lambda, ostemap, "OSTELE", ostemexp, ostinvemn, ostinvemeps, eval, deldlmda, d2eldlmda2);
+   mapOne(lambda, ostvmap, "OSTVDW", ostevexp, ostinvevn, ostinveveps, vval, dvldlmda, d2vldlmda2);
    plam = pval;
    elam = eval;
    vlam = vval;
 
    // quantized polarization derivative flags.
    if (ostpmap == Ostmap::QNT) {
-      use_pol4i = (ostlambda <= ostplmda1);
-      use_pol4f = (ostlambda >= ostplmda0);
+      use_pol4i = (lambda <= ostplmda1);
+      use_pol4f = (lambda >= ostplmda0);
    }
 }
 

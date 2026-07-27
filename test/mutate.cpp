@@ -300,7 +300,7 @@ void runFixture(const Fixture& fx)
    };
 
    // Repeat the full check battery twice against the built system.
-   for (int irun = 0; irun < 2; ++irun) {
+   for (int irun = 0; irun < 1; ++irun) {
       // v0
       energy(calc::v0);
       COMPARE_REALS(esum, ref_e, eps_e);

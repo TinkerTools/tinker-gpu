@@ -526,7 +526,7 @@ void ostLangevin()
 
    double sinth = std::sin(osttheta);
    ostlambda = sinth * sinth;
-   mapSubLambda();
+   mapSubLambda(ostlambda);
 }
 
 // emetabias -- Vbias(lambda) and dVbias/dlambda for the sum of 1D normalized

@@ -420,8 +420,8 @@ void epolarData(RcOp op)
          {&energy_ep, &virial_ep}, {&energy_elec, &virial_elec});
       ep_dl.manage(op, rc_flag, {&depdl_buf, &depvirdl_buf, &dfpdlx, &dfpdly, &dfpdlz, &d2epdl2_buf},
          {dedl_buf, dvirdl_buf, dfsumdlx, dfsumdly, dfsumdlz, d2edl2_buf},
-         (rc_a or use_ost or use_meta) and use_dlmda and use_epdt, //
-         {&depdl, &depvirdl, &d2epdl2}, {&dedl, &dvirdl, &d2edl2}, use_ost or use_meta);
+         (rc_a or use_ost or use_meta or use_ti) and use_dlmda and use_epdt, //
+         {&depdl, &depvirdl, &d2epdl2}, {&dedl, &dvirdl, &d2edl2}, use_ost or use_meta or use_ti);
       ep_snap.manage(op, rc_flag, use_epdt);
       if (rc_a)
          bufferAllocate(rc_flag, &nep);

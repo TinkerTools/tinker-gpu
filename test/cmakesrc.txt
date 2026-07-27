@@ -46,6 +46,7 @@ strbnd.cpp
 strtor.cpp
 testrt.cpp
 text.cpp
+thermint.cpp
 tinkernist.cpp
 torsion.cpp
 tortor.cpp

@@ -369,6 +369,8 @@ void lf_lpiston_npt(int istep, time_prec dt_ps)
       eostDyn(istep);
    else if (use_metadyn)
       eMetaDyn(istep);
+   else if (use_ti)
+      etidyn(istep);
 
    darray::copy(g::q0, n, leapfrog_x, xpos);
    darray::copy(g::q0, n, leapfrog_y, ypos);

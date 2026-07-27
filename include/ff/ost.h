@@ -1,5 +1,6 @@
 #pragma once
 #include "ff/precision.h"
+#include "ff/thermint.h"
 #include "tool/rcman.h"
 #include <vector>
 
@@ -16,7 +17,7 @@ enum class Ostmap
 /// Parses a Fortran character*3 map selector into an Ostmap value.
 Ostmap ostmapFrom(const char* s);
 
-void mapSubLambda();
+void mapSubLambda(double lambda);
 
 void lmdachain(int vers);
 
@@ -152,9 +153,9 @@ TINKER_EXTERN std::vector<double> ostdedlavgbin;
 TINKER_EXTERN std::vector<double> ostdedlstdbin;
 TINKER_EXTERN std::vector<double> ostdedlslpbin;
 
-/// Forces the energy term on when OST/metadynamics is active.
+/// Forces the energy term on when OST/metadynamics/TI is active.
 inline int ostVers(int vers)
 {
-   return (use_ost or use_meta) ? (vers | calc::energy) : vers;
+   return (use_ost or use_meta or use_ti) ? (vers | calc::energy) : vers;
 }
 }
