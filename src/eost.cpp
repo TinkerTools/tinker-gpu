@@ -6,8 +6,10 @@
 #include "ff/energy.h"
 #include "math/const.h"
 #include "math/random.h"
+#include "tool/argkey.h"
 #include "tool/darray.h"
 #include <tinker/detail/bath.hh>
+#include <tinker/detail/ost.hh>
 #include <tinker/detail/units.hh>
 
 #include <algorithm>
@@ -38,6 +40,62 @@ std::vector<int> metaihist; // iost/step stamp per deposited metadynamics gaussi
 // bias evaluated by eostBias
 double bgbias, bdgdl, bdgdfl, bostlmda, bdfdl;
 
+void ost_mech()
+{
+   ostlambda = ost::ostlambda;
+
+   ostinterpol = (ost::ostinterpol != 0);
+   fastkernel = (ost::fastkernel != 0);
+
+   iost = ost::iost;
+   iosthist = ost::iosthist;
+   ostnequil = ost::ostnequil;
+   ostnavg = ost::ostnavg;
+   nlmda = ost::nlmda;
+   nflmda = ost::nflmda;
+   fli0 = ost::fli0;
+   nosthist = 0;
+   sizeosthist = 0;
+   nmetahist = 0;
+   sizemetahist = 0;
+
+   wlmda = ost::wlmda;
+   wlmda2 = ost::wlmda2;
+   wflmda = ost::wflmda;
+   wflmda2 = ost::wflmda2;
+   wlhist = ost::wlhist;
+   wfhist = ost::wfhist;
+   maxwlhist = ost::maxwlhist;
+   maxwfhist = ost::maxwfhist;
+   hbias = ost::hbias;
+   oststdev = ost::oststdev;
+   osteqratio = ost::osteqratio;
+
+   osttheta = ost::osttheta;
+   ostvtheta = ost::ostvtheta;
+   ostmass = ost::ostmass;
+   ostfriction = ost::ostfriction;
+   ostdt = ost::ostdt;
+
+   ostdedl = 0;
+   ostdgdl = 0;
+   ostddgdl = 0;
+   deffdl = 0;
+   ostlambdaavg = 0;
+   ostlambdastd = 0;
+   ostlambdaslp = 0;
+   ostdedlavg = 0;
+   ostdedlstd = 0;
+   ostdedlslp = 0;
+
+   eosttot = 0;
+
+   getKV("OST-CONV-BIN", ostcvbin, 2);
+   getKV("OST-CONVCRI-DIF", ostcvdif, 25.0);
+   getKV("OST-CONVCRI-RAT", ostcvrat, 0.1);
+   getKV("OST-CONVCRI-SLP", ostcvslp, 1.0);
+   getKV("OST-CONVCRI-STD", ostcvstd, 10.0);
+}
 
 static double fitSlope(double tdot, double sum, int n)
 {
@@ -62,34 +120,27 @@ void histstat(const std::vector<double>& list, double& avg, double& std, double&
    }
 
    const double K = list[ostnequil];
-   double total = 0.0, totalsq = 0.0, tdot = 0.0;
+   double total = 0.0, tdot = 0.0;
    for (int i = ostnequil; i < ibegin; ++i) {
       double d = list[i] - K;
       total += d;
-      totalsq += d * d;
       tdot += (double)(i - ostnequil) * d;
    }
    for (int b = 0; b < nbin; ++b) {
       int i0 = ibegin + b * nper;
-      double a = 0.0, asq = 0.0, tloc = 0.0;
+      double a = 0.0, tloc = 0.0;
       for (int i = i0; i < i0 + nper; ++i) {
          double d = list[i] - K;
          a += d;
-         asq += d * d;
          tloc += (double)(i - i0) * d;
       }
       total += a;
-      totalsq += asq;
       // tloc counts from the bin start; shift it onto the whole-slice ramp
       tdot += tloc + (double)(i0 - ostnequil) * a;
-      avgbin[b] = K + a / (double)nper;
-      double v = (asq - a * a / (double)nper) / (double)nper;
-      stdbin[b] = std::sqrt(v > 0.0 ? v : 0.0);
+      avgstd(list, i0, nper, avgbin[b], stdbin[b]);
       slpbin[b] = fitSlope(tloc, a, nper);
    }
-   avg = K + total / (double)ostnavg;
-   double var = (totalsq - total * total / (double)ostnavg) / (double)ostnavg;
-   std = std::sqrt(var > 0.0 ? var : 0.0);
+   avgstd(list, ostnequil, ostnavg, avg, std);
    slp = fitSlope(tdot, total, ostnavg);
 }
 
@@ -712,14 +763,14 @@ void eostBias(int vers)
 {
    ostdedl = dedl;
 
-   if (use_metadyn) {
+   if (use_meta) {
       eMetaBias(ostlambda, bgbias, bdgdl);
       // Vbias depends on lambda alone, so it carries no Cartesian force/virial.
       if (vers & calc::energy)
          esum += bgbias;
       return;
    }
-   if (not use_ostdyn)
+   if (not use_ost)
       return;
 
    // Evaluate the g bias and the f (free-energy) term at the current state.

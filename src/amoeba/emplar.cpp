@@ -37,15 +37,15 @@ static bool emplarDualMatched()
    if (not use_dlmda)
       return true;
 
-   if (ostpmap != ostemap)
+   if (plmdamap != elmdamap)
       return false;
 
-   if (ostemap == Ostmap::EXP) {
-      return ostepexp == ostemexp;
-   } else if (ostemap == Ostmap::INV) {
-      return ostinvepn == ostinvemn and doubleEq(ostinvepeps, ostinvemeps);
+   if (elmdamap == Lmdamap::EXP) {
+      return plmdaexp == elmdaexp;
+   } else if (elmdamap == Lmdamap::INV) {
+      return plmdainvn == elmdainvn and doubleEq(plmdainveps, elmdainveps);
    } else {
-      return doubleEq(ostplmda0, ostelmda0) and doubleEq(ostplmda1, ostelmda1);
+      return doubleEq(qntplmda0, qntelmda0) and doubleEq(qntplmda1, qntelmda1);
    }
 }
 
@@ -142,11 +142,17 @@ void emplar_adt(int vers)
 {
    emplarBegin(vers);
 
-   emplarState(vers, RdtMask::ENV, mut, true);
-   empoleSaveEndpoint0(vers);
-
-   empoleZeroWork(vers);
-   emplarState(vers, RdtMask::ALL, mut, false);
+   if (use_ele4i) {
+      emplarState(vers, RdtMask::ENV, mut, true);
+      empoleSaveEndpoint0(vers);
+   }
+   if (use_ele4f) {
+      if (use_ele4i)
+         empoleZeroWork(vers);
+      emplarState(vers, RdtMask::ALL, mut, not use_ele4i);
+   }
+   if (not use_ele4i)
+      empoleSaveEndpoint0(vers);
 
    emplarMixEndpoints(vers);
    empoleFinish(vers);
@@ -157,14 +163,20 @@ void emplar_rdt(int vers)
    emplarBegin(vers);
 
    // E0 = E(B+environment) + E(A).
-   emplarState(vers, RdtMask::BE, rdt_group, true);
-   emplarState(vers, RdtMask::A, rdt_group, false);
-   empoleSaveEndpoint0(vers);
-
+   if (use_ele4i) {
+      emplarState(vers, RdtMask::BE, rdt_group, true);
+      emplarState(vers, RdtMask::A, rdt_group, false);
+      empoleSaveEndpoint0(vers);
+   }
    // E1 = E(A+environment) + E(B).
-   empoleZeroWork(vers);
-   emplarState(vers, RdtMask::AE, rdt_group, false);
-   emplarState(vers, RdtMask::B, rdt_group, false);
+   if (use_ele4f) {
+      if (use_ele4i)
+         empoleZeroWork(vers);
+      emplarState(vers, RdtMask::AE, rdt_group, not use_ele4i);
+      emplarState(vers, RdtMask::B, rdt_group, false);
+   }
+   if (not use_ele4i)
+      empoleSaveEndpoint0(vers);
 
    emplarMixEndpoints(vers);
    empoleFinish(vers);

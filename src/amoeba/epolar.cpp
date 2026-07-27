@@ -420,8 +420,8 @@ void epolarData(RcOp op)
          {&energy_ep, &virial_ep}, {&energy_elec, &virial_elec});
       ep_dl.manage(op, rc_flag, {&depdl_buf, &depvirdl_buf, &dfpdlx, &dfpdly, &dfpdlz, &d2epdl2_buf},
          {dedl_buf, dvirdl_buf, dfsumdlx, dfsumdly, dfsumdlz, d2edl2_buf},
-         (rc_a or use_ost or use_meta or use_ti) and use_dlmda and use_epdt, //
-         {&depdl, &depvirdl, &d2epdl2}, {&dedl, &dvirdl, &d2edl2}, use_ost or use_meta or use_ti);
+         (rc_a or useLmdaChain()) and use_dlmda and use_epdt, //
+         {&depdl, &depvirdl, &d2epdl2}, {&dedl, &dvirdl, &d2edl2}, useLmdaChain());
       ep_snap.manage(op, rc_flag, use_epdt);
       if (rc_a)
          bufferAllocate(rc_flag, &nep);
@@ -758,11 +758,17 @@ void epolar_adt(int vers)
 {
    epolarBegin(vers);
 
-   epolarState(vers, RdtMask::ENV, mut, true);
-   epolarSaveEndpoint0(vers);
-
-   epolarZeroWork(vers);
-   epolarState(vers, RdtMask::ALL, mut, false);
+   if (use_pol4i) {
+      epolarState(vers, RdtMask::ENV, mut, true);
+      epolarSaveEndpoint0(vers);
+   }
+   if (use_pol4f) {
+      if (use_pol4i)
+         epolarZeroWork(vers);
+      epolarState(vers, RdtMask::ALL, mut, not use_pol4i);
+   }
+   if (not use_pol4i)
+      epolarSaveEndpoint0(vers);
 
    epolarMixEndpoints(vers);
    epolarFinish(vers);
@@ -773,15 +779,21 @@ void epolar_rdt(int vers)
    epolarBegin(vers);
 
    // E0 = E(B+environment) + E(A).
-   epolarState(vers, RdtMask::BE, rdt_group, true);
-   epolarState(vers, RdtMask::A, rdt_group, false);
-   epolarSaveEndpoint0(vers);
-
+   if (use_pol4i) {
+      epolarState(vers, RdtMask::BE, rdt_group, true);
+      epolarState(vers, RdtMask::A, rdt_group, false);
+      epolarSaveEndpoint0(vers);
+   }
    // E1 = E(A+environment) + E(B).
-   epolarZeroWork(vers);
-   epolarState(vers, RdtMask::AE, rdt_group, false);
-   int bvers = (vers == calc::v3 ? calc::v0 : vers);
-   epolarState(bvers, RdtMask::B, rdt_group, false);
+   if (use_pol4f) {
+      if (use_pol4i)
+         epolarZeroWork(vers);
+      epolarState(vers, RdtMask::AE, rdt_group, not use_pol4i);
+      int bvers = (vers == calc::v3 ? calc::v0 : vers);
+      epolarState(bvers, RdtMask::B, rdt_group, false);
+   }
+   if (not use_pol4i)
+      epolarSaveEndpoint0(vers);
 
    epolarMixEndpoints(vers);
    epolarFinish(vers);

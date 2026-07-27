@@ -1,10 +1,9 @@
 #pragma once
+#include "ff/dlmda.h"
 #include "tool/rcman.h"
 #include <vector>
 
 namespace tinker {
-/// True if the "THERM-INTG" keyword is present.
-TINKER_EXTERN bool use_ti;
 /// Lambda of the current window.
 TINKER_EXTERN double tilmda;
 /// Fraction of each window discarded as equilibration.
@@ -37,6 +36,4 @@ void init_tidyn(int nstep);
 void etidyn(int istep);
 /// Advances to the next lambda window.
 void tischedule();
-/// Mean and population standard deviation of the first \c count entries.
-void avgstd(const std::vector<double>& v, int count, double& avg, double& sd);
 }

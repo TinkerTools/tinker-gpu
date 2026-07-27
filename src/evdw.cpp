@@ -398,8 +398,8 @@ void evdwData(RcOp op)
          {&energy_ev, &virial_ev}, {&energy_vdw, &virial_vdw});
       ev_dl.manage(op, rc_flag, {&devdl_buf, &devvirdl_buf, &dfvdlx, &dfvdly, &dfvdlz, &d2evdl2_buf},
          {dedl_buf, dvirdl_buf, dfsumdlx, dfsumdly, dfsumdlz, d2edl2_buf},
-         (rc_a or use_ost or use_meta or use_ti) and use_dlmda, //
-         {&devdl, &devvirdl, &d2evdl2}, {&dedl, &dvirdl, &d2edl2}, use_ost or use_meta or use_ti);
+         (rc_a or useLmdaChain()) and use_dlmda, //
+         {&devdl, &devvirdl, &d2evdl2}, {&dedl, &dvirdl, &d2edl2}, useLmdaChain());
       if (rc_a)
          bufferAllocate(rc_flag, &nev);
    }
@@ -614,24 +614,37 @@ void evdw_adt(int vers)
    real vlam_orig = vlam;
 
    evdwBegin(vers);
-   vlam = 0;
-   evdwKernel(vers);
-   ev_snap.save(vers, ev_buf);
 
-   evdwZeroBuffers(vers);
-   vlam = 1;
-   evdwKernel(vers);
+   if (use_vdw4i) {
+      vlam = 0;
+      evdwKernel(vers);
+      ev_snap.save(vers, ev_buf);
+   }
+   if (use_vdw4f) {
+      if (use_vdw4i)
+         evdwZeroBuffers(vers);
+      vlam = 1;
+      evdwKernel(vers);
+   }
+   if (not use_vdw4i)
+      ev_snap.save(vers, ev_buf);
    vlam = vlam_orig;
 
    double weight1, dweight1, d2weight1;
    adtWeight(vlam_orig, evdtexp, weight1, dweight1, d2weight1);
    ev_snap.mix(vers, vlam_orig, evdtexp, use_dlmda, ev_buf, ev_dl);
 
-   energy_prec adt_elrc = weight1 * elrc1_vol + (1 - weight1) * elrc0_vol;
-   virial_prec adt_vlrc = weight1 * vlrc1_vol + (1 - weight1) * vlrc0_vol;
-   energy_prec adt_delrc = dweight1 * (elrc1_vol - elrc0_vol);
-   energy_prec adt_d2elrc = d2weight1 * (elrc1_vol - elrc0_vol);
-   virial_prec adt_dvlrc = dweight1 * (vlrc1_vol - vlrc0_vol);
+
+   energy_prec elrc0 = use_vdw4i ? elrc0_vol : elrc1_vol;
+   energy_prec elrc1 = use_vdw4f ? elrc1_vol : elrc0_vol;
+   virial_prec vlrc0 = use_vdw4i ? vlrc0_vol : vlrc1_vol;
+   virial_prec vlrc1 = use_vdw4f ? vlrc1_vol : vlrc0_vol;
+
+   energy_prec adt_elrc = weight1 * elrc1 + (1 - weight1) * elrc0;
+   virial_prec adt_vlrc = weight1 * vlrc1 + (1 - weight1) * vlrc0;
+   energy_prec adt_delrc = dweight1 * (elrc1 - elrc0);
+   energy_prec adt_d2elrc = d2weight1 * (elrc1 - elrc0);
+   virial_prec adt_dvlrc = dweight1 * (vlrc1 - vlrc0);
    evdwFinish(vers, adt_elrc, adt_vlrc, adt_delrc, adt_d2elrc, adt_dvlrc);
 }
 
@@ -642,25 +655,37 @@ void evdw_rdt(int vers)
    evdwBegin(vers);
 
    // E0 = E(B+environment) + E(A).
-   ehalSubsys(vers, RdtMask::BE);
-   ehalSubsys(vers, RdtMask::A);
-   ev_snap.save(vers, ev_buf);
-
+   if (use_vdw4i) {
+      ehalSubsys(vers, RdtMask::BE);
+      ehalSubsys(vers, RdtMask::A);
+      ev_snap.save(vers, ev_buf);
+   }
    // E1 = E(A+environment) + E(B).
-   evdwZeroBuffers(vers);
-   ehalSubsys(vers, RdtMask::AE);
-   int bvers = (vers == calc::v3 ? calc::v0 : vers);
-   ehalSubsys(bvers, RdtMask::B);
+   if (use_vdw4f) {
+      if (use_vdw4i)
+         evdwZeroBuffers(vers);
+      ehalSubsys(vers, RdtMask::AE);
+      int bvers = (vers == calc::v3 ? calc::v0 : vers);
+      ehalSubsys(bvers, RdtMask::B);
+   }
+   if (not use_vdw4i)
+      ev_snap.save(vers, ev_buf);
 
    double weight1, dweight1, d2weight1;
    adtWeight(vlam, evdtexp, weight1, dweight1, d2weight1);
    ev_snap.mix(vers, vlam, evdtexp, use_dlmda, ev_buf, ev_dl);
 
-   energy_prec rdt_elrc = weight1 * elrc1_vol + (1 - weight1) * elrc0_vol;
-   virial_prec rdt_vlrc = weight1 * vlrc1_vol + (1 - weight1) * vlrc0_vol;
-   energy_prec rdt_delrc = dweight1 * (elrc1_vol - elrc0_vol);
-   energy_prec rdt_d2elrc = d2weight1 * (elrc1_vol - elrc0_vol);
-   virial_prec rdt_dvlrc = dweight1 * (vlrc1_vol - vlrc0_vol);
+
+   energy_prec elrc0 = use_vdw4i ? elrc0_vol : elrc1_vol;
+   energy_prec elrc1 = use_vdw4f ? elrc1_vol : elrc0_vol;
+   virial_prec vlrc0 = use_vdw4i ? vlrc0_vol : vlrc1_vol;
+   virial_prec vlrc1 = use_vdw4f ? vlrc1_vol : vlrc0_vol;
+
+   energy_prec rdt_elrc = weight1 * elrc1 + (1 - weight1) * elrc0;
+   virial_prec rdt_vlrc = weight1 * vlrc1 + (1 - weight1) * vlrc0;
+   energy_prec rdt_delrc = dweight1 * (elrc1 - elrc0);
+   energy_prec rdt_d2elrc = d2weight1 * (elrc1 - elrc0);
+   virial_prec rdt_dvlrc = dweight1 * (vlrc1 - vlrc0);
    evdwFinish(vers, rdt_elrc, rdt_vlrc, rdt_delrc, rdt_d2elrc, rdt_dvlrc);
 }
 }

@@ -168,6 +168,10 @@ const Fixture kFixtures[] = {
    {"128_water_rdt_ne_m05p05v00", "water2", true, true, false, true, "emplar"},
    {"129_water_rdt_ye_m00p00v10", "water2", true, true, false, true, "emplar"},
    {"130_water_rdt_ne_m00p00v10", "water2", true, true, false, true, "emplar"},
+   {"131_water_qnt_adt_l10", "water2", true, true, true, true, "legskip"},
+   {"132_water_qnt_adt_l00", "water2", true, true, true, true, "legskip"},
+   {"133_water_qnt_rdt_l10", "water2", true, true, true, true, "legskip"},
+   {"134_water_qnt_rdt_l00", "water2", true, true, true, true, "legskip"},
 };
 
 // Reference lambda-derivative block parsed out of the analyze-style ref file.
@@ -388,6 +392,18 @@ void runFixture(const Fixture& fx)
    finish();
    testEnd();
 }
+
+void runLegSkipFixture(const Fixture& fx, bool expect4i, bool expect4f)
+{
+   runFixture(fx);
+
+   REQUIRE(use_ele4i == expect4i);
+   REQUIRE(use_pol4i == expect4i);
+   REQUIRE(use_vdw4i == expect4i);
+   REQUIRE(use_ele4f == expect4f);
+   REQUIRE(use_pol4f == expect4f);
+   REQUIRE(use_vdw4f == expect4f);
+}
 } // namespace
 
 TEST_CASE("MUTATE-001_water_ye_m10", "[ff][mutate][mv]") { runFixture(kFixtures[0]); }
@@ -520,5 +536,9 @@ TEST_CASE("MUTATE-127_water_rdt_ye_m05p05v00", "[ff][mutate][emplar]") { runFixt
 TEST_CASE("MUTATE-128_water_rdt_ne_m05p05v00", "[ff][mutate][emplar]") { runFixture(kFixtures[127]); }
 TEST_CASE("MUTATE-129_water_rdt_ye_m00p00v10", "[ff][mutate][emplar]") { runFixture(kFixtures[128]); }
 TEST_CASE("MUTATE-130_water_rdt_ne_m00p00v10", "[ff][mutate][emplar]") { runFixture(kFixtures[129]); }
+TEST_CASE("MUTATE-131_water_qnt_adt_l10", "[ff][mutate][legskip]") { runLegSkipFixture(kFixtures[130], false, true); }
+TEST_CASE("MUTATE-132_water_qnt_adt_l00", "[ff][mutate][legskip]") { runLegSkipFixture(kFixtures[131], true, false); }
+TEST_CASE("MUTATE-133_water_qnt_rdt_l10", "[ff][mutate][legskip]") { runLegSkipFixture(kFixtures[132], false, true); }
+TEST_CASE("MUTATE-134_water_qnt_rdt_l00", "[ff][mutate][legskip]") { runLegSkipFixture(kFixtures[133], true, false); }
 
 #endif

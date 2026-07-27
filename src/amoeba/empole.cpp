@@ -42,8 +42,8 @@ void empoleData(RcOp op)
          {&energy_em, &virial_em}, {&energy_elec, &virial_elec});
       em_dl.manage(op, rc_flag, {&demdl_buf, &demvirdl_buf, &dfmdlx, &dfmdly, &dfmdlz, &d2emdl2_buf},
          {dedl_buf, dvirdl_buf, dfsumdlx, dfsumdly, dfsumdlz, d2edl2_buf},
-         (rc_a or use_ost or use_meta or use_ti) and use_dlmda, //
-         {&demdl, &demvirdl, &d2emdl2}, {&dedl, &dvirdl, &d2edl2}, use_ost or use_meta or use_ti);
+         (rc_a or useLmdaChain()) and use_dlmda, //
+         {&demdl, &demvirdl, &d2emdl2}, {&dedl, &dvirdl, &d2edl2}, useLmdaChain());
       em_snap.manage(op, rc_flag, use_emdt);
       if (rc_a)
          bufferAllocate(rc_flag, &nem);
@@ -166,11 +166,17 @@ void empole_adt(int vers)
 {
    empoleBegin(vers);
 
-   empoleState(vers, RdtMask::ENV, mut, true);
-   empoleSaveEndpoint0(vers);
-
-   empoleZeroWork(vers);
-   empoleState(vers, RdtMask::ALL, mut, false);
+   if (use_ele4i) {
+      empoleState(vers, RdtMask::ENV, mut, true);
+      empoleSaveEndpoint0(vers);
+   }
+   if (use_ele4f) {
+      if (use_ele4i)
+         empoleZeroWork(vers);
+      empoleState(vers, RdtMask::ALL, mut, not use_ele4i);
+   }
+   if (not use_ele4i)
+      empoleSaveEndpoint0(vers);
 
    empoleMixEndpoints(vers);
    empoleFinish(vers);
@@ -181,15 +187,21 @@ void empole_rdt(int vers)
    empoleBegin(vers);
 
    // E0 = E(B+environment) + E(A).
-   empoleState(vers, RdtMask::BE, rdt_group, true);
-   empoleState(vers, RdtMask::A, rdt_group, false);
-   empoleSaveEndpoint0(vers);
-
+   if (use_ele4i) {
+      empoleState(vers, RdtMask::BE, rdt_group, true);
+      empoleState(vers, RdtMask::A, rdt_group, false);
+      empoleSaveEndpoint0(vers);
+   }
    // E1 = E(A+environment) + E(B).
-   empoleZeroWork(vers);
-   empoleState(vers, RdtMask::AE, rdt_group, false);
-   int bvers = (vers == calc::v3 ? calc::v0 : vers);
-   empoleState(bvers, RdtMask::B, rdt_group, false);
+   if (use_ele4f) {
+      if (use_ele4i)
+         empoleZeroWork(vers);
+      empoleState(vers, RdtMask::AE, rdt_group, not use_ele4i);
+      int bvers = (vers == calc::v3 ? calc::v0 : vers);
+      empoleState(bvers, RdtMask::B, rdt_group, false);
+   }
+   if (not use_ele4i)
+      empoleSaveEndpoint0(vers);
 
    empoleMixEndpoints(vers);
    empoleFinish(vers);

@@ -26,8 +26,8 @@ localframe.cpp
 localframe2.cpp
 localframe3.cpp
 main.cpp
-mathfunc.cpp
 matexp.cpp
+mathfunc.cpp
 mutate.cpp
 nacl.cpp
 nblist.cpp

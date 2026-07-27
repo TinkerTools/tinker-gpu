@@ -74,7 +74,7 @@ void deviceData(RcOp op)
    // xred, yred, and zred need to be initialized in vdw (Halgren 14-7)
    // and will be used in nblist setups.
    RcMan nbl42{nblistData, op};
-   RcMan ost42{ostData2, op};
+   RcMan dlmda42{dlmdaData2, op};
 
    RcMan rattle42{rattleData, op};
    RcMan vel42{mdVelData, op};

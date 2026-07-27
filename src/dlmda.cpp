@@ -19,7 +19,7 @@
 #include <vector>
 
 namespace tinker {
-void ostData(RcOp op)
+void dlmdaData(RcOp op)
 {
    if (!use_rel)
       return;
@@ -39,7 +39,7 @@ void ostData(RcOp op)
    }
 }
 
-void ostData2(RcOp op)
+void dlmdaData2(RcOp op)
 {
    if (op & RcOp::INIT) {
       bool lambda_dynamics = use_dlmda or use_ost or use_meta or use_emdt //
@@ -49,19 +49,19 @@ void ostData2(RcOp op)
    }
 }
 
-Ostmap ostmapFrom(const char* s)
+Lmdamap lmdamapFrom(const char* s)
 {
    // s is a Fortran character*3 buffer (no null terminator).
    if (std::strncmp(s, "EXP", 3) == 0)
-      return Ostmap::EXP;
+      return Lmdamap::EXP;
    if (std::strncmp(s, "INV", 3) == 0)
-      return Ostmap::INV;
+      return Lmdamap::INV;
    if (std::strncmp(s, "QNT", 3) == 0)
-      return Ostmap::QNT;
-   return Ostmap::NONE;
+      return Lmdamap::QNT;
+   return Lmdamap::QNT;
 }
 
-void ost_mech()
+void dlmda_mech()
 {
    use_dlmda = dlmda::use_dlmda;
    use_emdt = dlmda::use_emdt;
@@ -83,91 +83,67 @@ void ost_mech()
    epdtexp = dlmda::epdtexp;
    evdtexp = dlmda::evdtexp;
 
-   // OST main-lambda -> sub-lambda mapping parameters (see ff/ost.h).
+   // which lambda-dynamics method owns the main lambda.
    use_ost = ost::use_ost;
    use_meta = ost::use_meta;
-   use_pol4i = ost::use_pol4i;
-   use_pol4f = ost::use_pol4f;
-
-   ostemexp = ost::ostemexp;
-   ostepexp = ost::ostepexp;
-   ostevexp = ost::ostevexp;
-   ostinvemn = ost::ostinvemn;
-   ostinvepn = ost::ostinvepn;
-   ostinvevn = ost::ostinvevn;
-   ostinvemeps = ost::ostinvemeps;
-   ostinvepeps = ost::ostinvepeps;
-   ostinveveps = ost::ostinveveps;
-
-   ostemap = ostmapFrom(ost::ostemap);
-   ostpmap = ostmapFrom(ost::ostpmap);
-   ostvmap = ostmapFrom(ost::ostvmap);
-
-   ostelmda0 = ost::ostelmda0;
-   ostelmda1 = ost::ostelmda1;
-   ostplmda0 = ost::ostplmda0;
-   ostplmda1 = ost::ostplmda1;
-   ostvlmda0 = ost::ostvlmda0;
-   ostvlmda1 = ost::ostvlmda1;
-
-   ostlambda = ost::ostlambda;
-
-   // OST / metadynamics lambda-dynamics state
-   use_ostdyn = use_ost;
-   use_metadyn = use_meta;
    ost::use_ostdyn = use_ost;
    ost::use_metadyn = use_meta;
-   ostinterpol = (ost::ostinterpol != 0);
-   fastkernel = (ost::fastkernel != 0);
 
-   iost = ost::iost;
-   iosthist = ost::iosthist;
-   ostnequil = ost::ostnequil;
-   ostnavg = ost::ostnavg;
-   nlmda = ost::nlmda;
-   nflmda = ost::nflmda;
-   fli0 = ost::fli0;
-   nosthist = 0;
-   sizeosthist = 0;
-   nmetahist = 0;
-   sizemetahist = 0;
+   use_ele4i = true;
+   use_ele4f = true;
+   use_pol4i = true;
+   use_pol4f = true;
+   use_vdw4i = true;
+   use_vdw4f = true;
 
-   wlmda = ost::wlmda;
-   wlmda2 = ost::wlmda2;
-   wflmda = ost::wflmda;
-   wflmda2 = ost::wflmda2;
-   wlhist = ost::wlhist;
-   wfhist = ost::wfhist;
-   maxwlhist = ost::maxwlhist;
-   maxwfhist = ost::maxwfhist;
-   hbias = ost::hbias;
-   oststdev = ost::oststdev;
-   osteqratio = ost::osteqratio;
+   elmdaexp = ost::ostemexp;
+   plmdaexp = ost::ostepexp;
+   vlmdaexp = ost::ostevexp;
+   elmdainvn = ost::ostinvemn;
+   plmdainvn = ost::ostinvepn;
+   vlmdainvn = ost::ostinvevn;
+   elmdainveps = ost::ostinvemeps;
+   plmdainveps = ost::ostinvepeps;
+   vlmdainveps = ost::ostinveveps;
 
-   osttheta = ost::osttheta;
-   ostvtheta = ost::ostvtheta;
-   ostmass = ost::ostmass;
-   ostfriction = ost::ostfriction;
-   ostdt = ost::ostdt;
+   elmdamap = lmdamapFrom(ost::ostemap);
+   plmdamap = lmdamapFrom(ost::ostpmap);
+   vlmdamap = lmdamapFrom(ost::ostvmap);
 
-   ostdedl = 0;
-   ostdgdl = 0;
-   ostddgdl = 0;
-   deffdl = 0;
-   ostlambdaavg = 0;
-   ostlambdastd = 0;
-   ostlambdaslp = 0;
-   ostdedlavg = 0;
-   ostdedlstd = 0;
-   ostdedlslp = 0;
+   qntelmda0 = ost::ostelmda0;
+   qntelmda1 = ost::ostelmda1;
+   qntplmda0 = ost::ostplmda0;
+   qntplmda1 = ost::ostplmda1;
+   qntvlmda0 = ost::ostvlmda0;
+   qntvlmda1 = ost::ostvlmda1;
 
-   eosttot = 0;
+   if (qntelmda0 > qntelmda1)
+      TINKER_THROW("DLMDA  --  ELE-LMDA-RANGE is inverted");
+   if (qntplmda0 > qntplmda1)
+      TINKER_THROW("DLMDA  --  POL-LMDA-RANGE is inverted");
+   if (qntvlmda0 > qntvlmda1)
+      TINKER_THROW("DLMDA  --  VDW-LMDA-RANGE is inverted");
+}
 
-   getKV("OST-CONV-BIN", ostcvbin, 2);
-   getKV("OST-CONVCRI-DIF", ostcvdif, 25.0);
-   getKV("OST-CONVCRI-RAT", ostcvrat, 0.1);
-   getKV("OST-CONVCRI-SLP", ostcvslp, 1.0);
-   getKV("OST-CONVCRI-STD", ostcvstd, 10.0);
+void avgstd(const std::vector<double>& v, int begin, int count, double& avg, double& sd)
+{
+   if (count < 1) {
+      avg = 0.0;
+      sd = 0.0;
+      return;
+   }
+
+   // Shifted mean, to keep the sum of squares well conditioned.
+   const double k = v[begin];
+   double total = 0.0, totalsq = 0.0;
+   for (int i = begin; i < begin + count; ++i) {
+      double d = v[i] - k;
+      total += d;
+      totalsq += d * d;
+   }
+   avg = k + total / (double)count;
+   double var = (totalsq - total * total / (double)count) / (double)count;
+   sd = std::sqrt(var > 0.0 ? var : 0.0);
 }
 
 void adtWeight(double lambda, int exponent, double& weight, double& dweight, double& d2weight)
@@ -280,15 +256,15 @@ static void sublmdaTaper(const char* mode, double x, double& taper, double& dtap
 }
 
 // Maps one sub-lambda from main lambda to its mapping type.
-static void mapOne(double lambda, Ostmap map, const char* tmode, int expExp, int invN, double invEps,
+static void mapOne(double lambda, Lmdamap map, const char* tmode, int expExp, int invN, double invEps,
    double& value, double& dvalue, double& d2value)
 {
-   if (map == Ostmap::EXP) {
+   if (map == Lmdamap::EXP) {
       sublmdaExp(lambda, expExp, value, dvalue, d2value);
-   } else if (map == Ostmap::INV) {
+   } else if (map == Lmdamap::INV) {
       sublmdaInvPower(lambda, invN, invEps, value, dvalue, d2value);
-   } else {
-      // quintic taper or quantized map: sublambda = 1 - taper.
+   } else { // Lmdamap::QNT
+      // quantized map: sublambda = 1 - taper.
       double taper, dtaper, d2taper;
       sublmdaTaper(tmode, lambda, taper, dtaper, d2taper);
       value = 1.0 - taper;
@@ -301,17 +277,24 @@ void mapSubLambda(double lambda)
 {
    // Map the main lambda to the sub-lambdas
    double pval, eval, vval;
-   mapOne(lambda, ostpmap, "OSTPOL", ostepexp, ostinvepn, ostinvepeps, pval, dpldlmda, d2pldlmda2);
-   mapOne(lambda, ostemap, "OSTELE", ostemexp, ostinvemn, ostinvemeps, eval, deldlmda, d2eldlmda2);
-   mapOne(lambda, ostvmap, "OSTVDW", ostevexp, ostinvevn, ostinveveps, vval, dvldlmda, d2vldlmda2);
+   mapOne(lambda, plmdamap, "OSTPOL", plmdaexp, plmdainvn, plmdainveps, pval, dpldlmda, d2pldlmda2);
+   mapOne(lambda, elmdamap, "OSTELE", elmdaexp, elmdainvn, elmdainveps, eval, deldlmda, d2eldlmda2);
+   mapOne(lambda, vlmdamap, "OSTVDW", vlmdaexp, vlmdainvn, vlmdainveps, vval, dvldlmda, d2vldlmda2);
    plam = pval;
    elam = eval;
    vlam = vval;
 
-   // quantized polarization derivative flags.
-   if (ostpmap == Ostmap::QNT) {
-      use_pol4i = (lambda <= ostplmda1);
-      use_pol4f = (lambda >= ostplmda0);
+   if (elmdamap == Lmdamap::QNT) {
+      use_ele4i = (lambda <= qntelmda1);
+      use_ele4f = (lambda >= qntelmda0);
+   }
+   if (plmdamap == Lmdamap::QNT) {
+      use_pol4i = (lambda <= qntplmda1);
+      use_pol4f = (lambda >= qntplmda0);
+   }
+   if (vlmdamap == Lmdamap::QNT) {
+      use_vdw4i = (lambda <= qntvlmda1);
+      use_vdw4f = (lambda >= qntvlmda0);
    }
 }
 

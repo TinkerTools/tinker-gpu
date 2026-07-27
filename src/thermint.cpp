@@ -69,27 +69,6 @@ void init_tidyn(int nstep)
    mapSubLambda(tilmda);
 }
 
-void avgstd(const std::vector<double>& v, int count, double& avg, double& sd)
-{
-   if (count < 1) {
-      avg = 0.0;
-      sd = 0.0;
-      return;
-   }
-
-   // Shifted mean, as in histstat, to keep the sum of squares well conditioned.
-   double k = v[0];
-   double total = 0.0, totalsq = 0.0;
-   for (int i = 0; i < count; ++i) {
-      double d = v[i] - k;
-      total += d;
-      totalsq += d * d;
-   }
-   avg = k + total / (double)count;
-   double var = (totalsq - total * total / (double)count) / (double)count;
-   sd = std::sqrt(var > 0.0 ? var : 0.0);
-}
-
 void etidyn(int istep)
 {
    // A trailing partial window is left unsampled when nstep % tinbin != 0.
@@ -104,7 +83,7 @@ void etidyn(int istep)
       tidedllist[(tiprod - 1) % tinstepavg] = dedl;
       if (tiprod % tinstepavg == 0) {
          double avg, sd;
-         avgstd(tidedllist, tinstepavg, avg, sd);
+         avgstd(tidedllist, 0, tinstepavg, avg, sd);
          tilmdadedl[tibin].push_back(avg);
          tilmdadedlstd[tibin].push_back(sd);
       }

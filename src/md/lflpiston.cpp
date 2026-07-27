@@ -1,6 +1,7 @@
 #include "md/lflpiston.h"
 #include "ff/energy.h"
 #include "ff/ost.h"
+#include "ff/thermint.h"
 #include "math/random.h"
 #include "md/misc.h"
 #include "md/pq.h"
@@ -287,7 +288,7 @@ void lf_lpiston_npt(int istep, time_prec dt_ps)
             darray::copy(g::q0, n, leapfrog_x, xpos);
             darray::copy(g::q0, n, leapfrog_y, ypos);
             darray::copy(g::q0, n, leapfrog_z, zpos);
-            energy(ostVers(vers1));
+            energy(lmdaVers(vers1));
          }
 
       } else {
@@ -303,7 +304,7 @@ void lf_lpiston_npt(int istep, time_prec dt_ps)
          }
 
          copyPosToXyz(true);
-         energy(ostVers(vers1));
+         energy(lmdaVers(vers1));
       }
 
       // in step 1, vx(new) and vxold are opposite from notation
@@ -362,12 +363,12 @@ void lf_lpiston_npt(int istep, time_prec dt_ps)
       leapfrog_vzold);
    lf_langevin_piston(dt_ps, press);
    copyPosToXyz(true);
-   energy(ostVers(vers1));
+   energy(lmdaVers(vers1));
 
    // propagate the lambda particle.
-   if (use_ostdyn)
+   if (use_ost)
       eostDyn(istep);
-   else if (use_metadyn)
+   else if (use_meta)
       eMetaDyn(istep);
    else if (use_ti)
       etidyn(istep);

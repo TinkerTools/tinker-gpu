@@ -512,7 +512,7 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
          sumGradient(gx, gy, gz, gx_nnintermol, gy_nnintermol, gz_nnintermol);
    }
 
-   if (use_dlmda and (use_ost or use_meta or use_ti)) {
+   if (use_dlmda and useLmdaChain()) {
       lmdachain(vers);
       if (use_ost or use_meta) {
          bool ecore_ost = false;
@@ -560,7 +560,7 @@ void energyData(RcOp op)
 
    RcMan ennmetal42{ennmetalData, op};
 
-   RcMan ost42{ostData, op};
+   RcMan dlmda42{dlmdaData, op};
    RcMan eost42{eostData, op};
    RcMan ti42{thermintData, op};
    RcMan vdwsSoftcore42{vdwSoftcoreData, op};

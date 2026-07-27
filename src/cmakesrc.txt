@@ -13,6 +13,7 @@ bonded/ebond.cpp
 bonded/egeom.cpp
 bonded/eimprop.cpp
 bonded/eimptor.cpp
+bonded/ennvalence.cpp
 bonded/eopbend.cpp
 bonded/epitors.cpp
 bonded/estrbnd.cpp
@@ -20,10 +21,10 @@ bonded/estrtor.cpp
 bonded/etors.cpp
 bonded/etortor.cpp
 bonded/eurey.cpp
-bonded/ennvalence.cpp
 box.cpp
 compilers.cpp
 cudalib.cpp
+dlmda.cpp
 echarge.cpp
 echglj.cpp
 egvop.cpp
@@ -50,8 +51,8 @@ initial.cpp
 iofortstr.cpp
 iotext.cpp
 mathlu.cpp
-mathrandom.cpp
 mathmatexp.cpp
+mathrandom.cpp
 mathtrimatexp.cpp
 md/barostat.cpp
 md/integrator.cpp
@@ -68,7 +69,6 @@ mod.cpp
 molecule.cpp
 nblist.cpp
 nn.cpp
-ost.cpp
 platform.cpp
 pme.cpp
 potent.cpp

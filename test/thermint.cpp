@@ -56,12 +56,12 @@ void clearti()
 // QNT/NONE taper branch calls tinker_f_switch and needs the Fortran runtime.
 void useExpMaps(int eexp, int pexp, int vexp)
 {
-   ostemap = Ostmap::EXP;
-   ostpmap = Ostmap::EXP;
-   ostvmap = Ostmap::EXP;
-   ostemexp = eexp;
-   ostepexp = pexp;
-   ostevexp = vexp;
+   elmdamap = Lmdamap::EXP;
+   plmdamap = Lmdamap::EXP;
+   vlmdamap = Lmdamap::EXP;
+   elmdaexp = eexp;
+   plmdaexp = pexp;
+   vlmdaexp = vexp;
 }
 }
 
@@ -77,31 +77,31 @@ TEST_CASE("THERMINT-avgstd", "[ff][thermint]")
    for (int i = 1; i <= 10; ++i)
       v10.push_back((double)i);
 
-   avgstd(v10, 10, avg, sd);
+   avgstd(v10, 0, 10, avg, sd);
    COMPARE_REALS(avg, 5.5, eps);
    COMPARE_REALS(sd, sd10, eps);
 
    // count must be honored: only the first five entries participate
-   avgstd(v10, 5, avg, sd);
+   avgstd(v10, 0, 5, avg, sd);
    COMPARE_REALS(avg, 3.0, eps);
    COMPARE_REALS(sd, std::sqrt(2.0), eps);
 
    // a constant list must give exactly zero, not a denormal from round-off
    std::vector<double> vc(4, 7.0);
-   avgstd(vc, 4, avg, sd);
+   avgstd(vc, 0, 4, avg, sd);
    COMPARE_REALS(avg, 7.0, eps);
    REQUIRE(sd == 0.0);
 
    // single sample
    std::vector<double> v1{42.0};
-   avgstd(v1, 1, avg, sd);
+   avgstd(v1, 0, 1, avg, sd);
    COMPARE_REALS(avg, 42.0, eps);
    REQUIRE(sd == 0.0);
 
    // empty: early return leaves both at zero
    avg = -1.0;
    sd = -1.0;
-   avgstd(v10, 0, avg, sd);
+   avgstd(v10, 0, 0, avg, sd);
    REQUIRE(avg == 0.0);
    REQUIRE(sd == 0.0);
 
@@ -110,7 +110,7 @@ TEST_CASE("THERMINT-avgstd", "[ff][thermint]")
    std::vector<double> vbig;
    for (int i = 1; i <= 10; ++i)
       vbig.push_back(1.0e8 + (double)i);
-   avgstd(vbig, 10, avg, sd);
+   avgstd(vbig, 0, 10, avg, sd);
    COMPARE_REALS(avg, 1.0e8 + 5.5, 1.0e-6);
    COMPARE_REALS(sd, sd10, 1.0e-9);
 }
@@ -344,7 +344,7 @@ TEST_CASE("THERMINT-mapsublambda", "[ff][thermint]")
    const double epsv = testGetEps(1.0e-6, 1.0e-12); // elam/plam/vlam are real
    const double epsd = 1.0e-12;                     // the derivatives are double
 
-   // ele uses ostemexp, pol uses ostepexp, vdw uses ostevexp.
+   // ele uses elmdaexp, pol uses plmdaexp, vdw uses vlmdaexp.
    useExpMaps(2, 3, 1);
 
    // The lambda comes from the argument, not from ostlambda. Before the
@@ -387,16 +387,16 @@ TEST_CASE("THERMINT-mapsublambda", "[ff][thermint]")
    COMPARE_REALS(d2pldlmda2, 6.0, epsd);
 
    // Shifted inverse-power map, identity case.
-   ostvmap = Ostmap::INV;
-   ostinvevn = 1;
-   ostinveveps = 0.3;
+   vlmdamap = Lmdamap::INV;
+   vlmdainvn = 1;
+   vlmdainveps = 0.3;
    mapSubLambda(0.25);
    COMPARE_REALS(vlam, 0.25, epsv);
    COMPARE_REALS(dvldlmda, 1.0, epsd);
    COMPARE_REALS(d2vldlmda2, 0.0, epsd);
 
    // Shifted inverse-power map, n = 4. The endpoints are exact by construction.
-   ostinvevn = 4;
+   vlmdainvn = 4;
    mapSubLambda(0.0);
    COMPARE_REALS(vlam, 0.0, epsv);
    mapSubLambda(1.0);
@@ -415,8 +415,8 @@ TEST_CASE("THERMINT-mapsublambda", "[ff][thermint]")
 
    // Leave the maps as the defaults set by mutate.f so nothing downstream sees
    // a half-configured state.
-   ostemap = Ostmap::QNT;
-   ostpmap = Ostmap::QNT;
-   ostvmap = Ostmap::QNT;
+   elmdamap = Lmdamap::QNT;
+   plmdamap = Lmdamap::QNT;
+   vlmdamap = Lmdamap::QNT;
    clearti();
 }

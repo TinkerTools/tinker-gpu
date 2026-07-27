@@ -93,7 +93,7 @@ static std::vector<int> s_mihist;
 
 static void mdsaveDupOst(int istep)
 {
-   ost_snap_active = use_ostdyn or use_metadyn;
+   ost_snap_active = use_ost or use_meta;
    if (not ost_snap_active)
       return;
 
@@ -113,7 +113,7 @@ static void mdsaveDupOst(int istep)
    s_nosthist = nosthist;
    s_sizeosthist = sizeosthist;
    s_ost_first = ost::nosthistsave + 1; // saves are serialized, so this is stable
-   if (use_ostdyn) {
+   if (use_ost) {
       for (int k = s_ost_first; k <= s_nosthist; ++k) {
          s_khist.push_back(osthist[k]);
          s_ihist.push_back(ostihist[k]);
@@ -129,7 +129,7 @@ static void mdsaveDupOst(int istep)
    s_nmetahist = nmetahist;
    s_sizemetahist = sizemetahist;
    s_meta_first = ost::nmethistsave + 1; // saves are serialized, so this is stable
-   if (use_metadyn) {
+   if (use_meta) {
       for (int k = s_meta_first; k <= s_nmetahist; ++k) {
          s_mlhist.push_back(metalhist[k]);
          s_mhhist.push_back(metahhist[k]);
@@ -155,7 +155,7 @@ static void mdsaveWriteOst()
    ost::osttheta = s_osttheta;
    ost::ostvtheta = s_ostvtheta;
 
-   if (use_ostdyn) {
+   if (use_ost) {
       // grow the Fortran arrays to match the engine, preserving existing entries
       while (ost::sizeosthist < s_sizeosthist)
          tinker_f_resizeosthist();
@@ -173,7 +173,7 @@ static void mdsaveWriteOst()
       // Fortran saveost advances nosthistsave after appending this slice.
    }
 
-   if (use_metadyn) {
+   if (use_meta) {
       while (ost::sizemetahist < s_sizemetahist)
          tinker_f_resizemeta();
       ost::nmetahist = s_nmetahist;
