@@ -52,9 +52,11 @@ void resetost(int nl, int nf, int nhist)
    ostlambda = 0.0;
    ostlambdaavg = 0.0;
    ostlambdastd = 0.0;
+   ostlambdaslp = 0.0;
    ostdedl = 0.0;
    ostdedlavg = 0.0;
    ostdedlstd = 0.0;
+   ostdedlslp = 0.0;
    deffdl = 0.0;
    ostpmap = Ostmap::QNT;
    ostemap = Ostmap::QNT;
@@ -82,8 +84,8 @@ void resetost(int nl, int nf, int nhist)
    osthhist.assign(sizeosthist + 1, 0.0);
    ostwlhist.assign(sizeosthist + 1, 0.0);
    ostwfhist.assign(sizeosthist + 1, 0.0);
-   ostllist.assign(iosthist + 1, 0.0);
-   ostflist.assign(iosthist + 1, 0.0);
+   ostllist.assign(iosthist, 0.0);
+   ostflist.assign(iosthist, 0.0);
    osthead.assign((size_t)nlmda * nflmda, 0);
    gkernel.assign((size_t)nlmda * nflmda, 0.0);
    gfkernel.assign((size_t)nlmda * nflmda, 0.0);
@@ -620,23 +622,138 @@ TEST_CASE("EOST-kernelbuilds", "[ff][eost]")
    }
 }
 
-TEST_CASE("EOST-avgstd", "[ff][eost]")
+TEST_CASE("EOST-histstat", "[ff][eost]")
 {
    resetost(5, 5, 1);
    iosthist = 6;
    ostnequil = 2;
    ostnavg = 4;
-   for (int i = 1; i <= iosthist; ++i) {
-      ostllist[i] = (double)i;
-      ostflist[i] = 2.0 * (double)i;
+   // samples 1..6 laid out 0-based, so the slice still holds the values 3..6
+   for (int i = 0; i < iosthist; ++i) {
+      ostllist[i] = (double)(i + 1);
+      ostflist[i] = 2.0 * (double)(i + 1);
    }
-   avgStd(ostllist, ostlambdaavg, ostlambdastd);
-   avgStd(ostflist, ostdedlavg, ostdedlstd);
+
+   // the whole-slice statistics cover list[2..5], the values 3..6
+   ostcvbin = 2;
+   histstat(ostllist, ostlambdaavg, ostlambdastd, ostlambdaslp, ostlambdaavgbin, ostlambdastdbin,
+      ostlambdaslpbin);
+   histstat(ostflist, ostdedlavg, ostdedlstd, ostdedlslp, ostdedlavgbin, ostdedlstdbin, ostdedlslpbin);
    double stdref = std::sqrt(1.25);
    COMPARE_REALS(ostlambdaavg, 4.5, 1.0e-12);
    COMPARE_REALS(ostdedlavg, 9.0, 1.0e-12);
    COMPARE_REALS(ostlambdastd, stdref, 1.0e-12);
    COMPARE_REALS(ostdedlstd, 2.0 * stdref, 1.0e-12);
+
+   // fitted changes per sample preserve the scale of each ramp
+   COMPARE_REALS(ostlambdaslp, 1.0, 1.0e-12);
+   COMPARE_REALS(ostdedlslp, 2.0, 1.0e-12);
+   COMPARE_REALS(ostlambdaslpbin[0], 1.0, 1.0e-12);
+   COMPARE_REALS(ostlambdaslpbin[1], 1.0, 1.0e-12);
+   COMPARE_REALS(ostdedlslpbin[0], 2.0, 1.0e-12);
+   COMPARE_REALS(ostdedlslpbin[1], 2.0, 1.0e-12);
+
+   // 4 samples into 2 bins divides evenly: values {3,4} and {5,6}
+   REQUIRE((int)ostlambdaavgbin.size() == 2);
+   COMPARE_REALS(ostlambdaavgbin[0], 3.5, 1.0e-12);
+   COMPARE_REALS(ostlambdaavgbin[1], 5.5, 1.0e-12);
+   COMPARE_REALS(ostlambdastdbin[0], 0.5, 1.0e-12);
+   COMPARE_REALS(ostlambdastdbin[1], 0.5, 1.0e-12);
+   COMPARE_REALS(ostdedlavgbin[0], 7.0, 1.0e-12);
+   COMPARE_REALS(ostdedlavgbin[1], 11.0, 1.0e-12);
+
+   // 4 samples into 3 bins keeps 1 per bin and drops the leading value 3
+   ostcvbin = 3;
+   histstat(ostllist, ostlambdaavg, ostlambdastd, ostlambdaslp, ostlambdaavgbin, ostlambdastdbin,
+      ostlambdaslpbin);
+   REQUIRE((int)ostlambdaavgbin.size() == 3);
+   COMPARE_REALS(ostlambdaavgbin[0], 4.0, 1.0e-12);
+   COMPARE_REALS(ostlambdaavgbin[1], 5.0, 1.0e-12);
+   COMPARE_REALS(ostlambdaavgbin[2], 6.0, 1.0e-12);
+   for (int b = 0; b < 3; ++b) {
+      COMPARE_REALS(ostlambdastdbin[b], 0.0, 1.0e-12);
+      COMPARE_REALS(ostlambdaslpbin[b], 0.0, 1.0e-12); // single-sample bins
+   }
+   COMPARE_REALS(ostlambdaslp, 1.0, 1.0e-12); // the whole slice still ramps
+}
+
+TEST_CASE("EOST-histstat-drift", "[ff][eost]")
+{
+   resetost(5, 5, 1);
+   iosthist = 8;
+   ostnequil = 0;
+   ostnavg = 8;
+   ostcvbin = 2;
+
+   // a flat series has zero slope
+   for (int i = 0; i < iosthist; ++i)
+      ostllist[i] = 7.0;
+   histstat(ostllist, ostlambdaavg, ostlambdastd, ostlambdaslp, ostlambdaavgbin, ostlambdastdbin,
+      ostlambdaslpbin);
+   COMPARE_REALS(ostlambdaavg, 7.0, 1.0e-12);
+   COMPARE_REALS(ostlambdaslp, 0.0, 1.0e-12);
+   COMPARE_REALS(ostlambdaslpbin[0], 0.0, 1.0e-12);
+
+   // a strictly decreasing ramp retains its fitted change per sample
+   for (int i = 0; i < iosthist; ++i)
+      ostllist[i] = -0.5 * (double)i;
+   histstat(ostllist, ostlambdaavg, ostlambdastd, ostlambdaslp, ostlambdaavgbin, ostlambdastdbin,
+      ostlambdaslpbin);
+   COMPARE_REALS(ostlambdaslp, -0.5, 1.0e-12);
+   COMPARE_REALS(ostlambdaslpbin[0], -0.5, 1.0e-12);
+   COMPARE_REALS(ostlambdaslpbin[1], -0.5, 1.0e-12);
+
+   // a symmetric V has no net drift overall, but each half drifts fully
+   double v[8] = {4.0, 3.0, 2.0, 1.0, 1.0, 2.0, 3.0, 4.0};
+   for (int i = 0; i < iosthist; ++i)
+      ostllist[i] = v[i];
+   histstat(ostllist, ostlambdaavg, ostlambdastd, ostlambdaslp, ostlambdaavgbin, ostlambdastdbin,
+      ostlambdaslpbin);
+   COMPARE_REALS(ostlambdaslp, 0.0, 1.0e-12);
+   COMPARE_REALS(ostlambdaslpbin[0], -1.0, 1.0e-12);
+   COMPARE_REALS(ostlambdaslpbin[1], 1.0, 1.0e-12);
+
+   // accuracy: a large offset must not swamp a small drift (the K shift)
+   for (int i = 0; i < iosthist; ++i)
+      ostllist[i] = 5000.0 + 1.0e-6 * (double)i;
+   histstat(ostllist, ostlambdaavg, ostlambdastd, ostlambdaslp, ostlambdaavgbin, ostlambdastdbin,
+      ostlambdaslpbin);
+   COMPARE_REALS(ostlambdaslp, 1.0e-6, 1.0e-9);
+}
+
+TEST_CASE("EOST-depcriteria", "[ff][eost]")
+{
+   ostcvstd = 10.0;
+   ostcvslp = 0.5;
+   ostcvdif = 4.0;
+   ostcvrat = 0.2;
+
+   std::vector<double> avgbin = {2.0, 4.0, 6.0};
+   REQUIRE(depcriteria(50.0, 10.0, 0.5, avgbin));
+
+   REQUIRE_FALSE(depcriteria(100.0, 10.1, 0.0, avgbin));
+   REQUIRE_FALSE(depcriteria(10.0, 2.1, 0.0, avgbin));
+   REQUIRE_FALSE(depcriteria(-10.0, 2.1, 0.0, avgbin));
+   REQUIRE_FALSE(depcriteria(0.0, 1.0, 0.0, avgbin));
+   REQUIRE(depcriteria(0.0, 0.0, 0.0, avgbin));
+   REQUIRE_FALSE(depcriteria(100.0, 0.0, 0.6, avgbin));
+   REQUIRE_FALSE(depcriteria(100.0, 0.0, -0.6, avgbin));
+
+   avgbin.back() = 6.1;
+   REQUIRE_FALSE(depcriteria(100.0, 0.0, 0.0, avgbin));
+}
+
+TEST_CASE("EOST-depcriteria2", "[ff][eost]")
+{
+   ostcvstd = 10.0;
+   ostcvrat = 0.2;
+
+   REQUIRE(depcriteria2(0.0, 9.9));
+   REQUIRE_FALSE(depcriteria2(0.0, 10.0));
+   REQUIRE(depcriteria2(50.0, 19.9));
+   REQUIRE_FALSE(depcriteria2(50.0, 20.0));
+   REQUIRE(depcriteria2(-50.0, 19.9));
+   REQUIRE_FALSE(depcriteria2(-50.0, 20.0));
 }
 
 TEST_CASE("EOST-eginterpolate", "[ff][eost]")
@@ -787,8 +904,9 @@ TEST_CASE("EOST-metadyn", "[ff][eost]")
    ostdedl = 0.0;
    ostdt = 0.0; // no-op ostLangevin, so the sampled lambda values stay controlled
 
-   // sampled lambda per step; avgStd averages the post-equilibration slice
-   // (indices ostnequil+1..iosthist = 3..4) divided by ostnavg = 2.
+   // sampled lambda per step (lam is indexed by istep, not by buffer slot);
+   // histstat averages the post-equilibration slice, indices
+   // ostnequil..iosthist-1 = 2..3, holding the last two samples.
    double lam[5] = {0.0, 0.1, 0.2, 0.4, 0.6};
    for (int istep = 1; istep <= iosthist; ++istep) {
       ostlambda = lam[istep];

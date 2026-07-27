@@ -12,7 +12,7 @@ extern std::vector<int> ostnext;
 extern std::vector<int> osthead; // (nlmda x nflmda), column-major
 extern std::vector<double> ostlhist, ostfhist, osthhist, ostwlhist, ostwfhist;
 
-// per-step sample ring buffers, size iosthist+1, indexed 1..iosthist
+// per-step sample ring buffers, size iosthist, indexed 0..iosthist-1
 extern std::vector<double> ostllist, ostflist;
 
 // bias grids (nlmda x nflmda), column-major
@@ -66,7 +66,10 @@ inline int flambdaBin(double dudl)
 }
 
 // engine routines (defined in src/eost.cpp)
-void avgStd(const std::vector<double>& list, double& avg, double& std);
+void histstat(const std::vector<double>& list, double& avg, double& std, double& slp,
+   std::vector<double>& avgbin, std::vector<double>& stdbin, std::vector<double>& slpbin);
+bool depcriteria(double avg, double std, double slp, const std::vector<double>& avgbin);
+bool depcriteria2(double avg, double std);
 void buildOstIndex();
 void resizeOstHist();
 void ensureFlambda(double dudl);

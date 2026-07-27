@@ -1,6 +1,7 @@
 #pragma once
 #include "ff/precision.h"
 #include "tool/rcman.h"
+#include <vector>
 
 namespace tinker {
 /// Mapping type from the OST main lambda to a sub-lambda.
@@ -131,9 +132,25 @@ TINKER_EXTERN double ostddgdl;  ///< dDeltaG/dlambda this step.
 TINKER_EXTERN double deffdl;    ///< effective lambda force for propagation.
 TINKER_EXTERN double ostlambdaavg;
 TINKER_EXTERN double ostlambdastd;
+TINKER_EXTERN double ostlambdaslp; ///< fitted lambda change per sample across the deposit interval.
 TINKER_EXTERN double ostdedlavg;
 TINKER_EXTERN double ostdedlstd;
+TINKER_EXTERN double ostdedlslp;   ///< fitted dU/dlambda change per sample across the deposit interval.
 TINKER_EXTERN double eosttot;   ///< current total OST free energy estimate.
+
+TINKER_EXTERN int ostcvbin; ///< number of convergence sub-bins per deposit interval.
+TINKER_EXTERN double ostcvdif;
+TINKER_EXTERN double ostcvslp;
+TINKER_EXTERN double ostcvstd;
+TINKER_EXTERN double ostcvrat;
+
+// per-deposit convergence sub-bin averages, size ostcvbin, indexed 0..ostcvbin-1.
+TINKER_EXTERN std::vector<double> ostlambdaavgbin;
+TINKER_EXTERN std::vector<double> ostlambdastdbin;
+TINKER_EXTERN std::vector<double> ostlambdaslpbin;
+TINKER_EXTERN std::vector<double> ostdedlavgbin;
+TINKER_EXTERN std::vector<double> ostdedlstdbin;
+TINKER_EXTERN std::vector<double> ostdedlslpbin;
 
 /// Forces the energy term on when OST/metadynamics is active.
 inline int ostVers(int vers)

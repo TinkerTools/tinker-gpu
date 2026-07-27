@@ -4,6 +4,7 @@
 #include "ff/egvop.h"
 #include "ff/elec.h"
 #include "ff/evdw.h"
+#include "tool/argkey.h"
 #include "tool/darray.h"
 #include "tool/error.h"
 #include "tool/externfunc.h"
@@ -155,9 +156,18 @@ void ost_mech()
    deffdl = 0;
    ostlambdaavg = 0;
    ostlambdastd = 0;
+   ostlambdaslp = 0;
    ostdedlavg = 0;
    ostdedlstd = 0;
+   ostdedlslp = 0;
+
    eosttot = 0;
+
+   getKV("OST-CONV-BIN", ostcvbin, 2);
+   getKV("OST-CONVCRI-DIF", ostcvdif, 25.0);
+   getKV("OST-CONVCRI-RAT", ostcvrat, 0.1);
+   getKV("OST-CONVCRI-SLP", ostcvslp, 1.0);
+   getKV("OST-CONVCRI-STD", ostcvstd, 10.0);
 }
 
 void adtWeight(double lambda, int exponent, double& weight, double& dweight, double& d2weight)

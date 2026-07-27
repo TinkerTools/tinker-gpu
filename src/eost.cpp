@@ -38,19 +38,78 @@ std::vector<int> metaihist; // iost/step stamp per deposited metadynamics gaussi
 // bias evaluated by eostBias
 double bgbias, bdgdl, bdgdfl, bostlmda, bdfdl;
 
-void avgStd(const std::vector<double>& list, double& avg, double& std)
-{
-   avg = 0.0;
-   for (int i = ostnequil + 1; i <= iosthist; ++i)
-      avg += list[i];
-   avg /= (double)ostnavg;
 
-   std = 0.0;
-   for (int i = ostnequil + 1; i <= iosthist; ++i) {
-      double d = list[i] - avg;
-      std += d * d;
+static double fitSlope(double tdot, double sum, int n)
+{
+   if (n < 2)
+      return 0.0;
+   double sxx = (double)n * ((double)n * (double)n - 1.0) / 12.0;
+   double sxy = tdot - 0.5 * (double)(n - 1) * sum;
+   return sxy / sxx;
+}
+
+void histstat(const std::vector<double>& list, double& avg, double& std, double& slp,
+   std::vector<double>& avgbin, std::vector<double>& stdbin, std::vector<double>& slpbin)
+{
+   int nper = (ostcvbin > 0) ? ostnavg / ostcvbin : 0;
+   int nbin = (nper > 0) ? ostcvbin : 0;
+
+   int ibegin = ostnequil + ostnavg - nper * nbin;
+   if (ostcvbin > 0) {
+      avgbin.assign(ostcvbin, 0.0);
+      stdbin.assign(ostcvbin, 0.0);
+      slpbin.assign(ostcvbin, 0.0);
    }
-   std = std::sqrt(std / (double)ostnavg);
+
+   const double K = list[ostnequil];
+   double total = 0.0, totalsq = 0.0, tdot = 0.0;
+   for (int i = ostnequil; i < ibegin; ++i) {
+      double d = list[i] - K;
+      total += d;
+      totalsq += d * d;
+      tdot += (double)(i - ostnequil) * d;
+   }
+   for (int b = 0; b < nbin; ++b) {
+      int i0 = ibegin + b * nper;
+      double a = 0.0, asq = 0.0, tloc = 0.0;
+      for (int i = i0; i < i0 + nper; ++i) {
+         double d = list[i] - K;
+         a += d;
+         asq += d * d;
+         tloc += (double)(i - i0) * d;
+      }
+      total += a;
+      totalsq += asq;
+      // tloc counts from the bin start; shift it onto the whole-slice ramp
+      tdot += tloc + (double)(i0 - ostnequil) * a;
+      avgbin[b] = K + a / (double)nper;
+      double v = (asq - a * a / (double)nper) / (double)nper;
+      stdbin[b] = std::sqrt(v > 0.0 ? v : 0.0);
+      slpbin[b] = fitSlope(tloc, a, nper);
+   }
+   avg = K + total / (double)ostnavg;
+   double var = (totalsq - total * total / (double)ostnavg) / (double)ostnavg;
+   std = std::sqrt(var > 0.0 ? var : 0.0);
+   slp = fitSlope(tdot, total, ostnavg);
+}
+
+bool depcriteria(double avg, double std, double slp, const std::vector<double>& avgbin)
+{
+   if (std > ostcvstd)
+      return false;
+   if ((avg == 0.0 && std != 0.0) || (avg != 0.0 && std::abs(std / avg) > ostcvrat))
+      return false;
+   if (std::abs(slp) > ostcvslp)
+      return false;
+   if (avgbin.size() >= 2 && std::abs(avgbin.back() - avgbin.front()) > ostcvdif)
+      return false;
+   return true;
+}
+
+bool depcriteria2(double avg, double std)
+{
+   double tolerance = ostcvstd + ostcvrat * std::abs(avg);
+   return tolerance > 0.0 && std / tolerance < 1.0;
 }
 
 // buildostindex -- rebuild the packed bins and linked-list lookup from the saved
@@ -591,6 +650,12 @@ void eostData(RcOp op)
       metahhist.clear();
       metawhist.clear();
       metaihist.clear();
+      ostlambdaavgbin.clear();
+      ostlambdastdbin.clear();
+      ostlambdaslpbin.clear();
+      ostdedlavgbin.clear();
+      ostdedlstdbin.clear();
+      ostdedlslpbin.clear();
    }
 
    if (op & RcOp::INIT) {
@@ -600,6 +665,14 @@ void eostData(RcOp op)
       bostlmda = 0;
       bdfdl = 0;
 
+      int ncvbin = std::max(ostcvbin, 0);
+      ostlambdaavgbin.assign(ncvbin, 0.0);
+      ostlambdastdbin.assign(ncvbin, 0.0);
+      ostlambdaslpbin.assign(ncvbin, 0.0);
+      ostdedlavgbin.assign(ncvbin, 0.0);
+      ostdedlstdbin.assign(ncvbin, 0.0);
+      ostdedlslpbin.assign(ncvbin, 0.0);
+
       // Mirror the Fortran mutate allocation/initialization (mutate.f:505).
       if (use_ost) {
          sizeosthist = 10000;
@@ -608,8 +681,8 @@ void eostData(RcOp op)
          ostihist.assign(sizeosthist + 1, 0);
          ostnext.assign(sizeosthist + 1, 0);
          osthead.assign((size_t)nlmda * nflmda, 0);
-         ostllist.assign(iosthist + 1, 0.0);
-         ostflist.assign(iosthist + 1, 0.0);
+         ostllist.assign(iosthist, 0.0);
+         ostflist.assign(iosthist, 0.0);
          ostlhist.assign(sizeosthist + 1, 0.0);
          ostfhist.assign(sizeosthist + 1, 0.0);
          osthhist.assign(sizeosthist + 1, 0.0);
@@ -630,7 +703,7 @@ void eostData(RcOp op)
          metahhist.assign(sizemetahist + 1, 0.0);
          metawhist.assign(sizemetahist + 1, 0.0);
          metaihist.assign(sizemetahist + 1, 0);
-         ostllist.assign(iosthist + 1, 0.0);
+         ostllist.assign(iosthist, 0.0);
       }
    }
 }
@@ -672,7 +745,7 @@ void eostBias(int vers)
 void eostDyn(int istep)
 {
    int im = istep % iosthist;
-   int isamp = (im == 0) ? iosthist : im;
+   int isamp = (istep - 1) % iosthist;
 
    // effective lambda force, from the bias eostBias evaluated this step
    // (eostBias also refreshed ostdedl).
@@ -686,36 +759,40 @@ void eostDyn(int istep)
 
    // deposit a new histogram gaussian every iosthist steps.
    if (im == 0) {
-      avgStd(ostllist, ostlambdaavg, ostlambdastd);
-      avgStd(ostflist, ostdedlavg, ostdedlstd);
-      int ilmda = lambdaBin(ostlambdaavg);
-      maxwlhist = std::max(maxwlhist, wlhist);
-      maxwfhist = std::max(maxwfhist, wfhist);
-      ensureFlambda(ostdedlavg);
-      int iflmda = flambdaBin(ostdedlavg);
+      histstat(ostllist, ostlambdaavg, ostlambdastd, ostlambdaslp, ostlambdaavgbin, ostlambdastdbin,
+         ostlambdaslpbin);
+      histstat(ostflist, ostdedlavg, ostdedlstd, ostdedlslp, ostdedlavgbin, ostdedlstdbin, ostdedlslpbin);
+      // if (depcriteria(ostdedlavg, ostdedlstd, ostdedlslp, ostdedlavgbin)) {
+      if (depcriteria2(ostdedlavg, ostdedlstd)) {
+         int ilmda = lambdaBin(ostlambdaavg);
+         maxwlhist = std::max(maxwlhist, wlhist);
+         maxwfhist = std::max(maxwfhist, wfhist);
+         ensureFlambda(ostdedlavg);
+         int iflmda = flambdaBin(ostdedlavg);
 
-      nosthist = nosthist + 1;
-      if (nosthist > sizeosthist)
-         resizeOstHist();
-      int k;
-      ijToK(ilmda, iflmda, nlmda, k);
-      osthist[nosthist] = k;
-      ostihist[nosthist] = istep;
-      ostlhist[nosthist] = ostlambdaavg;
-      ostfhist[nosthist] = ostdedlavg;
-      osthhist[nosthist] = hbias;
-      ostwlhist[nosthist] = wlhist;
-      ostwfhist[nosthist] = wfhist;
-      ostnext[nosthist] = osthead[gidx(ilmda, iflmda)];
-      osthead[gidx(ilmda, iflmda)] = nosthist;
+         nosthist = nosthist + 1;
+         if (nosthist > sizeosthist)
+            resizeOstHist();
+         int k;
+         ijToK(ilmda, iflmda, nlmda, k);
+         osthist[nosthist] = k;
+         ostihist[nosthist] = istep;
+         ostlhist[nosthist] = ostlambdaavg;
+         ostfhist[nosthist] = ostdedlavg;
+         osthhist[nosthist] = hbias;
+         ostwlhist[nosthist] = wlhist;
+         ostwfhist[nosthist] = wfhist;
+         ostnext[nosthist] = osthead[gidx(ilmda, iflmda)];
+         osthead[gidx(ilmda, iflmda)] = nosthist;
 
-      if (fastkernel) {
-         updateKernels();
-      } else {
-         updateGkernel();
-         buildFkernel();
+         if (fastkernel) {
+            updateKernels();
+         } else {
+            updateGkernel();
+            buildFkernel();
+         }
+         eosttot = etotFkernel();
       }
-      eosttot = etotFkernel();
    }
 
    // propagate the lambda particle for the next step.
@@ -725,7 +802,7 @@ void eostDyn(int istep)
 void eMetaDyn(int istep)
 {
    int im = istep % iosthist;
-   int isamp = (im == 0) ? iosthist : im;
+   int isamp = (istep - 1) % iosthist;
 
    // effective lambda force, from the bias eostBias evaluated this step
    // (eostBias also refreshed ostdedl).
@@ -736,7 +813,8 @@ void eMetaDyn(int istep)
 
    // deposit a new metadynamics gaussian every iosthist steps.
    if (im == 0) {
-      avgStd(ostllist, ostlambdaavg, ostlambdastd);
+      histstat(ostllist, ostlambdaavg, ostlambdastd, ostlambdaslp, ostlambdaavgbin, ostlambdastdbin,
+         ostlambdaslpbin);
       nmetahist = nmetahist + 1;
       if (nmetahist > sizemetahist)
          resizeMeta();
