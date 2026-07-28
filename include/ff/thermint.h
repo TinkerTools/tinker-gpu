@@ -36,4 +36,6 @@ void init_tidyn(int nstep);
 void etidyn(int istep);
 /// Advances to the next lambda window.
 void tischedule();
+/// Dumps the block averages to a whitespace-delimited <base>.ti file.
+void tiPrint();
 }

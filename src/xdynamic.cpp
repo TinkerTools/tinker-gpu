@@ -181,6 +181,10 @@ void xDynamic(int, char**)
    mdPropagate(nstep, dt);
    auto t_end = std::chrono::steady_clock::now();
 
+   // must come before finish(), which deallocates the TI accumulators.
+   if (use_ti)
+      tiPrint();
+
    auto d_us = std::chrono::duration_cast<std::chrono::microseconds>(t_end - t_start).count();
    double us1 = (dt * 1000.) * nstep * 86400;
 

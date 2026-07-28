@@ -3,7 +3,12 @@
 #include "ff/ost.h"
 #include "tool/argkey.h"
 #include "tool/error.h"
+#include "tool/iofortstr.h"
+#include "tool/ioprint.h"
+#include "tool/tinkersuppl.h"
 #include <cmath>
+#include <cstdio>
+#include <tinker/detail/files.hh>
 
 namespace tinker {
 void ti_mech()
@@ -101,5 +106,37 @@ void tischedule()
    if (tilmda < 0.0)
       tilmda = 0.0;
    // energy() re-maps the sub-lambdas at the top of the next step.
+}
+
+// Temporary output path: one row per block average, so the ragged rows of
+// tilmdadedl come out as a flat table that numpy.loadtxt reads as-is.
+void tiPrint()
+{
+   if (not use_ti)
+      return;
+
+   std::string tifile = FstrView(files::filename)(1, files::leng).trim() + ".ti";
+   tifile = tinker_f_version(tifile, "new");
+   std::FILE* fp = std::fopen(tifile.c_str(), "w");
+   if (fp == nullptr) {
+      print(stdout, "\n TI  --  Could not open %s for writing\n", tifile);
+      return;
+   }
+
+   print(fp, "# tinker9 thermodynamic integration\n");
+   print(fp, "# tinbin %d tinstepavg %d tieqratio %.6f tiwindow %d tinequil %d\n", //
+      tinbin, tinstepavg, tieqratio, tiwindow, tinequil);
+   print(fp, "# window lambda block dedl dedlstd\n");
+   for (int w = 0; w < tinbin; ++w) {
+      double lam = 1.0 - (double)w / (double)(tinbin - 1);
+      if (lam < 0.0)
+         lam = 0.0;
+      for (size_t b = 0; b < tilmdadedl[w].size(); ++b)
+         print(fp, "%6d %12.8f %6zu %20.10e %20.10e\n", //
+            w, lam, b, tilmdadedl[w][b], tilmdadedlstd[w][b]);
+   }
+   std::fclose(fp);
+
+   print(stdout, "\n TI  --  dU/dlambda block averages written to  %s\n", tifile);
 }
 }
