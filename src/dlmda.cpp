@@ -120,13 +120,6 @@ void dlmda_mech()
    qntvlmda0 = ost::ostvlmda0;
    qntvlmda1 = ost::ostvlmda1;
 
-   if (qntelmda0 > qntelmda1)
-      TINKER_THROW("DLMDA  --  ELE-LMDA-RANGE is inverted");
-   if (qntplmda0 > qntplmda1)
-      TINKER_THROW("DLMDA  --  POL-LMDA-RANGE is inverted");
-   if (qntvlmda0 > qntvlmda1)
-      TINKER_THROW("DLMDA  --  VDW-LMDA-RANGE is inverted");
-
    relstageMech();
 }
 
@@ -164,6 +157,38 @@ static void relstageMech()
    if (relstage0lmda1 > relstage1lmda0)
       TINKER_THROW("DLMDA  --  REL-LIG0-ELE-RANGE and REL-LIG1-ELE-RANGE overlap; "
                    "the ligand 0 window must end at or below the start of the ligand 1 window");
+}
+
+// The staged schedule is split across two places that nothing keeps in step:
+// mapSubLambda() sets relstage/relstagew and overwrites elam and plam, while
+// energy_core() picks the _staged term routines. A setup that reaches only one
+// of the two still runs, silently, on a schedule nobody asked for:
+//
+//   - with no main lambda, energy() never calls mapSubLambda, so relstage
+//     keeps the VDW_MORPH default and the multipoles and polarization sit on
+//     the decoupled reference at every lambda;
+//   - with no second ligand group, use_rel is false, so energy_core takes the
+//     _adt branch instead, while mapRelStage still rewrites elam and plam out
+//     from under it.
+//
+// Neither fails loudly or spoils the chain rule, so reject them up front. The
+// per-term dual topologies need no check of their own: mutate.f forces
+// use_emdt, use_epdt and use_evdt on whenever use_rel holds.
+//
+// This runs from mechanic2() rather than relstageMech() because use_ti is not
+// known until ti_mech(), which follows dlmda_mech().
+void relstageCheck()
+{
+   if (not use_relstage)
+      return;
+
+   // Mirrors the guard in energy() that gates the mapSubLambda call.
+   if (not use_dlmda or not useLmdaChain())
+      TINKER_THROW("DLMDA  --  REL-STAGE needs a main lambda to drive the schedule; "
+                   "add the OST, METADYN, or THERM-INTG keyword");
+   if (not use_rel)
+      TINKER_THROW("DLMDA  --  REL-STAGE is a relative free energy schedule and needs a "
+                   "second ligand group; add the LIGAND2 keyword");
 }
 
 void avgstd(const std::vector<double>& v, int begin, int count, double& avg, double& sd)

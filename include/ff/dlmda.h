@@ -50,6 +50,7 @@ void lmdachain(int vers);
 
 /// Reads the shared lambda-dynamics state from the Fortran modules.
 void dlmda_mech();
+void relstageCheck();
 void dlmdaData(RcOp op);
 void dlmdaData2(RcOp op);
 /// Mean and population standard deviation of v[begin, begin+count).

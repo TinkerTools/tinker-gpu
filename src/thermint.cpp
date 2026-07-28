@@ -19,7 +19,7 @@ void ti_mech()
    if (use_ost or use_meta)
       TINKER_THROW("THERM-INTG  --  Not compatible with OST or metadynamics");
    if (not use_dlmda)
-      TINKER_THROW("THERM-INTG  --  Requires an alchemical (MUTATE) setup");
+      TINKER_THROW("THERM-INTG  --  Requires an alchemical (LAMBDA-DERIV keyword) setup");
    if (tinbin < 2)
       TINKER_THROW("THERM-INTG  --  TI-NBIN must be at least 2");
    if (tinstepavg < 1)
