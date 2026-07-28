@@ -804,6 +804,41 @@ void epolar_rdt(int vers)
    polarState(RdtMask::ALL, rdt_group);
 }
 
+// The decoupled reference E(environment) + E(A) + E(B); each subsystem
+// polarizes on its own.
+static void epolarStateDecoupled(int vers, bool first_state)
+{
+   epolarState(vers, RdtMask::ENV, rdt_group, first_state);
+   epolarState(vers, RdtMask::LIGA, rdt_group, false);
+   epolarState(vers, RdtMask::LIGB, rdt_group, false);
+}
+
+void epolar_rdt_staged(int vers)
+{
+   epolarBegin(vers);
+
+   if (relstage == RelStage::VDW_MORPH) {
+      epolarStateDecoupled(vers, true);
+   } else {
+      bool lig1 = (relstage == RelStage::LIG1_ELE);
+      if (relstagemix) {
+         epolarStateDecoupled(vers, true);
+         epolarSaveEndpoint0(vers);
+         epolarZeroWork(vers);
+      }
+      epolarState(vers, lig1 ? RdtMask::AE : RdtMask::BE, rdt_group, not relstagemix);
+      int bvers = (vers == calc::v3 ? calc::v0 : vers);
+      epolarState(bvers, lig1 ? RdtMask::LIGB : RdtMask::LIGA, rdt_group, false);
+      if (relstagemix)
+         ep_snap.mix(vers, relstagew, 1, use_dlmda, ep_buf, ep_dl);
+   }
+
+   epolarFinish(vers);
+
+   mpoleInitState(calc::v0, RdtMask::ALL, rdt_group, false);
+   polarState(RdtMask::ALL, rdt_group);
+}
+
 TINKER_FVOID2(acc1, cu1, epolar0DotProd, const real (*)[3], const real (*)[3], EnergyBuffer);
 void epolar0DotProd(const real (*uind)[3], const real (*udirp)[3], EnergyBuffer eout)
 {

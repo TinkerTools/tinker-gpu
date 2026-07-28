@@ -27,8 +27,19 @@ enum class Lmdamap
    QNT  ///< quintic taper plus endpoint derivative flags
 };
 
+/// Staged relative free energy schedule the main lambda sits in.
+enum class RelStage
+{
+   LIG1_ELE,
+   VDW_MORPH,
+   LIG0_ELE
+};
+
 /// Parses a Fortran character*3 map selector into an Lmdamap value.
 Lmdamap lmdamapFrom(const char* s);
+
+/// Quintic switching polynomial
+void quinticTaper(double x, double cut, double off, double& taper, double& dtaper, double& d2taper);
 
 /// Maps the given main lambda onto the electrostatic, polarization, and
 /// van der Waals sub-lambdas and their derivatives.
@@ -109,6 +120,28 @@ TINKER_EXTERN bool use_pol4i;
 TINKER_EXTERN bool use_pol4f;
 TINKER_EXTERN bool use_vdw4i;
 TINKER_EXTERN bool use_vdw4f;
+
+//====================================================================//
+//        staged relative free energy schedule                        //
+//====================================================================//
+
+/// Whether the staged (sequential) relative free energy schedule is active.
+/// When off, the sub-lambdas move together under the ordinary maps above.
+TINKER_EXTERN bool use_relstage;
+
+// Main lambda window over which ligand 1's electrostatics ramp.
+TINKER_EXTERN double relstage1lmda0;
+TINKER_EXTERN double relstage1lmda1;
+// Main lambda window over which ligand 0's electrostatics ramp.
+TINKER_EXTERN double relstage0lmda0;
+TINKER_EXTERN double relstage0lmda1;
+
+/// The leg the current main lambda sits in; set by mapSubLambda.
+TINKER_EXTERN RelStage relstage;
+/// Weight on the coupled endpoint for the active leg. Equals elam and plam.
+TINKER_EXTERN double relstagew;
+/// False at the flat ends of a leg, where the mix would be a no-op.
+TINKER_EXTERN bool relstagemix;
 
 // first and second derivatives of each sub-lambda w.r.t. the main lambda.
 TINKER_EXTERN double deldlmda;

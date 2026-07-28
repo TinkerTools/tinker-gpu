@@ -21,9 +21,15 @@ extern std::vector<double> gkernel, glkernel, gfkernel, glfkernel;
 // free-energy mean force per lambda bin, size nlmda+1, indexed 1..nlmda
 extern std::vector<double> fkernel, fsumkernel, pfkernel;
 
+// running max of gkernel over the flambda axis for each lambda bin.
+extern std::vector<double> vkernelmax;
+
 // metadynamics gaussian history (1-based)
 extern std::vector<double> metalhist, metahhist, metawhist;
 extern std::vector<int> metaihist; // iost/step stamp per deposited metadynamics gaussian
+
+// metadynamics bias and its lambda derivative.
+extern std::vector<double> vmetagrid, dvmetagrid;
 
 // bias evaluated by eostBias.
 extern double bgbias, bdgdl, bdgdfl, bostlmda, bdfdl;
@@ -86,6 +92,13 @@ void egkernelInterpolate(double& egbias, double& dgdl, double& dgdfl);
 void efkernel(double& eostlmda, double& dfdl);
 double etotFkernel();
 void eMetaBias(double lambda, double& vbias, double& dvdl);
+void eMetaBiasInterpolate(double lambda, double& vbias, double& dvdl);
+void addMetaGrid(int ihist);
 double metaDeltaG();
 void resizeMeta();
+
+// global path-based tempering
+double ostVminimax();
+double metaVminimax();
+double temperedHeight(double vminimax);
 }

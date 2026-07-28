@@ -12,6 +12,7 @@ box.cpp
 chglj.cpp
 chgtrn.cpp
 disp.cpp
+dlmda.cpp
 emhippo.cpp
 eost.cpp
 ephippo.cpp

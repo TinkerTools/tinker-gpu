@@ -30,6 +30,10 @@ static bool doubleEq(double a, double b)
 /// Determines whether emplar can be used for dual topology.
 static bool emplarDualMatched()
 {
+   // The staged schedule drives polarization off the multipole weight by
+   // construction, so the per-map comparisons below do not apply to it.
+   if (use_relstage)
+      return true;
    if (emdtexp != epdtexp)
       return false;
    if (not doubleEq(elam, plam))
@@ -182,6 +186,43 @@ void emplar_rdt(int vers)
    empoleFinish(vers);
 
    // Restore the full system for whatever runs next.
+   mpoleInitState(calc::v0, RdtMask::ALL, rdt_group, false);
+   polarState(RdtMask::ALL, rdt_group);
+}
+
+// The decoupled reference E(environment) + E(A) + E(B).
+static void emplarStateDecoupled(int vers, bool first_state)
+{
+   emplarState(vers, RdtMask::ENV, rdt_group, first_state);
+   emplarState(vers, RdtMask::LIGA, rdt_group, false);
+   emplarState(vers, RdtMask::LIGB, rdt_group, false);
+}
+
+void emplar_rdt_staged(int vers)
+{
+   emplarBegin(vers);
+
+   if (relstage == RelStage::VDW_MORPH) {
+      emplarStateDecoupled(vers, true);
+   } else {
+      bool lig1 = (relstage == RelStage::LIG1_ELE);
+      if (relstagemix) {
+         emplarStateDecoupled(vers, true);
+         empoleSaveEndpoint0(vers);
+         empoleZeroWork(vers);
+      }
+      emplarState(vers, lig1 ? RdtMask::AE : RdtMask::BE, rdt_group, not relstagemix);
+      emplarState(vers, lig1 ? RdtMask::LIGB : RdtMask::LIGA, rdt_group, false);
+      if (relstagemix) {
+         if (not doubleEq(elam, plam))
+            TINKER_THROW("The electrostatic and polarization lambda values have drifted apart; "
+                         "the fused multipole/polarization dual topology needs them to be equal.");
+         empoleMixStagedEndpoints(vers);
+      }
+   }
+
+   empoleFinish(vers);
+
    mpoleInitState(calc::v0, RdtMask::ALL, rdt_group, false);
    polarState(RdtMask::ALL, rdt_group);
 }

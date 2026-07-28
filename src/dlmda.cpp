@@ -4,15 +4,16 @@
 #include "ff/egvop.h"
 #include "ff/elec.h"
 #include "ff/evdw.h"
+#include "ff/potent.h"
 #include "tool/argkey.h"
 #include "tool/darray.h"
 #include "tool/error.h"
 #include "tool/externfunc.h"
+#include "tool/ioprint.h"
 #include <tinker/detail/dlmda.hh>
+#include <tinker/detail/mplpot.hh>
 #include <tinker/detail/mutant.hh>
 #include <tinker/detail/ost.hh>
-#include <tinker/detail/shunt.hh>
-#include <tinker/routines.h>
 
 #include <cmath>
 #include <cstring>
@@ -60,6 +61,8 @@ Lmdamap lmdamapFrom(const char* s)
       return Lmdamap::QNT;
    return Lmdamap::QNT;
 }
+
+static void relstageMech();
 
 void dlmda_mech()
 {
@@ -123,6 +126,44 @@ void dlmda_mech()
       TINKER_THROW("DLMDA  --  POL-LMDA-RANGE is inverted");
    if (qntvlmda0 > qntvlmda1)
       TINKER_THROW("DLMDA  --  VDW-LMDA-RANGE is inverted");
+
+   relstageMech();
+}
+
+// Reads and validates the staged relative free energy schedule.
+static void relstageMech()
+{
+   getKV("REL-STAGE", use_relstage, false);
+
+   relstage1lmda0 = 0.7;
+   relstage1lmda1 = 1.0;
+   relstage0lmda0 = 0.0;
+   relstage0lmda1 = 0.3;
+   relstage = RelStage::VDW_MORPH;
+   relstagew = 0.0;
+   relstagemix = false;
+
+   if (not use_relstage)
+      return;
+
+   auto readRange = [](const char* key, double& lo, double& hi) {
+      std::vector<double> v;
+      getKV(key, v);
+      if (v.empty())
+         return;
+      if (v.size() != 2)
+         TINKER_THROW(format("DLMDA  --  %s takes exactly two values", key));
+      lo = v[0];
+      hi = v[1];
+      if (not(0.0 <= lo and lo < hi and hi <= 1.0))
+         TINKER_THROW(format("DLMDA  --  %s must satisfy 0 <= lo < hi <= 1", key));
+   };
+   readRange("REL-LIG1-ELE-RANGE", relstage1lmda0, relstage1lmda1);
+   readRange("REL-LIG0-ELE-RANGE", relstage0lmda0, relstage0lmda1);
+
+   if (relstage0lmda1 > relstage1lmda0)
+      TINKER_THROW("DLMDA  --  REL-LIG0-ELE-RANGE and REL-LIG1-ELE-RANGE overlap; "
+                   "the ligand 0 window must end at or below the start of the ligand 1 window");
 }
 
 void avgstd(const std::vector<double>& v, int begin, int count, double& avg, double& sd)
@@ -230,33 +271,31 @@ static void sublmdaInvPower(double x, int nn, double eps, double& lmda, double& 
    d2lmda = power * (power - 1.0) * std::pow(base, power - 2.0) / denom;
 }
 
-// Quintic taper of the sub-lambda at the endpoints (eost.f:sublmdataper).
-static void sublmdaTaper(const char* mode, double x, double& taper, double& dtaper, double& d2taper)
+// Quintic switching polynomial
+void quinticTaper(double x, double cut, double off, double& taper, double& dtaper, double& d2taper)
 {
-   tinker_f_switch({const_cast<char*>(mode), (tinker_fchar_len_t)std::strlen(mode)});
-   double cut = shunt::cut;
-   double off = shunt::off;
+   dtaper = 0.0;
+   d2taper = 0.0;
    if (x <= cut) {
       taper = 1.0;
-      dtaper = 0.0;
-      d2taper = 0.0;
       return;
    } else if (x >= off) {
       taper = 0.0;
-      dtaper = 0.0;
-      d2taper = 0.0;
       return;
    }
-   double c0 = shunt::c0, c1 = shunt::c1, c2 = shunt::c2;
-   double c3 = shunt::c3, c4 = shunt::c4, c5 = shunt::c5;
-   double x2 = x * x, x3 = x2 * x, x4 = x2 * x2, x5 = x2 * x3;
-   taper = c5 * x5 + c4 * x4 + c3 * x3 + c2 * x2 + c1 * x + c0;
-   dtaper = 5.0 * c5 * x4 + 4.0 * c4 * x3 + 3.0 * c3 * x2 + 2.0 * c2 * x + c1;
-   d2taper = 20.0 * c5 * x3 + 12.0 * c4 * x2 + 6.0 * c3 * x + 2.0 * c2;
+
+   double rinv = 1.0 / (off - cut);
+   double u = (x - cut) * rinv;
+   double u2 = u * u;
+   double v = 1.0 - u;
+
+   taper = 1.0 - u2 * u * (10.0 - 15.0 * u + 6.0 * u2);
+   dtaper = -30.0 * u2 * v * v * rinv;
+   d2taper = -60.0 * u * v * (1.0 - 2.0 * u) * rinv * rinv;
 }
 
 // Maps one sub-lambda from main lambda to its mapping type.
-static void mapOne(double lambda, Lmdamap map, const char* tmode, int expExp, int invN, double invEps,
+static void mapOne(double lambda, Lmdamap map, double qnt0, double qnt1, int expExp, int invN, double invEps,
    double& value, double& dvalue, double& d2value)
 {
    if (map == Lmdamap::EXP) {
@@ -266,20 +305,71 @@ static void mapOne(double lambda, Lmdamap map, const char* tmode, int expExp, in
    } else { // Lmdamap::QNT
       // quantized map: sublambda = 1 - taper.
       double taper, dtaper, d2taper;
-      sublmdaTaper(tmode, lambda, taper, dtaper, d2taper);
+      quinticTaper(lambda, qnt0, qnt1, taper, dtaper, d2taper);
       value = 1.0 - taper;
       dvalue = -dtaper;
       d2value = -d2taper;
    }
 }
 
+// Staged relative free energy schedule
+static void mapRelStage(double lambda)
+{
+   double taper, dtaper, d2taper;
+   if (lambda > relstage1lmda0) {
+      // Ligand 1 decoupling: weight runs 0 -> 1 as lambda runs lmda0 -> lmda1.
+      quinticTaper(lambda, relstage1lmda0, relstage1lmda1, taper, dtaper, d2taper);
+      relstage = RelStage::LIG1_ELE;
+      relstagew = 1.0 - taper;
+      deldlmda = -dtaper;
+      d2eldlmda2 = -d2taper;
+   } else if (lambda < relstage0lmda1) {
+      // Ligand 0 coupling: weight runs 1 -> 0 as lambda runs lmda0 -> lmda1.
+      quinticTaper(lambda, relstage0lmda0, relstage0lmda1, taper, dtaper, d2taper);
+      relstage = RelStage::LIG0_ELE;
+      relstagew = taper;
+      deldlmda = dtaper;
+      d2eldlmda2 = d2taper;
+   } else {
+      // Both ligands are electrostatically decoupled from the environment.
+      relstage = RelStage::VDW_MORPH;
+      relstagew = 0.0;
+      deldlmda = 0.0;
+      d2eldlmda2 = 0.0;
+   }
+   relstagemix = (relstagew > 0.0 and relstagew < 1.0);
+
+   // The mix takes the weight itself, so the exponent is 1 and lmdachain()
+   // supplies the whole main lambda chain rule through deldlmda.
+   elam = relstagew;
+
+   // Polarization stages with the multipoles: same states, same weight.
+   plam = elam;
+   dpldlmda = deldlmda;
+   d2pldlmda2 = d2eldlmda2;
+
+   // van der Waals keeps its ordinary map.
+   double vval;
+   mapOne(lambda, vlmdamap, qntvlmda0, qntvlmda1, vlmdaexp, vlmdainvn, vlmdainveps, vval, dvldlmda, d2vldlmda2);
+   vlam = vval;
+   if (vlmdamap == Lmdamap::QNT) {
+      use_vdw4i = (lambda <= qntvlmda1);
+      use_vdw4f = (lambda >= qntvlmda0);
+   }
+}
+
 void mapSubLambda(double lambda)
 {
+   if (use_relstage) {
+      mapRelStage(lambda);
+      return;
+   }
+
    // Map the main lambda to the sub-lambdas
    double pval, eval, vval;
-   mapOne(lambda, plmdamap, "OSTPOL", plmdaexp, plmdainvn, plmdainveps, pval, dpldlmda, d2pldlmda2);
-   mapOne(lambda, elmdamap, "OSTELE", elmdaexp, elmdainvn, elmdainveps, eval, deldlmda, d2eldlmda2);
-   mapOne(lambda, vlmdamap, "OSTVDW", vlmdaexp, vlmdainvn, vlmdainveps, vval, dvldlmda, d2vldlmda2);
+   mapOne(lambda, plmdamap, qntplmda0, qntplmda1, plmdaexp, plmdainvn, plmdainveps, pval, dpldlmda, d2pldlmda2);
+   mapOne(lambda, elmdamap, qntelmda0, qntelmda1, elmdaexp, elmdainvn, elmdainveps, eval, deldlmda, d2eldlmda2);
+   mapOne(lambda, vlmdamap, qntvlmda0, qntvlmda1, vlmdaexp, vlmdainvn, vlmdainveps, vval, dvldlmda, d2vldlmda2);
    plam = pval;
    elam = eval;
    vlam = vval;

@@ -24,4 +24,7 @@ void emplar_adt(int vers);
 
 /// \ingroup mplar
 void emplar_rdt(int vers);
+
+/// \ingroup mplar
+void emplar_rdt_staged(int vers);
 }

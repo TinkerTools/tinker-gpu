@@ -90,6 +90,11 @@ TINKER_EXTERN double ostcvslp;
 TINKER_EXTERN double ostcvstd;
 TINKER_EXTERN double ostcvrat;
 
+// global path-based tempering of the deposited gaussian heights.
+TINKER_EXTERN bool ostemper;       ///< enable tempering of the deposited gaussian heights.
+TINKER_EXTERN double temperthresh; ///< bias level below which heights are untempered (kcal/mol).
+TINKER_EXTERN double tempergamma;  ///< tempering factor; height decay scale is kT*tempergamma.
+
 // per-deposit convergence sub-bin averages, size ostcvbin, indexed 0..ostcvbin-1.
 TINKER_EXTERN std::vector<double> ostlambdaavgbin;
 TINKER_EXTERN std::vector<double> ostlambdastdbin;

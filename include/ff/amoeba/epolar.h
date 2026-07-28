@@ -11,6 +11,7 @@ void epolarData(RcOp);
 void epolar(int vers);
 void epolar_adt(int vers);
 void epolar_rdt(int vers);
+void epolar_rdt_staged(int vers);
 void polarState(RdtMask mask, const int* group);
 void epolarEwaldRecipSelf(int vers, EnergyBuffer out_e, VirialBuffer out_v,
    grad_prec* out_gx, grad_prec* out_gy, grad_prec* out_gz);

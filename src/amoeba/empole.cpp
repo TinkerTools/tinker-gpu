@@ -162,6 +162,13 @@ void empoleMixEndpoints(int vers)
    em_snap.mix(vers, elam, emdtexp, use_dlmda, em_buf, em_dl);
 }
 
+void empoleMixStagedEndpoints(int vers)
+{
+   // The staged weight is the mix weight itself, so the exponent is 1 and
+   // lmdachain() carries the whole main lambda chain rule through deldlmda.
+   em_snap.mix(vers, relstagew, 1, use_dlmda, em_buf, em_dl);
+}
+
 void empole_adt(int vers)
 {
    empoleBegin(vers);
@@ -204,6 +211,44 @@ void empole_rdt(int vers)
       empoleSaveEndpoint0(vers);
 
    empoleMixEndpoints(vers);
+   empoleFinish(vers);
+
+   mpoleInitState(calc::v0, RdtMask::ALL, rdt_group, false);
+}
+
+// The decoupled reference E(environment) + E(A) + E(B), with every subsystem
+// isolated from the others.
+static void empoleStateDecoupled(int vers, bool first_state)
+{
+   empoleState(vers, RdtMask::ENV, rdt_group, first_state);
+   empoleState(vers, RdtMask::LIGA, rdt_group, false);
+   empoleState(vers, RdtMask::LIGB, rdt_group, false);
+}
+
+void empole_rdt_staged(int vers)
+{
+   empoleBegin(vers);
+
+   if (relstage == RelStage::VDW_MORPH) {
+      // Both ligands are decoupled, so the energy is the reference itself and
+      // there is nothing to mix; em_dl stays zero from empoleBegin().
+      empoleStateDecoupled(vers, true);
+   } else {
+      bool lig1 = (relstage == RelStage::LIG1_ELE);
+      if (relstagemix) {
+         // E0 = the decoupled reference.
+         empoleStateDecoupled(vers, true);
+         empoleSaveEndpoint0(vers);
+         empoleZeroWork(vers);
+      }
+      // E1 = the coupled endpoint: E(X+environment) + E(other ligand).
+      empoleState(vers, lig1 ? RdtMask::AE : RdtMask::BE, rdt_group, not relstagemix);
+      int bvers = (vers == calc::v3 ? calc::v0 : vers);
+      empoleState(bvers, lig1 ? RdtMask::LIGB : RdtMask::LIGA, rdt_group, false);
+      if (relstagemix)
+         empoleMixStagedEndpoints(vers);
+   }
+
    empoleFinish(vers);
 
    mpoleInitState(calc::v0, RdtMask::ALL, rdt_group, false);

@@ -6,6 +6,7 @@
 #include <tinker/detail/bath.hh>
 #include <tinker/detail/units.hh>
 
+#include <algorithm>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -75,6 +76,11 @@ void resetost(int nl, int nf, int nhist)
    eosttot = 0.0;
    oststdev = 1.0;
    ostinterpol = false;
+   // tempering off by default, so every pre-existing case keeps the untempered
+   // behavior regardless of the (randomized) case order.
+   ostemper = false;
+   temperthresh = 1.0;
+   tempergamma = 1.0;
 
    osthist.assign(sizeosthist + 1, 0);
    ostihist.assign(sizeosthist + 1, 0);
@@ -94,6 +100,7 @@ void resetost(int nl, int nf, int nhist)
    fkernel.assign(nlmda + 1, 0.0);
    fsumkernel.assign(nlmda + 1, 0.0);
    pfkernel.assign(nlmda + 1, 0.0);
+   vkernelmax.assign(nlmda + 1, 0.0);
 }
 
 // resetmeta -- allocate metadynamics history arrays (test_eost.f:1170).
@@ -105,6 +112,9 @@ void resetmeta(int nhist)
    metahhist.assign(sizemetahist + 1, 0.0);
    metawhist.assign(sizemetahist + 1, 0.0);
    metaihist.assign(sizemetahist + 1, 0);
+   // sized off nlmda, so resetost must run first
+   vmetagrid.assign(nlmda + 1, 0.0);
+   dvmetagrid.assign(nlmda + 1, 0.0);
 }
 
 // sethist -- store one gaussian history entry and its packed bin
@@ -124,6 +134,17 @@ void sethist(int ihist, double lambda, double flmda, double height, double sigl,
    maxwlhist = std::max(maxwlhist, sigl);
    maxwfhist = std::max(maxwfhist, sigf);
    ostnext[ihist] = 0;
+}
+
+// brutevkmax -- max of the g kernel over the whole flambda axis for one lambda
+// bin, computed the slow way. Seeded at 0 to match vkernelmax, whose untouched
+// bins stay 0 (deposited heights are positive, so no cell is ever negative).
+double brutevkmax(int i)
+{
+   double m = 0.0;
+   for (int j = 1; j <= nflmda; ++j)
+      m = std::max(m, GK(i, j));
+   return m;
 }
 
 // kerneltag -- unique numeric tag for a kernel array and bin (test_eost.f:1237).
@@ -866,13 +887,21 @@ TEST_CASE("EOST-meta", "[ff][eost]")
    metahhist[1] = 2.0;
    metawhist[1] = 0.25;
    pref = metahhist[1] / (metawhist[1] * std::sqrt(2.0 * pi));
+
+   // the three reflecting images sit at lambda = 0.5, -0.5 and 1.5; sig2 = 0.0625.
+   // at the center the two images are equidistant, so they cancel in dvdl.
    eMetaBias(0.5, vbias, dvdl);
-   COMPARE_REALS(vbias, pref, 1.0e-12);
-   COMPARE_REALS(dvdl, 0.0, 1.0e-12);
-   eMetaBias(0.75, vbias, dvdl);
-   expected = pref * std::exp(-0.5);
+   expected = pref * (1.0 + 2.0 * std::exp(-8.0));
    COMPARE_REALS(vbias, expected, 1.0e-12);
-   COMPARE_REALS(dvdl, -4.0 * expected, 1.0e-12);
+   COMPARE_REALS(dvdl, 0.0, 1.0e-12);
+
+   // off center the image offsets are 0.25, 1.25 and -0.75
+   eMetaBias(0.75, vbias, dvdl);
+   double b1 = pref * std::exp(-0.5);
+   double b2 = pref * std::exp(-12.5);
+   double b3 = pref * std::exp(-4.5);
+   COMPARE_REALS(vbias, b1 + b2 + b3, 1.0e-12);
+   COMPARE_REALS(dvdl, -(0.25 * b1 + 1.25 * b2 - 0.75 * b3) / 0.0625, 1.0e-12);
 
    // symmetric gaussian has zero endpoint free energy difference
    COMPARE_REALS(metaDeltaG(), 0.0, 1.0e-12);
@@ -921,4 +950,208 @@ TEST_CASE("EOST-metadyn", "[ff][eost]")
    COMPARE_REALS(metahhist[1], hbias, 1.0e-12);
    COMPARE_REALS(metawhist[1], wlmda, 1.0e-12);
    COMPARE_INTS(metaihist[1], iosthist); // step stamp at the deposit boundary
+}
+
+TEST_CASE("EOST-vkernelmax", "[ff][eost]")
+{
+   // vkernelmax must hold max_j gkernel(i,j) for every lambda bin, however the
+   // kernel was filled, and ostVminimax must be the minimum of it over lambda.
+   bath::kelvin = 300.0;
+   resetost(5, 5, 4);
+
+   nosthist = 2;
+   sethist(1, 0.25, 0.0, 1.0, 0.25, 1.0);
+   sethist(2, 0.75, 1.0, 2.0, 0.25, 1.0);
+   buildOstIndex();
+   buildKernels();
+
+   double vmin = 1.0e30;
+   for (int i = 1; i <= nlmda; ++i) {
+      CAPTURE(i);
+      COMPARE_REALS(vkernelmax[i], brutevkmax(i), 1.0e-12);
+      vmin = std::min(vmin, brutevkmax(i));
+   }
+   COMPARE_REALS(ostVminimax(), vmin, 1.0e-12);
+   REQUIRE(vmin > 0.0); // the two sources reach every lambda bin
+
+   // the incremental update through updateKernels must stay exact
+   nosthist = 3;
+   sethist(3, 0.5, -1.0, 1.5, 0.25, 1.0);
+   buildOstIndex();
+   updateKernels();
+   for (int i = 1; i <= nlmda; ++i) {
+      CAPTURE(i);
+      COMPARE_REALS(vkernelmax[i], brutevkmax(i), 1.0e-12);
+   }
+
+   // buildGkernel takes the other gkernel write path (do_f false); it must
+   // reproduce both the kernel and the running max
+   std::vector<double> gsave = gkernel;
+   buildGkernel();
+   for (size_t k = 0; k < gsave.size(); ++k) {
+      CAPTURE(k);
+      COMPARE_REALS(gkernel[k], gsave[k], 1.0e-12);
+   }
+   for (int i = 1; i <= nlmda; ++i) {
+      CAPTURE(i);
+      COMPARE_REALS(vkernelmax[i], brutevkmax(i), 1.0e-12);
+   }
+}
+
+TEST_CASE("EOST-tempering", "[ff][eost]")
+{
+   bath::kelvin = 300.0;
+   resetost(5, 5, 1);
+   hbias = 1.0e-5;
+   double rt = units::gasconst * bath::kelvin;
+
+   // disabled: the height is hbias no matter how filled the path is
+   ostemper = false;
+   temperthresh = 1.0;
+   tempergamma = 1.0;
+   COMPARE_REALS(temperedHeight(0.0), hbias, 1.0e-18);
+   COMPARE_REALS(temperedHeight(5.0), hbias, 1.0e-18);
+   COMPARE_REALS(temperedHeight(50.0), hbias, 1.0e-18);
+
+   // enabled, at or below the threshold: still exactly hbias
+   ostemper = true;
+   COMPARE_REALS(temperedHeight(0.0), hbias, 1.0e-18);
+   COMPARE_REALS(temperedHeight(0.5), hbias, 1.0e-18);
+   COMPARE_REALS(temperedHeight(1.0), hbias, 1.0e-18);
+
+   // above the threshold: exponential decay, strictly monotonic in V*
+   double vstar[4] = {1.5, 2.0, 3.0, 5.0};
+   double prev = hbias;
+   for (int k = 0; k < 4; ++k) {
+      CAPTURE(vstar[k]);
+      double h = temperedHeight(vstar[k]);
+      COMPARE_REALS(h, hbias * std::exp(-(vstar[k] - 1.0) / rt), 1.0e-18);
+      REQUIRE(h < prev);
+      prev = h;
+   }
+
+   // a larger gamma decays more slowly at the same V*
+   tempergamma = 1.0;
+   double h1 = temperedHeight(3.0);
+   tempergamma = 2.0;
+   double h2 = temperedHeight(3.0);
+   REQUIRE(h2 > h1);
+   COMPARE_REALS(h2, hbias * std::exp(-2.0 / (2.0 * rt)), 1.0e-18);
+
+   // a non-positive gamma disables the decay rather than dividing by zero
+   tempergamma = 0.0;
+   COMPARE_REALS(temperedHeight(50.0), hbias, 1.0e-18);
+   tempergamma = -1.0;
+   COMPARE_REALS(temperedHeight(50.0), hbias, 1.0e-18);
+}
+
+TEST_CASE("EOST-metaimage", "[ff][eost]")
+{
+   // eMetaBias sums the same three reflecting lambda images as the g kernel.
+   double vbias, dvdl;
+   resetost(5, 5, 1);
+   resetmeta(2);
+   nmetahist = 1;
+   metalhist[1] = 0.1;
+   metahhist[1] = 2.0;
+   metawhist[1] = 0.25;
+   double pref = metahhist[1] / (metawhist[1] * std::sqrt(2.0 * pi));
+   double sig2 = metawhist[1] * metawhist[1];
+   double src[3] = {0.1, -0.1, 1.9};
+
+   double lam[4] = {0.0, 0.1, 0.5, 1.0};
+   for (int t = 0; t < 4; ++t) {
+      CAPTURE(lam[t]);
+      double vr = 0.0, dr = 0.0;
+      for (int m = 0; m < 3; ++m) {
+         double delta = lam[t] - src[m];
+         double b = pref * std::exp(-0.5 * delta * delta / sig2);
+         vr += b;
+         dr -= delta * b / sig2;
+      }
+      eMetaBias(lam[t], vbias, dvdl);
+      COMPARE_REALS(vbias, vr, 1.0e-12);
+      COMPARE_REALS(dvdl, dr, 1.0e-12);
+   }
+
+   // right at the lambda = 0 wall the nearby image doubles the bias
+   double single = pref * std::exp(-0.5 * 0.01 / sig2);
+   double far = pref * std::exp(-0.5 * 1.9 * 1.9 / sig2);
+   eMetaBias(0.0, vbias, dvdl);
+   COMPARE_REALS(vbias, 2.0 * single + far, 1.0e-12);
+   REQUIRE(vbias > single);
+}
+
+TEST_CASE("EOST-metatemper", "[ff][eost]")
+{
+   // drive eMetaDyn across several deposit intervals with tempering on.
+   bath::kelvin = 300.0;
+   resetost(5, 5, 1);
+   resetmeta(8);
+   iosthist = 4;
+   ostnequil = 2;
+   ostnavg = 2;
+   hbias = 2.0;
+   ostdedl = 0.0;
+   ostdt = 0.0; // no-op ostLangevin, so the sampled lambda values stay controlled
+   ostemper = true;
+   temperthresh = 0.5;
+   tempergamma = 1.0;
+
+   // V* over the deposits already stored, summed independently of vmetagrid
+   auto refVstar = [&](int upto) {
+      double vmin = 1.0e30;
+      for (int il = 1; il <= nlmda; ++il) {
+         double lambda = (double)(il - 1) * wlmda;
+         double v = 0.0;
+         for (int j = 1; j <= upto; ++j) {
+            double sig = metawhist[j];
+            double sig2 = sig * sig;
+            double pref = metahhist[j] / (sig * std::sqrt(2.0 * pi));
+            double src[3] = {metalhist[j], -metalhist[j], 2.0 - metalhist[j]};
+            for (int m = 0; m < 3; ++m) {
+               double delta = lambda - src[m];
+               v += pref * std::exp(-0.5 * delta * delta / sig2);
+            }
+         }
+         vmin = std::min(vmin, v);
+      }
+      return vmin;
+   };
+
+   const int ndep = 5;
+   for (int istep = 1; istep <= ndep * iosthist; ++istep) {
+      ostlambda = 0.5;
+      eMetaDyn(istep);
+   }
+   COMPARE_INTS(nmetahist, ndep);
+
+   // the first deposit sees an empty bias, so it is untempered
+   COMPARE_REALS(metahhist[1], hbias, 1.0e-12);
+   REQUIRE(refVstar(1) > temperthresh); // the threshold really is crossed
+
+   // every later height follows the rule applied to the pre-deposit V*, and the
+   // sequence decays monotonically
+   for (int k = 2; k <= ndep; ++k) {
+      CAPTURE(k);
+      COMPARE_REALS(metahhist[k], temperedHeight(refVstar(k - 1)), 1.0e-12);
+      REQUIRE(metahhist[k] < metahhist[k - 1]);
+   }
+
+   // the accumulated grid matches the direct sum at every bin center, and the
+   // Hermite evaluation reproduces it exactly at those nodes
+   for (int il = 1; il <= nlmda; ++il) {
+      CAPTURE(il);
+      double lambda = (double)(il - 1) * wlmda;
+      double vd, dd, vi, di;
+      ostinterpol = false;
+      eMetaBias(lambda, vd, dd);
+      COMPARE_REALS(vmetagrid[il], vd, 1.0e-12);
+      COMPARE_REALS(dvmetagrid[il], dd, 1.0e-12);
+      ostinterpol = true;
+      eMetaBias(lambda, vi, di);
+      COMPARE_REALS(vi, vd, 1.0e-12);
+      COMPARE_REALS(di, dd, 1.0e-12);
+   }
+   ostinterpol = false;
 }

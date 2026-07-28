@@ -33,9 +33,15 @@ std::vector<double> gkernel, glkernel, gfkernel, glfkernel;
 // free-energy mean force per lambda bin, size nlmda+1, indexed 1..nlmda
 std::vector<double> fkernel, fsumkernel, pfkernel;
 
+// running max of gkernel over the flambda axis, size nlmda+1, indexed 1..nlmda
+std::vector<double> vkernelmax;
+
 // metadynamics gaussian history (1-based)
 std::vector<double> metalhist, metahhist, metawhist;
 std::vector<int> metaihist; // iost/step stamp per deposited metadynamics gaussian
+
+// metadynamics bias and dV/dlambda at each lambda bin center, size nlmda+1
+std::vector<double> vmetagrid, dvmetagrid;
 
 // bias evaluated by eostBias
 double bgbias, bdgdl, bdgdfl, bostlmda, bdfdl;
@@ -95,6 +101,10 @@ void ost_mech()
    getKV("OST-CONVCRI-RAT", ostcvrat, 0.1);
    getKV("OST-CONVCRI-SLP", ostcvslp, 1.0);
    getKV("OST-CONVCRI-STD", ostcvstd, 10.0);
+
+   getKV("OST-TEMPER", ostemper, false);
+   getKV("OST-TEMPER-THRESH", temperthresh, 1.0);
+   getKV("OST-TEMPER-GAMMA", tempergamma, 1.0);
 }
 
 static double fitSlope(double tdot, double sum, int n)
@@ -161,6 +171,34 @@ bool depcriteria2(double avg, double std)
 {
    double tolerance = ostcvstd + ostcvrat * std::abs(avg);
    return tolerance > 0.0 && std / tolerance < 1.0;
+}
+
+double ostVminimax()
+{
+   // vkernelmax is 1-based with element 0 unused, so reduce over [1, nlmda].
+   if (nlmda < 1 || (int)vkernelmax.size() < nlmda + 1)
+      return 0.0;
+   return *std::min_element(vkernelmax.begin() + 1, vkernelmax.begin() + nlmda + 1);
+}
+
+double metaVminimax()
+{
+   if (nlmda < 1 || (int)vmetagrid.size() < nlmda + 1)
+      return 0.0;
+   return *std::min_element(vmetagrid.begin() + 1, vmetagrid.begin() + nlmda + 1);
+}
+
+// h = hbias * exp(-max(0, vminimax - temperthresh) / (kT * tempergamma))
+double temperedHeight(double vminimax)
+{
+   if (not ostemper)
+      return hbias;
+   const double rt = units::gasconst * bath::kelvin;
+   double denom = rt * tempergamma;
+   if (denom <= 0.0)
+      return hbias;
+   double excess = std::max(0.0, vminimax - temperthresh);
+   return hbias * std::exp(-excess / denom);
 }
 
 // buildostindex -- rebuild the packed bins and linked-list lookup from the saved
@@ -235,7 +273,7 @@ void ensureFlambda(double dudl)
    osthead.assign((size_t)nlmda * nflmda, 0);
    buildOstIndex();
 
-   // reallocate the flambda-dependent kernels, shifting old data by offset
+   // reallocate the flambda-dependent kernels, shifting old data by offset.
    std::vector<double> gf0 = gfkernel, g0 = gkernel, glf0 = glfkernel, gl0 = glkernel;
    gfkernel.assign((size_t)nlmda * nflmda, 0.0);
    gkernel.assign((size_t)nlmda * nflmda, 0.0);
@@ -270,6 +308,7 @@ void addKernelPoint(int ilmda, int iflmda, double e, double ldelta, double fldel
    double d2gdlfl = ldelta * fldelta * e / (sigl2 * sigf2);
    gfkernel[g] += dgdfl;
    gkernel[g] = newg;
+   vkernelmax[ilmda] = std::max(vkernelmax[ilmda], newg);
    glfkernel[g] += d2gdlfl;
    glkernel[g] += dgdl;
    fsumkernel[ilmda] += flmda * delweight;
@@ -336,10 +375,13 @@ void addKernelHistImpl(int ihist, bool do_f)
             double fldelta2 = fldelta * fldelta;
             double expfl = std::exp(-fldelta2 / (2.0 * sigf2));
             double e = pref * expl * expfl;
-            if (do_f)
+            if (do_f) {
                addKernelPoint(ilmda, iflmda, e, ldelta, fldelta, sigl2, sigf2);
-            else
-               gkernel[gidx(ilmda, iflmda)] += e;
+            } else {
+               double newg = gkernel[gidx(ilmda, iflmda)] + e;
+               gkernel[gidx(ilmda, iflmda)] = newg;
+               vkernelmax[ilmda] = std::max(vkernelmax[ilmda], newg);
+            }
          }
       }
    }
@@ -580,23 +622,100 @@ void ostLangevin()
    mapSubLambda(ostlambda);
 }
 
+static void metaImages(double lambda, double src[3])
+{
+   src[0] = lambda;
+   src[1] = -lambda;
+   src[2] = 2.0 - lambda;
+}
+
 // emetabias -- Vbias(lambda) and dVbias/dlambda for the sum of 1D normalized
 // metadynamics gaussians (eost.f:244).
 void eMetaBias(double lambda, double& vbias, double& dvdl)
 {
    vbias = 0;
    dvdl = 0;
+
+   if (ostinterpol && nmetahist > 0) {
+      eMetaBiasInterpolate(lambda, vbias, dvdl);
+      return;
+   }
+
    for (int ihist = 1; ihist <= nmetahist; ++ihist) {
       double sig = metawhist[ihist];
       if (sig > 0.0) {
          double sig2 = sig * sig;
-         double delta = lambda - metalhist[ihist];
          double pref = metahhist[ihist] / (sig * std::sqrt(2.0 * pi));
-         double bias = pref * std::exp(-0.5 * delta * delta / sig2);
-         vbias += bias;
-         dvdl -= delta * bias / sig2;
+         double src[3];
+         metaImages(metalhist[ihist], src);
+         for (int img = 0; img < 3; ++img) {
+            double delta = lambda - src[img];
+            double bias = pref * std::exp(-0.5 * delta * delta / sig2);
+            vbias += bias;
+            dvdl -= delta * bias / sig2;
+         }
       }
    }
+}
+
+// addmetagrid -- accumulate one deposited metadynamics gaussian
+void addMetaGrid(int ihist)
+{
+   double sig = metawhist[ihist];
+   if (sig <= 0.0)
+      return;
+   if ((int)vmetagrid.size() < nlmda + 1 || (int)dvmetagrid.size() < nlmda + 1)
+      return;
+   double sig2 = sig * sig;
+   double pref = metahhist[ihist] / (sig * std::sqrt(2.0 * pi));
+   double src[3];
+   metaImages(metalhist[ihist], src);
+   for (int il = 1; il <= nlmda; ++il) {
+      double lambda = (double)(il - 1) * wlmda;
+      for (int img = 0; img < 3; ++img) {
+         double delta = lambda - src[img];
+         double bias = pref * std::exp(-0.5 * delta * delta / sig2);
+         vmetagrid[il] += bias;
+         dvmetagrid[il] -= delta * bias / sig2;
+      }
+   }
+}
+
+// emetabiasinterpolate -- cubic Hermite evaluation of the metadynamics bias.
+void eMetaBiasInterpolate(double lambda, double& vbias, double& dvdl)
+{
+   vbias = 0;
+   dvdl = 0;
+   if (nlmda < 2)
+      return;
+   if ((int)vmetagrid.size() < nlmda + 1 || (int)dvmetagrid.size() < nlmda + 1)
+      return;
+
+   double lam = std::min(1.0, std::max(0.0, lambda));
+   int il0;
+   if (lam >= 1.0) {
+      il0 = nlmda - 1;
+   } else {
+      il0 = (int)(lam / wlmda) + 1;
+      il0 = std::max(1, std::min(il0, nlmda - 1));
+   }
+   double l0 = (double)(il0 - 1) * wlmda;
+   double x = (lam - l0) / wlmda;
+
+   double x2 = x * x, x3 = x2 * x;
+   double hxv[2] = {2.0 * x3 - 3.0 * x2 + 1.0, -2.0 * x3 + 3.0 * x2};
+   double hxd[2] = {x3 - 2.0 * x2 + x, x3 - x2};
+   double dhxv[2] = {6.0 * x2 - 6.0 * x, -6.0 * x2 + 6.0 * x};
+   double dhxd[2] = {3.0 * x2 - 4.0 * x + 1.0, 3.0 * x2 - 2.0 * x};
+
+   for (int ia = 0; ia < 2; ++ia) {
+      int i = il0 + ia;
+      double val = vmetagrid[i];
+      double der = wlmda * dvmetagrid[i];
+      vbias += hxv[ia] * val + hxd[ia] * der;
+      dvdl += dhxv[ia] * val + dhxd[ia] * der;
+   }
+   dvdl /= wlmda;
 }
 
 // metadeltag -- G(1) - G(0) = -Vbias(1) + Vbias(0) (eost.f:288).
@@ -640,6 +759,7 @@ void addKernelHist(int ihist)
 void buildGkernel()
 {
    std::fill(gkernel.begin(), gkernel.end(), 0.0);
+   std::fill(vkernelmax.begin(), vkernelmax.end(), 0.0);
    for (int ihist = 1; ihist <= nosthist; ++ihist)
       addGkernelHist(ihist);
 }
@@ -655,6 +775,7 @@ void buildKernels()
    std::fill(fkernel.begin(), fkernel.end(), 0.0);
    std::fill(fsumkernel.begin(), fsumkernel.end(), 0.0);
    std::fill(pfkernel.begin(), pfkernel.end(), 0.0);
+   std::fill(vkernelmax.begin(), vkernelmax.end(), 0.0);
    for (int ihist = 1; ihist <= nosthist; ++ihist)
       addKernelHist(ihist);
 }
@@ -697,10 +818,13 @@ void eostData(RcOp op)
       fkernel.clear();
       fsumkernel.clear();
       pfkernel.clear();
+      vkernelmax.clear();
       metalhist.clear();
       metahhist.clear();
       metawhist.clear();
       metaihist.clear();
+      vmetagrid.clear();
+      dvmetagrid.clear();
       ostlambdaavgbin.clear();
       ostlambdastdbin.clear();
       ostlambdaslpbin.clear();
@@ -742,6 +866,7 @@ void eostData(RcOp op)
          fkernel.assign(nlmda + 1, 0.0);
          fsumkernel.assign(nlmda + 1, 0.0);
          pfkernel.assign(nlmda + 1, 0.0);
+         vkernelmax.assign(nlmda + 1, 0.0);
          gkernel.assign((size_t)nlmda * nflmda, 0.0);
          gfkernel.assign((size_t)nlmda * nflmda, 0.0);
          glfkernel.assign((size_t)nlmda * nflmda, 0.0);
@@ -755,6 +880,8 @@ void eostData(RcOp op)
          metawhist.assign(sizemetahist + 1, 0.0);
          metaihist.assign(sizemetahist + 1, 0);
          ostllist.assign(iosthist, 0.0);
+         vmetagrid.assign(nlmda + 1, 0.0);
+         dvmetagrid.assign(nlmda + 1, 0.0);
       }
    }
 }
@@ -830,7 +957,7 @@ void eostDyn(int istep)
          ostihist[nosthist] = istep;
          ostlhist[nosthist] = ostlambdaavg;
          ostfhist[nosthist] = ostdedlavg;
-         osthhist[nosthist] = hbias;
+         osthhist[nosthist] = temperedHeight(ostVminimax());
          ostwlhist[nosthist] = wlhist;
          ostwfhist[nosthist] = wfhist;
          ostnext[nosthist] = osthead[gidx(ilmda, iflmda)];
@@ -870,9 +997,10 @@ void eMetaDyn(int istep)
       if (nmetahist > sizemetahist)
          resizeMeta();
       metalhist[nmetahist] = ostlambdaavg;
-      metahhist[nmetahist] = hbias;
+      metahhist[nmetahist] = temperedHeight(metaVminimax());
       metawhist[nmetahist] = wlmda;
       metaihist[nmetahist] = istep;
+      addMetaGrid(nmetahist);
       eosttot = metaDeltaG();
    }
 

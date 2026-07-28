@@ -272,7 +272,7 @@ void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
          if (use_emadt)
             empole_adt(vers);
          else if (use_emrdt)
-            empole_rdt(vers);
+            use_relstage ? empole_rdt_staged(vers) : empole_rdt(vers);
          else
             empole(vers);
       }
@@ -281,7 +281,7 @@ void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
          if (use_epadt)
             epolar_adt(vers);
          else if (use_eprdt)
-            epolar_rdt(vers);
+            use_relstage ? epolar_rdt_staged(vers) : epolar_rdt(vers);
          else
             epolar(vers);
       }
@@ -290,7 +290,7 @@ void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
          if (use_emadt)
             emplar_adt(vers);
          else if (use_emrdt)
-            emplar_rdt(vers);
+            use_relstage ? emplar_rdt_staged(vers) : emplar_rdt(vers);
          else
             emplar(vers);
       }
