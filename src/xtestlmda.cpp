@@ -51,7 +51,7 @@ static void setLambda(double vlambda, double elambda, double plambda)
    vlam = vlambda;
    mutant::elambda = elambda;
    elam = elambda;
-   dlmda::plambda = plambda;
+   mutant::plambda = plambda;
    plam = plambda;
 }
 

@@ -842,7 +842,7 @@ void elecData(RcOp op)
       electric = chgpot::electric;
       dielec = chgpot::dielec;
       elam = mutant::elambda;
-      plam = dlmda::plambda;
+      plam = mutant::plambda;
    }
    RcMan pchg42{pchgData, op};
    RcMan pole42{mpoleData, op};

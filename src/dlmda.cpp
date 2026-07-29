@@ -13,7 +13,6 @@
 #include <tinker/detail/dlmda.hh>
 #include <tinker/detail/mplpot.hh>
 #include <tinker/detail/mutant.hh>
-#include <tinker/detail/ost.hh>
 
 #include <cmath>
 #include <cstring>
@@ -87,10 +86,10 @@ void dlmda_mech()
    evdtexp = dlmda::evdtexp;
 
    // which lambda-dynamics method owns the main lambda.
-   use_ost = ost::use_ost;
-   use_meta = ost::use_meta;
-   ost::use_ostdyn = use_ost;
-   ost::use_metadyn = use_meta;
+   use_ost = dlmda::use_ost;
+   use_meta = dlmda::use_meta;
+   dlmda::use_ostdyn = use_ost;
+   dlmda::use_metadyn = use_meta;
 
    use_ele4i = true;
    use_ele4f = true;
@@ -99,26 +98,26 @@ void dlmda_mech()
    use_vdw4i = true;
    use_vdw4f = true;
 
-   elmdaexp = ost::ostemexp;
-   plmdaexp = ost::ostepexp;
-   vlmdaexp = ost::ostevexp;
-   elmdainvn = ost::ostinvemn;
-   plmdainvn = ost::ostinvepn;
-   vlmdainvn = ost::ostinvevn;
-   elmdainveps = ost::ostinvemeps;
-   plmdainveps = ost::ostinvepeps;
-   vlmdainveps = ost::ostinveveps;
+   elmdaexp = dlmda::elmdaexp;
+   plmdaexp = dlmda::plmdaexp;
+   vlmdaexp = dlmda::vlmdaexp;
+   elmdainvn = dlmda::elmdainvn;
+   plmdainvn = dlmda::plmdainvn;
+   vlmdainvn = dlmda::vlmdainvn;
+   elmdainveps = dlmda::elmdainveps;
+   plmdainveps = dlmda::plmdainveps;
+   vlmdainveps = dlmda::vlmdainveps;
 
-   elmdamap = lmdamapFrom(ost::ostemap);
-   plmdamap = lmdamapFrom(ost::ostpmap);
-   vlmdamap = lmdamapFrom(ost::ostvmap);
+   elmdamap = lmdamapFrom(dlmda::elmdamap);
+   plmdamap = lmdamapFrom(dlmda::plmdamap);
+   vlmdamap = lmdamapFrom(dlmda::vlmdamap);
 
-   qntelmda0 = ost::ostelmda0;
-   qntelmda1 = ost::ostelmda1;
-   qntplmda0 = ost::ostplmda0;
-   qntplmda1 = ost::ostplmda1;
-   qntvlmda0 = ost::ostvlmda0;
-   qntvlmda1 = ost::ostvlmda1;
+   qntelmda0 = dlmda::qntelmda0;
+   qntelmda1 = dlmda::qntelmda1;
+   qntplmda0 = dlmda::qntplmda0;
+   qntplmda1 = dlmda::qntplmda1;
+   qntvlmda0 = dlmda::qntvlmda0;
+   qntvlmda1 = dlmda::qntvlmda1;
 
    relstageMech();
 }
