@@ -14,6 +14,7 @@
 #include <tinker/detail/mplpot.hh>
 #include <tinker/detail/mutant.hh>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <vector>
@@ -132,7 +133,6 @@ static void relstageMech()
    relstage0lmda0 = 0.0;
    relstage0lmda1 = 0.3;
    relstage = RelStage::VDW_MORPH;
-   relstagew = 0.0;
    relstagemix = false;
 
    if (not use_relstage)
@@ -159,7 +159,7 @@ static void relstageMech()
 }
 
 // The staged schedule is split across two places that nothing keeps in step:
-// mapSubLambda() sets relstage/relstagew and overwrites elam and plam, while
+// mapSubLambda() sets relstage and writes the staged weight into elam and plam, while
 // energy_core() picks the _staged term routines. A setup that reaches only one
 // of the two still runs, silently, on a schedule nobody asked for:
 //
@@ -339,33 +339,35 @@ static void mapOne(double lambda, Lmdamap map, double qnt0, double qnt1, int exp
 // Staged relative free energy schedule
 static void mapRelStage(double lambda)
 {
-   double taper, dtaper, d2taper;
+   double w, taper, dtaper, d2taper;
    if (lambda > relstage1lmda0) {
       // Ligand 1 decoupling: weight runs 0 -> 1 as lambda runs lmda0 -> lmda1.
       quinticTaper(lambda, relstage1lmda0, relstage1lmda1, taper, dtaper, d2taper);
       relstage = RelStage::LIG1_ELE;
-      relstagew = 1.0 - taper;
+      w = 1.0 - taper;
       deldlmda = -dtaper;
       d2eldlmda2 = -d2taper;
    } else if (lambda < relstage0lmda1) {
       // Ligand 0 coupling: weight runs 1 -> 0 as lambda runs lmda0 -> lmda1.
       quinticTaper(lambda, relstage0lmda0, relstage0lmda1, taper, dtaper, d2taper);
       relstage = RelStage::LIG0_ELE;
-      relstagew = taper;
+      w = taper;
       deldlmda = dtaper;
       d2eldlmda2 = d2taper;
    } else {
       // Both ligands are electrostatically decoupled from the environment.
       relstage = RelStage::VDW_MORPH;
-      relstagew = 0.0;
+      w = 0.0;
       deldlmda = 0.0;
       d2eldlmda2 = 0.0;
    }
-   relstagemix = (relstagew > 0.0 and relstagew < 1.0);
 
-   // The mix takes the weight itself, so the exponent is 1 and lmdachain()
-   // supplies the whole main lambda chain rule through deldlmda.
-   elam = relstagew;
+   elam = std::min(1.0, std::max(0.0, w));
+
+   if (elam == 0.0)
+      relstage = RelStage::VDW_MORPH;
+
+   relstagemix = (elam > 0.0 and elam < 1.0);
 
    // Polarization stages with the multipoles: same states, same weight.
    plam = elam;

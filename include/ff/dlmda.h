@@ -139,8 +139,6 @@ TINKER_EXTERN double relstage0lmda1;
 
 /// The leg the current main lambda sits in; set by mapSubLambda.
 TINKER_EXTERN RelStage relstage;
-/// Weight on the coupled endpoint for the active leg. Equals elam and plam.
-TINKER_EXTERN double relstagew;
 /// False at the flat ends of a leg, where the mix would be a no-op.
 TINKER_EXTERN bool relstagemix;
 

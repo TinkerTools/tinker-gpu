@@ -166,7 +166,7 @@ void empoleMixStagedEndpoints(int vers)
 {
    // The staged weight is the mix weight itself, so the exponent is 1 and
    // lmdachain() carries the whole main lambda chain rule through deldlmda.
-   em_snap.mix(vers, relstagew, 1, use_dlmda, em_buf, em_dl);
+   em_snap.mix(vers, elam, 1, use_dlmda, em_buf, em_dl);
 }
 
 void empole_adt(int vers)

@@ -830,7 +830,7 @@ void epolar_rdt_staged(int vers)
       int bvers = (vers == calc::v3 ? calc::v0 : vers);
       epolarState(bvers, lig1 ? RdtMask::LIGB : RdtMask::LIGA, rdt_group, false);
       if (relstagemix)
-         ep_snap.mix(vers, relstagew, 1, use_dlmda, ep_buf, ep_dl);
+         ep_snap.mix(vers, plam, 1, use_dlmda, ep_buf, ep_dl);
    }
 
    epolarFinish(vers);
