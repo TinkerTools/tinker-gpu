@@ -50,7 +50,6 @@ void lmdachain(int vers);
 
 /// Reads the shared lambda-dynamics state from the Fortran modules.
 void dlmda_mech();
-void relstageCheck();
 void dlmdaData(RcOp op);
 void dlmdaData2(RcOp op);
 /// Mean and population standard deviation of v[begin, begin+count).
@@ -130,12 +129,12 @@ TINKER_EXTERN bool use_vdw4f;
 /// When off, the sub-lambdas move together under the ordinary maps above.
 TINKER_EXTERN bool use_relstage;
 
-// Main lambda window over which ligand 1's electrostatics ramp.
-TINKER_EXTERN double relstage1lmda0;
-TINKER_EXTERN double relstage1lmda1;
-// Main lambda window over which ligand 0's electrostatics ramp.
-TINKER_EXTERN double relstage0lmda0;
-TINKER_EXTERN double relstage0lmda1;
+// Main lambda window from REL-LIG1-ELE-RANGE.
+TINKER_EXTERN double relstg1lmda0;
+TINKER_EXTERN double relstg1lmda1;
+// Main lambda window from REL-LIG2-ELE-RANGE.
+TINKER_EXTERN double relstg2lmda0;
+TINKER_EXTERN double relstg2lmda1;
 
 /// The leg the current main lambda sits in; set by mapSubLambda.
 TINKER_EXTERN RelStage relstage;

@@ -6,7 +6,6 @@
 #include "ff/energy.h"
 #include "math/const.h"
 #include "math/random.h"
-#include "tool/argkey.h"
 #include "tool/darray.h"
 #include <tinker/detail/bath.hh>
 #include <tinker/detail/ost.hh>
@@ -76,6 +75,15 @@ void ost_mech()
    hbias = ost::hbias;
    oststdev = ost::oststdev;
    osteqratio = ost::osteqratio;
+   ostcvbin = ost::ostcvbin;
+   ostcvdif = ost::ostcvdif;
+   ostcvrat = ost::ostcvrat;
+   ostcvslp = ost::ostcvslp;
+   ostcvstd = ost::ostcvstd;
+
+   ostemper = (ost::ostemper != 0);
+   temperthresh = ost::temperthresh;
+   tempergamma = ost::tempergamma;
 
    osttheta = ost::osttheta;
    ostvtheta = ost::ostvtheta;
@@ -95,16 +103,6 @@ void ost_mech()
    ostdedlslp = 0;
 
    eosttot = 0;
-
-   getKV("OST-CONV-BIN", ostcvbin, 2);
-   getKV("OST-CONVCRI-DIF", ostcvdif, 25.0);
-   getKV("OST-CONVCRI-RAT", ostcvrat, 0.1);
-   getKV("OST-CONVCRI-SLP", ostcvslp, 1.0);
-   getKV("OST-CONVCRI-STD", ostcvstd, 10.0);
-
-   getKV("OST-TEMPER", ostemper, false);
-   getKV("OST-TEMPER-THRESH", temperthresh, 1.0);
-   getKV("OST-TEMPER-GAMMA", tempergamma, 1.0);
 }
 
 static double fitSlope(double tdot, double sum, int n)

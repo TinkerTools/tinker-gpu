@@ -5,7 +5,6 @@
 #include "ff/elec.h"
 #include "ff/evdw.h"
 #include "ff/potent.h"
-#include "tool/argkey.h"
 #include "tool/darray.h"
 #include "tool/error.h"
 #include "tool/externfunc.h"
@@ -61,8 +60,6 @@ Lmdamap lmdamapFrom(const char* s)
       return Lmdamap::QNT;
    return Lmdamap::QNT;
 }
-
-static void relstageMech();
 
 void dlmda_mech()
 {
@@ -120,74 +117,13 @@ void dlmda_mech()
    qntvlmda0 = dlmda::qntvlmda0;
    qntvlmda1 = dlmda::qntvlmda1;
 
-   relstageMech();
-}
-
-// Reads and validates the staged relative free energy schedule.
-static void relstageMech()
-{
-   getKV("REL-STAGE", use_relstage, false);
-
-   relstage1lmda0 = 0.7;
-   relstage1lmda1 = 1.0;
-   relstage0lmda0 = 0.0;
-   relstage0lmda1 = 0.3;
+   use_relstage = (dlmda::use_relstage != 0);
+   relstg1lmda0 = dlmda::relstg1lmda0;
+   relstg1lmda1 = dlmda::relstg1lmda1;
+   relstg2lmda0 = dlmda::relstg2lmda0;
+   relstg2lmda1 = dlmda::relstg2lmda1;
    relstage = RelStage::VDW_MORPH;
    relstagemix = false;
-
-   if (not use_relstage)
-      return;
-
-   auto readRange = [](const char* key, double& lo, double& hi) {
-      std::vector<double> v;
-      getKV(key, v);
-      if (v.empty())
-         return;
-      if (v.size() != 2)
-         TINKER_THROW(format("DLMDA  --  %s takes exactly two values", key));
-      lo = v[0];
-      hi = v[1];
-      if (not(0.0 <= lo and lo < hi and hi <= 1.0))
-         TINKER_THROW(format("DLMDA  --  %s must satisfy 0 <= lo < hi <= 1", key));
-   };
-   readRange("REL-LIG1-ELE-RANGE", relstage1lmda0, relstage1lmda1);
-   readRange("REL-LIG0-ELE-RANGE", relstage0lmda0, relstage0lmda1);
-
-   if (relstage0lmda1 > relstage1lmda0)
-      TINKER_THROW("DLMDA  --  REL-LIG0-ELE-RANGE and REL-LIG1-ELE-RANGE overlap; "
-                   "the ligand 0 window must end at or below the start of the ligand 1 window");
-}
-
-// The staged schedule is split across two places that nothing keeps in step:
-// mapSubLambda() sets relstage and writes the staged weight into elam and plam, while
-// energy_core() picks the _staged term routines. A setup that reaches only one
-// of the two still runs, silently, on a schedule nobody asked for:
-//
-//   - with no main lambda, energy() never calls mapSubLambda, so relstage
-//     keeps the VDW_MORPH default and the multipoles and polarization sit on
-//     the decoupled reference at every lambda;
-//   - with no second ligand group, use_rel is false, so energy_core takes the
-//     _adt branch instead, while mapRelStage still rewrites elam and plam out
-//     from under it.
-//
-// Neither fails loudly or spoils the chain rule, so reject them up front. The
-// per-term dual topologies need no check of their own: mutate.f forces
-// use_emdt, use_epdt and use_evdt on whenever use_rel holds.
-//
-// This runs from mechanic2() rather than relstageMech() because use_ti is not
-// known until ti_mech(), which follows dlmda_mech().
-void relstageCheck()
-{
-   if (not use_relstage)
-      return;
-
-   // Mirrors the guard in energy() that gates the mapSubLambda call.
-   if (not use_dlmda or not useLmdaChain())
-      TINKER_THROW("DLMDA  --  REL-STAGE needs a main lambda to drive the schedule; "
-                   "add the OST, METADYN, or THERM-INTG keyword");
-   if (not use_rel)
-      TINKER_THROW("DLMDA  --  REL-STAGE is a relative free energy schedule and needs a "
-                   "second ligand group; add the LIGAND2 keyword");
 }
 
 void avgstd(const std::vector<double>& v, int begin, int count, double& avg, double& sd)
@@ -340,16 +276,16 @@ static void mapOne(double lambda, Lmdamap map, double qnt0, double qnt1, int exp
 static void mapRelStage(double lambda)
 {
    double w, taper, dtaper, d2taper;
-   if (lambda > relstage1lmda0) {
-      // Ligand 1 decoupling: weight runs 0 -> 1 as lambda runs lmda0 -> lmda1.
-      quinticTaper(lambda, relstage1lmda0, relstage1lmda1, taper, dtaper, d2taper);
+   if (lambda > relstg2lmda0) {
+      // High-lambda electrostatics leg: weight runs 0 -> 1 across the window.
+      quinticTaper(lambda, relstg2lmda0, relstg2lmda1, taper, dtaper, d2taper);
       relstage = RelStage::LIG1_ELE;
       w = 1.0 - taper;
       deldlmda = -dtaper;
       d2eldlmda2 = -d2taper;
-   } else if (lambda < relstage0lmda1) {
-      // Ligand 0 coupling: weight runs 1 -> 0 as lambda runs lmda0 -> lmda1.
-      quinticTaper(lambda, relstage0lmda0, relstage0lmda1, taper, dtaper, d2taper);
+   } else if (lambda < relstg1lmda1) {
+      // Low-lambda electrostatics leg: weight runs 1 -> 0 across the window.
+      quinticTaper(lambda, relstg1lmda0, relstg1lmda1, taper, dtaper, d2taper);
       relstage = RelStage::LIG0_ELE;
       w = taper;
       deldlmda = dtaper;

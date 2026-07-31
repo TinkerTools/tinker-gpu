@@ -13,7 +13,5 @@ void mechanic2()
    dlmda_mech();
    ost_mech();
    ti_mech();
-
-   relstageCheck();
 }
 }

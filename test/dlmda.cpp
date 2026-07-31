@@ -137,10 +137,10 @@ TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
    // Drive mapSubLambda() through the staged schedule directly. Only the
    // scalar mapping is exercised here; the endpoint mixing needs a system.
    use_relstage = true;
-   relstage1lmda0 = 0.7;
-   relstage1lmda1 = 1.0;
-   relstage0lmda0 = 0.0;
-   relstage0lmda1 = 0.3;
+   relstg2lmda0 = 0.7;
+   relstg2lmda1 = 1.0;
+   relstg1lmda0 = 0.0;
+   relstg1lmda1 = 0.3;
    vlmdamap = Lmdamap::QNT;
    qntvlmda0 = 0.3;
    qntvlmda1 = 0.7;
@@ -203,10 +203,10 @@ TEST_CASE("DLMDA-relstage-collapsed-weight", "[ff][dlmda]")
    // window a lambda dynamics run can wander into. Both legs approach zero from
    // their own side, so both are checked.
    use_relstage = true;
-   relstage1lmda0 = 0.7;
-   relstage1lmda1 = 1.0;
-   relstage0lmda0 = 0.0;
-   relstage0lmda1 = 0.3;
+   relstg2lmda0 = 0.7;
+   relstg2lmda1 = 1.0;
+   relstg1lmda0 = 0.0;
+   relstg1lmda1 = 0.3;
    vlmdamap = Lmdamap::QNT;
    qntvlmda0 = 0.3;
    qntvlmda1 = 0.7;
@@ -236,10 +236,10 @@ TEST_CASE("DLMDA-relstage-collapsed-weight", "[ff][dlmda]")
 TEST_CASE("DLMDA-relstage-continuity", "[ff][dlmda]")
 {
    use_relstage = true;
-   relstage1lmda0 = 0.7;
-   relstage1lmda1 = 1.0;
-   relstage0lmda0 = 0.0;
-   relstage0lmda1 = 0.3;
+   relstg2lmda0 = 0.7;
+   relstg2lmda1 = 1.0;
+   relstg1lmda0 = 0.0;
+   relstg1lmda1 = 0.3;
    vlmdamap = Lmdamap::QNT;
    qntvlmda0 = 0.3;
    qntvlmda1 = 0.7;
@@ -286,9 +286,9 @@ TEST_CASE("DLMDA-relstage-continuity", "[ff][dlmda]")
       COMPARE_REALS(d2eldlmda2, sign * d2t, 1.0e-14);
    };
    for (double lambda : {0.75, 0.85, 0.95})
-      legMatchesTaper(lambda, relstage1lmda0, relstage1lmda1, -1.0);
+      legMatchesTaper(lambda, relstg2lmda0, relstg2lmda1, -1.0);
    for (double lambda : {0.05, 0.15, 0.25})
-      legMatchesTaper(lambda, relstage0lmda0, relstage0lmda1, 1.0);
+      legMatchesTaper(lambda, relstg1lmda0, relstg1lmda1, 1.0);
 
    use_relstage = false;
 }
