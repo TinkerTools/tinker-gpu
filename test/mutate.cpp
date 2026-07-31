@@ -4,7 +4,6 @@
 #include "ff/energy.h"
 #include "ff/evdw.h"
 #include "ff/modamoeba.h"
-#include "ff/ost.h"
 
 #include "test.h"
 #include "testrt.h"
@@ -28,8 +27,8 @@ namespace {
 // the shared coordinate file (water.xyz or water2.xyz); checkm/checkp/checkv
 // select which level-3 named components are verified (Atomic Multipoles,
 // Polarization, Van der Waals); dolmda enables the level-4 lambda-derivative
-// checks (fixtures 030-130). The neighbor-list duplication from the Fortran
-// test is intentionally omitted.
+// checks (fixtures 030 and later). The neighbor-list duplication from the
+// Fortran test is intentionally omitted.
 struct Fixture
 {
    const char* name;
@@ -173,6 +172,13 @@ const Fixture kFixtures[] = {
    {"132_water_qnt_adt_l00", "water2", true, true, true, true, "legskip"},
    {"133_water_qnt_rdt_l10", "water2", true, true, true, true, "legskip"},
    {"134_water_qnt_rdt_l00", "water2", true, true, true, true, "legskip"},
+   {"135_water_rels_ye_l100", "water2", true, true, true, true, "rels"},
+   {"136_water_rels_ye_l085", "water2", true, true, true, true, "rels"},
+   {"137_water_rels_ye_l070", "water2", true, true, true, true, "rels"},
+   {"138_water_rels_ye_l050", "water2", true, true, true, true, "rels"},
+   {"139_water_rels_ye_l030", "water2", true, true, true, true, "rels"},
+   {"140_water_rels_ye_l015", "water2", true, true, true, true, "rels"},
+   {"141_water_rels_ye_l000", "water2", true, true, true, true, "rels"},
 };
 
 // Reference lambda-derivative block parsed out of the analyze-style ref file.
@@ -394,51 +400,6 @@ void runFixture(const Fixture& fx)
    testEnd();
 }
 
-// Builds a system from a key file and hands control back with it live, so a
-// test can sweep the main lambda itself. The staged relative free energy
-// schedule has no Fortran counterpart to generate reference files from, so its
-// tests are self-contained: they check the schedule against its own endpoints,
-// against finite differences, and for continuity where the legs meet.
-template <class F>
-void withLiveSystem(const char* base, const char* keyname_base, F&& body)
-{
-   std::string dir = TINKER9_DIRSTR "/test/file/mutate/";
-   std::string xyzdst = std::string(base) + ".xyz";
-   std::string keyname = std::string(keyname_base) + ".key";
-
-   TestFile fxyz(dir + xyzdst, xyzdst);
-   TestFile fkey(dir + keyname, keyname);
-   TestFile fprm(TINKER9_DIRSTR "/test/file/commit_6fe8e913/water03.prm");
-
-   const char* argv[] = {"dummy", xyzdst.c_str(), "-k", keyname.c_str()};
-   int argc = 4;
-
-   rc_flag = calc::xyz | calc::mass | calc::vmask;
-
-   tinkerFortranRuntimeBegin(argc, (char**)argv);
-   initial();
-   tinker_f_command();
-   tinker_f_getxyz();
-   tinker_f_mechanic();
-   mechanic2();
-   initialize();
-
-   body();
-
-   finish();
-   testEnd();
-}
-
-// energy() remaps the sub-lambdas from ostlambda and applies lmdachain when
-// OST owns the main lambda, so setting ostlambda is enough to move along the
-// schedule. No gaussians are ever deposited here, so the OST bias stays zero.
-double energyAtMainLambda(double lambda, int vers = calc::energy)
-{
-   ostlambda = lambda;
-   energy(vers);
-   return esum;
-}
-
 void runLegSkipFixture(const Fixture& fx, bool expect4i, bool expect4f)
 {
    runFixture(fx);
@@ -586,136 +547,12 @@ TEST_CASE("MUTATE-131_water_qnt_adt_l10", "[ff][mutate][legskip]") { runLegSkipF
 TEST_CASE("MUTATE-132_water_qnt_adt_l00", "[ff][mutate][legskip]") { runLegSkipFixture(kFixtures[131], true, false); }
 TEST_CASE("MUTATE-133_water_qnt_rdt_l10", "[ff][mutate][legskip]") { runLegSkipFixture(kFixtures[132], false, true); }
 TEST_CASE("MUTATE-134_water_qnt_rdt_l00", "[ff][mutate][legskip]") { runLegSkipFixture(kFixtures[133], true, false); }
-
-// The staged schedule's endpoints are the plain relative dual topology
-// endpoints, so they must reproduce the 133/134 references exactly: at
-// lambda = 1 the mix weight is 1 and only E(A+env) + E(B) is evaluated, at
-// lambda = 0 it is E(B+env) + E(A). This is the check that the staged path did
-// not shift the physics.
-TEST_CASE("MUTATE-135_water_relstage_endpoints", "[ff][mutate][relstage]")
-{
-   const double eps_e = testGetEps(1.0e-3, 1.0e-4);
-   const double eps_g = testGetEps(1.0e-3, 1.0e-4);
-
-   withLiveSystem("water2", "135_water_relstage_l10", [&]() {
-      REQUIRE(use_relstage == true);
-      REQUIRE(use_emrdt == true);
-
-      TestReference r1(TINKER9_DIRSTR "/test/ref/mutate/133_water_qnt_rdt_l10.txt");
-      energyAtMainLambda(1.0, calc::v1);
-      REQUIRE(relstage == RelStage::LIG1_ELE);
-      REQUIRE(relstagemix == false);
-      COMPARE_REALS(esum, r1.getEnergy(), eps_e);
-      COMPARE_GRADIENT(r1.getGradient(), eps_g);
-
-      TestReference r0(TINKER9_DIRSTR "/test/ref/mutate/134_water_qnt_rdt_l00.txt");
-      energyAtMainLambda(0.0, calc::v1);
-      REQUIRE(relstage == RelStage::LIG0_ELE);
-      REQUIRE(relstagemix == false);
-      COMPARE_REALS(esum, r0.getEnergy(), eps_e);
-      COMPARE_GRADIENT(r0.getGradient(), eps_g);
-   });
-}
-
-// In the middle window both ligands are electrostatically decoupled from the
-// environment, so the electrostatic energy is flat in lambda and the whole
-// lambda derivative comes from the van der Waals morph.
-TEST_CASE("MUTATE-136_water_relstage_middle", "[ff][mutate][relstage]")
-{
-   withLiveSystem("water2", "137_water_relstage_l05", [&]() {
-      double em_ref = 0, ep_ref = 0;
-      for (double lambda : {0.7, 0.6, 0.5, 0.4, 0.3}) {
-         CAPTURE(lambda);
-         energyAtMainLambda(lambda, calc::v1);
-         REQUIRE(relstage == RelStage::VDW_MORPH);
-         COMPARE_REALS(demdl, 0.0, 1.0e-10);
-         COMPARE_REALS(depdl, 0.0, 1.0e-10);
-         COMPARE_REALS(d2emdl2, 0.0, 1.0e-10);
-         COMPARE_REALS(d2epdl2, 0.0, 1.0e-10);
-         COMPARE_REALS(dedl, devdl, 1.0e-10);
-
-         // The decoupled reference does not depend on lambda at all.
-         if (em_ref == 0 && ep_ref == 0) {
-            em_ref = energy_em;
-            ep_ref = energy_ep;
-         } else {
-            COMPARE_REALS(energy_em, em_ref, 1.0e-6);
-            COMPARE_REALS(energy_ep, ep_ref, 1.0e-6);
-         }
-      }
-   });
-}
-
-// The analytic main-lambda derivative against a central finite difference of
-// the total energy. This exercises the whole chain: the taper derivative in
-// mapSubLambda, the endpoint mix, and lmdachain.
-TEST_CASE("MUTATE-137_water_relstage_dudl", "[ff][mutate][relstage]")
-{
-   withLiveSystem("water2", "137_water_relstage_l05", [&]() {
-      // A five-point stencil, so the step can be large enough that the induced
-      // dipole convergence noise (polar-eps 1e-5) does not dominate the
-      // difference, while the O(h^4) truncation error stays far below it.
-      const double h = 5.0e-3;
-      for (double lambda : {0.9, 0.85, 0.75, 0.6, 0.5, 0.4, 0.25, 0.15, 0.1}) {
-         CAPTURE(lambda);
-         energyAtMainLambda(lambda, calc::v1);
-         double analytic = dedl;
-         double e_p2 = energyAtMainLambda(lambda + 2 * h);
-         double e_p1 = energyAtMainLambda(lambda + h);
-         double e_m1 = energyAtMainLambda(lambda - h);
-         double e_m2 = energyAtMainLambda(lambda - 2 * h);
-         double fd = (-e_p2 + 8 * e_p1 - 8 * e_m1 + e_m2) / (12 * h);
-         CAPTURE(analytic, fd);
-         COMPARE_REALS(analytic, fd, 1.0e-3 * (1.0 + std::fabs(fd)));
-      }
-   });
-}
-
-// The energy and its lambda derivative carry across the leg boundaries, where
-// the code switches between the mixed path, the decoupled-reference path and
-// the single-endpoint path. Agreement there is what shows all three agree on
-// the same underlying state.
-TEST_CASE("MUTATE-138_water_relstage_continuity", "[ff][mutate][relstage]")
-{
-   withLiveSystem("water2", "137_water_relstage_l05", [&]() {
-      const double d = 1.0e-5;
-      for (double edge : {0.7, 0.3}) {
-         CAPTURE(edge);
-         double eat = energyAtMainLambda(edge, calc::v1);
-         double dat = dedl;
-         double ehi = energyAtMainLambda(edge + d, calc::v1);
-         double dhi = dedl;
-         double elo = energyAtMainLambda(edge - d, calc::v1);
-         double dlo = dedl;
-
-         // No jump in the energy where the leg changes.
-         COMPARE_REALS(ehi, eat, 1.0e-5);
-         COMPARE_REALS(elo, eat, 1.0e-5);
-
-         // The electrostatic contribution to dU/dlambda vanishes at the edge
-         // from both sides; only the van der Waals morph is left.
-         COMPARE_REALS(dhi, dat, 1.0e-4);
-         COMPARE_REALS(dlo, dat, 1.0e-4);
-      }
-
-      // The outer ends are flat: the quintic taper has zero slope at 0 and 1,
-      // and the van der Waals morph is outside its own window there.
-      energyAtMainLambda(1.0, calc::v1);
-      COMPARE_REALS(dedl, 0.0, 1.0e-8);
-      energyAtMainLambda(0.0, calc::v1);
-      COMPARE_REALS(dedl, 0.0, 1.0e-8);
-
-      // At lambda = 1 and 0 the weight is exactly 1, so the code skips the mix
-      // and evaluates the coupled endpoint alone. Just inside, it goes through
-      // the mix with a weight barely below 1. The two must agree, which is what
-      // pins the mixed path's endpoint branch to the un-mixed one.
-      for (double endpoint : {1.0, 0.0}) {
-         CAPTURE(endpoint);
-         double e_end = energyAtMainLambda(endpoint);
-         double e_in = energyAtMainLambda(endpoint == 1.0 ? 1.0 - d : d);
-         COMPARE_REALS(e_in, e_end, 1.0e-5);
-      }
-   });
-}
+TEST_CASE("MUTATE-135_water_rels_ye_l100", "[ff][mutate][rels]") { runFixture(kFixtures[134]); }
+TEST_CASE("MUTATE-136_water_rels_ye_l085", "[ff][mutate][rels]") { runFixture(kFixtures[135]); }
+TEST_CASE("MUTATE-137_water_rels_ye_l070", "[ff][mutate][rels]") { runFixture(kFixtures[136]); }
+TEST_CASE("MUTATE-138_water_rels_ye_l050", "[ff][mutate][rels]") { runFixture(kFixtures[137]); }
+TEST_CASE("MUTATE-139_water_rels_ye_l030", "[ff][mutate][rels]") { runFixture(kFixtures[138]); }
+TEST_CASE("MUTATE-140_water_rels_ye_l015", "[ff][mutate][rels]") { runFixture(kFixtures[139]); }
+TEST_CASE("MUTATE-141_water_rels_ye_l000", "[ff][mutate][rels]") { runFixture(kFixtures[140]); }
 
 #endif

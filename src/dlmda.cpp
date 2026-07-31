@@ -311,13 +311,13 @@ static void mapRelStage(double lambda)
    d2pldlmda2 = d2eldlmda2;
 
    // van der Waals keeps its ordinary map.
-   double vval;
-   mapOne(lambda, vlmdamap, qntvlmda0, qntvlmda1, vlmdaexp, vlmdainvn, vlmdainveps, vval, dvldlmda, d2vldlmda2);
-   vlam = vval;
-   if (vlmdamap == Lmdamap::QNT) {
-      use_vdw4i = (lambda <= qntvlmda1);
-      use_vdw4f = (lambda >= qntvlmda0);
-   }
+   double taper2, dtaper2, d2taper2;
+   quinticTaper(lambda, qntvlmda0, qntvlmda1, taper2, dtaper2, d2taper2);
+   vlam = 1.0 - taper2;
+   dvldlmda = -dtaper2;
+   d2vldlmda2 = -d2taper2;
+   use_vdw4i = (lambda <= qntvlmda1);
+   use_vdw4f = (lambda >= qntvlmda0);
 }
 
 void mapSubLambda(double lambda)
