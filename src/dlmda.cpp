@@ -86,6 +86,7 @@ void dlmda_mech()
    // which lambda-dynamics method owns the main lambda.
    use_ost = dlmda::use_ost;
    use_meta = dlmda::use_meta;
+   use_ti = dlmda::use_ti;
    dlmda::use_ostdyn = use_ost;
    dlmda::use_metadyn = use_meta;
 

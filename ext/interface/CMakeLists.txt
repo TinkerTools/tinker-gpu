@@ -541,6 +541,7 @@ add_library (tinkerObjF OBJECT
 ../source/tcgstuf.f
 ../source/temper.f
 ../source/tettors.f
+../source/thermint.f
 ../source/tncg.f
 ../source/torphase.f
 ../source/torque.f

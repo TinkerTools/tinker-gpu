@@ -7,6 +7,7 @@
 #include "tool/ioread.h"
 #include <tinker/detail/bath.hh>
 #include <tinker/detail/bound.hh>
+#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/inform.hh>
 #include <tinker/detail/mdstuf.hh>
 #include <tinker/routines.h>
@@ -173,7 +174,13 @@ void xDynamic(int, char**)
    rc_flag = flags;
    initialize();
 
-   // the lambda window geometry needs both nstep and the initialized modules.
+   // open the file holding the adaptive bias history
+   if (dlmda::use_ostdyn)
+      tinker_f_initostfile();
+   if (dlmda::use_metadyn)
+      tinker_f_initmetafile();
+
+   // lay out the thermodynamic integration lambda windows
    if (use_ti)
       init_tidyn(nstep);
 
@@ -181,9 +188,8 @@ void xDynamic(int, char**)
    mdPropagate(nstep, dt);
    auto t_end = std::chrono::steady_clock::now();
 
-   // must come before finish(), which deallocates the TI accumulators.
-   if (use_ti)
-      tiPrint();
+   // save lambda dynamics information
+   mdsaveLmdaFinal(nstep);
 
    auto d_us = std::chrono::duration_cast<std::chrono::microseconds>(t_end - t_start).count();
    double us1 = (dt * 1000.) * nstep * 86400;

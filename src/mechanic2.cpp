@@ -1,6 +1,5 @@
 #include "ff/dlmda.h"
 #include "ff/ost.h"
-#include "ff/thermint.h"
 #include "md/osrw.h"
 #include "tool/tinkersuppl.h"
 
@@ -12,6 +11,5 @@ void mechanic2()
    osrw_mech();
    dlmda_mech();
    ost_mech();
-   ti_mech();
 }
 }

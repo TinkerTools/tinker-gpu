@@ -4,6 +4,7 @@
 #include "ff/modhippo.h"
 #include "ff/ost.h"
 #include "ff/potent.h"
+#include "ff/thermint.h"
 #include "md/misc.h"
 #include "md/pq.h"
 #include "tool/cudalib.h"
@@ -15,6 +16,7 @@
 #include <tinker/detail/atoms.hh>
 #include <tinker/detail/couple.hh>
 #include <tinker/detail/deriv.hh>
+#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/expol.hh>
 #include <tinker/detail/files.hh>
 #include <tinker/detail/moldyn.hh>
@@ -23,6 +25,7 @@
 #include <tinker/detail/output.hh>
 #include <tinker/detail/polar.hh>
 #include <tinker/detail/polpot.hh>
+#include <tinker/detail/thrmint.hh>
 #include <tinker/detail/titles.hh>
 #include <tinker/detail/units.hh>
 #include <tinker/routines.h>
@@ -90,6 +93,9 @@ static std::vector<double> s_lhist, s_fhist, s_hhist, s_wlhist, s_wfhist;
 static int s_nmetahist, s_sizemetahist, s_meta_first;
 static std::vector<double> s_mlhist, s_mhhist, s_mwhist;
 static std::vector<int> s_mihist;
+static bool ti_snap_active;
+static int s_tinbcount, s_ti_first;
+static std::vector<double> s_tihist, s_tidedl, s_tisd;
 
 static void mdsaveDupOst(int istep)
 {
@@ -187,6 +193,36 @@ static void mdsaveWriteOst()
    }
 }
 
+static void mdsaveDupTi()
+{
+   ti_snap_active = use_ti and not tilmdadedl.empty();
+   if (not ti_snap_active)
+      return;
+
+   s_tihist.clear(), s_tidedl.clear(), s_tisd.clear();
+   s_tinbcount = tinbcount;
+   s_ti_first = thrmint::tinbsave; // saves are serialized, so this is stable
+   for (int i = s_ti_first; i < s_tinbcount; ++i) {
+      s_tihist.push_back(tilmdahist[i]);
+      s_tidedl.push_back(tilmdadedl[i]);
+      s_tisd.push_back(tilmdadedlstd[i]);
+   }
+}
+
+static void mdsaveWriteTi()
+{
+   if (not ti_snap_active)
+      return;
+
+   for (int i = 0; i < (int)s_tihist.size(); ++i) {
+      int j = s_ti_first + i;
+      thrmint::tilmdahist[j] = s_tihist[i];
+      thrmint::tilmdadedl[j] = s_tidedl[i];
+      thrmint::tilmdadedlstd[j] = s_tisd[i];
+   }
+   thrmint::tinbcount = s_tinbcount;
+}
+
 static void mdsaveDupThenWrite(int istep, time_prec dt)
 {
 #if TINKER_CUDART
@@ -230,6 +266,7 @@ static void mdsaveDupThenWrite(int istep, time_prec dt)
       darray::copy(g::q0, 9 * n, &dup_buf_polscale[0][0][0], &polscale[0][0][0]);
 
    mdsaveDupOst(istep);
+   mdsaveDupTi();
 
       // Record mdsave_begin_event when g::s0 is available.
       // g::s1 will wait until mdsave_begin_event is recorded.
@@ -342,6 +379,7 @@ static void mdsaveDupThenWrite(int istep, time_prec dt)
 #endif
 
    mdsaveWriteOst();
+   mdsaveWriteTi();
 
    double dt1 = dt;
    double epot1 = epot;
@@ -375,6 +413,21 @@ void mdsaveSynchronize()
       fut_dup_then_write.get();
 }
 
+void mdsaveLmdaFinal(int istep)
+{
+   mdsaveDupOst(istep);
+   mdsaveWriteOst();
+   mdsaveDupTi();
+   mdsaveWriteTi();
+
+   if (dlmda::use_ostdyn)
+      tinker_f_saveost();
+   if (dlmda::use_metadyn)
+      tinker_f_savemeta();
+   if (dlmda::use_ti)
+      tinker_f_saveti();
+}
+
 void mdsaveData(RcOp op)
 {
    if (op & RcOp::DEALLOC) {
@@ -406,6 +459,8 @@ void mdsaveData(RcOp op)
       s_khist.clear(), s_ihist.clear(), s_lhist.clear(), s_fhist.clear();
       s_hhist.clear(), s_wlhist.clear(), s_wfhist.clear();
       s_mlhist.clear(), s_mhhist.clear(), s_mwhist.clear(), s_mihist.clear();
+      ti_snap_active = false;
+      s_tihist.clear(), s_tidedl.clear(), s_tisd.clear();
    }
 
    if (op & RcOp::ALLOC) {
@@ -453,6 +508,7 @@ void mdsaveData(RcOp op)
       idle_dup = false;
       idle_write = true;
       ost_snap_active = false;
+      ti_snap_active = false;
    }
 }
 }

@@ -77,6 +77,8 @@ void mdsaveAsync(int istep, time_prec dt);
 /// \ingroup md
 void mdsaveSynchronize();
 /// \ingroup md
+void mdsaveLmdaFinal(int istep);
+/// \ingroup md
 void mdsaveData(RcOp);
 }
 

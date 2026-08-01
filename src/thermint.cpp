@@ -1,142 +1,127 @@
 #include "ff/thermint.h"
 #include "ff/dlmda.h"
-#include "ff/ost.h"
-#include "tool/argkey.h"
-#include "tool/error.h"
-#include "tool/iofortstr.h"
-#include "tool/ioprint.h"
-#include "tool/tinkersuppl.h"
-#include <cmath>
-#include <cstdio>
-#include <tinker/detail/files.hh>
+#include <algorithm>
+#include <tinker/detail/thrmint.hh>
+#include <tinker/routines.h>
 
 namespace tinker {
-void ti_mech()
-{
-   getKV("THERM-INTG", use_ti, false);
-   getKV("TI-NBIN", tinbin, 21);
-   getKV("TI-NSTEPAVG", tinstepavg, 100);
-   getKV("TI-EQUIL-RATIO", tieqratio, 0.5);
-
-   if (not use_ti)
-      return;
-
-   if (use_ost or use_meta)
-      TINKER_THROW("THERM-INTG  --  Not compatible with OST or metadynamics");
-   if (not use_dlmda)
-      TINKER_THROW("THERM-INTG  --  Requires an alchemical (LAMBDA-DERIV keyword) setup");
-   if (tinbin < 2)
-      TINKER_THROW("THERM-INTG  --  TI-NBIN must be at least 2");
-   if (tinstepavg < 1)
-      TINKER_THROW("THERM-INTG  --  TI-NSTEPAVG must be positive");
-   if (tieqratio < 0.0 or tieqratio >= 1.0)
-      TINKER_THROW("THERM-INTG  --  TI-EQUIL-RATIO must be in [0,1)");
-}
-
 void thermintData(RcOp op)
 {
    if (not use_ti)
       return;
 
    if (op & RcOp::DEALLOC) {
+      tilmdalist.clear();
+      tifraclist.clear();
+      tiwinend.clear();
+      tilmdahist.clear();
       tilmdadedl.clear();
-      tilmdadedl.shrink_to_fit();
       tilmdadedlstd.clear();
-      tilmdadedlstd.shrink_to_fit();
       tidedllist.clear();
-      tidedllist.shrink_to_fit();
    }
 
    if (op & RcOp::INIT) {
-      // One row per lambda window; the rows grow by push_back.
-      tilmdadedl.assign(tinbin, {});
-      tilmdadedlstd.assign(tinbin, {});
+      // Adopt the schedule settisched built.
+      tinbin = thrmint::tinbin;
+      tinstepavg = thrmint::tinstepavg;
+      tieqratio = thrmint::tieqratio;
+      tilmda = thrmint::tilmda;
+      tilmdalist.assign(thrmint::tilmdalist, thrmint::tilmdalist + tinbin);
+      tifraclist.assign(thrmint::tifraclist, thrmint::tifraclist + tinbin);
+
+      // The block accumulators cannot be sized until nstep is known; init_tidyn
+      // does that once the window boundaries exist.
       tidedllist.assign(tinstepavg, 0.0);
-      tibin = 0;
-      tilmda = 1.0;
+      tiwinend.clear();
+      tilmdahist.clear();
+      tilmdadedl.clear();
+      tilmdadedlstd.clear();
+      tibin = 1;
+      tinbcount = 0;
+      tinbtot = 0;
       tiwindow = 0;
       tinequil = 0;
+      tinblock = 0;
    }
 }
 
 void init_tidyn(int nstep)
 {
-   tiwindow = nstep / tinbin;
-   if (tiwindow < 1)
-      TINKER_THROW("THERM-INTG  --  Fewer dynamics steps than TI-NBIN windows");
+   // The CPU divides the run among the windows, sizes its own accumulators and
+   // opens the .ti file; a window left with no dynamics steps is fatal there.
+   int ns = nstep;
+   tinker_f_inittidyn(&ns);
+   tinker_f_prttihead();
 
-   tinequil = (int)(tiwindow * tieqratio);
-   if (tiwindow - tinequil < tinstepavg)
-      TINKER_THROW("THERM-INTG  --  Production block is shorter than TI-NSTEPAVG");
+   tinbtot = thrmint::tinbtot;
+   tibin = thrmint::tibin;
+   tilmda = thrmint::tilmda;
+   tiwindow = thrmint::tiwindow;
+   tinequil = thrmint::tinequil;
+   tinblock = thrmint::tinblock;
+   tiwinend.assign(thrmint::tiwinend, thrmint::tiwinend + tinbin);
 
-   tibin = 0;
-   tilmda = 1.0;
+   int cap = std::max(1, tinbtot);
+   tilmdahist.assign(cap, 0.0);
+   tilmdadedl.assign(cap, 0.0);
+   tilmdadedlstd.assign(cap, 0.0);
+   tidedllist.assign(tinstepavg, 0.0);
+   tinbcount = 0;
+
    mapSubLambda(tilmda);
+}
+
+// Measures the current window against the preceding boundary (thermint.f:298).
+static void tiSetWindow()
+{
+   tiwindow = tiwinend[tibin - 1];
+   if (tibin > 1)
+      tiwindow = tiwinend[tibin - 1] - tiwinend[tibin - 2];
+   tinequil = (int)((double)tiwindow * tieqratio);
+   tinblock = (tiwindow - tinequil) / tinstepavg;
 }
 
 void etidyn(int istep)
 {
-   // A trailing partial window is left unsampled when nstep % tinbin != 0.
-   if (tibin >= tinbin)
+   // Nothing is left to sample once the schedule has run out.
+   if (tibin > tinbin)
       return;
 
-   int tistep = (istep - 1) % tiwindow + 1;
+   int tistart = (tibin > 1) ? tiwinend[tibin - 2] : 0;
+   int tistep = istep - tistart;
 
    // Nothing is stored while the window is equilibrating.
    if (tistep > tinequil) {
       int tiprod = tistep - tinequil;
       tidedllist[(tiprod - 1) % tinstepavg] = dedl;
+
+      // Reduce a full block into its average and deviation, keeping the lambda
+      // that produced it alongside the block itself.
       if (tiprod % tinstepavg == 0) {
          double avg, sd;
          avgstd(tidedllist, 0, tinstepavg, avg, sd);
-         tilmdadedl[tibin].push_back(avg);
-         tilmdadedlstd[tibin].push_back(sd);
+         if (tinbcount < tinbtot) {
+            tilmdahist[tinbcount] = tilmda;
+            tilmdadedl[tinbcount] = avg;
+            tilmdadedlstd[tinbcount] = sd;
+            ++tinbcount;
+         }
       }
    }
 
-   if (tistep == tiwindow)
+   // Move on to the next lambda window at the window boundary.
+   if (istep == tiwinend[tibin - 1])
       tischedule();
 }
 
 void tischedule()
 {
-   // Both endpoints are sampled, so tinbin windows span [0,1] in tinbin-1 steps.
-   tibin = tibin + 1;
-   tilmda = 1.0 - (double)tibin / (double)(tinbin - 1);
-   if (tilmda < 0.0)
-      tilmda = 0.0;
-   // energy() re-maps the sub-lambdas at the top of the next step.
-}
-
-// Temporary output path: one row per block average, so the ragged rows of
-// tilmdadedl come out as a flat table that numpy.loadtxt reads as-is.
-void tiPrint()
-{
-   if (not use_ti)
-      return;
-
-   std::string tifile = FstrView(files::filename)(1, files::leng).trim() + ".ti";
-   tifile = tinker_f_version(tifile, "new");
-   std::FILE* fp = std::fopen(tifile.c_str(), "w");
-   if (fp == nullptr) {
-      print(stdout, "\n TI  --  Could not open %s for writing\n", tifile);
-      return;
+   // Past the final window the lambda is left where it is and etidyn stops.
+   ++tibin;
+   if (tibin <= tinbin) {
+      tilmda = tilmdalist[tibin - 1];
+      tiSetWindow();
+      mapSubLambda(tilmda);
    }
-
-   print(fp, "# tinker9 thermodynamic integration\n");
-   print(fp, "# tinbin %d tinstepavg %d tieqratio %.6f tiwindow %d tinequil %d\n", //
-      tinbin, tinstepavg, tieqratio, tiwindow, tinequil);
-   print(fp, "# window lambda block dedl dedlstd\n");
-   for (int w = 0; w < tinbin; ++w) {
-      double lam = 1.0 - (double)w / (double)(tinbin - 1);
-      if (lam < 0.0)
-         lam = 0.0;
-      for (size_t b = 0; b < tilmdadedl[w].size(); ++b)
-         print(fp, "%6d %12.8f %6zu %20.10e %20.10e\n", //
-            w, lam, b, tilmdadedl[w][b], tilmdadedlstd[w][b]);
-   }
-   std::fclose(fp);
-
-   print(stdout, "\n TI  --  dU/dlambda block averages written to  %s\n", tifile);
 }
 }

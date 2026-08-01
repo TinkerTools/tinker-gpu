@@ -3,17 +3,37 @@
 #include "ff/elec.h"
 #include "ff/evdw.h"
 #include "ff/ost.h"
+#include "md/misc.h"
+#include "tool/iofortstr.h"
 
 #include "test.h"
 #include "testrt.h"
 
+#include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <fstream>
+#include <sstream>
+#include <string>
 #include <vector>
 
-// Unit tests for thermodynamic integration (src/thermint.cpp). Pure host math:
+#include <tinker/detail/dlmda.hh>
+#include <tinker/detail/files.hh>
+#include <tinker/detail/thrmint.hh>
+#include <tinker/routines.h>
+
+// Unit tests for thermodynamic integration (src/thermint.cpp), following the
+// Fortran suite in tinker/test/test_thermint.f. Most cases are pure host math:
 // no molecular system, no Fortran runtime, no GPU. etidyn samples the plain
 // host global dedl, so the accumulation logic is driven by assigning dedl
-// directly rather than by evaluating any energy.
+// directly rather than by evaluating any energy. Like the Fortran helpers, they
+// seed tiwinend/tilmdalist directly and bypass init_tidyn, so the accumulation
+// cases do not depend on how the step budget was divided.
+//
+// THERMINT-save is the exception: it brings up the Fortran runtime, because the
+// schedule is precomputed by mutate.f/settisched and the .ti file is written by
+// thermint.f/prttihead and saveti. It is also where the adoption performed by
+// thermintData(INIT) is checked, since that reads the Fortran thrmint module.
 //
 // IMPORTANT: use_ti is a process-wide global and all.tests is one process. If a
 // case here leaves it true, a later test's initialize() would see it in the
@@ -24,44 +44,121 @@
 using namespace tinker;
 
 namespace {
-// resetti -- set the TI scalars and size the accumulators directly, bypassing
-// thermintData so the accumulation cases do not depend on it. Keeps the
-// invariant tinbin == tilmdadedl.size(), which etidyn's bounds check relies on.
-void resetti(int nbin, int nstepavg, int window, int nequil)
-{
-   use_ti = true;
-   tinbin = nbin;
-   tinstepavg = nstepavg;
-   tiwindow = window;
-   tinequil = nequil;
-   tieqratio = (window > 0) ? (double)nequil / (double)window : 0.0;
-   tibin = 0;
-   tilmda = 1.0;
-   tilmdadedl.assign(nbin, {});
-   tilmdadedlstd.assign(nbin, {});
-   tidedllist.assign(nstepavg, 0.0);
-   dedl = 0;
-}
-
-// Restores the process-wide flag and drops the accumulators.
-void clearti()
-{
-   use_ti = false;
-   tilmdadedl.clear();
-   tilmdadedlstd.clear();
-   tidedllist.clear();
-}
-
 // Puts the sub-lambda maps on the power-law branch, which is plain C++. The
 // QNT/NONE taper branch calls tinker_f_switch and needs the Fortran runtime.
 void useExpMaps(int eexp, int pexp, int vexp)
 {
+   use_relstage = false;
    elmdamap = Lmdamap::EXP;
    plmdamap = Lmdamap::EXP;
    vlmdamap = Lmdamap::EXP;
    elmdaexp = eexp;
    plmdaexp = pexp;
    vlmdaexp = vexp;
+}
+
+// resettisched -- install an arbitrary schedule and size the accumulators the
+// way settiblocks would, then rewind to the first window. tischedule and
+// init_tidyn both end in mapSubLambda, so the maps are pinned here too.
+void resettisched(const std::vector<double>& lam, const std::vector<int>& winend, int nstepavg,
+   double eqratio)
+{
+   use_ti = true;
+   useExpMaps(1, 1, 1);
+
+   tinbin = (int)lam.size();
+   tinstepavg = nstepavg;
+   tieqratio = eqratio;
+   tilmdalist = lam;
+   tifraclist.assign(tinbin, 1.0 / (double)tinbin);
+   tiwinend = winend;
+
+   tinbtot = 0;
+   int istart = 0;
+   for (int i = 0; i < tinbin; ++i) {
+      int nw = winend[i] - istart;
+      int ne = (int)((double)nw * eqratio);
+      tinbtot += (nw - ne) / nstepavg;
+      istart = winend[i];
+   }
+
+   int cap = std::max(1, tinbtot);
+   tilmdahist.assign(cap, 0.0);
+   tilmdadedl.assign(cap, 0.0);
+   tilmdadedlstd.assign(cap, 0.0);
+   tidedllist.assign(nstepavg, 0.0);
+   tinbcount = 0;
+
+   tibin = 1;
+   tilmda = tilmdalist[0];
+   tiwindow = tiwinend[0];
+   tinequil = (int)((double)tiwindow * tieqratio);
+   tinblock = (tiwindow - tinequil) / tinstepavg;
+   dedl = 0;
+}
+
+// The equal-window special case, with the default schedule descending 1 -> 0.
+void resetti(int nbin, int nstepavg, int window, int nequil)
+{
+   std::vector<int> winend(nbin);
+   std::vector<double> lam(nbin);
+   for (int i = 0; i < nbin; ++i) {
+      winend[i] = (i + 1) * window;
+      lam[i] = (nbin > 1) ? 1.0 - (double)i / (double)(nbin - 1) : 1.0;
+   }
+   if (nbin > 1)
+      lam[nbin - 1] = 0.0;
+   resettisched(lam, winend, nstepavg, (double)nequil / (double)window);
+}
+
+// Restores the process-wide flags and drops the accumulators. The maps go back
+// to the defaults mutate.f sets, so nothing downstream sees a half-configured
+// state.
+void clearti()
+{
+   use_ti = false;
+   tilmdalist.clear();
+   tifraclist.clear();
+   tiwinend.clear();
+   tilmdahist.clear();
+   tilmdadedl.clear();
+   tilmdadedlstd.clear();
+   tidedllist.clear();
+   elmdamap = Lmdamap::QNT;
+   plmdamap = Lmdamap::QNT;
+   vlmdamap = Lmdamap::QNT;
+}
+
+// Number of data records, i.e. lines that prttihead did not write.
+int tiCountRows(const std::string& fname)
+{
+   std::ifstream fs(fname);
+   std::string line;
+   int n = 0;
+   while (std::getline(fs, line))
+      if (not line.empty() and line[0] != '#')
+         ++n;
+   return n;
+}
+
+// Lambda column of the nth (1-based) data record.
+double tiRowLambda(const std::string& fname, int nth)
+{
+   std::ifstream fs(fname);
+   std::string line;
+   int n = 0;
+   while (std::getline(fs, line)) {
+      if (line.empty() or line[0] == '#')
+         continue;
+      if (++n == nth) {
+         std::istringstream ss(line);
+         int idx;
+         double lam;
+         ss >> idx >> lam;
+         return lam;
+      }
+   }
+   return -1.0;
 }
 }
 
@@ -119,20 +216,23 @@ TEST_CASE("THERMINT-schedule", "[ff][thermint]")
 {
    const double eps = 1.0e-12;
 
-   // 21 bins: lambda = 1.00, 0.95, ..., 0.05, 0.00 in steps of 1/(tinbin-1).
+   // 21 bins: lambda = 1.00, 0.95, ..., 0.05, 0.00. tibin is a 1-based window
+   // number, so the schedule starts at 1 rather than 0.
    resetti(21, 10, 100, 50);
+   REQUIRE(tibin == 1);
+   REQUIRE(tilmda == 1.0);
    for (int k = 1; k <= 20; ++k) {
       tischedule();
-      REQUIRE(tibin == k);
+      REQUIRE(tibin == k + 1);
       COMPARE_REALS(tilmda, 1.0 - (double)k / 20.0, eps);
    }
    // the final window must sit exactly on the endpoint
    REQUIRE(tilmda == 0.0);
 
-   // one call past the end clamps instead of going negative
+   // one call past the end leaves the lambda where it is
    tischedule();
    REQUIRE(tilmda == 0.0);
-   REQUIRE(tibin == 21);
+   REQUIRE(tibin == 22);
 
    // 5 bins: 1.00, 0.75, 0.50, 0.25, 0.00
    resetti(5, 10, 40, 20);
@@ -148,87 +248,54 @@ TEST_CASE("THERMINT-schedule", "[ff][thermint]")
    REQUIRE(tilmda == 1.0);
    tischedule();
    REQUIRE(tilmda == 0.0);
-   REQUIRE(tibin == 1);
+   REQUIRE(tibin == 2);
+
+   // An ascending schedule is legal and must hold at its own last value rather
+   // than being clamped back toward zero.
+   resettisched({0.0, 0.25, 0.5, 0.75, 1.0}, {40, 80, 120, 160, 200}, 10, 0.5);
+   REQUIRE(tilmda == 0.0);
+   for (int k = 1; k <= 4; ++k)
+      tischedule();
+   REQUIRE(tilmda == 1.0);
+   tischedule();
+   REQUIRE(tilmda == 1.0);
+   REQUIRE(tibin == 6);
+
+   // An interior-only schedule never touches either endpoint.
+   resettisched({0.75, 0.70, 0.20}, {40, 80, 120}, 10, 0.5);
+   COMPARE_REALS(tilmda, 0.75, eps);
+   tischedule();
+   COMPARE_REALS(tilmda, 0.70, eps);
+   tischedule();
+   COMPARE_REALS(tilmda, 0.20, eps);
 
    clearti();
 }
 
 TEST_CASE("THERMINT-data", "[ff][thermint]")
 {
-   // use_ti false: thermintData is a no-op and must not touch the vectors
+   // thermintData(INIT) reads the Fortran thrmint module, so the adoption it
+   // performs is checked in THERMINT-save where the runtime is up. What is
+   // testable here is that the whole routine is inert while use_ti is false,
+   // and that DEALLOC releases the accumulators.
    use_ti = false;
    tinbin = 7;
    tinstepavg = 13;
-   tilmdadedl.assign(3, std::vector<double>{1.0, 2.0});
-   tilmdadedlstd.assign(3, std::vector<double>{3.0});
+   tilmdadedl.assign(3, 1.0);
+   tilmdadedlstd.assign(3, 3.0);
    tidedllist.assign(2, 9.0);
    thermintData(RcOp::ALLOC | RcOp::INIT);
    REQUIRE(tilmdadedl.size() == 3);
-   REQUIRE(tilmdadedl[0].size() == 2);
    REQUIRE(tilmdadedlstd.size() == 3);
    REQUIRE(tidedllist.size() == 2);
 
-   // use_ti true: INIT sizes one row per lambda window
    use_ti = true;
-   thermintData(RcOp::INIT);
-   REQUIRE((int)tilmdadedl.size() == 7);
-   REQUIRE((int)tilmdadedlstd.size() == 7);
-   REQUIRE((int)tidedllist.size() == 13);
-   for (int i = 0; i < 7; ++i) {
-      REQUIRE(tilmdadedl[i].empty());
-      REQUIRE(tilmdadedlstd[i].empty());
-   }
-   REQUIRE(tilmda == 1.0);
-   REQUIRE(tibin == 0);
-
-   // re-initializing clears whatever the rows had accumulated
-   tilmdadedl[2].push_back(5.0);
-   tilmdadedlstd[2].push_back(6.0);
-   tibin = 4;
-   tilmda = 0.25;
-   thermintData(RcOp::INIT);
-   REQUIRE((int)tilmdadedl.size() == 7);
-   REQUIRE(tilmdadedl[2].empty());
-   REQUIRE(tilmdadedlstd[2].empty());
-   REQUIRE(tibin == 0);
-   REQUIRE(tilmda == 1.0);
-
    thermintData(RcOp::DEALLOC);
    REQUIRE(tilmdadedl.empty());
    REQUIRE(tilmdadedlstd.empty());
    REQUIRE(tidedllist.empty());
-
-   clearti();
-}
-
-TEST_CASE("THERMINT-init_tidyn", "[ff][thermint]")
-{
-   // init_tidyn ends with mapSubLambda(tilmda); keep it on the power-law branch.
-   useExpMaps(1, 1, 1);
-
-   use_ti = true;
-   tinstepavg = 10;
-
-   tinbin = 5;
-   tieqratio = 0.5;
-   init_tidyn(200);
-   REQUIRE(tiwindow == 40);
-   REQUIRE(tinequil == 20);
-   REQUIRE(tibin == 0);
-   REQUIRE(tilmda == 1.0);
-
-   tinbin = 21;
-   tieqratio = 0.25;
-   init_tidyn(2100);
-   REQUIRE(tiwindow == 100);
-   REQUIRE(tinequil == 25);
-
-   // integer truncation: 205/5 = 41 steps per window, 41*0.5 = 20.5 -> 20
-   tinbin = 5;
-   tieqratio = 0.5;
-   init_tidyn(205);
-   REQUIRE(tiwindow == 41);
-   REQUIRE(tinequil == 20);
+   REQUIRE(tilmdahist.empty());
+   REQUIRE(tiwinend.empty());
 
    clearti();
 }
@@ -240,6 +307,7 @@ TEST_CASE("THERMINT-etidyn", "[ff][thermint]")
 
    // 5 windows of 40 steps: 20 equilibration, 20 production, 2 blocks of 10.
    resetti(5, 10, 40, 20);
+   REQUIRE(tinbtot == 10);
 
    std::vector<double> lambda_seen(201, -1.0);
    for (int istep = 1; istep <= 200; ++istep) {
@@ -248,19 +316,16 @@ TEST_CASE("THERMINT-etidyn", "[ff][thermint]")
       etidyn(istep);
    }
 
-   // means of the ten consecutive integers in each production block
-   const double ref[5][2] = {
-      {25.5, 35.5}, {65.5, 75.5}, {105.5, 115.5}, {145.5, 155.5}, {185.5, 195.5}};
+   // means of the ten consecutive integers in each production block, in record
+   // order rather than one row per window
+   const double ref[10] = {25.5, 35.5, 65.5, 75.5, 105.5, 115.5, 145.5, 155.5, 185.5, 195.5};
 
-   REQUIRE((int)tilmdadedl.size() == 5);
-   REQUIRE((int)tilmdadedlstd.size() == 5);
-   for (int w = 0; w < 5; ++w) {
-      REQUIRE((int)tilmdadedl[w].size() == 2);
-      REQUIRE((int)tilmdadedlstd[w].size() == 2);
-      for (int b = 0; b < 2; ++b) {
-         COMPARE_REALS(tilmdadedl[w][b], ref[w][b], eps);
-         COMPARE_REALS(tilmdadedlstd[w][b], sd10, eps);
-      }
+   REQUIRE(tinbcount == 10);
+   for (int b = 0; b < 10; ++b) {
+      COMPARE_REALS(tilmdadedl[b], ref[b], eps);
+      COMPARE_REALS(tilmdadedlstd[b], sd10, eps);
+      // each block is tagged with the lambda that produced it
+      COMPARE_REALS(tilmdahist[b], 1.0 - (double)(b / 2) / 4.0, 1.0e-12);
    }
 
    // the schedule must advance at the window boundary, not one step off
@@ -268,22 +333,20 @@ TEST_CASE("THERMINT-etidyn", "[ff][thermint]")
       double lref = 1.0 - (double)((istep - 1) / 40) / 4.0;
       COMPARE_REALS(lambda_seen[istep], lref, 1.0e-12);
    }
-   REQUIRE(tibin == 5);
+   REQUIRE(tibin == 6);
    REQUIRE(tilmda == 0.0);
 
    // Same run, but poison every equilibration step. The block averages must be
    // untouched, which makes the "discard while equilibrating" rule explicit.
    resetti(5, 10, 40, 20);
    for (int istep = 1; istep <= 200; ++istep) {
-      int tistep = (istep - 1) % tiwindow + 1;
+      int tistep = (istep - 1) % 40 + 1;
       dedl = (tistep <= tinequil) ? (energy_prec)-1.0e9 : (energy_prec)istep;
       etidyn(istep);
    }
-   for (int w = 0; w < 5; ++w) {
-      REQUIRE((int)tilmdadedl[w].size() == 2);
-      for (int b = 0; b < 2; ++b)
-         COMPARE_REALS(tilmdadedl[w][b], ref[w][b], eps);
-   }
+   REQUIRE(tinbcount == 10);
+   for (int b = 0; b < 10; ++b)
+      COMPARE_REALS(tilmdadedl[b], ref[b], eps);
 
    clearti();
 }
@@ -296,23 +359,22 @@ TEST_CASE("THERMINT-etidyn-partialblock", "[ff][thermint]")
    // five samples are stranded in tidedllist. They must not leak into the next
    // window, which overwrites every index before its first flush.
    resetti(5, 10, 40, 15);
+   REQUIRE(tinequil == 15);
+   REQUIRE(tinbtot == 10);
 
    for (int istep = 1; istep <= 200; ++istep) {
       dedl = (energy_prec)istep;
       etidyn(istep);
    }
 
-   REQUIRE((int)tilmdadedl.size() == 5);
-   for (int w = 0; w < 5; ++w)
-      REQUIRE((int)tilmdadedl[w].size() == 2);
-
-   // window 0: steps 16-25 and 26-35; steps 36-40 orphaned
-   COMPARE_REALS(tilmdadedl[0][0], 20.5, eps);
-   COMPARE_REALS(tilmdadedl[0][1], 30.5, eps);
-   // window 1 production starts at step 56; a leak from window 0 would drag
+   REQUIRE(tinbcount == 10);
+   // window 1: steps 16-25 and 26-35; steps 36-40 orphaned
+   COMPARE_REALS(tilmdadedl[0], 20.5, eps);
+   COMPARE_REALS(tilmdadedl[1], 30.5, eps);
+   // window 2 production starts at step 56; a leak from window 1 would drag
    // this below 60.5
-   COMPARE_REALS(tilmdadedl[1][0], 60.5, eps);
-   COMPARE_REALS(tilmdadedl[1][1], 70.5, eps);
+   COMPARE_REALS(tilmdadedl[2], 60.5, eps);
+   COMPARE_REALS(tilmdadedl[3], 70.5, eps);
 
    clearti();
 }
@@ -320,8 +382,8 @@ TEST_CASE("THERMINT-etidyn-partialblock", "[ff][thermint]")
 TEST_CASE("THERMINT-etidyn-trailing", "[ff][thermint]")
 {
    // 210 steps over 5 windows of 40: the last 10 steps fall past the schedule
-   // and must hit the tibin >= tinbin early return rather than index out of
-   // bounds on tilmdadedl[tibin].
+   // and must hit the tibin > tinbin early return rather than index out of
+   // bounds on tiwinend[tibin-1].
    resetti(5, 10, 40, 20);
 
    for (int istep = 1; istep <= 210; ++istep) {
@@ -329,14 +391,160 @@ TEST_CASE("THERMINT-etidyn-trailing", "[ff][thermint]")
       etidyn(istep);
    }
 
-   REQUIRE(tibin == 5);
-   REQUIRE((int)tilmdadedl.size() == 5);
-   for (int w = 0; w < 5; ++w) {
-      REQUIRE((int)tilmdadedl[w].size() == 2);
-      REQUIRE((int)tilmdadedlstd[w].size() == 2);
-   }
+   REQUIRE(tibin == 6);
+   REQUIRE(tinbcount == 10);
+   REQUIRE(tinbcount == tinbtot);
+   REQUIRE((int)tilmdadedl.size() == 10);
 
    clearti();
+}
+
+TEST_CASE("THERMINT-uneven", "[ff][thermint]")
+{
+   const double eps = testGetEps(1.0e-4, 1.0e-12);
+
+   // Windows of very different lengths, which the old fixed-width nstep/tinbin
+   // layout could not express at all: 50%, 48% and 2% of a 1000 step run.
+   resettisched({1.0, 0.5, 0.0}, {500, 980, 1000}, 10, 0.5);
+   REQUIRE(tinbtot == 50); // 25 + 24 + 1
+
+   for (int istep = 1; istep <= 1000; ++istep) {
+      dedl = (energy_prec)istep;
+      etidyn(istep);
+   }
+
+   REQUIRE(tinbcount == 50);
+   // window 1 production starts at step 251
+   COMPARE_REALS(tilmdadedl[0], 255.5, eps);
+   // the 2% window holds exactly one block, steps 991-1000
+   COMPARE_REALS(tilmdadedl[49], 995.5, eps);
+   COMPARE_REALS(tilmdahist[0], 1.0, 1.0e-12);
+   COMPARE_REALS(tilmdahist[24], 1.0, 1.0e-12);
+   COMPARE_REALS(tilmdahist[25], 0.5, 1.0e-12);
+   COMPARE_REALS(tilmdahist[48], 0.5, 1.0e-12);
+   COMPARE_REALS(tilmdahist[49], 0.0, 1.0e-12);
+
+   // A window shorter than one block records nothing, but the run still visits
+   // its lambda and the windows around it are unaffected.
+   resettisched({1.0, 0.5, 0.0}, {100, 105, 205}, 10, 0.5);
+   REQUIRE(tinbtot == 10); // 5 + 0 + 5
+
+   std::vector<double> lambda_seen(206, -1.0);
+   for (int istep = 1; istep <= 205; ++istep) {
+      dedl = (energy_prec)istep;
+      lambda_seen[istep] = tilmda;
+      etidyn(istep);
+   }
+
+   REQUIRE(tinbcount == 10);
+   COMPARE_REALS(lambda_seen[101], 0.5, 1.0e-12); // the short window is visited
+   COMPARE_REALS(lambda_seen[105], 0.5, 1.0e-12);
+   COMPARE_REALS(lambda_seen[106], 0.0, 1.0e-12);
+   COMPARE_REALS(tilmdahist[4], 1.0, 1.0e-12); // last block of window 1
+   COMPARE_REALS(tilmdahist[5], 0.0, 1.0e-12); // first block of window 3
+   COMPARE_REALS(tilmdadedl[4], 95.5, eps);    // steps 91-100
+   COMPARE_REALS(tilmdadedl[5], 160.5, eps);   // steps 156-165
+
+   clearti();
+}
+
+TEST_CASE("THERMINT-save", "[ff][thermint]")
+{
+   // The one case that needs the Fortran runtime: the schedule comes from
+   // settisched and the .ti file is written by prttihead and saveti.
+   const char* argv[] = {"dummy"};
+   tinkerFortranRuntimeBegin(1, (char**)argv);
+   initial();
+
+   // write into a scratch base name rather than whatever the runtime picked
+   char savedname[240];
+   std::memcpy(savedname, files::filename, 240);
+   int savedleng = files::leng;
+   FstrView fname = files::filename;
+   fname = "tisave_tmp";
+   files::leng = 10;
+
+   // mutate.f never ran, so seed what it would have parsed and let settisched
+   // build the schedule itself
+   dlmda::use_ti = 1;
+   dlmda::use_relstage = 0;
+   FstrView(dlmda::elmdamap) = "EXP";
+   FstrView(dlmda::plmdamap) = "EXP";
+   FstrView(dlmda::vlmdamap) = "EXP";
+   dlmda::elmdaexp = 1;
+   dlmda::plmdaexp = 1;
+   dlmda::vlmdaexp = 1;
+   thrmint::tinbin = 5;
+   thrmint::tinstepavg = 10;
+   thrmint::tieqratio = 0.5;
+   int ntiwin = 0, tinbinset = 0;
+   tinker_f_settisched(&ntiwin, &tinbinset);
+
+   use_ti = true;
+   useExpMaps(1, 1, 1);
+
+   // thermintData adopts the precomputed schedule
+   thermintData(RcOp::INIT);
+   REQUIRE(tinbin == 5);
+   REQUIRE(tinstepavg == 10);
+   COMPARE_REALS(tieqratio, 0.5, 1.0e-12);
+   REQUIRE((int)tilmdalist.size() == 5);
+   COMPARE_REALS(tilmdalist[0], 1.0, 1.0e-12);
+   COMPARE_REALS(tilmdalist[2], 0.5, 1.0e-12);
+   REQUIRE(tilmdalist[4] == 0.0);
+   REQUIRE((int)tifraclist.size() == 5);
+   COMPARE_REALS(tifraclist[0], 0.2, 1.0e-12);
+   REQUIRE(tibin == 1);
+
+   // init_tidyn divides the run among the windows and starts the file
+   init_tidyn(200);
+   REQUIRE((int)tiwinend.size() == 5);
+   REQUIRE(tiwinend[0] == 40);
+   REQUIRE(tiwinend[4] == 200);
+   REQUIRE(tiwindow == 40);
+   REQUIRE(tinequil == 20);
+   REQUIRE(tinblock == 2);
+   REQUIRE(tinbtot == 10);
+   REQUIRE(tibin == 1);
+   REQUIRE(tilmda == 1.0);
+   REQUIRE(tinbcount == 0);
+
+   // prttihead claims a new version, so take the name it actually used
+   std::string tifile = FstrView(thrmint::tifile).trim();
+   REQUIRE(tifile.size() > 0);
+   REQUIRE(tiCountRows(tifile) == 0); // header only
+
+   for (int istep = 1; istep <= 200; ++istep) {
+      dedl = (energy_prec)istep;
+      etidyn(istep);
+      if (istep == 80) {
+         mdsaveLmdaFinal(istep);
+         REQUIRE(tiCountRows(tifile) == 4); // two windows of two blocks
+      } else if (istep == 160) {
+         mdsaveLmdaFinal(istep);
+         REQUIRE(tiCountRows(tifile) == 8);
+         // nothing new has completed, so a second call must not append
+         mdsaveLmdaFinal(istep);
+         REQUIRE(tiCountRows(tifile) == 8);
+      }
+   }
+
+   mdsaveLmdaFinal(200);
+   REQUIRE(tiCountRows(tifile) == 10);
+   REQUIRE(tiCountRows(tifile) == tinbcount);
+   REQUIRE(thrmint::tinbsave == tinbcount);
+
+   // the lambda column must carry the schedule, not the row number
+   COMPARE_REALS(tiRowLambda(tifile, 1), 1.0, 1.0e-8);
+   COMPARE_REALS(tiRowLambda(tifile, 5), 0.5, 1.0e-8);
+   COMPARE_REALS(tiRowLambda(tifile, 10), 0.0, 1.0e-8);
+
+   fileExistsAndDelete(tifile);
+   std::memcpy(files::filename, savedname, 240);
+   files::leng = savedleng;
+   dlmda::use_ti = 0;
+   clearti();
+   testEnd();
 }
 
 TEST_CASE("THERMINT-mapsublambda", "[ff][thermint]")
@@ -415,8 +623,5 @@ TEST_CASE("THERMINT-mapsublambda", "[ff][thermint]")
 
    // Leave the maps as the defaults set by mutate.f so nothing downstream sees
    // a half-configured state.
-   elmdamap = Lmdamap::QNT;
-   plmdamap = Lmdamap::QNT;
-   vlmdamap = Lmdamap::QNT;
    clearti();
 }
