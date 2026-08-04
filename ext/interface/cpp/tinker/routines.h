@@ -314,8 +314,6 @@ void sublmdaexp_(double* x, int* exponent, double* lmda, double* dlmda, double* 
 #define tinker_f_sublmdaexp sublmdaexp_
 void sublmdainvpower_(double* x, int* n, double* eps, double* lmda, double* dlmda, double* d2lmda);
 #define tinker_f_sublmdainvpower sublmdainvpower_
-int uselmdachain_();
-#define tinker_f_uselmdachain uselmdachain_
 void lmdachain_();
 #define tinker_f_lmdachain lmdachain_
 void avgstd_(double* list, int* begin, int* count, double* avg, double* std);
@@ -2220,6 +2218,16 @@ void dmoments_(double* xm, double* ym, double* zm, double* xustc, double* yustc,
 // mutate.f
 void mutate_();
 #define tinker_f_mutate mutate_
+void mutate_dlmda_();
+#define tinker_f_mutate_dlmda mutate_dlmda_
+void mutate_ost_();
+#define tinker_f_mutate_ost mutate_ost_
+void mutate_meta_();
+#define tinker_f_mutate_meta mutate_meta_
+void mutate_ti_();
+#define tinker_f_mutate_ti mutate_ti_
+void mutate_check_();
+#define tinker_f_mutate_check mutate_check_
 void setligand_(int* j, int* igrp);
 #define tinker_f_setligand setligand_
 void altelec_();
