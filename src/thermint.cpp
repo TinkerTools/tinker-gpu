@@ -67,8 +67,6 @@ void init_tidyn(int nstep)
    tilmdadedlstd.assign(cap, 0.0);
    tidedllist.assign(tinstepavg, 0.0);
    tinbcount = 0;
-
-   mapSubLambda(tilmda);
 }
 
 // Measures the current window against the preceding boundary (thermint.f:298).
@@ -121,7 +119,6 @@ void tischedule()
    if (tibin <= tinbin) {
       tilmda = tilmdalist[tibin - 1];
       tiSetWindow();
-      mapSubLambda(tilmda);
    }
 }
 }

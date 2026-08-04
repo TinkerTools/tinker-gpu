@@ -617,7 +617,6 @@ void ostLangevin()
 
    double sinth = std::sin(osttheta);
    ostlambda = sinth * sinth;
-   mapSubLambda(ostlambda);
 }
 
 static void metaImages(double lambda, double src[3])

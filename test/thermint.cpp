@@ -58,8 +58,7 @@ void useExpMaps(int eexp, int pexp, int vexp)
 }
 
 // resettisched -- install an arbitrary schedule and size the accumulators the
-// way settiblocks would, then rewind to the first window. tischedule and
-// init_tidyn both end in mapSubLambda, so the maps are pinned here too.
+// way settiblocks would, then rewind to the first window.
 void resettisched(const std::vector<double>& lam, const std::vector<int>& winend, int nstepavg,
    double eqratio)
 {
