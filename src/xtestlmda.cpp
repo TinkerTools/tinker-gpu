@@ -47,6 +47,30 @@ struct LambdaEnergy
    energy_prec polar;
 };
 
+struct LambdaEvaluation
+{
+   LambdaEnergy energy;
+   std::vector<double> gradient;
+   double virial[9] = {};
+};
+
+enum class LambdaVariable
+{
+   MAIN,
+   VDW,
+   ELE,
+   POL
+};
+
+struct FdLambdaState
+{
+   bool useMain;
+   double main;
+   double vdw;
+   double ele;
+   double pol;
+};
+
 static void setLambda(double vlambda, double elambda, double plambda)
 {
    mutant::vlambda = vlambda;
@@ -57,36 +81,78 @@ static void setLambda(double vlambda, double elambda, double plambda)
    plam = plambda;
 }
 
-// The lambda the finite differences perturb. When OST, metadynamics, or TI owns
-// the main lambda, energy() re-derives vlam/elam/plam from it through
-// mapSubLambda(), so writing the sub-lambdas directly would have no effect.
-// With no owner there is no main lambda, and the sub-lambdas move together.
-static double fdLambda()
+static FdLambdaState captureFdLambdaState()
 {
-   return useLmdaChain() ? mainLambda() : elam;
+   bool useMain = useLmdaChain();
+   return {useMain, useMain ? mainLambda() : 0.0, vlam, elam, plam};
 }
 
-static void setFdLambda(double lambda)
+static void setMainLambda(double lambda)
 {
    if (use_ost or use_meta)
       ostlambda = lambda;
    else if (use_ti)
       tilmda = lambda;
    else
-      setLambda(lambda, lambda, lambda);
+      mutant::lambda = lambda;
 }
 
-// Evaluate the potential energy at a given main lambda value.
-static LambdaEnergy energyAtLambda(double lambda)
+// Applies a displacement from the captured point. A main lambda is mapped to
+// all sub-lambdas by energy(); without one, exactly one fixed sub-lambda moves.
+static void setFdOffset(const FdLambdaState& state, LambdaVariable variable, double delta)
 {
-   setFdLambda(lambda);
-   energy(calc::energy);
-   LambdaEnergy eout;
-   copyEnergy(calc::energy, &eout.total);
-   eout.vdw = energy_vdw;
-   eout.mpole = energy_em;
-   eout.polar = energy_ep;
+   if (state.useMain) {
+      setMainLambda(state.main + delta);
+      return;
+   }
+
+   double vdw = state.vdw;
+   double ele = state.ele;
+   double pol = state.pol;
+   if (variable == LambdaVariable::VDW)
+      vdw += delta;
+   else if (variable == LambdaVariable::ELE)
+      ele += delta;
+   else if (variable == LambdaVariable::POL)
+      pol += delta;
+   setLambda(vdw, ele, pol);
+}
+
+static void restoreFdLambdaState(const FdLambdaState& state)
+{
+   if (state.useMain) {
+      setMainLambda(state.main);
+      mapSubLambda(state.main);
+   } else {
+      setLambda(state.vdw, state.ele, state.pol);
+   }
+}
+
+static LambdaEvaluation evaluateAtOffset(const FdLambdaState& state, LambdaVariable variable, double delta)
+{
+   setFdOffset(state, variable, delta);
+   energy(calc::v1);
+
+   LambdaEvaluation eout;
+   copyEnergy(calc::energy, &eout.energy.total);
+   eout.energy.vdw = energy_vdw;
+   eout.energy.mpole = energy_em;
+   eout.energy.polar = energy_ep;
+   copyGradientFlat(calc::grad, eout.gradient);
+   for (int k = 0; k < 9; ++k)
+      eout.virial[k] = vir[k];
    return eout;
+}
+
+static double lambdaEnergy(const LambdaEvaluation& e, LambdaVariable variable)
+{
+   if (variable == LambdaVariable::VDW)
+      return e.energy.vdw;
+   if (variable == LambdaVariable::ELE)
+      return e.energy.mpole;
+   if (variable == LambdaVariable::POL)
+      return e.energy.polar;
+   return e.energy.total;
 }
 
 static void printDerivRow(FILE* out, const char* title, const char* l0, const char* l1, const char* l2, const char* l3,
@@ -127,48 +193,53 @@ TestlmdaResult testlmdaEvaluate(const FdTestOptions& opts)
 
    // ---- Numerical lambda derivatives ---------------------------------------
    if (opts.numer) {
-      const double lam0 = fdLambda();
+      const FdLambdaState state = captureFdLambdaState();
       const double eps = opts.eps;
+      const double eps2 = eps * eps;
+      LambdaEvaluation center = evaluateAtOffset(state, LambdaVariable::MAIN, 0.0);
+      r.ndfdl.assign(3 * n, 0.0);
 
-      // Scalar first/second derivatives from three energy evaluations.
-      LambdaEnergy e2 = energyAtLambda(lam0 + eps);
-      LambdaEnergy e0 = energyAtLambda(lam0 - eps);
-      LambdaEnergy e1 = energyAtLambda(lam0);
-      r.ndedl[0] = (e2.total - e0.total) / (2.0 * eps);
-      r.ndedl[1] = (e2.vdw - e0.vdw) / (2.0 * eps);
-      r.ndedl[2] = (e2.mpole - e0.mpole) / (2.0 * eps);
-      r.ndedl[3] = (e2.polar - e0.polar) / (2.0 * eps);
-      r.nd2edl2[0] = (e2.total - 2.0 * e1.total + e0.total) / (eps * eps);
-      r.nd2edl2[1] = (e2.vdw - 2.0 * e1.vdw + e0.vdw) / (eps * eps);
-      r.nd2edl2[2] = (e2.mpole - 2.0 * e1.mpole + e0.mpole) / (eps * eps);
-      r.nd2edl2[3] = (e2.polar - 2.0 * e1.polar + e0.polar) / (eps * eps);
-
-      // Per-atom force derivative and virial derivative via central
-      // difference of the gradient/virial at lambda +/- eps.
-      std::vector<double> gpx(n), gpy(n), gpz(n), gmx(n), gmy(n), gmz(n);
-
-      setFdLambda(lam0 + eps);
-      energy(calc::v1);
-      copyGradient(calc::grad, gpx.data(), gpy.data(), gpz.data());
-      double vplus[9];
-      for (int k = 0; k < 9; ++k)
-         vplus[k] = vir[k];
-
-      setFdLambda(lam0 - eps);
-      energy(calc::v1);
-      copyGradient(calc::grad, gmx.data(), gmy.data(), gmz.data());
-      for (int k = 0; k < 9; ++k)
-         r.ndvirdl[k] = (vplus[k] - vir[k]) / (2.0 * eps);
-
-      r.ndfdl.resize(3 * n);
-      for (int i = 0; i < n; ++i) {
-         r.ndfdl[3 * i + 0] = (gpx[i] - gmx[i]) / (2.0 * eps);
-         r.ndfdl[3 * i + 1] = (gpy[i] - gmy[i]) / (2.0 * eps);
-         r.ndfdl[3 * i + 2] = (gpz[i] - gmz[i]) / (2.0 * eps);
+      if (state.useMain) {
+         LambdaEvaluation plus = evaluateAtOffset(state, LambdaVariable::MAIN, eps);
+         LambdaEvaluation minus = evaluateAtOffset(state, LambdaVariable::MAIN, -eps);
+         const LambdaVariable variables[] = {
+            LambdaVariable::MAIN, LambdaVariable::VDW, LambdaVariable::ELE, LambdaVariable::POL};
+         for (int k = 0; k < 4; ++k) {
+            double ep = lambdaEnergy(plus, variables[k]);
+            double ec = lambdaEnergy(center, variables[k]);
+            double em = lambdaEnergy(minus, variables[k]);
+            r.ndedl[k] = (ep - em) / (2.0 * eps);
+            r.nd2edl2[k] = (ep - 2.0 * ec + em) / eps2;
+         }
+         for (int k = 0; k < 3 * n; ++k)
+            r.ndfdl[k] = (plus.gradient[k] - minus.gradient[k]) / (2.0 * eps);
+         for (int k = 0; k < 9; ++k)
+            r.ndvirdl[k] = (plus.virial[k] - minus.virial[k]) / (2.0 * eps);
+      } else {
+         // Fixed sub-lambdas are independent coordinates. Test each derivative
+         // at its own configured value, then sum them for the total derivative.
+         const LambdaVariable variables[] = {LambdaVariable::VDW, LambdaVariable::ELE, LambdaVariable::POL};
+         for (int j = 0; j < 3; ++j) {
+            LambdaVariable variable = variables[j];
+            LambdaEvaluation plus = evaluateAtOffset(state, variable, eps);
+            LambdaEvaluation minus = evaluateAtOffset(state, variable, -eps);
+            double ep = lambdaEnergy(plus, variable);
+            double ec = lambdaEnergy(center, variable);
+            double em = lambdaEnergy(minus, variable);
+            r.ndedl[j + 1] = (ep - em) / (2.0 * eps);
+            r.nd2edl2[j + 1] = (ep - 2.0 * ec + em) / eps2;
+            for (int k = 0; k < 3 * n; ++k)
+               r.ndfdl[k] += (plus.gradient[k] - minus.gradient[k]) / (2.0 * eps);
+            for (int k = 0; k < 9; ++k)
+               r.ndvirdl[k] += (plus.virial[k] - minus.virial[k]) / (2.0 * eps);
+         }
+         for (int k = 1; k < 4; ++k) {
+            r.ndedl[0] += r.ndedl[k];
+            r.nd2edl2[0] += r.nd2edl2[k];
+         }
       }
 
-      // Restore the original lambda value.
-      setFdLambda(lam0);
+      restoreFdLambdaState(state);
    }
 
    return r;

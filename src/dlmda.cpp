@@ -69,6 +69,7 @@ void dlmda_mech()
    use_epdt = dlmda::use_epdt;
    use_evdt = dlmda::use_evdt;
    use_plmda = dlmda::use_plmda;
+   use_mainlmda = dlmda::use_mainlmda;
    use_rel = mutant::use_rel;
 
    use_emadt = use_emdt && !use_rel;
@@ -329,7 +330,7 @@ double mainLambda()
    else if (use_ti)
       return tilmda;
    else
-      return 0;
+      return mutant::lambda;
 }
 
 void mapSubLambda(double lambda)

@@ -29,6 +29,8 @@ struct Fixture
 const Fixture kFixtures[] = {
    {"01_water_adt_l05.key", "testlmda.1.txt", true},
    {"02_water_ast_l05.key", "testlmda.2.txt", true},
+   {"03_water_adt_m06p05v04.key", "testlmda.3.txt", true},
+   {"04_water_ast_m06v04.key", "testlmda.4.txt", true},
 };
 
 // Finite difference stepsize, in lambda. Smaller steps sharpen the first
@@ -47,9 +49,6 @@ void runFixture(const Fixture& fx)
    const char* argv[] = {"dummy", xyzname, "-k", fx.key};
    int argc = 4;
 
-   // These key files drive lambda through OST rather than the "lambda-deriv"
-   // keyword, so use_dlmda has to be turned on for the derivative buffers to be
-   // allocated (see xTestlmda).
    testBeginWithArgs(argc, argv, true);
 
    FdTestOptions opts;
@@ -108,10 +107,12 @@ void runFixture(const Fixture& fx)
    use_ost = false;
    use_meta = false;
    use_ti = false;
+   use_mainlmda = false;
 }
 }
 
 TEST_CASE("TESTLMDA-01_water_adt_l05", "[ff][testlmda]") { runFixture(kFixtures[0]); }
 TEST_CASE("TESTLMDA-02_water_ast_l05", "[ff][testlmda]") { runFixture(kFixtures[1]); }
-
+TEST_CASE("TESTLMDA-03_water_adt_m06p05v04", "[ff][testlmda]") { runFixture(kFixtures[2]); }
+TEST_CASE("TESTLMDA-04_water_ast_m06v04", "[ff][testlmda]") { runFixture(kFixtures[3]); }
 #endif

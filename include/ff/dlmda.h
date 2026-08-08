@@ -65,6 +65,8 @@ TINKER_EXTERN bool use_emdt;
 TINKER_EXTERN bool use_epdt;
 TINKER_EXTERN bool use_evdt;
 TINKER_EXTERN bool use_plmda;
+/// True when the key file explicitly specifies a main lambda.
+TINKER_EXTERN bool use_mainlmda;
 
 // Which lambda-dynamics method owns the main lambda.
 TINKER_EXTERN bool use_ost;
@@ -74,7 +76,7 @@ TINKER_EXTERN bool use_ti;
 /// True when a main lambda drives the sub-lambdas.
 inline bool useLmdaChain()
 {
-   return use_ost or use_meta or use_ti;
+   return use_mainlmda or use_ost or use_meta or use_ti;
 }
 
 /// Forces the energy term on when a lambda-dynamics method is active.

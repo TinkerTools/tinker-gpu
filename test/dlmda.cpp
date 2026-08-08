@@ -5,6 +5,7 @@
 #include "testrt.h"
 
 #include <cmath>
+#include <tinker/detail/mutant.hh>
 
 // Host-only checks of the lambda-mapping math in src/dlmda.cpp: the quintic
 // taper and the staged relative free energy schedule that mapSubLambda()
@@ -26,6 +27,35 @@ double dtaperAt(double x, double cut, double off)
    quinticTaper(x, cut, off, t, dt, d2t);
    return dt;
 }
+}
+
+TEST_CASE("DLMDA-explicit-main-lambda", "[ff][dlmda]")
+{
+   bool oldUseMain = use_mainlmda;
+   bool oldUseOst = use_ost;
+   bool oldUseMeta = use_meta;
+   bool oldUseTi = use_ti;
+   double oldLambda = mutant::lambda;
+
+   use_ost = false;
+   use_meta = false;
+   use_ti = false;
+   use_mainlmda = false;
+   mutant::lambda = 0.37;
+   bool chainWithoutMain = useLmdaChain();
+   use_mainlmda = true;
+   bool chainWithMain = useLmdaChain();
+   double selectedLambda = mainLambda();
+
+   use_mainlmda = oldUseMain;
+   use_ost = oldUseOst;
+   use_meta = oldUseMeta;
+   use_ti = oldUseTi;
+   mutant::lambda = oldLambda;
+
+   REQUIRE_FALSE(chainWithoutMain);
+   REQUIRE(chainWithMain);
+   COMPARE_REALS(selectedLambda, 0.37, 1.0e-14);
 }
 
 TEST_CASE("DLMDA-taper-shape", "[ff][dlmda]")
