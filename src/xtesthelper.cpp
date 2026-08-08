@@ -70,6 +70,32 @@ energy_prec evaluateEnergy()
    return eout;
 }
 
+static void interleave(std::vector<double>& g, const std::vector<double>& gx, const std::vector<double>& gy,
+   const std::vector<double>& gz)
+{
+   g.resize(3 * n);
+   for (int i = 0; i < n; ++i) {
+      g[3 * i + 0] = gx[i];
+      g[3 * i + 1] = gy[i];
+      g[3 * i + 2] = gz[i];
+   }
+}
+
+void copyGradientFlat(int vers, std::vector<double>& g)
+{
+   std::vector<double> gx(n), gy(n), gz(n);
+   copyGradient(vers, gx.data(), gy.data(), gz.data());
+   interleave(g, gx, gy, gz);
+}
+
+void copyGradientFlat(int vers, std::vector<double>& g, const grad_prec* gxSrc, const grad_prec* gySrc,
+   const grad_prec* gzSrc)
+{
+   std::vector<double> gx(n), gy(n), gz(n);
+   copyGradient(vers, gx.data(), gy.data(), gz.data(), gxSrc, gySrc, gzSrc);
+   interleave(g, gx, gy, gz);
+}
+
 double vectorNorm(double x, double y, double z)
 {
    return std::sqrt(x * x + y * y + z * z);
@@ -78,15 +104,6 @@ double vectorNorm(double x, double y, double z)
 double getGradientComponent(const std::vector<double>& g, int i, int j)
 {
    return g[3 * i + j];
-}
-
-double totalGradientNorm(const std::vector<double>& gx, const std::vector<double>& gy,
-   const std::vector<double>& gz)
-{
-   double norm2 = 0;
-   for (int i = 0; i < n; ++i)
-      norm2 += gx[i] * gx[i] + gy[i] * gy[i] + gz[i] * gz[i];
-   return std::sqrt(norm2);
 }
 
 double totalGradientNorm(const std::vector<double>& g)
@@ -151,6 +168,43 @@ void printSummaryRow(FILE* out, const char* fmt, const char* label, const char* 
    int digits)
 {
    print(out, fmt, label, title, value, width, digits);
+}
+
+void printGradientTable(FILE* out, const char* title, const GradientPrintFormat& fmt, const FdTestOptions& opts,
+   const std::vector<double>& anlyt, const std::vector<double>& numer, int digits, double rmsDenom)
+{
+   if (not(opts.analyt or opts.numer))
+      return;
+
+   print(out, "\n %s :\n", title);
+   print(out, fmt.header, "");
+
+   for (int i = 0; i < n; ++i) {
+      if (opts.analyt)
+         printGradientRow(out, fmt.row, "Anlyt", i + 1, getGradientComponent(anlyt, i, 0),
+            getGradientComponent(anlyt, i, 1), getGradientComponent(anlyt, i, 2));
+      if (opts.numer)
+         printGradientRow(out, fmt.row, "Numer", i + 1, getGradientComponent(numer, i, 0),
+            getGradientComponent(numer, i, 1), getGradientComponent(numer, i, 2));
+   }
+
+   print(out, "\n\n Total Gradient Norm and RMS Gradient per Atom :\n");
+   const char* fmtSummary = "\n %1$s      %2$-30s%3$*4$.*5$f";
+   const int width = 13 + digits;
+
+   double anlytNorm = opts.analyt ? totalGradientNorm(anlyt) : 0;
+   double numerNorm = opts.numer ? totalGradientNorm(numer) : 0;
+   if (opts.analyt)
+      printSummaryRow(out, fmtSummary, "Anlyt", "Total Gradient Norm Value", anlytNorm, width, digits);
+   if (opts.numer)
+      printSummaryRow(out, fmtSummary, "Numer", "Total Gradient Norm Value", numerNorm, width, digits);
+   print(out, "\n");
+
+   if (opts.analyt)
+      printSummaryRow(out, fmtSummary, "Anlyt", "RMS Gradient over All Atoms", anlytNorm / rmsDenom, width, digits);
+   if (opts.numer)
+      printSummaryRow(out, fmtSummary, "Numer", "RMS Gradient over All Atoms", numerNorm / rmsDenom, width, digits);
+   print(out, "\n");
 }
 
 void printMatrix(FILE* out, const char* title, int nspace, const double (&m)[3][3], int indent)

@@ -1,5 +1,6 @@
 #include "ff/dlmda.h"
 #include "ff/ost.h"
+#include "ff/thermint.h"
 #include "ff/atom.h"
 #include "ff/egvop.h"
 #include "ff/elec.h"
@@ -319,6 +320,16 @@ static void mapRelStage(double lambda)
    d2vldlmda2 = -d2taper2;
    use_vdw4i = (lambda <= qntvlmda1);
    use_vdw4f = (lambda >= qntvlmda0);
+}
+
+double mainLambda()
+{
+   if (use_ost or use_meta)
+      return ostlambda;
+   else if (use_ti)
+      return tilmda;
+   else
+      return 0;
 }
 
 void mapSubLambda(double lambda)

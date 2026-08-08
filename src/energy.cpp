@@ -347,13 +347,9 @@ static DHRc* ev_dptr;
 
 void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
 {
-   if (use_dlmda) {
-      // whichever method owns the main lambda drives the sub-lambda maps.
-      if (use_ost or use_meta)
-         mapSubLambda(ostlambda);
-      else if (use_ti)
-         mapSubLambda(tilmda);
-   }
+   // whichever method owns the main lambda drives the sub-lambda maps.
+   if (use_dlmda and useLmdaChain())
+      mapSubLambda(mainLambda());
 
    zeroEGV(vers);
    energy_core(vers, tsflag, tsconfig);

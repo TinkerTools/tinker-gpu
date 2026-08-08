@@ -1,13 +1,16 @@
 #include "tool/error.h"
 #include <tinker/detail/bath.hh>
+#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/inform.hh>
 #include <tinker/routines.h>
 
 #include "testrt.h"
 #include "tinker9.h"
 
+#include <cctype>
 #include <fstream>
 #include <map>
+#include <sstream>
 #include <tuple>
 
 namespace tinker {
@@ -66,14 +69,25 @@ TestRemoveFileOnExit::~TestRemoveFileOnExit()
 }
 
 namespace tinker {
+static bool isAtomIndex(const std::string& s)
+{
+   if (s.empty())
+      return false;
+   for (char c : s)
+      if (!std::isdigit(static_cast<unsigned char>(c)))
+         return false;
+   return true;
+}
+
 class TestReference::Impl
 {
 public:
    std::vector<double> gradient;
    std::map<std::string, std::tuple<double, int>> engcnt;
-   double virial[3][3];
-   double energy;
-   int count;
+   TestLmdaReference lmda;
+   double virial[3][3] = {};
+   double energy = 0;
+   int count = 0;
 };
 
 TestReference::~TestReference()
@@ -119,7 +133,12 @@ TestReference::TestReference(std::string fname)
          pimpl->virial[2][1] = std::stod(vs.end()[-2]);
          pimpl->virial[2][2] = std::stod(vs.end()[-1]);
       } else if (l.find("ANLYT ") != end) {
+         // Skip the "Anlyt  Total Gradient Norm Value ..." summary lines that
+         // testgrad-style output appends after the per-atom table; only rows
+         // whose second token is an atom index carry a gradient.
          auto vs = Text::split(l);
+         if (vs.size() < 5 || !isAtomIndex(vs[1]))
+            continue;
          double g1 = std::stod(vs[2]);
          double g2 = std::stod(vs[3]);
          double g3 = std::stod(vs[4]);
@@ -136,6 +155,47 @@ TestReference::TestReference(std::string fname)
          double eng = std::stod(vs.end()[-2]);
          int cnt = std::stoi(vs.end()[-1]);
          pimpl->engcnt[name] = std::make_tuple(eng, cnt);
+      }
+
+      // Lambda-derivative blocks, written by testlmda-style output. These are checked
+      // separately from the chain above: "Analytical Lambda Derivatives" would
+      // otherwise be swallowed by the per-atom "LAMBDA " test below it.
+      if (l.find("ANALYTICAL LAMBDA DERIVATIVES") != end) {
+         // The four values sit on the line after the column labels.
+         std::getline(fr, l);
+         auto vs = Text::split(l);
+         for (int k = 0; k < 4 && k < (int)vs.size(); ++k)
+            pimpl->lmda.dedl[k] = std::stod(vs[k]);
+      } else if (l.find("ANALYTICAL 2ND LAMBDA DERIVATIVES") != end) {
+         std::getline(fr, l);
+         auto vs = Text::split(l);
+         for (int k = 0; k < 4 && k < (int)vs.size(); ++k)
+            pimpl->lmda.d2edl2[k] = std::stod(vs[k]);
+      } else if (l.find("ANALYTICAL DV/DL") != end) {
+         // As with the virial tensor, the first row shares the header line.
+         auto vs = Text::split(l);
+         double(&m)[3][3] = pimpl->lmda.dvdl;
+         for (int i = 0; i < 3; ++i) {
+            if (i > 0) {
+               std::getline(fr, l);
+               vs = Text::split(l);
+            }
+            m[i][0] = std::stod(vs.end()[-3]);
+            m[i][1] = std::stod(vs.end()[-2]);
+            m[i][2] = std::stod(vs.end()[-1]);
+         }
+      } else if (l.find("LAMBDA ") != end) {
+         // Per-atom dF/dL rows, tagged "Lambda" in column one. Matching on the token
+         // rather than the substring keeps the "... LAMBDA DERIVATIVES" headers out.
+         auto vs = Text::split(l);
+         if (vs.size() < 5 || vs[0] != "LAMBDA" || !isAtomIndex(vs[1]))
+            continue;
+         int idx = std::stoi(vs[1]);
+         if (idx < 1)
+            continue;
+         if ((int)pimpl->lmda.lgrad.size() < idx)
+            pimpl->lmda.lgrad.resize(idx, {0.0, 0.0, 0.0});
+         pimpl->lmda.lgrad[idx - 1] = {std::stod(vs[2]), std::stod(vs[3]), std::stod(vs[4])};
       }
    }
 }
@@ -168,6 +228,11 @@ const double (*TestReference::getGradient() const)[3]
    return reinterpret_cast<const double(*)[3]>(pimpl->gradient.data());
 }
 
+const TestLmdaReference& TestReference::getLmda() const
+{
+   return pimpl->lmda;
+}
+
 double testGetEps(double eps_single, double eps_double)
 {
 #if TINKER_REAL_SIZE == 4
@@ -181,7 +246,7 @@ double testGetEps(double eps_single, double eps_double)
 #endif
 }
 
-void testBeginWithArgs(int argc, const char** argv)
+void testBeginWithArgs(int argc, const char** argv, bool useDlmda)
 {
    tinkerFortranRuntimeBegin(argc, const_cast<char**>(argv));
 
@@ -189,6 +254,8 @@ void testBeginWithArgs(int argc, const char** argv)
    tinker_f_command();
    tinker_f_getxyz();
    tinker_f_mechanic();
+   if (useDlmda)
+      dlmda::use_dlmda = 1;
    mechanic2();
 }
 

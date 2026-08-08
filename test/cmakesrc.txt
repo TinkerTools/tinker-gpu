@@ -45,6 +45,8 @@ rephippo.cpp
 respa.cpp
 strbnd.cpp
 strtor.cpp
+testgrad.cpp
+testlmda.cpp
 testrt.cpp
 text.cpp
 thermint.cpp

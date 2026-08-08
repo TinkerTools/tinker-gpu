@@ -74,6 +74,14 @@ void syncXyzFromHost();
 /// Evaluates the potential energy only and returns it on the host.
 energy_prec evaluateEnergy();
 
+/// Copies the gradient from #gx, #gy, #gz into one interleaved 3n host array,
+/// which is the layout the print and comparison helpers below expect.
+void copyGradientFlat(int vers, std::vector<double>& g);
+
+/// Copies the given device gradient into one interleaved 3n host array.
+void copyGradientFlat(int vers, std::vector<double>& g, const grad_prec* gxSrc, const grad_prec* gySrc,
+   const grad_prec* gzSrc);
+
 //====================================================================//
 //                               Norms                                //
 //====================================================================//
@@ -83,10 +91,6 @@ double vectorNorm(double x, double y, double z);
 
 /// Returns component \c j of atom \c i from an interleaved 3n gradient array.
 double getGradientComponent(const std::vector<double>& g, int i, int j);
-
-/// Returns the norm of a gradient stored as three n-length arrays.
-double totalGradientNorm(const std::vector<double>& gx, const std::vector<double>& gy,
-   const std::vector<double>& gz);
 
 /// Returns the norm of a gradient stored as one interleaved 3n array.
 double totalGradientNorm(const std::vector<double>& g);
@@ -118,11 +122,74 @@ void printGradientRow(FILE* out, const std::string& fmt, const char* label, int 
 void printSummaryRow(FILE* out, const char* fmt, const char* label, const char* title, double value, int width,
    int digits);
 
+/// Prints a per-atom gradient breakdown table followed by the total-norm and RMS
+/// summary rows, for whichever of the two vectors \c opts requests. Both vectors are
+/// interleaved 3n arrays; an unrequested one is not read.
+///
+/// \param title     Section heading, printed as <tt>' <title> :'</tt>.
+/// \param rmsDenom  Divisor of the RMS rows: \c xtestgrad normalizes by all atoms,
+///                  \c xtestlmda by the active ones.
+void printGradientTable(FILE* out, const char* title, const GradientPrintFormat& fmt, const FdTestOptions& opts,
+   const std::vector<double>& anlyt, const std::vector<double>& numer, int digits, double rmsDenom);
+
 /// Prints a titled 3x3 matrix as <tt>' <title> :'</tt>, \c nspace blanks, then the first row;
 /// the remaining two rows are indented by \c indent columns.
 void printMatrix(FILE* out, const char* title, int nspace, const double (&m)[3][3], int indent = 36);
 
 /// Prints a titled 3x3 matrix stored as a row-major flat array of 9 elements.
 void printMatrix(FILE* out, const char* title, int nspace, const double* m9, int indent = 36);
+
+//====================================================================//
+//                      Program Cores (testable)                      //
+//====================================================================//
+//
+// Each \c x*test* driver is split into a "flags" query, an "evaluate" step that
+// computes one frame's worth of numbers, and a "print" step that formats them.
+// The Catch2 suite under \c test/ drives the evaluate step directly so it can
+// assert on values instead of scraping stdout.
+
+/// One frame of \c xtestgrad results. Gradients are 3n interleaved arrays.
+struct TestgradResult
+{
+   energy_prec energy = 0;
+   std::vector<double> ganlyt;
+   std::vector<double> gnumer;
+};
+
+/// The \c rc_flag mask \c xtestgrad needs for the given options.
+int testgradFlags(const FdTestOptions& opts);
+
+/// Computes the energy and the requested gradients for the current coordinates.
+/// The molecular system must already be built and #initialize called.
+TestgradResult testgradEvaluate(const FdTestOptions& opts);
+
+/// Prints one frame of \c xtestgrad results.
+void testgradPrint(FILE* out, const FdTestOptions& opts, const TestgradResult& r, int digits);
+
+/// One frame of \c xtestlmda results. The four-element arrays are ordered
+/// total, van der Waals, multipole, polarization; \c dfdl is 3n interleaved.
+struct TestlmdaResult
+{
+   double dedl[4] = {};
+   double d2edl2[4] = {};
+   double dvirdl[9] = {};
+   std::vector<double> dfdl;
+
+   double ndedl[4] = {};
+   double nd2edl2[4] = {};
+   double ndvirdl[9] = {};
+   std::vector<double> ndfdl;
+};
+
+/// The \c rc_flag mask \c xtestlmda needs for the given options.
+int testlmdaFlags(const FdTestOptions& opts);
+
+/// Computes the requested lambda derivatives for the current coordinates.
+/// The molecular system must already be built with \c dlmda::use_dlmda enabled
+/// and #initialize called.
+TestlmdaResult testlmdaEvaluate(const FdTestOptions& opts);
+
+/// Prints one frame of \c xtestlmda results.
+void testlmdaPrint(FILE* out, const FdTestOptions& opts, const TestlmdaResult& r, int digits);
 /// \}
 }

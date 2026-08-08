@@ -83,6 +83,8 @@ inline int lmdaVers(int vers)
    return useLmdaChain() ? (vers | calc::energy) : vers;
 }
 
+double mainLambda();
+
 //====================================================================//
 //        main lambda -> sub-lambda mapping, shared by all methods    //
 //====================================================================//

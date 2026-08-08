@@ -3,6 +3,7 @@
 
 #include "tinker9.h"
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -38,6 +39,20 @@ public:
    ~TestRemoveFileOnExit();                        ///< Removes the file in the destructor.
 };
 
+/// \brief The lambda-derivative sections of a reference file.
+///
+/// Filled from the \c "Analytical Lambda Derivatives", \c "Analytical 2nd Lambda
+/// Derivatives", \c "Lambda Gradient Breakdown" (rows tagged \c Lambda), and
+/// \c "Analytical dV/dL" blocks. Sections absent from the file stay zeroed, so a
+/// reference without lambda data simply reads back as all zeros.
+struct TestLmdaReference
+{
+   double dedl[4] = {};                      ///< dE/dL, dEV/dL, dEM/dL, dEP/dL.
+   double d2edl2[4] = {};                    ///< d2E/dL2, d2EV/dL2, d2EM/dL2, d2EP/dL2.
+   std::vector<std::array<double, 3>> lgrad; ///< Per-atom dF/dL, sized by the atom indices read.
+   double dvdl[3][3] = {};                   ///< dV/dL tensor.
+};
+
 /// \brief Reads reference values from a text file.
 class TestReference
 {
@@ -53,6 +68,9 @@ public:
    const double (*getVirial() const)[3];
    const double (*getGradient() const)[3];
    void getEnergyCountByName(std::string name, double& energy, int& count);
+
+   /// \brief The lambda-derivative blocks, all zero if the file has none.
+   const TestLmdaReference& getLmda() const;
 };
 
 /// \brief Returns tolerance eps depending on the predefined floating-point precision.
@@ -61,7 +79,13 @@ double testGetEps(double epsSingle, ///< Larger eps value for lower floating-poi
 );
 
 /// \brief Initializes the test.
-void testBeginWithArgs(int argc, const char** argv);
+void testBeginWithArgs(int argc,
+                       const char** argv,
+                       bool useDlmda = false ///< Turns on the Fortran-side \c dlmda::use_dlmda before \c mechanic2(),
+                                             ///  so the lambda-derivative buffers get allocated. Needed only for key
+                                             ///  files that drive lambda through OST/TI rather than the
+                                             ///  \c lambda-deriv keyword; see \c xTestlmda.
+);
 
 /// \brief Ends the test.
 void testEnd();
@@ -192,4 +216,25 @@ std::vector<std::vector<AtomData>> readAmoebaCoordinateFile(const std::string& f
       }                                                                   \
    }
 #define COMPARE_GRADIENT(ref_grad, eps) COMPARE_GRADIENT2(ref_grad, eps, [](int, int) { return true; })
+
+/// \def COMPARE_GRADIENT_FLAT
+/// \brief Compares an interleaved 3n host gradient to a [n][3] reference.
+///
+/// The device-side #COMPARE_GRADIENT copies the gradient out itself; this one takes a
+/// gradient already on the host, in the interleaved layout the \c x*test* drivers use.
+///
+/// \def COMPARE_GRADIENT_FLAT2
+/// \brief Compares two interleaved 3n host gradients, e.g. numerical against analytical.
+#define COMPARE_GRADIENT_FLAT(g, ref_grad, eps)                          \
+   {                                                                     \
+      for (int i = 0; i < n; ++i)                                        \
+         for (int j = 0; j < 3; ++j)                                     \
+            REQUIRE(g[3 * i + j] == Approx(ref_grad[i][j]).margin(eps)); \
+   }
+#define COMPARE_GRADIENT_FLAT2(g1, g2, eps)                              \
+   {                                                                     \
+      for (int i = 0; i < n; ++i)                                        \
+         for (int j = 0; j < 3; ++j)                                     \
+            REQUIRE(g1[3 * i + j] == Approx(g2[3 * i + j]).margin(eps)); \
+   }
 /// \}

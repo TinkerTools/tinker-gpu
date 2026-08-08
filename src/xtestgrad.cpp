@@ -66,6 +66,45 @@ static void numericalGradient(std::vector<double>& g, double eps)
    syncXyzFromHost();
 }
 
+int testgradFlags(const FdTestOptions& opts)
+{
+   int flags = calc::xyz + calc::mass + calc::energy;
+   if (opts.analyt)
+      flags += calc::grad;
+   return flags;
+}
+
+TestgradResult testgradEvaluate(const FdTestOptions& opts)
+{
+   TestgradResult r;
+
+   if (opts.analyt) {
+      energy(rc_flag);
+      copyEnergy(calc::energy, &r.energy);
+
+      copyGradientFlat(calc::grad, r.ganlyt);
+   }
+
+   if (opts.numer)
+      numericalGradient(r.gnumer, opts.eps);
+
+   return r;
+}
+
+void testgradPrint(FILE* out, const FdTestOptions& opts, const TestgradResult& r, int digits)
+{
+   auto fmt = gradientPrintFormat(digits);
+
+   if (opts.analyt) {
+      const int len_e = 20 + digits;
+      const char* fmt_e = "\n Total Potential Energy :%1$*2$.*3$f Kcal/mole\n\n";
+      print(out, fmt_e, r.energy, len_e, digits);
+   }
+
+   printGradientTable(out, "Cartesian Gradient Breakdown over Individual Atoms", fmt, opts, r.ganlyt, r.gnumer, digits,
+      std::sqrt(n));
+}
+
 void xTestgrad(int, char**)
 {
    initial();
@@ -78,14 +117,8 @@ void xTestgrad(int, char**)
    int digits = inform::digits;
    FdTestOptions opts = readOptions();
 
-   int flags = calc::xyz + calc::mass + calc::energy;
-   if (opts.analyt)
-      flags += calc::grad;
-
-   rc_flag = flags;
+   rc_flag = testgradFlags(opts);
    initialize();
-
-   auto fmt = gradientPrintFormat(digits);
 
    FstrView fsw = files::filename;
    std::string fname = fsw.trim();
@@ -99,65 +132,7 @@ void xTestgrad(int, char**)
       if (nframe_processed > 1)
          print(out, "\n Analysis for Archive Structure :%16d\n", nframe_processed);
 
-      energy_prec eval = 0;
-      if (opts.analyt) {
-         energy(rc_flag);
-         copyEnergy(calc::energy, &eval);
-      }
-
-      std::vector<double> gdx, gdy, gdz;
-      if (opts.analyt) {
-         gdx.resize(n);
-         gdy.resize(n);
-         gdz.resize(n);
-         copyGradient(calc::grad, gdx.data(), gdy.data(), gdz.data());
-      }
-      std::vector<double> ng;
-      if (opts.numer)
-         numericalGradient(ng, opts.eps);
-
-      if (opts.analyt) {
-         const int len_e = 20 + digits;
-         const char* fmt_e = "\n Total Potential Energy :%1$*2$.*3$f Kcal/mole\n\n";
-         print(out, fmt_e, eval, len_e, digits);
-      }
-
-      if (opts.analyt || opts.numer)
-         print(out, fmt.header, "");
-
-      for (int i = 0; i < n; ++i) {
-         if (opts.analyt)
-            printGradientRow(out, fmt.row, "Anlyt", i + 1, gdx[i], gdy[i], gdz[i]);
-
-         if (opts.numer) {
-            double nx = getGradientComponent(ng, i, 0);
-            double ny = getGradientComponent(ng, i, 1);
-            double nz = getGradientComponent(ng, i, 2);
-            printGradientRow(out, fmt.row, "Numer", i + 1, nx, ny, nz);
-         }
-      }
-
-      if (opts.analyt || opts.numer) {
-         print(out, "\n\n Total Gradient Norm and RMS Gradient per Atom :\n");
-         const char* fmt_summary = "\n %1$s      %2$-30s%3$*4$.*5$f";
-         const int len3 = 13 + digits;
-
-         double anlyt_norm = opts.analyt ? totalGradientNorm(gdx, gdy, gdz) : 0;
-         double numer_norm = opts.numer ? totalGradientNorm(ng) : 0;
-         if (opts.analyt)
-            printSummaryRow(out, fmt_summary, "Anlyt", "Total Gradient Norm Value", anlyt_norm, len3, digits);
-         if (opts.numer)
-            printSummaryRow(out, fmt_summary, "Numer", "Total Gradient Norm Value", numer_norm, len3, digits);
-         print(out, "\n");
-
-         if (opts.analyt)
-            printSummaryRow(out, fmt_summary, "Anlyt", "RMS Gradient over All Atoms", anlyt_norm / std::sqrt(n), len3,
-               digits);
-         if (opts.numer)
-            printSummaryRow(out, fmt_summary, "Numer", "RMS Gradient over All Atoms", numer_norm / std::sqrt(n), len3,
-               digits);
-         print(out, "\n");
-      }
+      testgradPrint(out, opts, testgradEvaluate(opts), digits);
    } while (not done);
 
    finish();

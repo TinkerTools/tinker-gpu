@@ -6,7 +6,9 @@
 #include "ff/evdw.h"
 #include "ff/modamoeba.h"
 #include "ff/nblist.h"
+#include "ff/ost.h"
 #include "ff/rwcrd.h"
+#include "ff/thermint.h"
 #include "tool/argkey.h"
 #include "tool/darray.h"
 #include "tool/iofortstr.h"
@@ -55,10 +57,29 @@ static void setLambda(double vlambda, double elambda, double plambda)
    plam = plambda;
 }
 
-// Evaluate the potential energy at a given lambda value
-static LambdaEnergy energyAtLambda(double vlambda, double elambda, double plambda)
+// The lambda the finite differences perturb. When OST, metadynamics, or TI owns
+// the main lambda, energy() re-derives vlam/elam/plam from it through
+// mapSubLambda(), so writing the sub-lambdas directly would have no effect.
+// With no owner there is no main lambda, and the sub-lambdas move together.
+static double fdLambda()
 {
-   setLambda(vlambda, elambda, plambda);
+   return useLmdaChain() ? mainLambda() : elam;
+}
+
+static void setFdLambda(double lambda)
+{
+   if (use_ost or use_meta)
+      ostlambda = lambda;
+   else if (use_ti)
+      tilmda = lambda;
+   else
+      setLambda(lambda, lambda, lambda);
+}
+
+// Evaluate the potential energy at a given main lambda value.
+static LambdaEnergy energyAtLambda(double lambda)
+{
+   setFdLambda(lambda);
    energy(calc::energy);
    LambdaEnergy eout;
    copyEnergy(calc::energy, &eout.total);
@@ -75,6 +96,116 @@ static void printDerivRow(FILE* out, const char* title, const char* l0, const ch
    print(out, "%36s%14.6f%14.6f%14.6f%14.6f\n", "", v0, v1, v2, v3);
 }
 
+int testlmdaFlags(const FdTestOptions& opts)
+{
+   int flags = calc::xyz + calc::mass + calc::energy + calc::analyz;
+   if (opts.analyt or opts.numer)
+      flags += calc::grad + calc::virial;
+   return flags;
+}
+
+TestlmdaResult testlmdaEvaluate(const FdTestOptions& opts)
+{
+   TestlmdaResult r;
+
+   // ---- Analytical lambda derivatives --------------------------------------
+   if (opts.analyt) {
+      energy(calc::v1);
+      r.dedl[0] = dedl;
+      r.dedl[1] = devdl;
+      r.dedl[2] = demdl;
+      r.dedl[3] = depdl;
+      r.d2edl2[0] = d2edl2;
+      r.d2edl2[1] = d2evdl2;
+      r.d2edl2[2] = d2emdl2;
+      r.d2edl2[3] = d2epdl2;
+      for (int k = 0; k < 9; ++k)
+         r.dvirdl[k] = dvirdl[k];
+
+      copyGradientFlat(calc::grad, r.dfdl, dfsumdlx, dfsumdly, dfsumdlz);
+   }
+
+   // ---- Numerical lambda derivatives ---------------------------------------
+   if (opts.numer) {
+      const double lam0 = fdLambda();
+      const double eps = opts.eps;
+
+      // Scalar first/second derivatives from three energy evaluations.
+      LambdaEnergy e2 = energyAtLambda(lam0 + eps);
+      LambdaEnergy e0 = energyAtLambda(lam0 - eps);
+      LambdaEnergy e1 = energyAtLambda(lam0);
+      r.ndedl[0] = (e2.total - e0.total) / (2.0 * eps);
+      r.ndedl[1] = (e2.vdw - e0.vdw) / (2.0 * eps);
+      r.ndedl[2] = (e2.mpole - e0.mpole) / (2.0 * eps);
+      r.ndedl[3] = (e2.polar - e0.polar) / (2.0 * eps);
+      r.nd2edl2[0] = (e2.total - 2.0 * e1.total + e0.total) / (eps * eps);
+      r.nd2edl2[1] = (e2.vdw - 2.0 * e1.vdw + e0.vdw) / (eps * eps);
+      r.nd2edl2[2] = (e2.mpole - 2.0 * e1.mpole + e0.mpole) / (eps * eps);
+      r.nd2edl2[3] = (e2.polar - 2.0 * e1.polar + e0.polar) / (eps * eps);
+
+      // Per-atom force derivative and virial derivative via central
+      // difference of the gradient/virial at lambda +/- eps.
+      std::vector<double> gpx(n), gpy(n), gpz(n), gmx(n), gmy(n), gmz(n);
+
+      setFdLambda(lam0 + eps);
+      energy(calc::v1);
+      copyGradient(calc::grad, gpx.data(), gpy.data(), gpz.data());
+      double vplus[9];
+      for (int k = 0; k < 9; ++k)
+         vplus[k] = vir[k];
+
+      setFdLambda(lam0 - eps);
+      energy(calc::v1);
+      copyGradient(calc::grad, gmx.data(), gmy.data(), gmz.data());
+      for (int k = 0; k < 9; ++k)
+         r.ndvirdl[k] = (vplus[k] - vir[k]) / (2.0 * eps);
+
+      r.ndfdl.resize(3 * n);
+      for (int i = 0; i < n; ++i) {
+         r.ndfdl[3 * i + 0] = (gpx[i] - gmx[i]) / (2.0 * eps);
+         r.ndfdl[3 * i + 1] = (gpy[i] - gmy[i]) / (2.0 * eps);
+         r.ndfdl[3 * i + 2] = (gpz[i] - gmz[i]) / (2.0 * eps);
+      }
+
+      // Restore the original lambda value.
+      setFdLambda(lam0);
+   }
+
+   return r;
+}
+
+void testlmdaPrint(FILE* out, const FdTestOptions& opts, const TestlmdaResult& r, int digits)
+{
+   auto fmt = gradientPrintFormat(digits, "dFx/dL", "dFy/dL", "dFz/dL");
+
+   if (opts.analyt)
+      printDerivRow(out, " Analytical Lambda Derivatives :", "dE/dL", "dEV/dL", "dEM/dL", "dEP/dL", r.dedl[0],
+         r.dedl[1], r.dedl[2], r.dedl[3]);
+   if (opts.numer)
+      printDerivRow(out, " Numerical Lambda Derivatives : ", "dE/dL", "dEV/dL", "dEM/dL", "dEP/dL", r.ndedl[0],
+         r.ndedl[1], r.ndedl[2], r.ndedl[3]);
+
+   if (opts.analyt)
+      printDerivRow(out, " Analytical 2nd Lambda Derivatives :", "d2E/dL2", "d2EV/dL2", "d2EM/dL2", "d2EP/dL2",
+         r.d2edl2[0], r.d2edl2[1], r.d2edl2[2], r.d2edl2[3]);
+   if (opts.numer)
+      printDerivRow(out, " Numerical 2nd Lambda Derivatives : ", "d2E/dL2", "d2EV/dL2", "d2EM/dL2", "d2EP/dL2",
+         r.nd2edl2[0], r.nd2edl2[1], r.nd2edl2[2], r.nd2edl2[3]);
+
+   // Per-atom lambda gradient breakdown. Fortran testlmda normalizes the RMS rows
+   // by the number of active atoms rather than by all of them.
+   double rdenom = std::sqrt((double)(usage::nuse > 0 ? usage::nuse : 1));
+   printGradientTable(out, "Lambda Gradient Breakdown over Individual Atoms", fmt, opts, r.dfdl, r.ndfdl, digits,
+      rdenom);
+
+   // Virial derivative dV/dL.
+   if (opts.analyt)
+      // Fortran testlmda fmt 230/240 indents the continuation rows by 27.
+      printMatrix(out, "Analytical dV/dL", 8, r.dvirdl, 27);
+   if (opts.numer)
+      printMatrix(out, "Numerical dV/dL", 9, r.ndvirdl, 27);
+}
+
 void xTestlmda(int, char**)
 {
    initial();
@@ -88,15 +219,10 @@ void xTestlmda(int, char**)
 
    FdTestOptions opts = readOptions();
 
-   int flags = calc::xyz + calc::mass + calc::energy + calc::analyz;
-   if (opts.analyt or opts.numer)
-      flags += calc::grad + calc::virial;
-
-   rc_flag = flags;
+   rc_flag = testlmdaFlags(opts);
    initialize();
 
    int digits = inform::digits;
-   auto fmt = gradientPrintFormat(digits, "dFx/dL", "dFy/dL", "dFz/dL");
 
    FstrView fsw = files::filename;
    std::string fname = fsw.trim();
@@ -110,143 +236,7 @@ void xTestlmda(int, char**)
       if (nframe_processed > 1)
          print(out, "\n Analysis for Archive Structure :%16d\n", nframe_processed);
 
-      // ---- Analytical lambda derivatives -----------------------------------
-      double adedl = 0, adevdl = 0, ademdl = 0, adepdl = 0;
-      double ad2edl2 = 0, ad2evdl2 = 0, ad2emdl2 = 0, ad2epdl2 = 0;
-      double advirdl[9] = {0};
-      std::vector<double> adfx, adfy, adfz;
-      if (opts.analyt) {
-         energy(calc::v1);
-         adedl = dedl;
-         adevdl = devdl;
-         ademdl = demdl;
-         adepdl = depdl;
-         ad2edl2 = d2edl2;
-         ad2evdl2 = d2evdl2;
-         ad2emdl2 = d2emdl2;
-         ad2epdl2 = d2epdl2;
-         for (int k = 0; k < 9; ++k)
-            advirdl[k] = dvirdl[k];
-         adfx.resize(n);
-         adfy.resize(n);
-         adfz.resize(n);
-         copyGradient(calc::grad, adfx.data(), adfy.data(), adfz.data(), dfsumdlx, dfsumdly, dfsumdlz);
-      }
-
-      // ---- Numerical lambda derivatives ------------------------------------
-      double ndedl = 0, ndevdl = 0, ndemdl = 0, ndepdl = 0;
-      double nd2edl2 = 0, nd2evdl2 = 0, nd2emdl2 = 0, nd2epdl2 = 0;
-      double ndvirdl[9] = {0};
-      std::vector<double> ndfx, ndfy, ndfz;
-      if (opts.numer) {
-         double el0 = elam;
-         double vl0 = vlam;
-         double pl0 = plam;
-         double eps = opts.eps;
-
-         // Scalar first/second derivatives from three energy evaluations.
-         LambdaEnergy e2 = energyAtLambda(vl0 + eps, el0 + eps, pl0 + eps);
-         LambdaEnergy e0 = energyAtLambda(vl0 - eps, el0 - eps, pl0 - eps);
-         LambdaEnergy e1 = energyAtLambda(vl0, el0, pl0);
-         ndedl = (e2.total - e0.total) / (2.0 * eps);
-         ndevdl = (e2.vdw - e0.vdw) / (2.0 * eps);
-         ndemdl = (e2.mpole - e0.mpole) / (2.0 * eps);
-         ndepdl = (e2.polar - e0.polar) / (2.0 * eps);
-         nd2edl2 = (e2.total - 2.0 * e1.total + e0.total) / (eps * eps);
-         nd2evdl2 = (e2.vdw - 2.0 * e1.vdw + e0.vdw) / (eps * eps);
-         nd2emdl2 = (e2.mpole - 2.0 * e1.mpole + e0.mpole) / (eps * eps);
-         nd2epdl2 = (e2.polar - 2.0 * e1.polar + e0.polar) / (eps * eps);
-
-         // Per-atom force derivative and virial derivative via central
-         // difference of the gradient/virial at lambda +/- eps.
-         std::vector<double> gpx(n), gpy(n), gpz(n), gmx(n), gmy(n), gmz(n);
-
-         setLambda(vl0 + eps, el0 + eps, pl0 + eps);
-         energy(calc::v1);
-         copyGradient(calc::grad, gpx.data(), gpy.data(), gpz.data());
-         double vplus[9];
-         for (int k = 0; k < 9; ++k)
-            vplus[k] = vir[k];
-
-         setLambda(vl0 - eps, el0 - eps, pl0 - eps);
-         energy(calc::v1);
-         copyGradient(calc::grad, gmx.data(), gmy.data(), gmz.data());
-         for (int k = 0; k < 9; ++k)
-            ndvirdl[k] = (vplus[k] - vir[k]) / (2.0 * eps);
-
-         ndfx.resize(n);
-         ndfy.resize(n);
-         ndfz.resize(n);
-         for (int i = 0; i < n; ++i) {
-            ndfx[i] = (gpx[i] - gmx[i]) / (2.0 * eps);
-            ndfy[i] = (gpy[i] - gmy[i]) / (2.0 * eps);
-            ndfz[i] = (gpz[i] - gmz[i]) / (2.0 * eps);
-         }
-
-         // Restore the original lambda value.
-         setLambda(vl0, el0, pl0);
-      }
-
-      // ---- Output ----------------------------------------------------------
-      if (opts.analyt)
-         printDerivRow(out, " Analytical Lambda Derivatives :", "dE/dL", "dEV/dL", "dEM/dL", "dEP/dL", adedl, adevdl,
-            ademdl, adepdl);
-      if (opts.numer)
-         printDerivRow(out, " Numerical Lambda Derivatives : ", "dE/dL", "dEV/dL", "dEM/dL", "dEP/dL", ndedl, ndevdl,
-            ndemdl, ndepdl);
-
-      if (opts.analyt)
-         printDerivRow(out, " Analytical 2nd Lambda Derivatives :", "d2E/dL2", "d2EV/dL2", "d2EM/dL2", "d2EP/dL2",
-            ad2edl2, ad2evdl2, ad2emdl2, ad2epdl2);
-      if (opts.numer)
-         printDerivRow(out, " Numerical 2nd Lambda Derivatives : ", "d2E/dL2", "d2EV/dL2", "d2EM/dL2", "d2EP/dL2",
-            nd2edl2, nd2evdl2, nd2emdl2, nd2epdl2);
-
-      // Per-atom lambda gradient breakdown.
-      if (opts.analyt or opts.numer) {
-         print(out, "\n Lambda Gradient Breakdown over Individual Atoms :\n");
-         print(out, fmt.header, "");
-      }
-      double totnorm = 0, ntotnorm = 0;
-      for (int i = 0; i < n; ++i) {
-         if (opts.analyt) {
-            totnorm += adfx[i] * adfx[i] + adfy[i] * adfy[i] + adfz[i] * adfz[i];
-            printGradientRow(out, fmt.row, "Anlyt", i + 1, adfx[i], adfy[i], adfz[i]);
-         }
-         if (opts.numer) {
-            ntotnorm += ndfx[i] * ndfx[i] + ndfy[i] * ndfy[i] + ndfz[i] * ndfz[i];
-            printGradientRow(out, fmt.row, "Numer", i + 1, ndfx[i], ndfy[i], ndfz[i]);
-         }
-      }
-
-      if (opts.analyt or opts.numer) {
-         print(out, "\n\n Total Gradient Norm and RMS Gradient per Atom :\n");
-         const char* fmt_summary = "\n %1$s      %2$-30s%3$*4$.*5$f";
-         const int len3 = 13 + digits;
-         // Fortran testlmda normalizes by the number of active atoms.
-         double rdenom = std::sqrt((double)(usage::nuse > 0 ? usage::nuse : 1));
-
-         totnorm = std::sqrt(totnorm);
-         ntotnorm = std::sqrt(ntotnorm);
-         if (opts.analyt)
-            printSummaryRow(out, fmt_summary, "Anlyt", "Total Gradient Norm Value", totnorm, len3, digits);
-         if (opts.numer)
-            printSummaryRow(out, fmt_summary, "Numer", "Total Gradient Norm Value", ntotnorm, len3, digits);
-         print(out, "\n");
-
-         if (opts.analyt)
-            printSummaryRow(out, fmt_summary, "Anlyt", "RMS Gradient over All Atoms", totnorm / rdenom, len3, digits);
-         if (opts.numer)
-            printSummaryRow(out, fmt_summary, "Numer", "RMS Gradient over All Atoms", ntotnorm / rdenom, len3, digits);
-         print(out, "\n");
-      }
-
-      // Virial derivative dV/dL.
-      if (opts.analyt)
-         // Fortran testlmda fmt 230/240 indents the continuation rows by 27.
-         printMatrix(out, "Analytical dV/dL", 8, advirdl, 27);
-      if (opts.numer)
-         printMatrix(out, "Numerical dV/dL", 9, ndvirdl, 27);
+      testlmdaPrint(out, opts, testlmdaEvaluate(opts), digits);
    } while (not done);
 
    finish();

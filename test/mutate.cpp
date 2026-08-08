@@ -9,12 +9,7 @@
 #include "testrt.h"
 #include "tinker9.h"
 
-#include <tinker/detail/dlmda.hh>
-#include <tinker/routines.h>
-
 #include <array>
-#include <fstream>
-#include <sstream>
 #include <string>
 #include <vector>
 
@@ -181,83 +176,6 @@ const Fixture kFixtures[] = {
    {"141_water_rels_ye_l000", "water2", true, true, true, true, "rels"},
 };
 
-// Reference lambda-derivative block parsed out of the analyze-style ref file.
-// TestReference does not understand these sections, so they are read here.
-struct LmdaRef
-{
-   double dedl[4];   // dE/dL, dEV/dL, dEM/dL, dEP/dL
-   double d2edl2[4]; // d2E/dL2, d2EV/dL2, d2EM/dL2, d2EP/dL2
-   std::vector<std::array<double, 3>> lgrad; // per-atom dF/dL
-   double dvdl[3][3];                        // dV/dL tensor
-};
-
-std::vector<double> floatsOf(const std::string& line)
-{
-   std::vector<double> v;
-   std::istringstream iss(line);
-   std::string tok;
-   while (iss >> tok) {
-      try {
-         size_t pos;
-         double d = std::stod(tok, &pos);
-         if (pos == tok.size())
-            v.push_back(d);
-      } catch (...) {
-      }
-   }
-   return v;
-}
-
-LmdaRef readLmdaRef(const std::string& path, int natom)
-{
-   LmdaRef r{};
-   r.lgrad.assign(natom, {0.0, 0.0, 0.0});
-   std::ifstream fin(path);
-   std::vector<std::string> lines;
-   std::string ln;
-   while (std::getline(fin, ln))
-      lines.push_back(ln);
-   for (size_t i = 0; i < lines.size(); ++i) {
-      const std::string& L = lines[i];
-      if (L.find("Analytical Lambda Derivatives") != std::string::npos) {
-         auto f = floatsOf(lines.at(i + 1));
-         for (int k = 0; k < 4 && k < (int)f.size(); ++k)
-            r.dedl[k] = f[k];
-      } else if (L.find("Analytical 2nd Lambda Derivatives") != std::string::npos) {
-         auto f = floatsOf(lines.at(i + 1));
-         for (int k = 0; k < 4 && k < (int)f.size(); ++k)
-            r.d2edl2[k] = f[k];
-      } else if (L.find("Lambda Gradient Breakdown") != std::string::npos) {
-         int got = 0;
-         for (size_t j = i + 1; j < lines.size() && got < natom; ++j) {
-            std::istringstream iss(lines[j]);
-            std::string tag;
-            if (!(iss >> tag) || tag != "Lambda")
-               continue;
-            int idx;
-            double fx, fy, fz;
-            if ((iss >> idx >> fx >> fy >> fz) && idx >= 1 && idx <= natom) {
-               r.lgrad[idx - 1] = {fx, fy, fz};
-               ++got;
-            }
-         }
-      } else if (L.find("Analytical dV/dL") != std::string::npos) {
-         auto f0 = floatsOf(lines.at(i));     // first row shares the header line
-         auto f1 = floatsOf(lines.at(i + 1));
-         auto f2 = floatsOf(lines.at(i + 2));
-         for (int k = 0; k < 3; ++k) {
-            if (k < (int)f0.size())
-               r.dvdl[0][k] = f0[k];
-            if (k < (int)f1.size())
-               r.dvdl[1][k] = f1[k];
-            if (k < (int)f2.size())
-               r.dvdl[2][k] = f2[k];
-         }
-      }
-   }
-   return r;
-}
-
 void runFixture(const Fixture& fx)
 {
    std::string dir = TINKER9_DIRSTR "/test/file/mutate/";
@@ -279,14 +197,9 @@ void runFixture(const Fixture& fx)
 
    rc_flag = calc::xyz | calc::mass | calc::vmask;
 
-   // Replicate testBeginWithArgs, but toggle the Fortran-side use_dlmda before
-   // mechanic2() so the lambda-derivative buffers get allocated (see xtestlmda).
-   tinkerFortranRuntimeBegin(argc, (char**)argv);
-   initial();
-   tinker_f_command();
-   tinker_f_getxyz();
-   tinker_f_mechanic();
-   mechanic2();
+   // These key files enable the lambda-derivative machinery through the
+   // "lambda-deriv" keyword, so the Fortran-side use_dlmda needs no nudging here.
+   testBeginWithArgs(argc, argv);
    initialize();
 
    TestReference ref(refpath);
@@ -294,9 +207,11 @@ void runFixture(const Fixture& fx)
    auto ref_v = ref.getVirial();
    auto ref_g = ref.getGradient();
 
-   LmdaRef lr;
+   // The lambda-derivative sections are absent from the non-dolmda references,
+   // in which case every field reads back as zero and goes unused.
+   const TestLmdaReference& lr = ref.getLmda();
    if (fx.dolmda)
-      lr = readLmdaRef(refpath, n);
+      REQUIRE((int)lr.lgrad.size() >= n);
 
    // Per-atom lambda gradient (dfsumdl*) vs reference. Valid whenever calc::grad
    // is requested, since lmdachain builds dfsumdl* under its do_g branch.
