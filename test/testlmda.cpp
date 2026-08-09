@@ -16,21 +16,17 @@ using namespace tinker;
 #if TINKER_GPULANG_CUDA
 
 namespace {
-// The fixtures of Tinker's test_testlmda.f, driven through the same evaluate
-// step xtestlmda uses. The reference files are captured tinker9 output and hold
-// the analytical derivatives only.
 struct Fixture
 {
    const char* key;
    const char* ref;
-   bool checknumer;
 };
 
 const Fixture kFixtures[] = {
-   {"01_water_adt_l05.key", "testlmda.1.txt", true},
-   {"02_water_ast_l05.key", "testlmda.2.txt", true},
-   {"03_water_adt_m06p05v04.key", "testlmda.3.txt", true},
-   {"04_water_ast_m06v04.key", "testlmda.4.txt", true},
+   {"01_water_adt_l05.key", "testlmda.1.txt"},
+   {"02_water_ast_l05.key", "testlmda.2.txt"},
+   {"03_water_adt_m06p05v04.key", "testlmda.3.txt"},
+   {"04_water_ast_m06v04.key", "testlmda.4.txt"},
 };
 
 // Finite difference stepsize, in lambda. Smaller steps sharpen the first
@@ -76,27 +72,18 @@ void runFixture(const Fixture& fx)
    COMPARE_GRADIENT_FLAT(r.dfdl, ref.lgrad, eps_d);
    COMPARE_VIR9(r.dvirdl, ref.dvdl, eps_v);
 
-   // ---- Numerical values against the analytical ones -----------------------
+   // ---- Numerical values against the same reference ------------------------
    // Central-difference truncation dominates here; the second derivatives carry
    // an extra factor of 1/eps of it.
    const double eps_n1 = 5.0e-2;
    const double eps_n2 = 2.0e-1;
    const double eps_nf = 1.0e-1;
-   if (fx.checknumer) {
-      for (int k = 0; k < 4; ++k) {
-         COMPARE_REALS(r.ndedl[k], r.dedl[k], eps_n1);
-         COMPARE_REALS(r.nd2edl2[k], r.d2edl2[k], eps_n2);
-      }
-      COMPARE_GRADIENT_FLAT2(r.ndfdl, r.dfdl, eps_nf);
-      for (int k = 0; k < 9; ++k)
-         COMPARE_REALS(r.ndvirdl[k], r.dvirdl[k], eps_nf);
-   } else {
-      // Only the vdw (1) and multipole (2) columns are meaningful.
-      COMPARE_REALS(r.ndedl[1], r.dedl[1], eps_n1);
-      COMPARE_REALS(r.ndedl[2], r.dedl[2], eps_n1);
-      COMPARE_REALS(r.nd2edl2[1], r.d2edl2[1], eps_n2);
-      COMPARE_REALS(r.nd2edl2[2], r.d2edl2[2], eps_n2);
+   for (int k = 0; k < 4; ++k) {
+      COMPARE_REALS(r.ndedl[k], ref.dedl[k], eps_n1);
+      COMPARE_REALS(r.nd2edl2[k], ref.d2edl2[k], eps_n2);
    }
+   COMPARE_GRADIENT_FLAT(r.ndfdl, ref.lgrad, eps_nf);
+   COMPARE_VIR9(r.ndvirdl, ref.dvdl, eps_nf);
 
    finish();
    testEnd();

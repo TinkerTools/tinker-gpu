@@ -11,8 +11,6 @@
 using namespace tinker;
 
 namespace {
-// The three lambda values of Tinker's test_testgrad.f, driven through the same
-// evaluate step xtestgrad uses. The reference files are captured tinker9 output.
 struct Fixture
 {
    const char* key;
@@ -51,7 +49,10 @@ void runFixture(const Fixture& fx)
 
    auto r = testgradEvaluate(opts);
    TestReference ref(std::string(TINKER9_DIRSTR "/test/ref/") + fx.ref);
+   REQUIRE(ref.getGradientCount() == n);
+   REQUIRE(ref.getNumerGradientCount() == n);
    auto ref_g = ref.getGradient();
+   auto ref_gn = ref.getNumerGradient();
 
    // The references carry 4 decimals, so they cannot pin anything tighter than
    // 1e-3 no matter how the build is configured.
@@ -62,7 +63,7 @@ void runFixture(const Fixture& fx)
 
    COMPARE_REALS(r.energy, ref.getEnergy(), eps_e);
    COMPARE_GRADIENT_FLAT(r.ganlyt, ref_g, eps_g);
-   COMPARE_GRADIENT_FLAT2(r.gnumer, r.ganlyt, eps_n);
+   COMPARE_GRADIENT_FLAT(r.gnumer, ref_gn, eps_n);
 
    finish();
    testEnd();

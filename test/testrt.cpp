@@ -83,6 +83,7 @@ class TestReference::Impl
 {
 public:
    std::vector<double> gradient;
+   std::vector<double> ngradient;
    std::map<std::string, std::tuple<double, int>> engcnt;
    TestLmdaReference lmda;
    double virial[3][3] = {};
@@ -132,19 +133,17 @@ TestReference::TestReference(std::string fname)
          pimpl->virial[2][0] = std::stod(vs.end()[-3]);
          pimpl->virial[2][1] = std::stod(vs.end()[-2]);
          pimpl->virial[2][2] = std::stod(vs.end()[-1]);
-      } else if (l.find("ANLYT ") != end) {
+      } else if (l.find("ANLYT ") != end || l.find("NUMER ") != end) {
          // Skip the "Anlyt  Total Gradient Norm Value ..." summary lines that
          // testgrad-style output appends after the per-atom table; only rows
          // whose second token is an atom index carry a gradient.
          auto vs = Text::split(l);
          if (vs.size() < 5 || !isAtomIndex(vs[1]))
             continue;
-         double g1 = std::stod(vs[2]);
-         double g2 = std::stod(vs[3]);
-         double g3 = std::stod(vs[4]);
-         pimpl->gradient.push_back(g1);
-         pimpl->gradient.push_back(g2);
-         pimpl->gradient.push_back(g3);
+         auto& g = (vs[0] == "ANLYT") ? pimpl->gradient : pimpl->ngradient;
+         g.push_back(std::stod(vs[2]));
+         g.push_back(std::stod(vs[3]));
+         g.push_back(std::stod(vs[4]));
       } else if (l.find("ENGCNT ") != end) {
          auto vs = Text::split(l);
          std::string name = vs[1];
@@ -226,6 +225,21 @@ const double (*TestReference::getVirial() const)[3]
 const double (*TestReference::getGradient() const)[3]
 {
    return reinterpret_cast<const double(*)[3]>(pimpl->gradient.data());
+}
+
+const double (*TestReference::getNumerGradient() const)[3]
+{
+   return reinterpret_cast<const double(*)[3]>(pimpl->ngradient.data());
+}
+
+int TestReference::getGradientCount() const
+{
+   return (int)pimpl->gradient.size() / 3;
+}
+
+int TestReference::getNumerGradientCount() const
+{
+   return (int)pimpl->ngradient.size() / 3;
 }
 
 const TestLmdaReference& TestReference::getLmda() const

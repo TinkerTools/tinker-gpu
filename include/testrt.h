@@ -66,7 +66,10 @@ public:
    int getCount() const;
    double getEnergy() const;
    const double (*getVirial() const)[3];
-   const double (*getGradient() const)[3];
+   const double (*getGradient() const)[3];       ///< Per-atom rows tagged \c Anlyt.
+   const double (*getNumerGradient() const)[3];  ///< Per-atom rows tagged \c Numer.
+   int getGradientCount() const;                 ///< Number of atoms read from the \c Anlyt rows.
+   int getNumerGradientCount() const;            ///< Number of atoms read from the \c Numer rows.
    void getEnergyCountByName(std::string name, double& energy, int& count);
 
    /// \brief The lambda-derivative blocks, all zero if the file has none.
@@ -222,19 +225,10 @@ std::vector<std::vector<AtomData>> readAmoebaCoordinateFile(const std::string& f
 ///
 /// The device-side #COMPARE_GRADIENT copies the gradient out itself; this one takes a
 /// gradient already on the host, in the interleaved layout the \c x*test* drivers use.
-///
-/// \def COMPARE_GRADIENT_FLAT2
-/// \brief Compares two interleaved 3n host gradients, e.g. numerical against analytical.
 #define COMPARE_GRADIENT_FLAT(g, ref_grad, eps)                          \
    {                                                                     \
       for (int i = 0; i < n; ++i)                                        \
          for (int j = 0; j < 3; ++j)                                     \
             REQUIRE(g[3 * i + j] == Approx(ref_grad[i][j]).margin(eps)); \
-   }
-#define COMPARE_GRADIENT_FLAT2(g1, g2, eps)                              \
-   {                                                                     \
-      for (int i = 0; i < n; ++i)                                        \
-         for (int j = 0; j < 3; ++j)                                     \
-            REQUIRE(g1[3 * i + j] == Approx(g2[3 * i + j]).margin(eps)); \
    }
 /// \}
