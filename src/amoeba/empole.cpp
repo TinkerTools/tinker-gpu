@@ -42,8 +42,8 @@ void empoleData(RcOp op)
          {&energy_em, &virial_em}, {&energy_elec, &virial_elec});
       em_dl.manage(op, rc_flag, {&demdl_buf, &demvirdl_buf, &dfmdlx, &dfmdly, &dfmdlz, &d2emdl2_buf},
          {dedl_buf, dvirdl_buf, dfsumdlx, dfsumdly, dfsumdlz, d2edl2_buf},
-         (rc_a or useLmdaChain()) and use_dlmda, //
-         {&demdl, &demvirdl, &d2emdl2}, {&dedl, &dvirdl, &d2edl2}, useLmdaChain());
+         use_dlmda, //
+         {&demdl, &demvirdl, &d2emdl2}, {&dedl, &dvirdl, &d2edl2}, use_dlmda);
       em_snap.manage(op, rc_flag, use_emdt);
       if (rc_a)
          bufferAllocate(rc_flag, &nem);

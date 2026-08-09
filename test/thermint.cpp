@@ -55,6 +55,10 @@ void useExpMaps(int eexp, int pexp, int vexp)
    elmdaexp = eexp;
    plmdaexp = pexp;
    vlmdaexp = vexp;
+   // Every sub-lambda follows the main lambda here.
+   use_elmdamap = true;
+   use_plmdamap = true;
+   use_vlmdamap = true;
 }
 
 // resettisched -- install an arbitrary schedule and size the accumulators the
@@ -126,6 +130,9 @@ void clearti()
    elmdamap = Lmdamap::QNT;
    plmdamap = Lmdamap::QNT;
    vlmdamap = Lmdamap::QNT;
+   use_elmdamap = false;
+   use_plmdamap = false;
+   use_vlmdamap = false;
 }
 
 // Number of data records, i.e. lines that prttihead did not write.

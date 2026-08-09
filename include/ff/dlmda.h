@@ -65,7 +65,6 @@ TINKER_EXTERN bool use_emdt;
 TINKER_EXTERN bool use_epdt;
 TINKER_EXTERN bool use_evdt;
 TINKER_EXTERN bool use_plmda;
-/// True when the key file explicitly specifies a main lambda.
 TINKER_EXTERN bool use_mainlmda;
 
 // Which lambda-dynamics method owns the main lambda.
@@ -73,16 +72,10 @@ TINKER_EXTERN bool use_ost;
 TINKER_EXTERN bool use_meta;
 TINKER_EXTERN bool use_ti;
 
-/// True when a main lambda drives the sub-lambdas.
-inline bool useLmdaChain()
-{
-   return use_mainlmda or use_ost or use_meta or use_ti;
-}
-
 /// Forces the energy term on when a lambda-dynamics method is active.
 inline int lmdaVers(int vers)
 {
-   return useLmdaChain() ? (vers | calc::energy) : vers;
+   return use_mainlmda ? (vers | calc::energy) : vers;
 }
 
 double mainLambda();
@@ -108,6 +101,11 @@ TINKER_EXTERN double vlmdainveps;
 TINKER_EXTERN Lmdamap elmdamap;
 TINKER_EXTERN Lmdamap plmdamap;
 TINKER_EXTERN Lmdamap vlmdamap;
+
+// Whether each sub-lambda follows the main lambda map.
+TINKER_EXTERN bool use_elmdamap;
+TINKER_EXTERN bool use_plmdamap;
+TINKER_EXTERN bool use_vlmdamap;
 
 // sub-lambda bounds used by the taper/quantized maps.
 TINKER_EXTERN double qntelmda0;

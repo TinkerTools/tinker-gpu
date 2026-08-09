@@ -113,6 +113,18 @@ void dlmda_mech()
    plmdamap = lmdamapFrom(dlmda::plmdamap);
    vlmdamap = lmdamapFrom(dlmda::vlmdamap);
 
+   use_elmdamap = (dlmda::use_elmdamap != 0);
+   use_plmdamap = (dlmda::use_plmdamap != 0);
+   use_vlmdamap = (dlmda::use_vlmdamap != 0);
+
+   // A sub-lambda not driven by the main lambda has an identity chain.
+   deldlmda = 1.0;
+   dpldlmda = 1.0;
+   dvldlmda = 1.0;
+   d2eldlmda2 = 0.0;
+   d2pldlmda2 = 0.0;
+   d2vldlmda2 = 0.0;
+
    qntelmda0 = dlmda::qntelmda0;
    qntelmda1 = dlmda::qntelmda1;
    qntplmda0 = dlmda::qntplmda0;
@@ -340,24 +352,33 @@ void mapSubLambda(double lambda)
       return;
    }
 
-   // Map the main lambda to the sub-lambdas
-   double pval, eval, vval;
-   mapOne(lambda, plmdamap, qntplmda0, qntplmda1, plmdaexp, plmdainvn, plmdainveps, pval, dpldlmda, d2pldlmda2);
-   mapOne(lambda, elmdamap, qntelmda0, qntelmda1, elmdaexp, elmdainvn, elmdainveps, eval, deldlmda, d2eldlmda2);
-   mapOne(lambda, vlmdamap, qntvlmda0, qntvlmda1, vlmdaexp, vlmdainvn, vlmdainveps, vval, dvldlmda, d2vldlmda2);
-   plam = pval;
-   elam = eval;
-   vlam = vval;
+   // Map the main lambda onto each sub-lambda that follows it; the rest keep
+   // their fixed values and their identity chain factors.
+   if (use_plmdamap) {
+      double pval;
+      mapOne(lambda, plmdamap, qntplmda0, qntplmda1, plmdaexp, plmdainvn, plmdainveps, pval, dpldlmda, d2pldlmda2);
+      plam = pval;
+   }
+   if (use_elmdamap) {
+      double eval;
+      mapOne(lambda, elmdamap, qntelmda0, qntelmda1, elmdaexp, elmdainvn, elmdainveps, eval, deldlmda, d2eldlmda2);
+      elam = eval;
+   }
+   if (use_vlmdamap) {
+      double vval;
+      mapOne(lambda, vlmdamap, qntvlmda0, qntvlmda1, vlmdaexp, vlmdainvn, vlmdainveps, vval, dvldlmda, d2vldlmda2);
+      vlam = vval;
+   }
 
-   if (elmdamap == Lmdamap::QNT) {
+   if (use_elmdamap and elmdamap == Lmdamap::QNT) {
       use_ele4i = (lambda <= qntelmda1);
       use_ele4f = (lambda >= qntelmda0);
    }
-   if (plmdamap == Lmdamap::QNT) {
+   if (use_plmdamap and plmdamap == Lmdamap::QNT) {
       use_pol4i = (lambda <= qntplmda1);
       use_pol4f = (lambda >= qntplmda0);
    }
-   if (vlmdamap == Lmdamap::QNT) {
+   if (use_vlmdamap and vlmdamap == Lmdamap::QNT) {
       use_vdw4i = (lambda <= qntvlmda1);
       use_vdw4f = (lambda >= qntvlmda0);
    }

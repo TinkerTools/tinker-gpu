@@ -347,8 +347,8 @@ static DHRc* ev_dptr;
 
 void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
 {
-   // whichever method owns the main lambda drives the sub-lambda maps.
-   if (use_dlmda and useLmdaChain())
+   // Whichever method owns the main lambda drives the sub-lambda maps.
+   if (use_dlmda)
       mapSubLambda(mainLambda());
 
    zeroEGV(vers);
@@ -508,7 +508,7 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
          sumGradient(gx, gy, gz, gx_nnintermol, gy_nnintermol, gz_nnintermol);
    }
 
-   if (use_dlmda and useLmdaChain()) {
+   if (use_dlmda) {
       lmdachain(vers);
       if (use_ost or use_meta) {
          bool ecore_ost = false;

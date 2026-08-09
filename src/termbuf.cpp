@@ -133,8 +133,8 @@ void TermBuffer::flush(int vers) const
          sumVirialBuffer(bsize * VirialBufferTraits::value, mShared.v, *mSlots.v);
    }
 
-   // The gradient lands in the category gradient -- except in OST chain-rule
-   // mode, where lmdachain scales the private force derivatives and sums them.
+   // The gradient lands in the category gradient -- except in chain-rule mode,
+   // where lmdachain scales the private force derivatives and sums them.
    if (do_g and not mChainRule)
       sumGradient(mShared.gx, mShared.gy, mShared.gz, *mSlots.gx, *mSlots.gy, *mSlots.gz);
 }

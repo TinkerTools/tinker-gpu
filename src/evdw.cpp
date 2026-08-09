@@ -398,8 +398,8 @@ void evdwData(RcOp op)
          {&energy_ev, &virial_ev}, {&energy_vdw, &virial_vdw});
       ev_dl.manage(op, rc_flag, {&devdl_buf, &devvirdl_buf, &dfvdlx, &dfvdly, &dfvdlz, &d2evdl2_buf},
          {dedl_buf, dvirdl_buf, dfsumdlx, dfsumdly, dfsumdlz, d2edl2_buf},
-         (rc_a or useLmdaChain()) and use_dlmda, //
-         {&devdl, &devvirdl, &d2evdl2}, {&dedl, &dvirdl, &d2edl2}, useLmdaChain());
+         use_dlmda, //
+         {&devdl, &devvirdl, &d2evdl2}, {&dedl, &dvirdl, &d2edl2}, use_dlmda);
       if (rc_a)
          bufferAllocate(rc_flag, &nev);
    }

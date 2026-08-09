@@ -83,7 +83,7 @@ static void setLambda(double vlambda, double elambda, double plambda)
 
 static FdLambdaState captureFdLambdaState()
 {
-   bool useMain = useLmdaChain();
+   bool useMain = use_mainlmda;
    return {useMain, useMain ? mainLambda() : 0.0, vlam, elam, plam};
 }
 
