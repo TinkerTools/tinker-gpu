@@ -1,6 +1,5 @@
 #include "tool/error.h"
 #include <tinker/detail/bath.hh>
-#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/inform.hh>
 #include <tinker/routines.h>
 
@@ -260,7 +259,7 @@ double testGetEps(double eps_single, double eps_double)
 #endif
 }
 
-void testBeginWithArgs(int argc, const char** argv, bool useDlmda)
+void testBeginWithArgs(int argc, const char** argv)
 {
    tinkerFortranRuntimeBegin(argc, const_cast<char**>(argv));
 
@@ -268,8 +267,6 @@ void testBeginWithArgs(int argc, const char** argv, bool useDlmda)
    tinker_f_command();
    tinker_f_getxyz();
    tinker_f_mechanic();
-   if (useDlmda)
-      dlmda::use_dlmda = 1;
    mechanic2();
 }
 

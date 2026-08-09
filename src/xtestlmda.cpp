@@ -17,7 +17,6 @@
 #include "tool/xtesthelper.h"
 #include <cmath>
 #include <string>
-#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/files.hh>
 #include <tinker/detail/inform.hh>
 #include <tinker/detail/mutant.hh>
@@ -187,9 +186,12 @@ int testlmdaFlags(const FdTestOptions& opts)
 TestlmdaResult testlmdaEvaluate(const FdTestOptions& opts)
 {
    TestlmdaResult r;
+   const bool keylmda = use_dlmda;
+   r.dfdl.assign(3 * n, 0.0);
+   r.ndfdl.assign(3 * n, 0.0);
 
    // ---- Analytical lambda derivatives --------------------------------------
-   if (opts.analyt) {
+   if (opts.analyt and keylmda) {
       energy(calc::v1);
       r.dedl[0] = dedl;
       r.dedl[1] = devdl;
@@ -206,13 +208,12 @@ TestlmdaResult testlmdaEvaluate(const FdTestOptions& opts)
    }
 
    // ---- Numerical lambda derivatives ---------------------------------------
-   if (opts.numer) {
+   if (opts.numer and keylmda) {
       const FdLambdaState state = captureFdLambdaState();
       ScopedDlmdaOff dlmda_off;
       const double eps = opts.eps;
       const double eps2 = eps * eps;
       LambdaEvaluation center = evaluateAtOffset(state, LambdaVariable::MAIN, 0.0);
-      r.ndfdl.assign(3 * n, 0.0);
 
       if (state.useMain) {
          LambdaEvaluation plus = evaluateAtOffset(state, LambdaVariable::MAIN, eps);
@@ -298,7 +299,6 @@ void xTestlmda(int, char**)
    int ixyz;
    tinker_f_getcart(&ixyz);
    tinker_f_mechanic();
-   dlmda::use_dlmda = 1;
    mechanic2();
 
    auto out = stdout;

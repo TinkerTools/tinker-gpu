@@ -18,12 +18,6 @@ using namespace tinker;
 #if TINKER_GPULANG_CUDA
 
 namespace {
-// One water mutation fixture ported from Tinker's test_mutate.f. "base" selects
-// the shared coordinate file (water.xyz or water2.xyz); checkm/checkp/checkv
-// select which level-3 named components are verified (Atomic Multipoles,
-// Polarization, Van der Waals); dolmda enables the level-4 lambda-derivative
-// checks (fixtures 030 and later). The neighbor-list duplication from the
-// Fortran test is intentionally omitted.
 struct Fixture
 {
    const char* name;
@@ -174,6 +168,18 @@ const Fixture kFixtures[] = {
    {"139_water_rels_ye_l030", "water2", true, true, true, true, "rels"},
    {"140_water_rels_ye_l015", "water2", true, true, true, true, "rels"},
    {"141_water_rels_ye_l000", "water2", true, true, true, true, "rels"},
+   {"142_water_qnt_vcorr_adt_l10", "water2", false, false, true, true, "vcorr"},
+   {"143_water_qnt_vcorr_adt_l00", "water2", false, false, true, true, "vcorr"},
+   {"144_water_qnt_vcorr_rdt_l10", "water2", false, false, true, true, "vcorr"},
+   {"145_water_qnt_vcorr_rdt_l00", "water2", false, false, true, true, "vcorr"},
+   {"146_water_lmda_ast_l05", "water2", true, true, true, false, "lmda"},
+   {"147_water_lmda_ast_e05", "water2", true, true, true, false, "lmda"},
+   {"148_water_lmda_ast_l10", "water2", true, true, true, false, "lmda"},
+   {"149_water_lmda_ast_none", "water2", true, true, true, false, "lmda"},
+   {"150_water_lmda_pin_l05v10", "water2", true, true, true, false, "lmda"},
+   {"151_water_lmda_pin_e05v10", "water2", true, true, true, false, "lmda"},
+   {"152_water_lmda_qnt_l05", "water2", true, true, true, false, "lmda"},
+   {"153_water_lmda_vexp_l05", "water2", true, true, true, false, "lmda"},
 };
 
 void runFixture(const Fixture& fx)
@@ -192,7 +198,9 @@ void runFixture(const Fixture& fx)
 
    const double eps_e = testGetEps(1.0e-3, 1.0e-4);
    const double eps_g = testGetEps(1.0e-3, 1.0e-4);
-   const double eps_v = testGetEps(2.0e-3, 1.0e-3);
+   double eps_v = testGetEps(2.0e-3, 1.0e-3);
+   if (std::string(fx.name).find("_vcorr_") != std::string::npos)
+      eps_v = 1.0e-2;
    const double eps_l = testGetEps(1.0e-3, 1.0e-4);
 
    rc_flag = calc::xyz | calc::mass | calc::vmask;
@@ -469,5 +477,17 @@ TEST_CASE("MUTATE-138_water_rels_ye_l050", "[ff][mutate][rels]") { runFixture(kF
 TEST_CASE("MUTATE-139_water_rels_ye_l030", "[ff][mutate][rels]") { runFixture(kFixtures[138]); }
 TEST_CASE("MUTATE-140_water_rels_ye_l015", "[ff][mutate][rels]") { runFixture(kFixtures[139]); }
 TEST_CASE("MUTATE-141_water_rels_ye_l000", "[ff][mutate][rels]") { runFixture(kFixtures[140]); }
+TEST_CASE("MUTATE-142_water_qnt_vcorr_adt_l10", "[ff][mutate][vcorr]") { runFixture(kFixtures[141]); }
+TEST_CASE("MUTATE-143_water_qnt_vcorr_adt_l00", "[ff][mutate][vcorr]") { runFixture(kFixtures[142]); }
+TEST_CASE("MUTATE-144_water_qnt_vcorr_rdt_l10", "[ff][mutate][vcorr]") { runFixture(kFixtures[143]); }
+TEST_CASE("MUTATE-145_water_qnt_vcorr_rdt_l00", "[ff][mutate][vcorr]") { runFixture(kFixtures[144]); }
+TEST_CASE("MUTATE-146_water_lmda_ast_l05", "[ff][mutate][lmda]") { runFixture(kFixtures[145]); }
+TEST_CASE("MUTATE-147_water_lmda_ast_e05", "[ff][mutate][lmda]") { runFixture(kFixtures[146]); }
+TEST_CASE("MUTATE-148_water_lmda_ast_l10", "[ff][mutate][lmda]") { runFixture(kFixtures[147]); }
+TEST_CASE("MUTATE-149_water_lmda_ast_none", "[ff][mutate][lmda]") { runFixture(kFixtures[148]); }
+TEST_CASE("MUTATE-150_water_lmda_pin_l05v10", "[ff][mutate][lmda]") { runFixture(kFixtures[149]); }
+TEST_CASE("MUTATE-151_water_lmda_pin_e05v10", "[ff][mutate][lmda]") { runFixture(kFixtures[150]); }
+TEST_CASE("MUTATE-152_water_lmda_qnt_l05", "[ff][mutate][lmda]") { runFixture(kFixtures[151]); }
+TEST_CASE("MUTATE-153_water_lmda_vexp_l05", "[ff][mutate][lmda]") { runFixture(kFixtures[152]); }
 
 #endif

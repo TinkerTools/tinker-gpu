@@ -82,13 +82,7 @@ double testGetEps(double epsSingle, ///< Larger eps value for lower floating-poi
 );
 
 /// \brief Initializes the test.
-void testBeginWithArgs(int argc,
-                       const char** argv,
-                       bool useDlmda = false ///< Turns on the Fortran-side \c dlmda::use_dlmda before \c mechanic2(),
-                                             ///  so the lambda-derivative buffers get allocated. Needed only for key
-                                             ///  files that drive lambda through OST/TI rather than the
-                                             ///  \c lambda-deriv keyword; see \c xTestlmda.
-);
+void testBeginWithArgs(int argc, const char** argv);
 
 /// \brief Ends the test.
 void testEnd();

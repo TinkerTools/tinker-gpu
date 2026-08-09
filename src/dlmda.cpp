@@ -117,10 +117,9 @@ void dlmda_mech()
    use_plmdamap = (dlmda::use_plmdamap != 0);
    use_vlmdamap = (dlmda::use_vlmdamap != 0);
 
-   // A sub-lambda not driven by the main lambda has an identity chain.
-   deldlmda = 1.0;
-   dpldlmda = 1.0;
-   dvldlmda = 1.0;
+   deldlmda = dlmda::deldlmda;
+   dpldlmda = dlmda::dpldlmda;
+   dvldlmda = dlmda::dvldlmda;
    d2eldlmda2 = 0.0;
    d2pldlmda2 = 0.0;
    d2vldlmda2 = 0.0;
