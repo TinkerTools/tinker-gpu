@@ -87,6 +87,20 @@ static FdLambdaState captureFdLambdaState()
    return {useMain, useMain ? mainLambda() : 0.0, vlam, elam, plam};
 }
 
+struct ScopedDlmdaOff
+{
+   bool saved;
+   ScopedDlmdaOff()
+      : saved(use_dlmda)
+   {
+      use_dlmda = false;
+   }
+   ~ScopedDlmdaOff()
+   {
+      use_dlmda = saved;
+   }
+};
+
 static void setMainLambda(double lambda)
 {
    if (use_ost or use_meta)
@@ -194,6 +208,7 @@ TestlmdaResult testlmdaEvaluate(const FdTestOptions& opts)
    // ---- Numerical lambda derivatives ---------------------------------------
    if (opts.numer) {
       const FdLambdaState state = captureFdLambdaState();
+      ScopedDlmdaOff dlmda_off;
       const double eps = opts.eps;
       const double eps2 = eps * eps;
       LambdaEvaluation center = evaluateAtOffset(state, LambdaVariable::MAIN, 0.0);
