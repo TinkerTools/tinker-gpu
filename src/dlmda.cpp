@@ -343,8 +343,7 @@ void mapSubLambda()
       return;
    }
 
-   // Map the main lambda onto each sub-lambda that follows it; the rest keep
-   // their fixed values and their identity chain factors.
+   // Map the main lambda onto each sub-lambda that follows it.
    if (use_plmdamap) {
       double pval;
       mapOne(lambda, plmdamap, qntplmda0, qntplmda1, plmdaexp, plmdainvn, plmdainveps, pval, dpldlmda, d2pldlmda2);

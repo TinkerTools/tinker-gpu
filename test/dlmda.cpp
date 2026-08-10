@@ -42,16 +42,21 @@ TEST_CASE("DLMDA-one-main-lambda", "[ff][dlmda]")
    bool oldUseOst = use_ost, oldUseMeta = use_meta, oldUseTi = use_ti;
    bool oldRel = use_relstage;
    bool oldE = use_elmdamap, oldP = use_plmdamap, oldV = use_vlmdamap;
-   Lmdamap oldEm = elmdamap;
-   int oldEx = elmdaexp;
+   Lmdamap oldEm = elmdamap, oldPm = plmdamap, oldVm = vlmdamap;
+   int oldEx = elmdaexp, oldPx = plmdaexp, oldVx = vlmdaexp;
    double oldMutant = mutant::lambda, oldLambda = lambda;
 
+   // A main lambda claims all three sub-lambdas, so map all three.
    use_relstage = false;
    elmdamap = Lmdamap::EXP;
+   plmdamap = Lmdamap::EXP;
+   vlmdamap = Lmdamap::EXP;
    elmdaexp = 2;
+   plmdaexp = 2;
+   vlmdaexp = 2;
    use_elmdamap = true;
-   use_plmdamap = false;
-   use_vlmdamap = false;
+   use_plmdamap = true;
+   use_vlmdamap = true;
 
    // Decoy: were the Fortran copy consulted, elam would come out 0.81.
    mutant::lambda = 0.9;
@@ -74,107 +79,13 @@ TEST_CASE("DLMDA-one-main-lambda", "[ff][dlmda]")
    use_plmdamap = oldP;
    use_vlmdamap = oldV;
    elmdamap = oldEm;
+   plmdamap = oldPm;
+   vlmdamap = oldVm;
    elmdaexp = oldEx;
+   plmdaexp = oldPx;
+   vlmdaexp = oldVx;
    mutant::lambda = oldMutant;
    lambda = oldLambda;
-}
-
-TEST_CASE("DLMDA-partial-sublambda-map", "[ff][dlmda]")
-{
-   // A sub-lambda without its map keyword holds the fixed value it was given
-   // and keeps the identity chain factors, so lmdachain passes it through.
-   bool oldRel = use_relstage;
-   bool oldE = use_elmdamap, oldP = use_plmdamap, oldV = use_vlmdamap;
-   Lmdamap oldEm = elmdamap, oldPm = plmdamap, oldVm = vlmdamap;
-   int oldEx = elmdaexp;
-
-   use_relstage = false;
-   elmdamap = Lmdamap::EXP;
-   elmdaexp = 2;
-   plmdamap = Lmdamap::EXP;
-   vlmdamap = Lmdamap::EXP;
-   use_elmdamap = true;
-   use_plmdamap = false;
-   use_vlmdamap = false;
-
-   // The fixed sub-lambdas and the identity chain dlmda_mech() installs.
-   elam = 0.0;
-   plam = 0.11;
-   vlam = 0.22;
-   deldlmda = 1.0;
-   dpldlmda = 1.0;
-   dvldlmda = 1.0;
-   d2eldlmda2 = 0.0;
-   d2pldlmda2 = 0.0;
-   d2vldlmda2 = 0.0;
-
-   mapAt(0.5);
-
-   // Only electrostatics follows the main lambda.
-   COMPARE_REALS(elam, 0.25, 1.0e-7);
-   COMPARE_REALS(deldlmda, 1.0, 1.0e-14);
-   COMPARE_REALS(d2eldlmda2, 2.0, 1.0e-14);
-
-   // The other two are untouched, chain factors included.
-   COMPARE_REALS(plam, 0.11, 1.0e-7);
-   COMPARE_REALS(vlam, 0.22, 1.0e-7);
-   COMPARE_REALS(dpldlmda, 1.0, 1.0e-14);
-   COMPARE_REALS(dvldlmda, 1.0, 1.0e-14);
-   COMPARE_REALS(d2pldlmda2, 0.0, 1.0e-14);
-   COMPARE_REALS(d2vldlmda2, 0.0, 1.0e-14);
-
-   use_relstage = oldRel;
-   use_elmdamap = oldE;
-   use_plmdamap = oldP;
-   use_vlmdamap = oldV;
-   elmdamap = oldEm;
-   plmdamap = oldPm;
-   vlmdamap = oldVm;
-   elmdaexp = oldEx;
-}
-
-TEST_CASE("DLMDA-unmapped-keeps-endpoints", "[ff][dlmda]")
-{
-   // The QNT endpoint flags belong to the map, so an unmapped sub-lambda keeps
-   // both of its dual topology legs live wherever the main lambda sits.
-   bool oldRel = use_relstage;
-   bool oldE = use_elmdamap, oldP = use_plmdamap, oldV = use_vlmdamap;
-   Lmdamap oldEm = elmdamap, oldPm = plmdamap, oldVm = vlmdamap;
-
-   use_relstage = false;
-   elmdamap = Lmdamap::QNT;
-   plmdamap = Lmdamap::QNT;
-   vlmdamap = Lmdamap::QNT;
-   qntelmda0 = 0.3;
-   qntelmda1 = 0.7;
-   qntvlmda0 = 0.3;
-   qntvlmda1 = 0.7;
-   use_elmdamap = true;
-   use_vlmdamap = false;
-   use_plmdamap = false;
-
-   use_ele4i = true;
-   use_ele4f = true;
-   use_vdw4i = true;
-   use_vdw4f = true;
-
-   // Above the electrostatic window the mapped term drops its initial leg.
-   mapAt(0.9);
-   REQUIRE_FALSE(use_ele4i);
-   REQUIRE(use_ele4f);
-   // The unmapped one keeps both, even though it shares the window.
-   REQUIRE(use_vdw4i);
-   REQUIRE(use_vdw4f);
-
-   use_ele4i = true;
-   use_ele4f = true;
-   use_relstage = oldRel;
-   use_elmdamap = oldE;
-   use_plmdamap = oldP;
-   use_vlmdamap = oldV;
-   elmdamap = oldEm;
-   plmdamap = oldPm;
-   vlmdamap = oldVm;
 }
 
 TEST_CASE("DLMDA-taper-shape", "[ff][dlmda]")

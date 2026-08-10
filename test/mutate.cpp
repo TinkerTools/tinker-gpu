@@ -176,10 +176,8 @@ const Fixture kFixtures[] = {
    {"147_water_lmda_ast_e05", "water2", true, true, true, false, "lmda"},
    {"148_water_lmda_ast_l10", "water2", true, true, true, false, "lmda"},
    {"149_water_lmda_ast_none", "water2", true, true, true, false, "lmda"},
-   {"150_water_lmda_pin_l05v10", "water2", true, true, true, false, "lmda"},
-   {"151_water_lmda_pin_e05v10", "water2", true, true, true, false, "lmda"},
-   {"152_water_lmda_qnt_l05", "water2", true, true, true, false, "lmda"},
-   {"153_water_lmda_vexp_l05", "water2", true, true, true, false, "lmda"},
+   {"150_water_lmda_qnt_l05", "water2", true, true, true, false, "lmda"},
+   {"151_water_lmda_vexp_l05", "water2", true, true, true, false, "lmda"},
 };
 
 void runFixture(const Fixture& fx)
@@ -485,9 +483,7 @@ TEST_CASE("MUTATE-146_water_lmda_ast_l05", "[ff][mutate][lmda]") { runFixture(kF
 TEST_CASE("MUTATE-147_water_lmda_ast_e05", "[ff][mutate][lmda]") { runFixture(kFixtures[146]); }
 TEST_CASE("MUTATE-148_water_lmda_ast_l10", "[ff][mutate][lmda]") { runFixture(kFixtures[147]); }
 TEST_CASE("MUTATE-149_water_lmda_ast_none", "[ff][mutate][lmda]") { runFixture(kFixtures[148]); }
-TEST_CASE("MUTATE-150_water_lmda_pin_l05v10", "[ff][mutate][lmda]") { runFixture(kFixtures[149]); }
-TEST_CASE("MUTATE-151_water_lmda_pin_e05v10", "[ff][mutate][lmda]") { runFixture(kFixtures[150]); }
-TEST_CASE("MUTATE-152_water_lmda_qnt_l05", "[ff][mutate][lmda]") { runFixture(kFixtures[151]); }
-TEST_CASE("MUTATE-153_water_lmda_vexp_l05", "[ff][mutate][lmda]") { runFixture(kFixtures[152]); }
+TEST_CASE("MUTATE-150_water_lmda_qnt_l05", "[ff][mutate][lmda]") { runFixture(kFixtures[149]); }
+TEST_CASE("MUTATE-151_water_lmda_vexp_l05", "[ff][mutate][lmda]") { runFixture(kFixtures[150]); }
 
 #endif

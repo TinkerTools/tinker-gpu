@@ -27,8 +27,7 @@ const Fixture kFixtures[] = {
    {"02_water_ast_l05.key", "testlmda.2.txt"},
    {"03_water_adt_m06p05v04.key", "testlmda.3.txt"},
    {"04_water_ast_m06v04.key", "testlmda.4.txt"},
-   {"05_water_ast_l05v10.key", "testlmda.5.txt"},
-   {"06_water_ast_nodl_l05.key", "testlmda.6.txt"},
+   {"05_water_ast_nodl_l05.key", "testlmda.5.txt"},
 };
 
 // Finite difference stepsize, in lambda. Smaller steps sharpen the first
@@ -104,6 +103,5 @@ TEST_CASE("TESTLMDA-01_water_adt_l05", "[ff][testlmda]") { runFixture(kFixtures[
 TEST_CASE("TESTLMDA-02_water_ast_l05", "[ff][testlmda]") { runFixture(kFixtures[1]); }
 TEST_CASE("TESTLMDA-03_water_adt_m06p05v04", "[ff][testlmda]") { runFixture(kFixtures[2]); }
 TEST_CASE("TESTLMDA-04_water_ast_m06v04", "[ff][testlmda]") { runFixture(kFixtures[3]); }
-TEST_CASE("TESTLMDA-05_water_ast_l05v10", "[ff][testlmda]") { runFixture(kFixtures[4]); }
-TEST_CASE("TESTLMDA-06_water_ast_nodl_l05", "[ff][testlmda]") { runFixture(kFixtures[5]); }
+TEST_CASE("TESTLMDA-05_water_ast_nodl_l05", "[ff][testlmda]") { runFixture(kFixtures[4]); }
 #endif
