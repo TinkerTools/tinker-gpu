@@ -83,7 +83,7 @@ static void setLambda(double vlambda, double elambda, double plambda)
 static FdLambdaState captureFdLambdaState()
 {
    bool useMain = use_mainlmda;
-   return {useMain, useMain ? mainLambda() : 0.0, vlam, elam, plam};
+   return {useMain, useMain ? lambda : 0.0, vlam, elam, plam};
 }
 
 struct ScopedDlmdaOff
@@ -100,22 +100,12 @@ struct ScopedDlmdaOff
    }
 };
 
-static void setMainLambda(double lambda)
-{
-   if (use_ost or use_meta)
-      ostlambda = lambda;
-   else if (use_ti)
-      tilmda = lambda;
-   else
-      mutant::lambda = lambda;
-}
-
 // Applies a displacement from the captured point. A main lambda is mapped to
 // all sub-lambdas by energy(); without one, exactly one fixed sub-lambda moves.
 static void setFdOffset(const FdLambdaState& state, LambdaVariable variable, double delta)
 {
    if (state.useMain) {
-      setMainLambda(state.main + delta);
+      lambda = state.main + delta;
       return;
    }
 
@@ -134,8 +124,8 @@ static void setFdOffset(const FdLambdaState& state, LambdaVariable variable, dou
 static void restoreFdLambdaState(const FdLambdaState& state)
 {
    if (state.useMain) {
-      setMainLambda(state.main);
-      mapSubLambda(state.main);
+      lambda = state.main;
+      mapSubLambda();
    } else {
       setLambda(state.vdw, state.ele, state.pol);
    }

@@ -64,6 +64,8 @@ Lmdamap lmdamapFrom(const char* s)
 
 void dlmda_mech()
 {
+   lambda = mutant::lambda;
+
    use_dlmda = dlmda::use_dlmda;
    use_emdt = dlmda::use_emdt;
    use_epdt = dlmda::use_epdt;
@@ -161,14 +163,14 @@ void avgstd(const std::vector<double>& v, int begin, int count, double& avg, dou
    sd = std::sqrt(var > 0.0 ? var : 0.0);
 }
 
-void adtWeight(double lambda, int exponent, double& weight, double& dweight, double& d2weight)
+void adtWeight(double lmda, int exponent, double& weight, double& dweight, double& d2weight)
 {
-   weight = std::pow(lambda, exponent);
+   weight = std::pow(lmda, exponent);
    dweight = 0;
    d2weight = 0;
    if (exponent >= 2) {
-      dweight = exponent * std::pow(lambda, exponent - 1);
-      d2weight = exponent * (exponent - 1) * std::pow(lambda, exponent - 2);
+      dweight = exponent * std::pow(lmda, exponent - 1);
+      d2weight = exponent * (exponent - 1) * std::pow(lmda, exponent - 2);
    } else {
       dweight = 1;
    }
@@ -269,17 +271,17 @@ void quinticTaper(double x, double cut, double off, double& taper, double& dtape
 }
 
 // Maps one sub-lambda from main lambda to its mapping type.
-static void mapOne(double lambda, Lmdamap map, double qnt0, double qnt1, int expExp, int invN, double invEps,
+static void mapOne(double lmda, Lmdamap map, double qnt0, double qnt1, int expExp, int invN, double invEps,
    double& value, double& dvalue, double& d2value)
 {
    if (map == Lmdamap::EXP) {
-      sublmdaExp(lambda, expExp, value, dvalue, d2value);
+      sublmdaExp(lmda, expExp, value, dvalue, d2value);
    } else if (map == Lmdamap::INV) {
-      sublmdaInvPower(lambda, invN, invEps, value, dvalue, d2value);
+      sublmdaInvPower(lmda, invN, invEps, value, dvalue, d2value);
    } else { // Lmdamap::QNT
       // quantized map: sublambda = 1 - taper.
       double taper, dtaper, d2taper;
-      quinticTaper(lambda, qnt0, qnt1, taper, dtaper, d2taper);
+      quinticTaper(lmda, qnt0, qnt1, taper, dtaper, d2taper);
       value = 1.0 - taper;
       dvalue = -dtaper;
       d2value = -d2taper;
@@ -287,19 +289,19 @@ static void mapOne(double lambda, Lmdamap map, double qnt0, double qnt1, int exp
 }
 
 // Staged relative free energy schedule
-static void mapRelStage(double lambda)
+static void mapRelStage(double lmda)
 {
    double w, taper, dtaper, d2taper;
-   if (lambda > relstg2lmda0) {
+   if (lmda > relstg2lmda0) {
       // High-lambda electrostatics leg: weight runs 0 -> 1 across the window.
-      quinticTaper(lambda, relstg2lmda0, relstg2lmda1, taper, dtaper, d2taper);
+      quinticTaper(lmda, relstg2lmda0, relstg2lmda1, taper, dtaper, d2taper);
       relstage = RelStage::LIG1_ELE;
       w = 1.0 - taper;
       deldlmda = -dtaper;
       d2eldlmda2 = -d2taper;
-   } else if (lambda < relstg1lmda1) {
+   } else if (lmda < relstg1lmda1) {
       // Low-lambda electrostatics leg: weight runs 1 -> 0 across the window.
-      quinticTaper(lambda, relstg1lmda0, relstg1lmda1, taper, dtaper, d2taper);
+      quinticTaper(lmda, relstg1lmda0, relstg1lmda1, taper, dtaper, d2taper);
       relstage = RelStage::LIG0_ELE;
       w = taper;
       deldlmda = dtaper;
@@ -326,25 +328,15 @@ static void mapRelStage(double lambda)
 
    // van der Waals keeps its ordinary map.
    double taper2, dtaper2, d2taper2;
-   quinticTaper(lambda, qntvlmda0, qntvlmda1, taper2, dtaper2, d2taper2);
+   quinticTaper(lmda, qntvlmda0, qntvlmda1, taper2, dtaper2, d2taper2);
    vlam = 1.0 - taper2;
    dvldlmda = -dtaper2;
    d2vldlmda2 = -d2taper2;
-   use_vdw4i = (lambda <= qntvlmda1);
-   use_vdw4f = (lambda >= qntvlmda0);
+   use_vdw4i = (lmda <= qntvlmda1);
+   use_vdw4f = (lmda >= qntvlmda0);
 }
 
-double mainLambda()
-{
-   if (use_ost or use_meta)
-      return ostlambda;
-   else if (use_ti)
-      return tilmda;
-   else
-      return mutant::lambda;
-}
-
-void mapSubLambda(double lambda)
+void mapSubLambda()
 {
    if (use_relstage) {
       mapRelStage(lambda);

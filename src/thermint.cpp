@@ -1,6 +1,7 @@
 #include "ff/thermint.h"
 #include "ff/dlmda.h"
 #include <algorithm>
+#include <tinker/detail/mutant.hh>
 #include <tinker/detail/thrmint.hh>
 #include <tinker/routines.h>
 
@@ -25,7 +26,6 @@ void thermintData(RcOp op)
       tinbin = thrmint::tinbin;
       tinstepavg = thrmint::tinstepavg;
       tieqratio = thrmint::tieqratio;
-      tilmda = thrmint::tilmda;
       tilmdalist.assign(thrmint::tilmdalist, thrmint::tilmdalist + tinbin);
       tifraclist.assign(thrmint::tifraclist, thrmint::tifraclist + tinbin);
 
@@ -55,7 +55,7 @@ void init_tidyn(int nstep)
 
    tinbtot = thrmint::tinbtot;
    tibin = thrmint::tibin;
-   tilmda = thrmint::tilmda;
+   lambda = mutant::lambda;
    tiwindow = thrmint::tiwindow;
    tinequil = thrmint::tinequil;
    tinblock = thrmint::tinblock;
@@ -99,7 +99,7 @@ void etidyn(int istep)
          double avg, sd;
          avgstd(tidedllist, 0, tinstepavg, avg, sd);
          if (tinbcount < tinbtot) {
-            tilmdahist[tinbcount] = tilmda;
+            tilmdahist[tinbcount] = lambda;
             tilmdadedl[tinbcount] = avg;
             tilmdadedlstd[tinbcount] = sd;
             ++tinbcount;
@@ -117,7 +117,7 @@ void tischedule()
    // Past the final window the lambda is left where it is and etidyn stops.
    ++tibin;
    if (tibin <= tinbin) {
-      tilmda = tilmdalist[tibin - 1];
+      lambda = tilmdalist[tibin - 1];
       tiSetWindow();
    }
 }

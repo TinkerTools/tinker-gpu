@@ -21,6 +21,7 @@
 #include <tinker/detail/files.hh>
 #include <tinker/detail/moldyn.hh>
 #include <tinker/detail/mpole.hh>
+#include <tinker/detail/mutant.hh>
 #include <tinker/detail/ost.hh>
 #include <tinker/detail/output.hh>
 #include <tinker/detail/polar.hh>
@@ -84,7 +85,7 @@ static pos_prec *dup_buf_x, *dup_buf_y, *dup_buf_z;
 static vel_prec *dup_buf_vx, *dup_buf_vy, *dup_buf_vz;
 static grad_prec *dup_buf_gx, *dup_buf_gy, *dup_buf_gz;
 static bool ost_snap_active;
-static double s_ostlambda, s_ostdedl, s_ostdgdl, s_ostddgdl, s_eosttot;
+static double s_lambda, s_dedl, s_ostdgdl, s_ostddgdl, s_eosttot;
 static double s_osttheta, s_ostvtheta;
 static int s_iost, s_nflmda, s_fli0;
 static int s_nosthist, s_sizeosthist, s_ost_first;
@@ -106,8 +107,8 @@ static void mdsaveDupOst(int istep)
    s_iost = istep;
    s_nflmda = nflmda;
    s_fli0 = fli0;
-   s_ostlambda = ostlambda;
-   s_ostdedl = ostdedl;
+   s_lambda = lambda;
+   s_dedl = dedl;
    s_ostdgdl = ostdgdl;
    s_ostddgdl = ostddgdl;
    s_eosttot = eosttot;
@@ -153,8 +154,8 @@ static void mdsaveWriteOst()
    ost::iost = s_iost;
    ost::nflmda = s_nflmda;
    ost::fli0 = s_fli0;
-   ost::ostlambda = s_ostlambda;
-   ost::ostdedl = s_ostdedl;
+   mutant::lambda = s_lambda;
+   dlmda::dedl = s_dedl;
    ost::ostdgdl = s_ostdgdl;
    ost::ostddgdl = s_ostddgdl;
    ost::eosttot = s_eosttot;

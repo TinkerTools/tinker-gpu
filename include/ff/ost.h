@@ -28,8 +28,6 @@ void eMetaDyn(int istep);
 //====================================================================//
 
 namespace tinker {
-TINKER_EXTERN double ostlambda;
-
 //====================================================================//
 //              OST / metadynamics lambda-dynamics state              //
 //====================================================================//
@@ -71,8 +69,8 @@ TINKER_EXTERN double ostmass;
 TINKER_EXTERN double ostfriction;
 TINKER_EXTERN double ostdt;
 
-// current-step derived quantities and running averages.
-TINKER_EXTERN double ostdedl;   ///< unbiased dU/dlambda this step.
+// current-step derived quantities and running averages. The unbiased
+// dU/dlambda is \ref dedl itself; OST keeps no separate copy of it.
 TINKER_EXTERN double ostdgdl;   ///< dg/dlambda (with chain rule via d2edl2).
 TINKER_EXTERN double ostddgdl;  ///< dDeltaG/dlambda this step.
 TINKER_EXTERN double deffdl;    ///< effective lambda force for propagation.

@@ -44,6 +44,13 @@
 using namespace tinker;
 
 namespace {
+// mapSubLambda() reads the one main lambda, so drive it by setting that first.
+void mapAt(double lmda)
+{
+   lambda = lmda;
+   mapSubLambda();
+}
+
 // Puts the sub-lambda maps on the power-law branch, which is plain C++. The
 // QNT/NONE taper branch calls tinker_f_switch and needs the Fortran runtime.
 void useExpMaps(int eexp, int pexp, int vexp)
@@ -93,7 +100,7 @@ void resettisched(const std::vector<double>& lam, const std::vector<int>& winend
    tinbcount = 0;
 
    tibin = 1;
-   tilmda = tilmdalist[0];
+   lambda = tilmdalist[0];
    tiwindow = tiwinend[0];
    tinequil = (int)((double)tiwindow * tieqratio);
    tinblock = (tiwindow - tinequil) / tinstepavg;
@@ -226,18 +233,18 @@ TEST_CASE("THERMINT-schedule", "[ff][thermint]")
    // number, so the schedule starts at 1 rather than 0.
    resetti(21, 10, 100, 50);
    REQUIRE(tibin == 1);
-   REQUIRE(tilmda == 1.0);
+   REQUIRE(lambda == 1.0);
    for (int k = 1; k <= 20; ++k) {
       tischedule();
       REQUIRE(tibin == k + 1);
-      COMPARE_REALS(tilmda, 1.0 - (double)k / 20.0, eps);
+      COMPARE_REALS(lambda, 1.0 - (double)k / 20.0, eps);
    }
    // the final window must sit exactly on the endpoint
-   REQUIRE(tilmda == 0.0);
+   REQUIRE(lambda == 0.0);
 
    // one call past the end leaves the lambda where it is
    tischedule();
-   REQUIRE(tilmda == 0.0);
+   REQUIRE(lambda == 0.0);
    REQUIRE(tibin == 22);
 
    // 5 bins: 1.00, 0.75, 0.50, 0.25, 0.00
@@ -245,35 +252,35 @@ TEST_CASE("THERMINT-schedule", "[ff][thermint]")
    const double lref5[] = {0.75, 0.50, 0.25, 0.00};
    for (int k = 0; k < 4; ++k) {
       tischedule();
-      COMPARE_REALS(tilmda, lref5[k], eps);
+      COMPARE_REALS(lambda, lref5[k], eps);
    }
-   REQUIRE(tilmda == 0.0);
+   REQUIRE(lambda == 0.0);
 
    // 2 bins: just the two endpoints
    resetti(2, 10, 40, 20);
-   REQUIRE(tilmda == 1.0);
+   REQUIRE(lambda == 1.0);
    tischedule();
-   REQUIRE(tilmda == 0.0);
+   REQUIRE(lambda == 0.0);
    REQUIRE(tibin == 2);
 
    // An ascending schedule is legal and must hold at its own last value rather
    // than being clamped back toward zero.
    resettisched({0.0, 0.25, 0.5, 0.75, 1.0}, {40, 80, 120, 160, 200}, 10, 0.5);
-   REQUIRE(tilmda == 0.0);
+   REQUIRE(lambda == 0.0);
    for (int k = 1; k <= 4; ++k)
       tischedule();
-   REQUIRE(tilmda == 1.0);
+   REQUIRE(lambda == 1.0);
    tischedule();
-   REQUIRE(tilmda == 1.0);
+   REQUIRE(lambda == 1.0);
    REQUIRE(tibin == 6);
 
    // An interior-only schedule never touches either endpoint.
    resettisched({0.75, 0.70, 0.20}, {40, 80, 120}, 10, 0.5);
-   COMPARE_REALS(tilmda, 0.75, eps);
+   COMPARE_REALS(lambda, 0.75, eps);
    tischedule();
-   COMPARE_REALS(tilmda, 0.70, eps);
+   COMPARE_REALS(lambda, 0.70, eps);
    tischedule();
-   COMPARE_REALS(tilmda, 0.20, eps);
+   COMPARE_REALS(lambda, 0.20, eps);
 
    clearti();
 }
@@ -318,7 +325,7 @@ TEST_CASE("THERMINT-etidyn", "[ff][thermint]")
    std::vector<double> lambda_seen(201, -1.0);
    for (int istep = 1; istep <= 200; ++istep) {
       dedl = (energy_prec)istep;
-      lambda_seen[istep] = tilmda;
+      lambda_seen[istep] = lambda;
       etidyn(istep);
    }
 
@@ -340,7 +347,7 @@ TEST_CASE("THERMINT-etidyn", "[ff][thermint]")
       COMPARE_REALS(lambda_seen[istep], lref, 1.0e-12);
    }
    REQUIRE(tibin == 6);
-   REQUIRE(tilmda == 0.0);
+   REQUIRE(lambda == 0.0);
 
    // Same run, but poison every equilibration step. The block averages must be
    // untouched, which makes the "discard while equilibrating" rule explicit.
@@ -438,7 +445,7 @@ TEST_CASE("THERMINT-uneven", "[ff][thermint]")
    std::vector<double> lambda_seen(206, -1.0);
    for (int istep = 1; istep <= 205; ++istep) {
       dedl = (energy_prec)istep;
-      lambda_seen[istep] = tilmda;
+      lambda_seen[istep] = lambda;
       etidyn(istep);
    }
 
@@ -512,7 +519,7 @@ TEST_CASE("THERMINT-save", "[ff][thermint]")
    REQUIRE(tinblock == 2);
    REQUIRE(tinbtot == 10);
    REQUIRE(tibin == 1);
-   REQUIRE(tilmda == 1.0);
+   REQUIRE(lambda == 1.0);
    REQUIRE(tinbcount == 0);
 
    // prttihead claims a new version, so take the name it actually used
@@ -561,11 +568,9 @@ TEST_CASE("THERMINT-mapsublambda", "[ff][thermint]")
    // ele uses elmdaexp, pol uses plmdaexp, vdw uses vlmdaexp.
    useExpMaps(2, 3, 1);
 
-   // The lambda comes from the argument, not from ostlambda. Before the
-   // refactor mapSubLambda read ostlambda implicitly; this decoy pins the new
-   // contract and is the single assertion this case exists for.
-   ostlambda = 0.9;
-   mapSubLambda(0.5);
+   // The maps below are exercised from the one main lambda; DLMDA-one-main-lambda
+   // pins that mapSubLambda reads it and nothing else.
+   mapAt(0.5);
 
    COMPARE_REALS(elam, 0.25, epsv); // 0.5^2
    COMPARE_REALS(deldlmda, 1.0, epsd);
@@ -580,7 +585,7 @@ TEST_CASE("THERMINT-mapsublambda", "[ff][thermint]")
    COMPARE_REALS(d2vldlmda2, 0.0, epsd);
 
    // Lower boundary clamp of the power-law map.
-   mapSubLambda(0.0);
+   mapAt(0.0);
    COMPARE_REALS(vlam, 0.0, epsv);
    COMPARE_REALS(dvldlmda, 1.0, epsd); // exponent 1
    COMPARE_REALS(d2vldlmda2, 0.0, epsd);
@@ -592,7 +597,7 @@ TEST_CASE("THERMINT-mapsublambda", "[ff][thermint]")
    COMPARE_REALS(d2pldlmda2, 0.0, epsd);
 
    // Upper boundary clamp.
-   mapSubLambda(1.0);
+   mapAt(1.0);
    COMPARE_REALS(elam, 1.0, epsv);
    COMPARE_REALS(deldlmda, 2.0, epsd);
    COMPARE_REALS(d2eldlmda2, 2.0, epsd);
@@ -604,26 +609,26 @@ TEST_CASE("THERMINT-mapsublambda", "[ff][thermint]")
    vlmdamap = Lmdamap::INV;
    vlmdainvn = 1;
    vlmdainveps = 0.3;
-   mapSubLambda(0.25);
+   mapAt(0.25);
    COMPARE_REALS(vlam, 0.25, epsv);
    COMPARE_REALS(dvldlmda, 1.0, epsd);
    COMPARE_REALS(d2vldlmda2, 0.0, epsd);
 
    // Shifted inverse-power map, n = 4. The endpoints are exact by construction.
    vlmdainvn = 4;
-   mapSubLambda(0.0);
+   mapAt(0.0);
    COMPARE_REALS(vlam, 0.0, epsv);
-   mapSubLambda(1.0);
+   mapAt(1.0);
    COMPARE_REALS(vlam, 1.0, epsv);
 
    // Check the reported first derivative against a central difference of the
    // mapped value -- independent of the closed form in src/ost.cpp.
    const double h = 0.01;
-   mapSubLambda(0.5 + h);
+   mapAt(0.5 + h);
    double vhi = vlam;
-   mapSubLambda(0.5 - h);
+   mapAt(0.5 - h);
    double vlo = vlam;
-   mapSubLambda(0.5);
+   mapAt(0.5);
    COMPARE_REALS(dvldlmda, (vhi - vlo) / (2.0 * h), 1.0e-3);
    REQUIRE(dvldlmda > 0.0);
 

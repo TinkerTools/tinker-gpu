@@ -14,6 +14,13 @@
 using namespace tinker;
 
 namespace {
+// mapSubLambda() reads the one main lambda, so drive it by setting that first.
+void mapAt(double lmda)
+{
+   lambda = lmda;
+   mapSubLambda();
+}
+
 double taperAt(double x, double cut, double off)
 {
    double t, dt, d2t;
@@ -29,26 +36,47 @@ double dtaperAt(double x, double cut, double off)
 }
 }
 
-TEST_CASE("DLMDA-explicit-main-lambda", "[ff][dlmda]")
+TEST_CASE("DLMDA-one-main-lambda", "[ff][dlmda]")
 {
    // Without a sampling method the main lambda is the one from the key file.
-   bool oldUseOst = use_ost;
-   bool oldUseMeta = use_meta;
-   bool oldUseTi = use_ti;
-   double oldLambda = mutant::lambda;
+   bool oldUseOst = use_ost, oldUseMeta = use_meta, oldUseTi = use_ti;
+   bool oldRel = use_relstage;
+   bool oldE = use_elmdamap, oldP = use_plmdamap, oldV = use_vlmdamap;
+   Lmdamap oldEm = elmdamap;
+   int oldEx = elmdaexp;
+   double oldMutant = mutant::lambda, oldLambda = lambda;
 
-   use_ost = false;
-   use_meta = false;
-   use_ti = false;
-   mutant::lambda = 0.37;
-   double selectedLambda = mainLambda();
+   use_relstage = false;
+   elmdamap = Lmdamap::EXP;
+   elmdaexp = 2;
+   use_elmdamap = true;
+   use_plmdamap = false;
+   use_vlmdamap = false;
+
+   // Decoy: were the Fortran copy consulted, elam would come out 0.81.
+   mutant::lambda = 0.9;
+
+   // 0 = a fixed lambda from the key file, then each sampling method in turn.
+   for (int method = 0; method < 4; ++method) {
+      use_ost = (method == 1);
+      use_meta = (method == 2);
+      use_ti = (method == 3);
+      CAPTURE(method);
+      mapAt(0.5);
+      COMPARE_REALS(elam, 0.25, 1.0e-7); // 0.5^2
+   }
 
    use_ost = oldUseOst;
    use_meta = oldUseMeta;
    use_ti = oldUseTi;
-   mutant::lambda = oldLambda;
-
-   COMPARE_REALS(selectedLambda, 0.37, 1.0e-14);
+   use_relstage = oldRel;
+   use_elmdamap = oldE;
+   use_plmdamap = oldP;
+   use_vlmdamap = oldV;
+   elmdamap = oldEm;
+   elmdaexp = oldEx;
+   mutant::lambda = oldMutant;
+   lambda = oldLambda;
 }
 
 TEST_CASE("DLMDA-partial-sublambda-map", "[ff][dlmda]")
@@ -80,7 +108,7 @@ TEST_CASE("DLMDA-partial-sublambda-map", "[ff][dlmda]")
    d2pldlmda2 = 0.0;
    d2vldlmda2 = 0.0;
 
-   mapSubLambda(0.5);
+   mapAt(0.5);
 
    // Only electrostatics follows the main lambda.
    COMPARE_REALS(elam, 0.25, 1.0e-7);
@@ -131,7 +159,7 @@ TEST_CASE("DLMDA-unmapped-keeps-endpoints", "[ff][dlmda]")
    use_vdw4f = true;
 
    // Above the electrostatic window the mapped term drops its initial leg.
-   mapSubLambda(0.9);
+   mapAt(0.9);
    REQUIRE_FALSE(use_ele4i);
    REQUIRE(use_ele4f);
    // The unmapped one keeps both, even though it shares the window.
@@ -267,7 +295,7 @@ TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
    qntvlmda1 = 0.7;
 
    // lambda = 1: ligand 1 fully coupled, van der Waals at ligand 1.
-   mapSubLambda(1.0);
+   mapAt(1.0);
    REQUIRE(relstage == RelStage::LIG1_ELE);
    COMPARE_REALS(elam, 1.0, 1.0e-14);
    REQUIRE(relstagemix == false);
@@ -275,7 +303,7 @@ TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
    COMPARE_REALS(deldlmda, 0.0, 1.0e-14);
 
    // Interior of the ligand 1 discharge leg.
-   mapSubLambda(0.85);
+   mapAt(0.85);
    REQUIRE(relstage == RelStage::LIG1_ELE);
    COMPARE_REALS(elam, 0.5, 1.0e-12);
    REQUIRE(relstagemix == true);
@@ -285,18 +313,18 @@ TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
    // The van der Waals morph leg: both ligands electrostatically decoupled.
    for (double lambda : {0.7, 0.5, 0.3}) {
       CAPTURE(lambda);
-      mapSubLambda(lambda);
+      mapAt(lambda);
       REQUIRE(relstage == RelStage::VDW_MORPH);
       COMPARE_REALS(elam, 0.0, 1.0e-14);
       REQUIRE(relstagemix == false);
       COMPARE_REALS(deldlmda, 0.0, 1.0e-14);
       COMPARE_REALS(d2eldlmda2, 0.0, 1.0e-14);
    }
-   mapSubLambda(0.5);
+   mapAt(0.5);
    COMPARE_REALS(vlam, 0.5, 1.0e-12);
 
    // Interior of the ligand 0 recharge leg.
-   mapSubLambda(0.15);
+   mapAt(0.15);
    REQUIRE(relstage == RelStage::LIG0_ELE);
    COMPARE_REALS(elam, 0.5, 1.0e-12);
    REQUIRE(relstagemix == true);
@@ -304,7 +332,7 @@ TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
    COMPARE_REALS(vlam, 0.0, 1.0e-14);
 
    // lambda = 0: ligand 0 fully coupled.
-   mapSubLambda(0.0);
+   mapAt(0.0);
    REQUIRE(relstage == RelStage::LIG0_ELE);
    COMPARE_REALS(elam, 1.0, 1.0e-14);
    REQUIRE(relstagemix == false);
@@ -334,7 +362,7 @@ TEST_CASE("DLMDA-relstage-collapsed-weight", "[ff][dlmda]")
 
    for (double lambda : {0.7 + 1.0e-7, 0.7 + 5.0e-7, 0.3 - 1.0e-7, 0.3 - 5.0e-7}) {
       CAPTURE(lambda);
-      mapSubLambda(lambda);
+      mapAt(lambda);
       // Clamped up from zero or from a slightly negative cancellation result.
       REQUIRE(elam == 0.0);
       REQUIRE(relstage == RelStage::VDW_MORPH);
@@ -345,7 +373,7 @@ TEST_CASE("DLMDA-relstage-collapsed-weight", "[ff][dlmda]")
    // a mix rather than a bare endpoint.
    for (double lambda : {0.7 + 1.0e-5, 0.3 - 1.0e-5}) {
       CAPTURE(lambda);
-      mapSubLambda(lambda);
+      mapAt(lambda);
       REQUIRE(elam > 0.0);
       REQUIRE(relstage != RelStage::VDW_MORPH);
       REQUIRE(relstagemix == true);
@@ -368,7 +396,7 @@ TEST_CASE("DLMDA-relstage-continuity", "[ff][dlmda]")
    // Polarization tracks the multipoles exactly, so emplar stays usable.
    for (double lambda : {0.95, 0.85, 0.72, 0.5, 0.28, 0.15, 0.05}) {
       CAPTURE(lambda);
-      mapSubLambda(lambda);
+      mapAt(lambda);
       COMPARE_REALS(plam, elam, 1.0e-15);
       COMPARE_REALS(dpldlmda, deldlmda, 1.0e-15);
       COMPARE_REALS(d2pldlmda2, d2eldlmda2, 1.0e-15);
@@ -385,9 +413,9 @@ TEST_CASE("DLMDA-relstage-continuity", "[ff][dlmda]")
    const double dbound = 30.0 * (eps / window) * (eps / window) / window;
    for (double edge : {0.7, 0.3}) {
       CAPTURE(edge);
-      mapSubLambda(edge + eps);
+      mapAt(edge + eps);
       double w_hi = elam, d_hi = deldlmda;
-      mapSubLambda(edge - eps);
+      mapAt(edge - eps);
       double w_lo = elam, d_lo = deldlmda;
       COMPARE_REALS(w_hi, w_lo, 1.0e-14);
       REQUIRE(std::fabs(d_hi - d_lo) <= dbound);
@@ -398,7 +426,7 @@ TEST_CASE("DLMDA-relstage-continuity", "[ff][dlmda]")
    // The staged weight is C1 in the main lambda across each leg.
    auto legMatchesTaper = [](double lambda, double lo, double hi, double sign) {
       CAPTURE(lambda);
-      mapSubLambda(lambda);
+      mapAt(lambda);
       double t, dt, d2t;
       quinticTaper(lambda, lo, hi, t, dt, d2t);
       // elam is real, so it holds the weight only to float round-off.

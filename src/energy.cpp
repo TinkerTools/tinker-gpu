@@ -349,7 +349,7 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
 {
    // Whichever method owns the main lambda drives the sub-lambda maps.
    if (use_mainlmda)
-      mapSubLambda(mainLambda());
+      mapSubLambda();
 
    zeroEGV(vers);
    energy_core(vers, tsflag, tsconfig);

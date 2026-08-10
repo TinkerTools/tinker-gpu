@@ -50,11 +50,11 @@ void resetost(int nl, int nf, int nhist)
    iosthist = 10;
    ostnequil = 5;
    ostnavg = 5;
-   ostlambda = 0.0;
+   lambda = 0.0;
    ostlambdaavg = 0.0;
    ostlambdastd = 0.0;
    ostlambdaslp = 0.0;
-   ostdedl = 0.0;
+   dedl = 0.0;
    ostdedlavg = 0.0;
    ostdedlstd = 0.0;
    ostdedlslp = 0.0;
@@ -383,8 +383,8 @@ TEST_CASE("EOST-gkernels", "[ff][eost]")
    COMPARE_REALS(GK(3, 3), expected, 1.0e-12);
 
    // egkernel evaluates the continuous gaussian and derivatives
-   ostlambda = 0.75;
-   ostdedl = 1.0;
+   lambda = 0.75;
+   dedl = 1.0;
    egkernel(egbias, dgdl, dgdfl);
    expected = 2.0 + std::exp(-1.0);
    COMPARE_REALS(egbias, expected, 1.0e-12);
@@ -398,8 +398,8 @@ TEST_CASE("EOST-gkernels", "[ff][eost]")
    sethist(1, 0.50, 0.0, height, wlmda, wflmda);
    sethist(2, 0.50, 0.0, height, wlmda, wflmda);
    buildOstIndex();
-   ostlambda = 0.50;
-   ostdedl = 0.0;
+   lambda = 0.50;
+   dedl = 0.0;
    egkernel(egbias, dgdl, dgdfl);
    COMPARE_REALS(egbias, 2.0, 1.0e-12);
    COMPARE_REALS(dgdl, 0.0, 1.0e-12);
@@ -413,8 +413,8 @@ TEST_CASE("EOST-gkernels", "[ff][eost]")
    sethist(2, 0.50, 0.0, 2.0 * height, wlmda, wflmda);
    sethist(3, 0.75, 1.0, 3.0 * height, wlmda, wflmda);
    buildOstIndex();
-   ostlambda = 0.75;
-   ostdedl = 1.0;
+   lambda = 0.75;
+   dedl = 1.0;
    egkernel(egbias, dgdl, dgdfl);
    expected = 3.0 + 3.0 * std::exp(-1.0);
    COMPARE_REALS(egbias, expected, 1.0e-12);
@@ -427,8 +427,8 @@ TEST_CASE("EOST-gkernels", "[ff][eost]")
    nosthist = 1;
    sethist(1, 0.0, 0.0, height, wlmda, wflmda);
    buildOstIndex();
-   ostlambda = 0.0;
-   ostdedl = 0.0;
+   lambda = 0.0;
+   dedl = 0.0;
    egkernel(egbias, dgdl, dgdfl);
    COMPARE_REALS(egbias, 2.0, 1.0e-12);
    COMPARE_REALS(dgdl, 0.0, 1.0e-12);
@@ -439,8 +439,8 @@ TEST_CASE("EOST-gkernels", "[ff][eost]")
    nosthist = 1;
    sethist(1, 1.0, 0.0, height, wlmda, wflmda);
    buildOstIndex();
-   ostlambda = 1.0;
-   ostdedl = 0.0;
+   lambda = 1.0;
+   dedl = 0.0;
    egkernel(egbias, dgdl, dgdfl);
    COMPARE_REALS(egbias, 2.0, 1.0e-12);
    COMPARE_REALS(dgdl, 0.0, 1.0e-12);
@@ -461,8 +461,8 @@ TEST_CASE("EOST-gkernels", "[ff][eost]")
       buildGkernel();
       expected = std::exp(-0.25);
       COMPARE_REALS(GK(22, 46), expected, 1.0e-12);
-      ostlambda = targetl;
-      ostdedl = targetf;
+      lambda = targetl;
+      dedl = targetf;
       egkernel(egbias, dgdl, dgdfl);
       COMPARE_REALS(egbias, expected, 1.0e-12);
       COMPARE_REALS(dgdl, -10.0 * expected, 1.0e-12);
@@ -475,8 +475,8 @@ TEST_CASE("EOST-gkernels", "[ff][eost]")
    nosthist = 1;
    sethist(1, 0.50, 0.0, height, wlmda, wflmda);
    buildOstIndex();
-   ostlambda = 0.50;
-   ostdedl = 100.0;
+   lambda = 0.50;
+   dedl = 100.0;
    egkernel(egbias, dgdl, dgdfl);
    COMPARE_REALS(egbias, 0.0, 1.0e-12);
    COMPARE_REALS(dgdl, 0.0, 1.0e-12);
@@ -796,8 +796,8 @@ TEST_CASE("EOST-eginterpolate", "[ff][eost]")
    sethist(3, 0.75, 1.0, 2.3 * height, sigl, sigf);
    buildOstIndex();
    buildKernels();
-   ostlambda = 0.50;
-   ostdedl = 0.0;
+   lambda = 0.50;
+   dedl = 0.0;
    ostinterpol = false;
    egkernel(egbias0, dgdl0, dgdfl0);
    egkernelInterpolate(egbias1, dgdl1, dgdfl1);
@@ -817,8 +817,8 @@ TEST_CASE("EOST-eginterpolate", "[ff][eost]")
    sethist(3, 0.75, 2.0, 1.6 * height, sigl, sigf);
    buildOstIndex();
    buildKernels();
-   ostlambda = 0.53125;
-   ostdedl = 0.25;
+   lambda = 0.53125;
+   dedl = 0.25;
    ostinterpol = false;
    egkernel(egbias0, dgdl0, dgdfl0);
    egkernelInterpolate(egbias1, dgdl1, dgdfl1);
@@ -835,31 +835,31 @@ TEST_CASE("EOST-efkernel", "[ff][eost]")
    resetost(5, 5, 1);
    for (int i = 1; i <= nlmda; ++i)
       fkernel[i] = (double)(i - 1) * wlmda;
-   ostlambda = 0.375;
+   lambda = 0.375;
    efkernel(eostlmda, dfdl);
-   expected = 0.5 * ostlambda * ostlambda;
+   expected = 0.5 * lambda * lambda;
    COMPARE_REALS(eostlmda, expected, 1.0e-12);
-   COMPARE_REALS(dfdl, ostlambda, 1.0e-12);
+   COMPARE_REALS(dfdl, lambda, 1.0e-12);
 
    // use fkernel(lambda)=1+lambda so endpoint mean forces are nonzero
    resetost(5, 5, 1);
    for (int i = 1; i <= nlmda; ++i)
       fkernel[i] = 1.0 + (double)(i - 1) * wlmda;
 
-   ostlambda = 0.0;
+   lambda = 0.0;
    efkernel(eostlmda, dfdl);
    COMPARE_REALS(eostlmda, 0.0, 1.0e-12);
    COMPARE_REALS(dfdl, 1.0, 1.0e-12);
-   ostlambda = -0.25;
+   lambda = -0.25;
    efkernel(eostlmda, dfdl);
    COMPARE_REALS(eostlmda, 0.0, 1.0e-12);
    COMPARE_REALS(dfdl, 1.0, 1.0e-12);
 
-   ostlambda = 1.0;
+   lambda = 1.0;
    efkernel(eostlmda, dfdl);
    COMPARE_REALS(eostlmda, 1.5, 1.0e-12);
    COMPARE_REALS(dfdl, 2.0, 1.0e-12);
-   ostlambda = 1.25;
+   lambda = 1.25;
    efkernel(eostlmda, dfdl);
    COMPARE_REALS(eostlmda, 1.5, 1.0e-12);
    COMPARE_REALS(dfdl, 2.0, 1.0e-12);
@@ -930,7 +930,7 @@ TEST_CASE("EOST-metadyn", "[ff][eost]")
    ostnavg = 2;
    hbias = 2.0;
    wlmda = 0.25;
-   ostdedl = 0.0;
+   dedl = 0.0;
    ostdt = 0.0; // no-op ostLangevin, so the sampled lambda values stay controlled
 
    // sampled lambda per step (lam is indexed by istep, not by buffer slot);
@@ -938,7 +938,7 @@ TEST_CASE("EOST-metadyn", "[ff][eost]")
    // ostnequil..iosthist-1 = 2..3, holding the last two samples.
    double lam[5] = {0.0, 0.1, 0.2, 0.4, 0.6};
    for (int istep = 1; istep <= iosthist; ++istep) {
-      ostlambda = lam[istep];
+      lambda = lam[istep];
       eMetaDyn(istep);
       if (istep < iosthist)
          COMPARE_INTS(nmetahist, 0); // no deposit before the interval boundary
@@ -1092,7 +1092,7 @@ TEST_CASE("EOST-metatemper", "[ff][eost]")
    ostnequil = 2;
    ostnavg = 2;
    hbias = 2.0;
-   ostdedl = 0.0;
+   dedl = 0.0;
    ostdt = 0.0; // no-op ostLangevin, so the sampled lambda values stay controlled
    ostemper = true;
    temperthresh = 0.5;
@@ -1121,7 +1121,7 @@ TEST_CASE("EOST-metatemper", "[ff][eost]")
 
    const int ndep = 5;
    for (int istep = 1; istep <= ndep * iosthist; ++istep) {
-      ostlambda = 0.5;
+      lambda = 0.5;
       eMetaDyn(istep);
    }
    COMPARE_INTS(nmetahist, ndep);

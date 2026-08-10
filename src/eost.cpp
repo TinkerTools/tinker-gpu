@@ -47,8 +47,6 @@ double bgbias, bdgdl, bdgdfl, bostlmda, bdfdl;
 
 void ost_mech()
 {
-   ostlambda = ost::ostlambda;
-
    ostinterpol = (ost::ostinterpol != 0);
    fastkernel = (ost::fastkernel != 0);
 
@@ -91,7 +89,7 @@ void ost_mech()
    ostfriction = ost::ostfriction;
    ostdt = ost::ostdt;
 
-   ostdedl = 0;
+   // dedl is owned by the energy routines and zeroed by zeroEGV each step.
    ostdgdl = 0;
    ostddgdl = 0;
    deffdl = 0;
@@ -407,15 +405,15 @@ void buildFkernel()
 }
 
 // egkernel -- direct linked-list gaussian sum of the g bias and its partials at
-// the current (ostlambda, ostdedl) (eost.f:851).
+// the current (lambda, dedl) (eost.f:851).
 void egkernel(double& egbias, double& dgdl, double& dgdfl)
 {
    egbias = 0;
    dgdl = 0;
    dgdfl = 0;
 
-   int ilmda = lambdaBin(ostlambda);
-   int iflmda = (int)std::lround(ostdedl / wflmda) + fli0;
+   int ilmda = lambdaBin(lambda);
+   int iflmda = (int)std::lround(dedl / wflmda) + fli0;
    if (iflmda < 1 || iflmda > nflmda)
       return;
 
@@ -446,7 +444,7 @@ void egkernel(double& egbias, double& dgdl, double& dgdfl)
             double sigl = ostwlhist[ihist];
             double sigf = ostwfhist[ihist];
             double sourcefl = ostfhist[ihist];
-            double fldelta = ostdedl - sourcefl;
+            double fldelta = dedl - sourcefl;
             if (std::fabs(fldelta) <= oststdev * sigf) {
                double sigl2 = sigl * sigl;
                double sigf2 = sigf * sigf;
@@ -470,7 +468,7 @@ void egkernel(double& egbias, double& dgdl, double& dgdfl)
                      sourcel = 2.0 - ostlhist[ihist];
                   else
                      sourcel = ostlhist[ihist];
-                  double ldelta = ostlambda - sourcel;
+                  double ldelta = lambda - sourcel;
                   if (std::fabs(ldelta) <= oststdev * sigl) {
                      double ldelta2 = ldelta * ldelta;
                      double expl = std::exp(-0.5 * ldelta2 * sigl2inv);
@@ -496,29 +494,29 @@ void egkernelInterpolate(double& egbias, double& dgdl, double& dgdfl)
    dgdfl = 0;
    double flstart = (double)(1 - fli0) * wflmda;
    double flend = (double)(nflmda - fli0) * wflmda;
-   if (ostlambda < 0.0 || ostlambda > 1.0)
+   if (lambda < 0.0 || lambda > 1.0)
       return;
-   if (ostdedl < flstart || ostdedl > flend)
+   if (dedl < flstart || dedl > flend)
       return;
 
    int il0;
-   if (ostlambda >= 1.0)
+   if (lambda >= 1.0)
       il0 = nlmda - 1;
    else {
-      il0 = (int)(ostlambda / wlmda) + 1;
+      il0 = (int)(lambda / wlmda) + 1;
       il0 = std::max(1, std::min(il0, nlmda - 1));
    }
    int if0;
-   if (ostdedl >= flend)
+   if (dedl >= flend)
       if0 = nflmda - 1;
    else {
-      if0 = (int)((ostdedl - flstart) / wflmda) + 1;
+      if0 = (int)((dedl - flstart) / wflmda) + 1;
       if0 = std::max(1, std::min(if0, nflmda - 1));
    }
    double l0 = (double)(il0 - 1) * wlmda;
    double f0 = (double)(if0 - fli0) * wflmda;
-   double x = (ostlambda - l0) / wlmda;
-   double y = (ostdedl - f0) / wflmda;
+   double x = (lambda - l0) / wlmda;
+   double y = (dedl - f0) / wflmda;
 
    double x2 = x * x, x3 = x2 * x;
    double y2 = y * y, y3 = y2 * y;
@@ -551,13 +549,13 @@ void egkernelInterpolate(double& egbias, double& dgdl, double& dgdfl)
    dgdfl /= wflmda;
 }
 
-// efkernel -- DeltaG(ostlambda) and dDeltaG/dlambda by piecewise-linear
+// efkernel -- DeltaG(lambda) and dDeltaG/dlambda by piecewise-linear
 // integration of the mean force (eost.f:1750).
 void efkernel(double& eostlmda, double& dfdl)
 {
    eostlmda = 0;
    dfdl = 0;
-   if (ostlambda <= 0.0) {
+   if (lambda <= 0.0) {
       dfdl = fkernel[1];
       return;
    }
@@ -568,8 +566,8 @@ void efkernel(double& eostlmda, double& dfdl)
       double fl0 = fkernel[il0];
       double fl1 = fkernel[il1];
       double slope = (fl1 - fl0) / wlmda;
-      if (ostlambda <= lmda1) {
-         double xx = ostlambda - lmda0;
+      if (lambda <= lmda1) {
+         double xx = lambda - lmda0;
          eostlmda += fl0 * xx + 0.5 * slope * xx * xx;
          dfdl = fl0 + slope * xx;
          return;
@@ -616,25 +614,25 @@ void ostLangevin()
       osttheta += 2.0 * pi;
 
    double sinth = std::sin(osttheta);
-   ostlambda = sinth * sinth;
+   lambda = sinth * sinth;
 }
 
-static void metaImages(double lambda, double src[3])
+static void metaImages(double lmda, double src[3])
 {
-   src[0] = lambda;
-   src[1] = -lambda;
-   src[2] = 2.0 - lambda;
+   src[0] = lmda;
+   src[1] = -lmda;
+   src[2] = 2.0 - lmda;
 }
 
 // emetabias -- Vbias(lambda) and dVbias/dlambda for the sum of 1D normalized
 // metadynamics gaussians (eost.f:244).
-void eMetaBias(double lambda, double& vbias, double& dvdl)
+void eMetaBias(double lmda, double& vbias, double& dvdl)
 {
    vbias = 0;
    dvdl = 0;
 
    if (ostinterpol && nmetahist > 0) {
-      eMetaBiasInterpolate(lambda, vbias, dvdl);
+      eMetaBiasInterpolate(lmda, vbias, dvdl);
       return;
    }
 
@@ -646,7 +644,7 @@ void eMetaBias(double lambda, double& vbias, double& dvdl)
          double src[3];
          metaImages(metalhist[ihist], src);
          for (int img = 0; img < 3; ++img) {
-            double delta = lambda - src[img];
+            double delta = lmda - src[img];
             double bias = pref * std::exp(-0.5 * delta * delta / sig2);
             vbias += bias;
             dvdl -= delta * bias / sig2;
@@ -668,9 +666,9 @@ void addMetaGrid(int ihist)
    double src[3];
    metaImages(metalhist[ihist], src);
    for (int il = 1; il <= nlmda; ++il) {
-      double lambda = (double)(il - 1) * wlmda;
+      double lmda = (double)(il - 1) * wlmda;
       for (int img = 0; img < 3; ++img) {
-         double delta = lambda - src[img];
+         double delta = lmda - src[img];
          double bias = pref * std::exp(-0.5 * delta * delta / sig2);
          vmetagrid[il] += bias;
          dvmetagrid[il] -= delta * bias / sig2;
@@ -679,7 +677,7 @@ void addMetaGrid(int ihist)
 }
 
 // emetabiasinterpolate -- cubic Hermite evaluation of the metadynamics bias.
-void eMetaBiasInterpolate(double lambda, double& vbias, double& dvdl)
+void eMetaBiasInterpolate(double lmda, double& vbias, double& dvdl)
 {
    vbias = 0;
    dvdl = 0;
@@ -688,7 +686,7 @@ void eMetaBiasInterpolate(double lambda, double& vbias, double& dvdl)
    if ((int)vmetagrid.size() < nlmda + 1 || (int)dvmetagrid.size() < nlmda + 1)
       return;
 
-   double lam = std::min(1.0, std::max(0.0, lambda));
+   double lam = std::min(1.0, std::max(0.0, lmda));
    int il0;
    if (lam >= 1.0) {
       il0 = nlmda - 1;
@@ -885,10 +883,12 @@ void eostData(RcOp op)
 
 void eostBias(int vers)
 {
-   ostdedl = dedl;
-
+   // dedl is the unbiased dU/dlambda for this configuration, accumulated by the
+   // energy terms and chain ruled by lmdachain just above. Nothing below writes
+   // it, so it stays valid until eostDyn/eMetaDyn consume it after energy()
+   // returns; zeroEGV zeroes it again at the top of the next evaluation.
    if (use_meta) {
-      eMetaBias(ostlambda, bgbias, bdgdl);
+      eMetaBias(lambda, bgbias, bdgdl);
       // Vbias depends on lambda alone, so it carries no Cartesian force/virial.
       if (vers & calc::energy)
          esum += bgbias;
@@ -922,15 +922,15 @@ void eostDyn(int istep)
    int im = istep % iosthist;
    int isamp = (istep - 1) % iosthist;
 
-   // effective lambda force, from the bias eostBias evaluated this step
-   // (eostBias also refreshed ostdedl).
+   // effective lambda force, from the bias eostBias evaluated this step and the
+   // unbiased dedl left behind by the energy call.
    ostdgdl = bdgdl + bdgdfl * d2edl2;
    ostddgdl = bdfdl;
-   deffdl = ostdedl + ostdgdl - ostddgdl;
+   deffdl = dedl + ostdgdl - ostddgdl;
 
    // buffer this step's sample.
-   ostllist[isamp] = ostlambda;
-   ostflist[isamp] = ostdedl;
+   ostllist[isamp] = lambda;
+   ostflist[isamp] = dedl;
 
    // deposit a new histogram gaussian every iosthist steps.
    if (im == 0) {
@@ -993,12 +993,12 @@ void eMetaDyn(int istep)
    int im = istep % iosthist;
    int isamp = (istep - 1) % iosthist;
 
-   // effective lambda force, from the bias eostBias evaluated this step
-   // (eostBias also refreshed ostdedl).
-   deffdl = ostdedl + bdgdl;
+   // effective lambda force, from the bias eostBias evaluated this step and the
+   // unbiased dedl left behind by the energy call.
+   deffdl = dedl + bdgdl;
 
    // buffer this step's sample.
-   ostllist[isamp] = ostlambda;
+   ostllist[isamp] = lambda;
 
    // deposit a new metadynamics gaussian every iosthist steps.
    if (im == 0) {

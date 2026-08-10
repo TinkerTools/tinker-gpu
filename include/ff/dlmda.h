@@ -41,9 +41,9 @@ Lmdamap lmdamapFrom(const char* s);
 /// Quintic switching polynomial
 void quinticTaper(double x, double cut, double off, double& taper, double& dtaper, double& d2taper);
 
-/// Maps the given main lambda onto the electrostatic, polarization, and
-/// van der Waals sub-lambdas and their derivatives.
-void mapSubLambda(double lambda);
+/// Maps the main lambda onto the electrostatic, polarization, and van der
+/// Waals sub-lambdas and their derivatives (dlambda.f:refreshsublmda).
+void mapSubLambda();
 
 /// Applies the sub-lambda chain rule to the term derivatives.
 void lmdachain(int vers);
@@ -55,7 +55,7 @@ void dlmdaData2(RcOp op);
 /// Mean and population standard deviation of v[begin, begin+count).
 void avgstd(const std::vector<double>& v, int begin, int count, double& avg, double& sd);
 
-void adtWeight(double lambda, int exponent, double& weight, double& dweight, double& d2weight);
+void adtWeight(double lmda, int exponent, double& weight, double& dweight, double& d2weight);
 void adtMix(int vers, bool do_dlmda, int n, size_t buffer_size, double weight1, double dweight1, double d2weight1,
    const EnergyBufferTraits::type* e0, EnergyBuffer e1, EnergyBuffer dedl, EnergyBuffer d2edl2, VirialBuffer v0,
    VirialBuffer v1, VirialBuffer dvdl, const grad_prec* gx0, const grad_prec* gy0, const grad_prec* gz0,
@@ -78,7 +78,10 @@ inline int lmdaVers(int vers)
    return use_mainlmda ? (vers | calc::energy) : vers;
 }
 
-double mainLambda();
+/// The one main lambda, mirroring mutant::lambda. Whichever method owns it --
+/// OST, metadynamics, TI, or a fixed value from the LAMBDA keyword -- drives it,
+/// and every sub-lambda is mapped from it by mapSubLambda().
+TINKER_EXTERN double lambda;
 
 //====================================================================//
 //        main lambda -> sub-lambda mapping, shared by all methods    //

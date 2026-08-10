@@ -4,8 +4,6 @@
 #include <vector>
 
 namespace tinker {
-/// Lambda of the current window.
-TINKER_EXTERN double tilmda;
 /// Fraction of each window discarded as equilibration.
 TINKER_EXTERN double tieqratio;
 /// Number of lambda windows.
