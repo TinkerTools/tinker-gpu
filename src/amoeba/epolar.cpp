@@ -420,8 +420,8 @@ void epolarData(RcOp op)
          {&energy_ep, &virial_ep}, {&energy_elec, &virial_elec});
       ep_dl.manage(op, rc_flag, {&depdl_buf, &depvirdl_buf, &dfpdlx, &dfpdly, &dfpdlz, &d2epdl2_buf},
          {dedl_buf, dvirdl_buf, dfsumdlx, dfsumdly, dfsumdlz, d2edl2_buf},
-         use_dlmda and use_epdt, //
-         {&depdl, &depvirdl, &d2epdl2}, {&dedl, &dvirdl, &d2edl2}, use_dlmda and use_epdt);
+         use_pdlmda, //
+         {&depdl, &depvirdl, &d2epdl2}, {&dedl, &dvirdl, &d2edl2}, use_pdlmda);
       ep_snap.manage(op, rc_flag, use_epdt);
       if (rc_a)
          bufferAllocate(rc_flag, &nep);
@@ -507,7 +507,7 @@ void epolarData(RcOp op)
             TINKER_THROW("Polarization dual topology does not support charge flux.");
       }
 
-      if (use_plmda) {
+      if (use_plmda and not polTracksEle()) {
          if (mplpot::use_chgpen)
             TINKER_THROW("A decoupled polarization lambda does not support charge penetration.");
          if (polpot::use_tholed)
@@ -660,7 +660,7 @@ void epolar(int vers)
 
    if (use_cf)
       alterchg();
-   mpoleInit(vers);
+   mpoleInit(vers, use_emast and not use_plmda);
    if (use_cfgrad)
       cfluxZeroPot();
 
@@ -697,7 +697,7 @@ static void epolarZeroWork(int vers)
 static void epolarBegin(int vers)
 {
    zeroOnHost(energy_ep, virial_ep);
-   if (use_dlmda)
+   if (use_pdlmda)
       zeroOnHost(depdl, d2epdl2, depvirdl);
    epolarZeroWork(vers);
    ep_dl.zero(vers);
@@ -744,7 +744,7 @@ static void epolarSaveEndpoint0(int vers)
 
 static void epolarMixEndpoints(int vers)
 {
-   ep_snap.mix(vers, plam, epdtexp, use_dlmda, ep_buf, ep_dl);
+   ep_snap.mix(vers, plam, epdtexp, use_pdlmda, ep_buf, ep_dl);
 }
 
 static void epolarFinish(int vers)
@@ -830,7 +830,7 @@ void epolar_rdt_staged(int vers)
       int bvers = (vers == calc::v3 ? calc::v0 : vers);
       epolarState(bvers, lig1 ? RdtMask::LIGB : RdtMask::LIGA, rdt_group, false);
       if (relstagemix)
-         ep_snap.mix(vers, plam, 1, use_dlmda, ep_buf, ep_dl);
+         ep_snap.mix(vers, plam, 1, use_pdlmda, ep_buf, ep_dl);
    }
 
    epolarFinish(vers);

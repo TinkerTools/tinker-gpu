@@ -231,7 +231,7 @@ TEST_CASE("Local-Frame-3", "[ff][epolar][nonewald][local-frame]")
          {-0.1215, -0.1945, -0.0897}};
 
       zeroEGV();
-      mpoleInit(calc::v0);
+      mpoleInit(calc::v0, false);
       dfieldNonEwald(udir, udirp);
       std::vector<std::array<double, 3>> fieldd, fieldp;
       fieldd.resize(n);
@@ -265,7 +265,7 @@ TEST_CASE("Local-Frame-3", "[ff][epolar][nonewald][local-frame]")
          {-0.0331, 0.4012, -1.5516}, {0.7016, -1.3551, -0.9421}, {-1.4662, -0.8545, -1.3742}};
 
       zeroEGV();
-      mpoleInit(calc::v0);
+      mpoleInit(calc::v0, false);
       std::vector<std::array<double, 3>> ud, up;
       ud.resize(n);
       up.resize(n);
@@ -310,7 +310,7 @@ TEST_CASE("Local-Frame-3", "[ff][epolar][nonewald][local-frame]")
          {-0.2126, -0.4665, -0.1829}};
 
       zeroEGV();
-      mpoleInit(calc::v0);
+      mpoleInit(calc::v0, false);
       induce(uind, uinp);
       std::vector<std::array<double, 3>> ud, up;
       ud.resize(n);
@@ -407,7 +407,7 @@ TEST_CASE("Local-Frame-4", "[ff][epolar][ewald][local-frame]")
          {-0.1249, -0.1932, -0.0900}};
 
       zeroEGV();
-      mpoleInit(calc::v0);
+      mpoleInit(calc::v0, false);
       dfieldEwald(udir, udirp);
       std::vector<std::array<double, 3>> fieldd, fieldp;
       fieldd.resize(n);
@@ -441,7 +441,7 @@ TEST_CASE("Local-Frame-4", "[ff][epolar][ewald][local-frame]")
          {-0.0191, 0.4125, -1.5382}, {0.7158, -1.3417, -0.9288}, {-1.4493, -0.8422, -1.3602}};
 
       zeroEGV();
-      mpoleInit(calc::v0);
+      mpoleInit(calc::v0, false);
       std::vector<std::array<double, 3>> ud, up;
       ud.resize(n);
       up.resize(n);
@@ -487,7 +487,7 @@ TEST_CASE("Local-Frame-4", "[ff][epolar][ewald][local-frame]")
          {-0.2191, -0.4626, -0.1832}};
 
       zeroEGV();
-      mpoleInit(calc::v0);
+      mpoleInit(calc::v0, false);
       induce(uind, uinp);
       std::vector<std::array<double, 3>> ud, up;
       ud.resize(n);

@@ -33,9 +33,9 @@ void rotpole_cu1(int n, real (*restrict rpole)[MPL_TOTAL], const real (*restrict
       rotpoleAtomI(i, rpole, pole, zaxis, x, y, z);
 }
 
-void rotpole_cu()
+void rotpole_cu(bool use_orig)
 {
-   if (use_emast) {
+   if (use_orig) {
       launch_k1s(g::s0, n, rotpole_cu1, n, rpole, poleorig, zaxis, x, y, z);
    } else {
       launch_k1s(g::s0, n, rotpole_cu1, n, rpole, pole, zaxis, x, y, z);

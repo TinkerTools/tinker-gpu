@@ -220,7 +220,7 @@ void epolarChgpen(int vers)
 
    if (use_cf)
       alterchg();
-   mpoleInit(vers);
+   mpoleInit(vers, use_emast);
    if (use_cfgrad) {
       cfluxZeroPot();
    }

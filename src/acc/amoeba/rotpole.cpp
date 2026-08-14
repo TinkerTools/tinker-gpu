@@ -7,10 +7,10 @@
 namespace tinker {
 void chkpole_acc()
 {
-   if (use_emast) {
-      #pragma acc parallel loop independent async deviceptr(x,y,z,zaxis,poleorig)
+   if (poleorig) {
+      #pragma acc parallel loop independent async deviceptr(x,y,z,zaxis,pole,poleorig)
       for (int i = 0; i < n; ++i)
-         chkpoleAtomI(i, poleorig, zaxis, x, y, z);
+         chkpoleAtomI(i, pole, poleorig, zaxis, x, y, z);
    } else {
       #pragma acc parallel loop independent async deviceptr(x,y,z,zaxis,pole)
       for (int i = 0; i < n; ++i)
@@ -18,9 +18,9 @@ void chkpole_acc()
    }
 }
 
-void rotpole_acc()
+void rotpole_acc(bool use_orig)
 {
-   if (use_emast) {
+   if (use_orig) {
       #pragma acc parallel loop independent async deviceptr(x,y,z,zaxis,rpole,poleorig)
       for (int i = 0; i < n; ++i)
          rotpoleAtomI(i, rpole, poleorig, zaxis, x, y, z);

@@ -74,13 +74,17 @@ void dlmda_mech()
    use_mainlmda = dlmda::use_mainlmda;
    use_rel = mutant::use_rel;
 
+   use_edlmda = (dlmda::use_edlmda != 0);
+   use_pdlmda = (dlmda::use_pdlmda != 0);
+   use_vdlmda = (dlmda::use_vdlmda != 0);
+
    use_emadt = use_emdt && !use_rel;
-   use_emast = use_dlmda && !use_emdt && !use_rel;
+   use_emast = use_edlmda && !use_emdt && !use_rel;
    use_emrdt = use_emdt && use_rel;
    use_epadt = use_epdt && !use_rel;
    use_eprdt = use_epdt && use_rel;
    use_evadt = use_evdt && !use_rel;
-   use_evast = use_dlmda && !use_evdt && !use_rel;
+   use_evast = use_vdlmda && !use_evdt && !use_rel;
    use_evrdt = use_evdt && use_rel;
 
    emdtexp = dlmda::emdtexp;
@@ -193,42 +197,24 @@ namespace tinker {
 // Power-law sub-lambda map, lmda = x^exponent.
 static void sublmdaExp(double x, int exponent, double& lmda, double& dlmda, double& d2lmda)
 {
-   double expnt = (double)exponent;
-   if (x <= 0.0) {
-      lmda = 0.0;
-      if (exponent == 1) {
-         dlmda = 1.0;
-         d2lmda = 0.0;
-      } else if (exponent == 2) {
-         dlmda = 0.0;
-         d2lmda = 2.0;
-      } else {
-         dlmda = 0.0;
-         d2lmda = 0.0;
-      }
-      return;
-   } else if (x >= 1.0) {
-      lmda = 1.0;
-      dlmda = expnt;
-      d2lmda = expnt * (expnt - 1.0);
-      return;
-   }
    lmda = std::pow(x, exponent);
-   dlmda = expnt * std::pow(x, exponent - 1);
-   if (exponent == 1)
+   if (exponent == 1) {
+      dlmda = 1.0;
       d2lmda = 0.0;
-   else
+   } else if (exponent == 2) {
+      dlmda = 2.0 * x;
+      d2lmda = 2.0;
+   } else {
+      double expnt = (double)exponent;
+      dlmda = expnt * std::pow(x, exponent - 1);
       d2lmda = expnt * (expnt - 1.0) * std::pow(x, exponent - 2);
+   }
 }
 
-// Shifted inverse-power sub-lambda map onto [0,1] (eost.f:sublmdainvpower).
+// Shifted inverse-power sub-lambda map onto [0,1] (dlambda.f:sublmdainvpower).
 static void sublmdaInvPower(double x, int nn, double eps, double& lmda, double& dlmda, double& d2lmda)
 {
    double xval = x;
-   if (xval < 0.0)
-      xval = 0.0;
-   if (xval > 1.0)
-      xval = 1.0;
    if (nn <= 1) {
       lmda = xval;
       dlmda = 1.0;
@@ -336,6 +322,35 @@ static void mapRelStage(double lmda)
    use_vdw4f = (lmda >= qntvlmda0);
 }
 
+bool polTracksEle()
+{
+   constexpr double eps = 1.0e-6;
+   auto sameValue = [](double a, double b) { return std::fabs(a - b) <= eps; };
+
+   // The staged schedule drives polarization off the multipole weight by
+   // construction, so the per-map comparisons below do not apply to it.
+   if (use_relstage)
+      return true;
+   // One sub-lambda driven and the other frozen: they part company as soon as
+   // the main lambda moves off the value they happen to share now.
+   if (use_elmdamap != use_plmdamap)
+      return false;
+   // Neither is driven, so today's values are the only values.
+   if (not(use_mainlmda and use_elmdamap))
+      return sameValue(elam, plam);
+
+   if (plmdamap != elmdamap)
+      return false;
+
+   if (elmdamap == Lmdamap::EXP) {
+      return plmdaexp == elmdaexp;
+   } else if (elmdamap == Lmdamap::INV) {
+      return plmdainvn == elmdainvn and sameValue(plmdainveps, elmdainveps);
+   } else {
+      return sameValue(qntplmda0, qntelmda0) and sameValue(qntplmda1, qntelmda1);
+   }
+}
+
 void mapSubLambda()
 {
    if (use_relstage) {
@@ -381,14 +396,33 @@ void lmdachain(int vers)
    auto do_v = vers & calc::virial;
    auto do_g = vers & calc::grad;
 
+   // A term the main lambda does not drive leaves the chain rule entirely: it
+   // ran the ordinary kernel, so its raw derivative slots are meaningless and
+   // are cleared rather than scaled.
+
    // Chain rule for the scalar energy derivatives.
    if (do_e) {
-      d2emdl2 = d2emdl2 * deldlmda * deldlmda + demdl * d2eldlmda2;
-      demdl = demdl * deldlmda;
-      d2epdl2 = d2epdl2 * dpldlmda * dpldlmda + depdl * d2pldlmda2;
-      depdl = depdl * dpldlmda;
-      d2evdl2 = d2evdl2 * dvldlmda * dvldlmda + devdl * d2vldlmda2;
-      devdl = devdl * dvldlmda;
+      if (use_edlmda) {
+         d2emdl2 = d2emdl2 * deldlmda * deldlmda + demdl * d2eldlmda2;
+         demdl = demdl * deldlmda;
+      } else {
+         demdl = 0;
+         d2emdl2 = 0;
+      }
+      if (use_pdlmda) {
+         d2epdl2 = d2epdl2 * dpldlmda * dpldlmda + depdl * d2pldlmda2;
+         depdl = depdl * dpldlmda;
+      } else {
+         depdl = 0;
+         d2epdl2 = 0;
+      }
+      if (use_vdlmda) {
+         d2evdl2 = d2evdl2 * dvldlmda * dvldlmda + devdl * d2vldlmda2;
+         devdl = devdl * dvldlmda;
+      } else {
+         devdl = 0;
+         d2evdl2 = 0;
+      }
 
       dedl = demdl + depdl + devdl;
       d2edl2 = d2emdl2 + d2epdl2 + d2evdl2;
@@ -397,21 +431,23 @@ void lmdachain(int vers)
    // Chain rule for the virial derivative (first derivative only).
    if (do_v) {
       for (int k = 0; k < 9; ++k) {
-         demvirdl[k] *= deldlmda;
-         depvirdl[k] *= dpldlmda;
-         devvirdl[k] *= dvldlmda;
+         demvirdl[k] = use_edlmda ? demvirdl[k] * deldlmda : 0;
+         depvirdl[k] = use_pdlmda ? depvirdl[k] * dpldlmda : 0;
+         devvirdl[k] = use_vdlmda ? devvirdl[k] * dvldlmda : 0;
          dvirdl[k] = demvirdl[k] + depvirdl[k] + devvirdl[k];
       }
    }
 
-   // Chain rule for the per-atom force derivatives.
+   // Chain rule for the per-atom force derivatives. The null checks stay: an
+   // undriven term's TermBuffer aliases its gradient slots onto dfsumdl*, and
+   // summing that into itself would double count.
    if (do_g) {
       darray::zero(g::q0, n, dfsumdlx, dfsumdly, dfsumdlz);
-      if (dfvdlx)
+      if (use_vdlmda and dfvdlx)
          sumGradient(dvldlmda, dfsumdlx, dfsumdly, dfsumdlz, dfvdlx, dfvdly, dfvdlz);
-      if (dfmdlx)
+      if (use_edlmda and dfmdlx)
          sumGradient(deldlmda, dfsumdlx, dfsumdly, dfsumdlz, dfmdlx, dfmdly, dfmdlz);
-      if (dfpdlx)
+      if (use_pdlmda and dfpdlx)
          sumGradient(dpldlmda, dfsumdlx, dfsumdly, dfsumdlz, dfpdlx, dfpdly, dfpdlz);
    }
 }

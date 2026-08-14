@@ -42,8 +42,8 @@ void empoleData(RcOp op)
          {&energy_em, &virial_em}, {&energy_elec, &virial_elec});
       em_dl.manage(op, rc_flag, {&demdl_buf, &demvirdl_buf, &dfmdlx, &dfmdly, &dfmdlz, &d2emdl2_buf},
          {dedl_buf, dvirdl_buf, dfsumdlx, dfsumdly, dfsumdlz, d2edl2_buf},
-         use_dlmda, //
-         {&demdl, &demvirdl, &d2emdl2}, {&dedl, &dvirdl, &d2edl2}, use_dlmda);
+         use_edlmda, //
+         {&demdl, &demvirdl, &d2emdl2}, {&dedl, &dvirdl, &d2edl2}, use_edlmda);
       em_snap.manage(op, rc_flag, use_emdt);
       if (rc_a)
          bufferAllocate(rc_flag, &nem);
@@ -99,7 +99,7 @@ void empoleZeroWork(int vers)
 void empoleBegin(int vers)
 {
    zeroOnHost(energy_em, virial_em);
-   if (use_dlmda)
+   if (use_edlmda)
       zeroOnHost(demdl, d2emdl2, demvirdl);
    empoleZeroWork(vers);
    em_dl.zero(vers);
@@ -133,7 +133,7 @@ void empole(int vers)
 
    empoleBegin(vers);
 
-   mpoleInit(vers);
+   mpoleInit(vers, use_emast);
    empoleKernel(vers);
    exfield(vers, 1);
    torque(vers, demx, demy, demz);
@@ -159,14 +159,14 @@ void empoleSaveEndpoint0(int vers)
 
 void empoleMixEndpoints(int vers)
 {
-   em_snap.mix(vers, elam, emdtexp, use_dlmda, em_buf, em_dl);
+   em_snap.mix(vers, elam, emdtexp, use_edlmda, em_buf, em_dl);
 }
 
 void empoleMixStagedEndpoints(int vers)
 {
    // The staged weight is the mix weight itself, so the exponent is 1 and
    // lmdachain() carries the whole main lambda chain rule through deldlmda.
-   em_snap.mix(vers, elam, 1, use_dlmda, em_buf, em_dl);
+   em_snap.mix(vers, elam, 1, use_edlmda, em_buf, em_dl);
 }
 
 void empole_adt(int vers)

@@ -25,9 +25,10 @@ struct Fixture
 const Fixture kFixtures[] = {
    {"01_water_adt_l05.key", "testlmda.1.txt"},
    {"02_water_ast_l05.key", "testlmda.2.txt"},
-   {"03_water_adt_m06p05v04.key", "testlmda.3.txt"},
-   {"04_water_ast_m06v04.key", "testlmda.4.txt"},
+   {"03_water_adt_l06exp.key", "testlmda.3.txt"},
+   {"04_water_ast_l06exp.key", "testlmda.4.txt"},
    {"05_water_ast_nodl_l05.key", "testlmda.5.txt"},
+   {"06_water_ast_vonly_l05.key", "testlmda.6.txt"},
 };
 
 // Finite difference stepsize, in lambda. Smaller steps sharpen the first
@@ -91,7 +92,13 @@ void runFixture(const Fixture& fx)
 
    // Avoid contaminating later randomized tests.
    dlmda::use_dlmda = 0;
+   dlmda::use_edlmda = 0;
+   dlmda::use_pdlmda = 0;
+   dlmda::use_vdlmda = 0;
    use_dlmda = false;
+   use_edlmda = false;
+   use_pdlmda = false;
+   use_vdlmda = false;
    use_ost = false;
    use_meta = false;
    use_ti = false;
@@ -101,7 +108,8 @@ void runFixture(const Fixture& fx)
 
 TEST_CASE("TESTLMDA-01_water_adt_l05", "[ff][testlmda]") { runFixture(kFixtures[0]); }
 TEST_CASE("TESTLMDA-02_water_ast_l05", "[ff][testlmda]") { runFixture(kFixtures[1]); }
-TEST_CASE("TESTLMDA-03_water_adt_m06p05v04", "[ff][testlmda]") { runFixture(kFixtures[2]); }
-TEST_CASE("TESTLMDA-04_water_ast_m06v04", "[ff][testlmda]") { runFixture(kFixtures[3]); }
+TEST_CASE("TESTLMDA-03_water_adt_l06exp", "[ff][testlmda]") { runFixture(kFixtures[2]); }
+TEST_CASE("TESTLMDA-04_water_ast_l06exp", "[ff][testlmda]") { runFixture(kFixtures[3]); }
 TEST_CASE("TESTLMDA-05_water_ast_nodl_l05", "[ff][testlmda]") { runFixture(kFixtures[4]); }
+TEST_CASE("TESTLMDA-06_water_ast_vonly_l05", "[ff][testlmda]") { runFixture(kFixtures[5]); }
 #endif

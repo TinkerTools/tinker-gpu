@@ -88,15 +88,24 @@ static FdLambdaState captureFdLambdaState()
 
 struct ScopedDlmdaOff
 {
-   bool saved;
+   bool saved, saved_e, saved_p, saved_v;
    ScopedDlmdaOff()
       : saved(use_dlmda)
+      , saved_e(use_edlmda)
+      , saved_p(use_pdlmda)
+      , saved_v(use_vdlmda)
    {
       use_dlmda = false;
+      use_edlmda = false;
+      use_pdlmda = false;
+      use_vdlmda = false;
    }
    ~ScopedDlmdaOff()
    {
       use_dlmda = saved;
+      use_edlmda = saved_e;
+      use_pdlmda = saved_p;
+      use_vdlmda = saved_v;
    }
 };
 

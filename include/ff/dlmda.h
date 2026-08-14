@@ -48,6 +48,8 @@ void mapSubLambda();
 /// Applies the sub-lambda chain rule to the term derivatives.
 void lmdachain(int vers);
 
+bool polTracksEle();
+
 /// Reads the shared lambda-dynamics state from the Fortran modules.
 void dlmda_mech();
 void dlmdaData(RcOp op);
@@ -66,6 +68,10 @@ TINKER_EXTERN bool use_epdt;
 TINKER_EXTERN bool use_evdt;
 TINKER_EXTERN bool use_plmda;
 TINKER_EXTERN bool use_mainlmda;
+
+TINKER_EXTERN bool use_edlmda;
+TINKER_EXTERN bool use_pdlmda;
+TINKER_EXTERN bool use_vdlmda;
 
 // Which lambda-dynamics method owns the main lambda.
 TINKER_EXTERN bool use_ost;

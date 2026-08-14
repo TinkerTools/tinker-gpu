@@ -30,34 +30,18 @@ static bool doubleEq(double a, double b)
 /// Determines whether emplar can be used for dual topology.
 static bool emplarDualMatched()
 {
-   // The staged schedule drives polarization off the multipole weight by
-   // construction, so the per-map comparisons below do not apply to it.
+   if (not polTracksEle())
+      return false;
    if (use_relstage)
       return true;
-   if (emdtexp != epdtexp)
-      return false;
-   if (not doubleEq(elam, plam))
-      return false;
-   if (not use_dlmda)
-      return true;
-
-   if (plmdamap != elmdamap)
-      return false;
-
-   if (elmdamap == Lmdamap::EXP) {
-      return plmdaexp == elmdaexp;
-   } else if (elmdamap == Lmdamap::INV) {
-      return plmdainvn == elmdainvn and doubleEq(plmdainveps, elmdainveps);
-   } else {
-      return doubleEq(qntplmda0, qntelmda0) and doubleEq(qntplmda1, qntelmda1);
-   }
+   return emdtexp == epdtexp;
 }
 
 static bool emplarDecide()
 {
    if (mplpot::use_chgpen)
       return false;
-   if (use_plmda)
+   if (use_plmda and not polTracksEle())
       return false;
    if (use_emast)
       return false;
@@ -103,7 +87,7 @@ void emplar(int vers)
    zeroOnHost(energy_em, virial_em);
    zeroOnHost(energy_ep, virial_ep);
 
-   mpoleInit(vers);
+   mpoleInit(vers, use_emast);
    emplarKernel(vers);
    exfield(vers, 1);
    // epolarPairwiseExtfield(vers, uind); // emplar uses the dot product version

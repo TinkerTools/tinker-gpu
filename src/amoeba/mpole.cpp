@@ -28,10 +28,10 @@ static void chkpole()
    TINKER_FCALL2(acc1, cu1, chkpole);
 }
 
-TINKER_FVOID2(acc1, cu1, rotpole);
-static void rotpole()
+TINKER_FVOID2(acc1, cu1, rotpole, bool);
+static void rotpole(bool use_orig)
 {
-   TINKER_FCALL2(acc1, cu1, rotpole);
+   TINKER_FCALL2(acc1, cu1, rotpole, use_orig);
 }
 
 TINKER_FVOID2(acc0, cu1, rotpoleState, RdtMask, const int*);
@@ -87,14 +87,14 @@ static void mpoleInitEwald(bool do_dlmda, bool prepare_splines, bool prepare_pol
    }
 }
 
-void mpoleInit(int vers)
+void mpoleInit(int vers, bool do_dlmda)
 {
    mpoleInitBuffers(vers, true);
    chkpole();
-   rotpole();
+   rotpole(do_dlmda);
 
    if (useEwald())
-      mpoleInitEwald(use_emast, true, true);
+      mpoleInitEwald(do_dlmda, true, true);
 }
 
 void mpoleInitState(int vers, RdtMask mask, const int* group, bool first_state, bool polar)

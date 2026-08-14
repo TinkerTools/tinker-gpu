@@ -398,8 +398,8 @@ void evdwData(RcOp op)
          {&energy_ev, &virial_ev}, {&energy_vdw, &virial_vdw});
       ev_dl.manage(op, rc_flag, {&devdl_buf, &devvirdl_buf, &dfvdlx, &dfvdly, &dfvdlz, &d2evdl2_buf},
          {dedl_buf, dvirdl_buf, dfsumdlx, dfsumdly, dfsumdlz, d2edl2_buf},
-         use_dlmda, //
-         {&devdl, &devvirdl, &d2evdl2}, {&dedl, &dvirdl, &d2edl2}, use_dlmda);
+         use_vdlmda, //
+         {&devdl, &devvirdl, &d2evdl2}, {&dedl, &dvirdl, &d2edl2}, use_vdlmda);
       if (rc_a)
          bufferAllocate(rc_flag, &nev);
    }
@@ -529,7 +529,7 @@ static void evdwBegin(int vers)
    auto rc_a = rc_flag & calc::analyz;
 
    zeroOnHost(energy_ev, virial_ev);
-   if (use_dlmda)
+   if (use_vdlmda)
       zeroOnHost(devdl, d2evdl2, devvirdl);
    evdwZeroBuffers(vers);
    ev_dl.zero(vers);
@@ -565,12 +565,12 @@ static void evdwFinish(int vers, energy_prec elrcv, virial_prec vlrcv, energy_pr
          energy_ev += corr;
          energy_vdw += corr;
       }
-      if (use_dlmda and delrcv != 0) {
+      if (use_vdlmda and delrcv != 0) {
          energy_prec corr = delrcv / boxVolume();
          devdl += corr;
          dedl += corr;
       }
-      if (use_dlmda and d2elrcv != 0) {
+      if (use_vdlmda and d2elrcv != 0) {
          energy_prec corr = d2elrcv / boxVolume();
          d2evdl2 += corr;
          d2edl2 += corr;
@@ -586,7 +586,7 @@ static void evdwFinish(int vers, energy_prec elrcv, virial_prec vlrcv, energy_pr
          virial_vdw[4] += term;
          virial_vdw[8] += term;
       }
-      if (use_dlmda and dvlrcv != 0) {
+      if (use_vdlmda and dvlrcv != 0) {
          virial_prec term = dvlrcv / boxVolume();
          devvirdl[0] += term;
          devvirdl[4] += term;
@@ -632,7 +632,7 @@ void evdw_adt(int vers)
 
    double weight1, dweight1, d2weight1;
    adtWeight(vlam_orig, evdtexp, weight1, dweight1, d2weight1);
-   ev_snap.mix(vers, vlam_orig, evdtexp, use_dlmda, ev_buf, ev_dl);
+   ev_snap.mix(vers, vlam_orig, evdtexp, use_vdlmda, ev_buf, ev_dl);
 
 
    energy_prec elrc0 = use_vdw4i ? elrc0_vol : elrc1_vol;
@@ -673,7 +673,7 @@ void evdw_rdt(int vers)
 
    double weight1, dweight1, d2weight1;
    adtWeight(vlam, evdtexp, weight1, dweight1, d2weight1);
-   ev_snap.mix(vers, vlam, evdtexp, use_dlmda, ev_buf, ev_dl);
+   ev_snap.mix(vers, vlam, evdtexp, use_vdlmda, ev_buf, ev_dl);
 
 
    energy_prec elrc0 = use_vdw4i ? elrc0_vol : elrc1_vol;
