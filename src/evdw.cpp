@@ -38,6 +38,9 @@ static energy_prec elrc0_vol;
 static energy_prec elrc1_vol;
 static virial_prec vlrc0_vol;
 static virial_prec vlrc1_vol;
+// Long-range correction of each parameter-zeroed subsystem, indexed as relSlot.
+static energy_prec elrc_slot[nRelSlot];
+static virial_prec vlrc_slot[nRelSlot];
 
 void vdwSoftcoreData(RcOp op)
 {
@@ -117,6 +120,10 @@ void evdwData(RcOp op)
       elrc1_vol = 0;
       vlrc0_vol = 0;
       vlrc1_vol = 0;
+      for (int k = 0; k < nRelSlot; ++k) {
+         elrc_slot[k] = 0;
+         vlrc_slot[k] = 0;
+      }
    }
 
    if (op & RcOp::ALLOC) {
@@ -481,24 +488,24 @@ void evdwData(RcOp op)
             vlrc0_vol = vlrc0 * boxVolume();
             vlrc1_vol = vlrc1 * boxVolume();
          } else if (use_evrdt) {
-            auto subsystemCorr = [](int la, int lb, int le, double& elrc, double& vlrc) {
+            // One correction per parameter-zeroed subsystem, in relSlot order.
+            // Tinker charges evcorr1 inside ehal1calc/ehal3calc, so each
+            // subsystem carries its own; the endpoints are summed from these
+            // per the coupling states, which is why every slot is needed and
+            // not just the four a plain relative schedule happens to use.
+            static constexpr int kLa[nRelSlot] = {1, 0, 0, 1, 0};
+            static constexpr int kLb[nRelSlot] = {0, 1, 0, 0, 1};
+            static constexpr int kLe[nRelSlot] = {1, 1, 1, 0, 0};
+            for (int k = 0; k < nRelSlot; ++k) {
+               int la = kLa[k], lb = kLb[k], le = kLe[k];
+               double eslot = 0, vslot = 0;
                tinker_f_submask(&la, &lb, &le);
-               tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &elrc, &vlrc);
-            };
-            double elrc_ae = 0, vlrc_ae = 0;
-            double elrc_be = 0, vlrc_be = 0;
-            double elrc_a = 0, vlrc_a = 0;
-            double elrc_b = 0, vlrc_b = 0;
-            subsystemCorr(1, 0, 1, elrc_ae, vlrc_ae);
-            subsystemCorr(0, 1, 1, elrc_be, vlrc_be);
-            subsystemCorr(1, 0, 0, elrc_a, vlrc_a);
-            subsystemCorr(0, 1, 0, elrc_b, vlrc_b);
+               tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &eslot, &vslot);
+               elrc_slot[k] = eslot * boxVolume();
+               vlrc_slot[k] = vslot * boxVolume();
+            }
             int active = 1;
             tinker_f_submask(&active, &active, &active);
-            elrc0_vol = (elrc_be + elrc_a) * boxVolume();
-            elrc1_vol = (elrc_ae + elrc_b) * boxVolume();
-            vlrc0_vol = (vlrc_be + vlrc_a) * boxVolume();
-            vlrc1_vol = (vlrc_ae + vlrc_b) * boxVolume();
          }
          double elrc = 0, vlrc = 0;
          tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &elrc, &vlrc);
@@ -511,6 +518,10 @@ void evdwData(RcOp op)
          elrc1_vol = 0;
          vlrc0_vol = 0;
          vlrc1_vol = 0;
+         for (int k = 0; k < nRelSlot; ++k) {
+            elrc_slot[k] = 0;
+            vlrc_slot[k] = 0;
+         }
       }
    }
 }
@@ -607,86 +618,112 @@ void evdw(int vers)
    evdwFinish(vers, elrc_vol, vlrc_vol);
 }
 
+// Interpolates the long-range correction between two endpoint values and hands
+// the result, with its lambda derivatives, to evdwFinish.
+static void evdwFinishMixed(int vers, double weight1, double dweight1, double d2weight1, energy_prec elrc0,
+   energy_prec elrc1, virial_prec vlrc0, virial_prec vlrc1)
+{
+   energy_prec mix_elrc = weight1 * elrc1 + (1 - weight1) * elrc0;
+   virial_prec mix_vlrc = weight1 * vlrc1 + (1 - weight1) * vlrc0;
+   energy_prec mix_delrc = dweight1 * (elrc1 - elrc0);
+   energy_prec mix_d2elrc = d2weight1 * (elrc1 - elrc0);
+   virial_prec mix_dvlrc = dweight1 * (vlrc1 - vlrc0);
+   evdwFinish(vers, mix_elrc, mix_vlrc, mix_delrc, mix_d2elrc, mix_dvlrc);
+}
+
 void evdw_adt(int vers)
 {
    assert(vdwtyp == Vdw::HAL);
 
    real vlam_orig = vlam;
 
+   double weight1, dweight1, d2weight1;
+   bool need0, need1;
+   dtWeightNeed(vlam_orig, evdtexp, dvldlmda, d2vldlmda2, weight1, dweight1, d2weight1, need0, need1);
+
    evdwBegin(vers);
 
-   if (use_vdw4i) {
-      vlam = 0;
-      evdwKernel(vers);
-      ev_snap.save(vers, ev_buf);
-   }
-   if (use_vdw4f) {
-      if (use_vdw4i)
-         evdwZeroBuffers(vers);
+   // As for the multipoles, analysis reports the coupled endpoint's count even
+   // when that endpoint carries no weight, so it is evaluated for the count
+   // alone (ehal3.f:1243-1251). ev_buf.zero() keeps nev; evdwZeroBuffers()
+   // would clear the very thing this exists to preserve.
+   int wvers = vers;
+   if ((vers & calc::analyz) and not need1) {
       vlam = 1;
       evdwKernel(vers);
+      ev_buf.zero(vers);
+      wvers = vers & ~calc::analyz;
    }
-   if (not use_vdw4i)
-      ev_snap.save(vers, ev_buf);
+
+   if (need0) {
+      vlam = 0;
+      evdwKernel(wvers);
+      ev_snap.save(wvers, ev_buf);
+   }
+   if (need1) {
+      if (need0)
+         evdwZeroBuffers(wvers);
+      vlam = 1;
+      evdwKernel(wvers);
+      if (not need0)
+         ev_snap.save(wvers, ev_buf);
+   }
    vlam = vlam_orig;
 
-   double weight1, dweight1, d2weight1;
-   adtWeight(vlam_orig, evdtexp, weight1, dweight1, d2weight1);
    ev_snap.mix(vers, vlam_orig, evdtexp, use_vdlmda, ev_buf, ev_dl);
 
-
-   energy_prec elrc0 = use_vdw4i ? elrc0_vol : elrc1_vol;
-   energy_prec elrc1 = use_vdw4f ? elrc1_vol : elrc0_vol;
-   virial_prec vlrc0 = use_vdw4i ? vlrc0_vol : vlrc1_vol;
-   virial_prec vlrc1 = use_vdw4f ? vlrc1_vol : vlrc0_vol;
-
-   energy_prec adt_elrc = weight1 * elrc1 + (1 - weight1) * elrc0;
-   virial_prec adt_vlrc = weight1 * vlrc1 + (1 - weight1) * vlrc0;
-   energy_prec adt_delrc = dweight1 * (elrc1 - elrc0);
-   energy_prec adt_d2elrc = d2weight1 * (elrc1 - elrc0);
-   virial_prec adt_dvlrc = dweight1 * (vlrc1 - vlrc0);
-   evdwFinish(vers, adt_elrc, adt_vlrc, adt_delrc, adt_d2elrc, adt_dvlrc);
+   // A dead endpoint's correction is aliased onto the live one, so that the
+   // interpolation is an identity there just as it is for the energy buffers.
+   energy_prec elrc0 = need0 ? elrc0_vol : elrc1_vol;
+   energy_prec elrc1 = need1 ? elrc1_vol : elrc0_vol;
+   virial_prec vlrc0 = need0 ? vlrc0_vol : vlrc1_vol;
+   virial_prec vlrc1 = need1 ? vlrc1_vol : vlrc0_vol;
+   evdwFinishMixed(vers, weight1, dweight1, d2weight1, elrc0, elrc1, vlrc0, vlrc1);
 }
 
 void evdw_rdt(int vers)
 {
    assert(vdwtyp == Vdw::HAL);
 
+   double weight1, dweight1, d2weight1;
+   bool need0, need1;
+   dtWeightNeed(vlam, evdtexp, dvldlmda, d2vldlmda2, weight1, dweight1, d2weight1, need0, need1);
+
    evdwBegin(vers);
 
-   // E0 = E(B+environment) + E(A).
-   if (use_vdw4i) {
-      ehalSubsys(vers, RdtMask::BE);
-      ehalSubsys(vers, RdtMask::A);
-      ev_snap.save(vers, ev_buf);
+   const RelDualOps ops = {
+      [](int v, RdtMask mask, bool) { ehalSubsys(v, mask); },
+      [](int v) { evdwZeroBuffers(v); },
+      [](int v) { ev_snap.save(v, ev_buf); },
+      [](int v) { ev_snap.mix(v, vlam, evdtexp, use_vdlmda, ev_buf, ev_dl); },
+   };
+   relDualDrive(vers, evrelst0, evrelst1, need0, need1, ops);
+
+   // Each endpoint's correction is the sum over the subsystems its coupling
+   // state claims, exactly as its energy is.
+   energy_prec elrc0 = 0, elrc1 = 0;
+   virial_prec vlrc0 = 0, vlrc1 = 0;
+   for (int k = 0; k < nRelSlot; ++k) {
+      RdtMask mask;
+      bool in0, in1;
+      relSlot(k, evrelst0, evrelst1, mask, in0, in1);
+      if (in0) {
+         elrc0 += elrc_slot[k];
+         vlrc0 += vlrc_slot[k];
+      }
+      if (in1) {
+         elrc1 += elrc_slot[k];
+         vlrc1 += vlrc_slot[k];
+      }
    }
-   // E1 = E(A+environment) + E(B).
-   if (use_vdw4f) {
-      if (use_vdw4i)
-         evdwZeroBuffers(vers);
-      ehalSubsys(vers, RdtMask::AE);
-      int bvers = (vers == calc::v3 ? calc::v0 : vers);
-      ehalSubsys(bvers, RdtMask::B);
+   if (not need0) {
+      elrc0 = elrc1;
+      vlrc0 = vlrc1;
+   } else if (not need1) {
+      elrc1 = elrc0;
+      vlrc1 = vlrc0;
    }
-   if (not use_vdw4i)
-      ev_snap.save(vers, ev_buf);
-
-   double weight1, dweight1, d2weight1;
-   adtWeight(vlam, evdtexp, weight1, dweight1, d2weight1);
-   ev_snap.mix(vers, vlam, evdtexp, use_vdlmda, ev_buf, ev_dl);
-
-
-   energy_prec elrc0 = use_vdw4i ? elrc0_vol : elrc1_vol;
-   energy_prec elrc1 = use_vdw4f ? elrc1_vol : elrc0_vol;
-   virial_prec vlrc0 = use_vdw4i ? vlrc0_vol : vlrc1_vol;
-   virial_prec vlrc1 = use_vdw4f ? vlrc1_vol : vlrc0_vol;
-
-   energy_prec rdt_elrc = weight1 * elrc1 + (1 - weight1) * elrc0;
-   virial_prec rdt_vlrc = weight1 * vlrc1 + (1 - weight1) * vlrc0;
-   energy_prec rdt_delrc = dweight1 * (elrc1 - elrc0);
-   energy_prec rdt_d2elrc = d2weight1 * (elrc1 - elrc0);
-   virial_prec rdt_dvlrc = dweight1 * (vlrc1 - vlrc0);
-   evdwFinish(vers, rdt_elrc, rdt_vlrc, rdt_delrc, rdt_d2elrc, rdt_dvlrc);
+   evdwFinishMixed(vers, weight1, dweight1, d2weight1, elrc0, elrc1, vlrc0, vlrc1);
 }
 }
 

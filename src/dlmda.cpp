@@ -6,6 +6,7 @@
 #include "ff/elec.h"
 #include "ff/evdw.h"
 #include "ff/potent.h"
+#include "md/osrw.h"
 #include "tool/darray.h"
 #include "tool/error.h"
 #include "tool/externfunc.h"
@@ -44,7 +45,7 @@ void dlmdaData2(RcOp op)
 {
    if (op & RcOp::INIT) {
       bool lambda_dynamics = use_dlmda or use_ost or use_meta or use_emdt //
-         or use_epdt or use_evdt or use_plmda or use_rel;
+         or use_epdt or use_evdt or use_rel;
       if (lambda_dynamics and not(pltfm_config & Platform::CUDA))
          TINKER_THROW("OST  --  Lambda dynamics requires the CUDA platform");
    }
@@ -62,6 +63,146 @@ Lmdamap lmdamapFrom(const char* s)
    return Lmdamap::QNT;
 }
 
+RelStage relStageFrom(const char* s)
+{
+   // s is a Fortran character*4 buffer (no null terminator).
+   if (std::strncmp(s, "LIG1", 4) == 0)
+      return RelStage::LIG1;
+   if (std::strncmp(s, "LIG2", 4) == 0)
+      return RelStage::LIG2;
+   return RelStage::VDWM;
+}
+
+void relSlot(int k, RelState ist0, RelState ist1, RdtMask& mask, bool& in0, bool& in1)
+{
+   // Only five subsystems are reachable, and the three coupling states of a
+   // relative dual topology are sums of them (mutate.f:relslot):
+   //
+   //    slot   la     lb     le     subsystem
+   //      0    T      F      T      ligand 1 with environment
+   //      1    F      T      T      ligand 2 with environment
+   //      2    F      F      T      environment alone
+   //      3    T      F      F      ligand 1 alone
+   //      4    F      T      F      ligand 2 alone
+   //
+   //    LIG1 = slots 0 and 4 ,   ligand 1 bound, ligand 2 free
+   //    LIG2 = slots 1 and 3 ,   ligand 2 bound, ligand 1 free
+   //    NONE = slots 2, 3 and 4 ,  neither ligand bound
+   static constexpr RdtMask kMask[nRelSlot] = {
+      RdtMask::AE, RdtMask::BE, RdtMask::ENV, RdtMask::LIGA, RdtMask::LIGB};
+   // kMember[slot][state - 1].
+   static constexpr bool kMember[nRelSlot][3] = {
+      {true, false, false},  //
+      {false, true, false},  //
+      {false, false, true},  //
+      {false, true, true},   //
+      {true, false, true}};  //
+
+   mask = kMask[k];
+   in0 = kMember[k][(int)ist0 - 1];
+   in1 = kMember[k][(int)ist1 - 1];
+}
+
+void dtWeight(double x, int nexp, double& w, double& dw, double& d2w)
+{
+   // The linear case is taken separately so that a zero sub-lambda never
+   // reaches a zero power.
+   w = std::pow(x, nexp);
+   dw = 0.0;
+   d2w = 0.0;
+   if (nexp == 1) {
+      dw = 1.0;
+   } else if (nexp >= 2) {
+      dw = (double)nexp * std::pow(x, nexp - 1);
+      d2w = (double)nexp * (double)(nexp - 1) * std::pow(x, nexp - 2);
+   }
+}
+
+void dtNeed(double w, double dw, double d2w, double chain, double d2chain, bool& need0, bool& need1)
+{
+   double c1 = dw * chain;
+   double c2 = d2w * chain * chain + dw * d2chain;
+   need1 = (w != 0.0) or (c1 != 0.0) or (c2 != 0.0);
+   need0 = (w != 1.0) or (c1 != 0.0) or (c2 != 0.0);
+}
+
+void dtWeightNeed(double sublmda, int dtexp, double chain, double d2chain, //
+   double& w, double& dw, double& d2w, bool& need0, bool& need1)
+{
+   dtWeight(sublmda, dtexp, w, dw, d2w);
+   dtNeed(w, dw, d2w, chain, d2chain, need0, need1);
+}
+
+void relDualDrive(int vers, RelState ist0, RelState ist1, bool need0, bool need1, const RelDualOps& ops)
+{
+   // dtNeed() never clears both endpoints: w is either 1, making need1 true,
+   // or not 1, making need0 true.
+   const auto do_a = vers & calc::analyz;
+   const int qvers = vers & ~calc::analyz; // evaluate, but do not count
+
+   int only0[nRelSlot], only1[nRelSlot], both[nRelSlot];
+   int n0 = 0, n1 = 0, nb = 0;
+   for (int k = 0; k < nRelSlot; ++k) {
+      RdtMask mask;
+      bool in0, in1;
+      relSlot(k, ist0, ist1, mask, in0, in1);
+      in0 = in0 and need0;
+      in1 = in1 and need1;
+      if (in0 and in1)
+         both[nb++] = k;
+      else if (in0)
+         only0[n0++] = k;
+      else if (in1)
+         only1[n1++] = k;
+   }
+
+   // The count is reported from endpoint 1 when it is live, else endpoint 0.
+   // Within that endpoint a single ligand-plus-environment subsystem carries
+   // the whole count if there is one; a decoupled endpoint has none, so its
+   // subsystems sum instead (empole3.f:2584-2650).
+   const RelState reported = need1 ? ist1 : ist0;
+   bool coupled = false;
+   for (int k = 0; k < nRelSlot and not coupled; ++k) {
+      RdtMask mask;
+      bool in0, in1;
+      relSlot(k, reported, reported, mask, in0, in1);
+      coupled = in0 and relSlotIsCoupled(k);
+   }
+
+   bool first = true;
+   auto run = [&](int k, bool reportedPass) {
+      RdtMask mask;
+      bool in0, in1;
+      relSlot(k, ist0, ist1, mask, in0, in1);
+      bool counts = do_a and reportedPass and (not coupled or relSlotIsCoupled(k));
+      ops.state(counts ? vers : qvers, mask, first);
+      first = false;
+   };
+
+   // Endpoint 0 runs first so that the reported pass is the one whose counts
+   // survive the zeroWork() between the two.
+   if (need0) {
+      for (int i = 0; i < n0; ++i)
+         run(only0[i], not need1);
+      ops.save(vers);
+   }
+   if (need1) {
+      if (need0)
+         ops.zeroWork(vers);
+      for (int i = 0; i < n1; ++i)
+         run(only1[i], true);
+      // Alias the dead endpoint 0 onto endpoint 1 so the mix is an identity.
+      if (not need0)
+         ops.save(vers);
+   }
+   ops.mix(vers);
+
+   // The shared subsystems ride on top of the mixed result. Their counts are
+   // unaffected by the mix, so the gating above still applies to them.
+   for (int i = 0; i < nb; ++i)
+      run(both[i], true);
+}
+
 void dlmda_mech()
 {
    lambda = mutant::lambda;
@@ -70,7 +211,7 @@ void dlmda_mech()
    use_emdt = dlmda::use_emdt;
    use_epdt = dlmda::use_epdt;
    use_evdt = dlmda::use_evdt;
-   use_plmda = dlmda::use_plmda;
+   use_plmda = dlmda::use_plmda and not use_osrw;
    use_mainlmda = dlmda::use_mainlmda;
    use_rel = mutant::use_rel;
 
@@ -97,13 +238,6 @@ void dlmda_mech()
    use_ti = dlmda::use_ti;
    dlmda::use_ostdyn = use_ost;
    dlmda::use_metadyn = use_meta;
-
-   use_ele4i = true;
-   use_ele4f = true;
-   use_pol4i = true;
-   use_pol4f = true;
-   use_vdw4i = true;
-   use_vdw4f = true;
 
    elmdaexp = dlmda::elmdaexp;
    plmdaexp = dlmda::plmdaexp;
@@ -138,12 +272,16 @@ void dlmda_mech()
    qntvlmda1 = dlmda::qntvlmda1;
 
    use_relstage = (dlmda::use_relstage != 0);
-   relstg1lmda0 = dlmda::relstg1lmda0;
-   relstg1lmda1 = dlmda::relstg1lmda1;
-   relstg2lmda0 = dlmda::relstg2lmda0;
-   relstg2lmda1 = dlmda::relstg2lmda1;
-   relstage = RelStage::VDW_MORPH;
-   relstagemix = false;
+   relstage = relStageFrom(dlmda::relstage);
+
+   // Plain relative interpolates between the two coupled states; mapRelStage()
+   // overrides the electrostatic pair on a staged leg (mutate.f:404-409).
+   emrelst0 = RelState::LIG2;
+   emrelst1 = RelState::LIG1;
+   eprelst0 = RelState::LIG2;
+   eprelst1 = RelState::LIG1;
+   evrelst0 = RelState::LIG2;
+   evrelst1 = RelState::LIG1;
 }
 
 void avgstd(const std::vector<double>& v, int begin, int count, double& avg, double& sd)
@@ -165,19 +303,6 @@ void avgstd(const std::vector<double>& v, int begin, int count, double& avg, dou
    avg = k + total / (double)count;
    double var = (totalsq - total * total / (double)count) / (double)count;
    sd = std::sqrt(var > 0.0 ? var : 0.0);
-}
-
-void adtWeight(double lmda, int exponent, double& weight, double& dweight, double& d2weight)
-{
-   weight = std::pow(lmda, exponent);
-   dweight = 0;
-   d2weight = 0;
-   if (exponent >= 2) {
-      dweight = exponent * std::pow(lmda, exponent - 1);
-      d2weight = exponent * (exponent - 1) * std::pow(lmda, exponent - 2);
-   } else {
-      dweight = 1;
-   }
 }
 
 TINKER_FVOID2(acc0, cu1, adtMix, int, bool, int, size_t, double, double, double, const EnergyBufferTraits::type*,
@@ -274,52 +399,68 @@ static void mapOne(double lmda, Lmdamap map, double qnt0, double qnt1, int expEx
    }
 }
 
-// Staged relative free energy schedule
+// Maps the main lambda onto the sub-lambdas of the one declared staged
+// relative leg (dlambda.f:maprelstage):
+//
+//    LIG2   charge ligand 2 against the decoupled reference, its weight
+//             rising with the main lambda
+//    VDWM   both ligands electrostatically decoupled while van der Waals
+//             morphs from ligand 2 onto ligand 1
+//    LIG1   charge ligand 1 against the decoupled reference, its weight
+//             rising with the main lambda
 static void mapRelStage(double lmda)
 {
-   double w, taper, dtaper, d2taper;
-   if (lmda > relstg2lmda0) {
-      // High-lambda electrostatics leg: weight runs 0 -> 1 across the window.
-      quinticTaper(lmda, relstg2lmda0, relstg2lmda1, taper, dtaper, d2taper);
-      relstage = RelStage::LIG1_ELE;
-      w = 1.0 - taper;
-      deldlmda = -dtaper;
-      d2eldlmda2 = -d2taper;
-   } else if (lmda < relstg1lmda1) {
-      // Low-lambda electrostatics leg: weight runs 1 -> 0 across the window.
-      quinticTaper(lmda, relstg1lmda0, relstg1lmda1, taper, dtaper, d2taper);
-      relstage = RelStage::LIG0_ELE;
-      w = taper;
-      deldlmda = dtaper;
-      d2eldlmda2 = d2taper;
-   } else {
-      // Both ligands are electrostatically decoupled from the environment.
-      relstage = RelStage::VDW_MORPH;
-      w = 0.0;
+   double eval, vval;
+
+   // van der Waals interpolates between the two coupled states on every leg,
+   // morphing over its own map in the middle and held at one end or the other
+   // while a ligand is being charged.
+   evrelst0 = RelState::LIG2;
+   evrelst1 = RelState::LIG1;
+
+   if (relstage == RelStage::VDWM) {
+      // The middle leg holds both ligands decoupled, so electrostatics and
+      // polarization sit at the reference state and leave the chain rule
+      // while van der Waals morphs across its map.
+      emrelst0 = RelState::NONE;
+      emrelst1 = RelState::NONE;
+      eval = 0.0;
       deldlmda = 0.0;
       d2eldlmda2 = 0.0;
+      mapOne(lmda, vlmdamap, qntvlmda0, qntvlmda1, vlmdaexp, vlmdainvn, vlmdainveps, vval, dvldlmda, d2vldlmda2);
+      vlam = vval;
+   } else if (relstage == RelStage::LIG1) {
+      // The ligand 1 leg charges ligand 1 against the decoupled reference
+      // with van der Waals already morphed onto it.
+      emrelst0 = RelState::NONE;
+      emrelst1 = RelState::LIG1;
+      mapOne(lmda, elmdamap, qntelmda0, qntelmda1, elmdaexp, elmdainvn, elmdainveps, eval, deldlmda, d2eldlmda2);
+      vlam = 1.0;
+      dvldlmda = 0.0;
+      d2vldlmda2 = 0.0;
+   } else {
+      // The ligand 2 leg discharges ligand 2 as the main lambda rises, so its
+      // weight is the complement of the map, with van der Waals still on it.
+      emrelst0 = RelState::NONE;
+      emrelst1 = RelState::LIG2;
+      mapOne(lmda, elmdamap, qntelmda0, qntelmda1, elmdaexp, elmdainvn, elmdainveps, eval, deldlmda, d2eldlmda2);
+      eval = 1.0 - eval;
+      deldlmda = -deldlmda;
+      d2eldlmda2 = -d2eldlmda2;
+      vlam = 0.0;
+      dvldlmda = 0.0;
+      d2vldlmda2 = 0.0;
    }
 
-   elam = std::min(1.0, std::max(0.0, w));
-
-   if (elam == 0.0)
-      relstage = RelStage::VDW_MORPH;
-
-   relstagemix = (elam > 0.0 and elam < 1.0);
+   // Numerical guard on the map complement.
+   elam = std::min(1.0, std::max(0.0, eval));
 
    // Polarization stages with the multipoles: same states, same weight.
+   eprelst0 = emrelst0;
+   eprelst1 = emrelst1;
    plam = elam;
    dpldlmda = deldlmda;
    d2pldlmda2 = d2eldlmda2;
-
-   // van der Waals keeps its ordinary map.
-   double taper2, dtaper2, d2taper2;
-   quinticTaper(lmda, qntvlmda0, qntvlmda1, taper2, dtaper2, d2taper2);
-   vlam = 1.0 - taper2;
-   dvldlmda = -dtaper2;
-   d2vldlmda2 = -d2taper2;
-   use_vdw4i = (lmda <= qntvlmda1);
-   use_vdw4f = (lmda >= qntvlmda0);
 }
 
 bool polTracksEle()
@@ -375,18 +516,6 @@ void mapSubLambda()
       vlam = vval;
    }
 
-   if (use_elmdamap and elmdamap == Lmdamap::QNT) {
-      use_ele4i = (lambda <= qntelmda1);
-      use_ele4f = (lambda >= qntelmda0);
-   }
-   if (use_plmdamap and plmdamap == Lmdamap::QNT) {
-      use_pol4i = (lambda <= qntplmda1);
-      use_pol4f = (lambda >= qntplmda0);
-   }
-   if (use_vlmdamap and vlmdamap == Lmdamap::QNT) {
-      use_vdw4i = (lambda <= qntvlmda1);
-      use_vdw4f = (lambda >= qntvlmda0);
-   }
 }
 
 void lmdachain(int vers)

@@ -162,28 +162,39 @@ void empoleMixEndpoints(int vers)
    em_snap.mix(vers, elam, emdtexp, use_edlmda, em_buf, em_dl);
 }
 
-void empoleMixStagedEndpoints(int vers)
-{
-   // The staged weight is the mix weight itself, so the exponent is 1 and
-   // lmdachain() carries the whole main lambda chain rule through deldlmda.
-   em_snap.mix(vers, elam, 1, use_edlmda, em_buf, em_dl);
-}
-
 void empole_adt(int vers)
 {
+   double w, dw, d2w;
+   bool need0, need1;
+   dtWeightNeed(elam, emdtexp, deldlmda, d2eldlmda2, w, dw, d2w, need0, need1);
+
    empoleBegin(vers);
 
-   if (use_ele4i) {
-      empoleState(vers, RdtMask::ENV, mut, true);
-      empoleSaveEndpoint0(vers);
+   // Analysis reports the interaction count of the fully coupled endpoint even
+   // when that endpoint carries no weight, so it is built for the count alone
+   // and its energy discarded (empole3.f:2419-2427). em_buf.zero() rather than
+   // empoleZeroWork(), which would clear the count this exists to keep.
+   int wvers = vers;
+   bool first = true;
+   if ((vers & calc::analyz) and not need1) {
+      empoleState(vers, RdtMask::ALL, mut, true);
+      em_buf.zero(vers);
+      wvers = vers & ~calc::analyz;
+      first = false;
    }
-   if (use_ele4f) {
-      if (use_ele4i)
-         empoleZeroWork(vers);
-      empoleState(vers, RdtMask::ALL, mut, not use_ele4i);
+
+   if (need0) {
+      empoleState(wvers, RdtMask::ENV, mut, first);
+      first = false;
+      empoleSaveEndpoint0(wvers);
    }
-   if (not use_ele4i)
-      empoleSaveEndpoint0(vers);
+   if (need1) {
+      if (need0)
+         empoleZeroWork(wvers);
+      empoleState(wvers, RdtMask::ALL, mut, first);
+      if (not need0)
+         empoleSaveEndpoint0(wvers);
+   }
 
    empoleMixEndpoints(vers);
    empoleFinish(vers);
@@ -191,63 +202,19 @@ void empole_adt(int vers)
 
 void empole_rdt(int vers)
 {
+   double w, dw, d2w;
+   bool need0, need1;
+   dtWeightNeed(elam, emdtexp, deldlmda, d2eldlmda2, w, dw, d2w, need0, need1);
+
    empoleBegin(vers);
 
-   // E0 = E(B+environment) + E(A).
-   if (use_ele4i) {
-      empoleState(vers, RdtMask::BE, rdt_group, true);
-      empoleState(vers, RdtMask::A, rdt_group, false);
-      empoleSaveEndpoint0(vers);
-   }
-   // E1 = E(A+environment) + E(B).
-   if (use_ele4f) {
-      if (use_ele4i)
-         empoleZeroWork(vers);
-      empoleState(vers, RdtMask::AE, rdt_group, not use_ele4i);
-      int bvers = (vers == calc::v3 ? calc::v0 : vers);
-      empoleState(bvers, RdtMask::B, rdt_group, false);
-   }
-   if (not use_ele4i)
-      empoleSaveEndpoint0(vers);
-
-   empoleMixEndpoints(vers);
-   empoleFinish(vers);
-
-   mpoleInitState(calc::v0, RdtMask::ALL, rdt_group, false);
-}
-
-// The decoupled reference E(environment) + E(A) + E(B), with every subsystem
-// isolated from the others.
-static void empoleStateDecoupled(int vers, bool first_state)
-{
-   empoleState(vers, RdtMask::ENV, rdt_group, first_state);
-   empoleState(vers, RdtMask::LIGA, rdt_group, false);
-   empoleState(vers, RdtMask::LIGB, rdt_group, false);
-}
-
-void empole_rdt_staged(int vers)
-{
-   empoleBegin(vers);
-
-   if (relstage == RelStage::VDW_MORPH) {
-      // Both ligands are decoupled, so the energy is the reference itself and
-      // there is nothing to mix; em_dl stays zero from empoleBegin().
-      empoleStateDecoupled(vers, true);
-   } else {
-      bool lig1 = (relstage == RelStage::LIG1_ELE);
-      if (relstagemix) {
-         // E0 = the decoupled reference.
-         empoleStateDecoupled(vers, true);
-         empoleSaveEndpoint0(vers);
-         empoleZeroWork(vers);
-      }
-      // E1 = the coupled endpoint: E(X+environment) + E(other ligand).
-      empoleState(vers, lig1 ? RdtMask::AE : RdtMask::BE, rdt_group, not relstagemix);
-      int bvers = (vers == calc::v3 ? calc::v0 : vers);
-      empoleState(bvers, lig1 ? RdtMask::LIGB : RdtMask::LIGA, rdt_group, false);
-      if (relstagemix)
-         empoleMixStagedEndpoints(vers);
-   }
+   const RelDualOps ops = {
+      [](int v, RdtMask mask, bool first) { empoleState(v, mask, rdt_group, first); },
+      [](int v) { empoleZeroWork(v); },
+      [](int v) { empoleSaveEndpoint0(v); },
+      [](int v) { empoleMixEndpoints(v); },
+   };
+   relDualDrive(vers, emrelst0, emrelst1, need0, need1, ops);
 
    empoleFinish(vers);
 

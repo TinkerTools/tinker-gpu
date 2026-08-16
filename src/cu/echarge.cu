@@ -220,36 +220,39 @@ void echargeEwaldFphiSelf_cu(int vers)
       echargeFphiSelf_cu<calc::V6>();
 }
 
+template <class Ver>
 __global__
 static void exfieldCharge_cu1(CountBuffer restrict nec, EnergyBuffer restrict ec, VirialBuffer restrict vir_ec,
-   grad_prec* restrict decx, grad_prec* restrict decy, grad_prec* restrict decz, int vers, int n, real f, real ef1,
+   grad_prec* restrict decx, grad_prec* restrict decy, grad_prec* restrict decz, int n, real f, real ef1,
    real ef2, real ef3, const real* restrict pchg, const real* restrict x, const real* restrict y,
    const real* restrict z)
 {
-   bool do_e = vers & calc::energy;
-   bool do_a = vers & calc::analyz;
-   bool do_g = vers & calc::grad;
-   bool do_v = vers & calc::virial;
+   constexpr bool do_e = Ver::e;
+   constexpr bool do_a = Ver::a;
+   constexpr bool do_g = Ver::g;
+   constexpr bool do_v = Ver::v;
 
    int ithread = ITHREAD;
    for (int ii = ithread; ii < n; ii += STRIDE) {
       real xi = x[ii], yi = y[ii], zi = z[ii], ci = pchg[ii];
 
-      if (do_e) {
+      if CONSTEXPR (do_e) {
          real phi = xi * ef1 + yi * ef2 + zi * ef3; // negative potential
          real e = -f * ci * phi;
          atomic_add(e, ec, ithread);
-         if (do_a)
-            atomic_add(1, nec, ithread);
+         if CONSTEXPR (do_a) {
+            if (e != 0)
+               atomic_add(1, nec, ithread);
+         }
       }
-      if (do_g) {
+      if CONSTEXPR (do_g) {
          real frx = -f * ef1 * ci;
          real fry = -f * ef2 * ci;
          real frz = -f * ef3 * ci;
          atomic_add(frx, decx, ii);
          atomic_add(fry, decy, ii);
          atomic_add(frz, decz, ii);
-         if (do_v) {
+         if CONSTEXPR (do_v) {
             real vxx = xi * frx;
             real vyy = yi * fry;
             real vzz = zi * frz;
@@ -262,10 +265,28 @@ static void exfieldCharge_cu1(CountBuffer restrict nec, EnergyBuffer restrict ec
    }
 }
 
-void exfieldCharge_cu(int vers)
+template <class Ver>
+static void exfieldCharge_cu2()
 {
    real f = electric / dielec;
    real ef1 = extfld::texfld[0], ef2 = extfld::texfld[1], ef3 = extfld::texfld[2];
-   launch_k1s(g::s0, n, exfieldCharge_cu1, nec, ec, vir_ec, decx, decy, decz, vers, n, f, ef1, ef2, ef3, pchg, x, y, z);
+   launch_k1s(g::s0, n, exfieldCharge_cu1<Ver>, nec, ec, vir_ec, decx, decy, decz, n, f, ef1, ef2, ef3, pchg, x, y,
+      z);
+}
+
+void exfieldCharge_cu(int vers)
+{
+   if (vers == calc::v0)
+      exfieldCharge_cu2<calc::V0>();
+   else if (vers == calc::v1)
+      exfieldCharge_cu2<calc::V1>();
+   else if (vers == calc::v3)
+      exfieldCharge_cu2<calc::V3>();
+   else if (vers == calc::v4)
+      exfieldCharge_cu2<calc::V4>();
+   else if (vers == calc::v5)
+      exfieldCharge_cu2<calc::V5>();
+   else if (vers == calc::v6)
+      exfieldCharge_cu2<calc::V6>();
 }
 }

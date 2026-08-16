@@ -369,12 +369,13 @@ void echargeEwaldFphiSelf_acc(int vers)
       echarge_acc3<calc::V6, 5>();
 }
 
-void exfieldCharge_acc(int vers)
+template <class Ver>
+static void exfieldCharge_acc1()
 {
-   bool do_e = vers & calc::energy;
-   bool do_a = vers & calc::analyz;
-   bool do_g = vers & calc::grad;
-   bool do_v = vers & calc::virial;
+   constexpr bool do_e = Ver::e;
+   constexpr bool do_a = Ver::a;
+   constexpr bool do_g = Ver::g;
+   constexpr bool do_v = Ver::v;
 
    auto bufsize = bufferSize();
    real f = electric / dielec;
@@ -386,21 +387,23 @@ void exfieldCharge_acc(int vers)
       int offset = ii & (bufsize - 1);
       real xi = x[ii], yi = y[ii], zi = z[ii], ci = pchg[ii];
 
-      if (do_e) {
+      if CONSTEXPR (do_e) {
          real phi = xi * ef1 + yi * ef2 + zi * ef3; // negative potential
          real e = -f * ci * phi;
          atomic_add(e, ec, offset);
-         if (do_a)
-            atomic_add(1, nec, offset);
+         if CONSTEXPR (do_a) {
+            if (e != 0)
+               atomic_add(1, nec, offset);
+         }
       }
-      if (do_g) {
+      if CONSTEXPR (do_g) {
          real frx = -f * ef1 * ci;
          real fry = -f * ef2 * ci;
          real frz = -f * ef3 * ci;
          atomic_add(frx, decx, ii);
          atomic_add(fry, decy, ii);
          atomic_add(frz, decz, ii);
-         if (do_v) {
+         if CONSTEXPR (do_v) {
             real vxx = xi * frx;
             real vyy = yi * fry;
             real vzz = zi * frz;
@@ -411,5 +414,21 @@ void exfieldCharge_acc(int vers)
          }
       }
    }
+}
+
+void exfieldCharge_acc(int vers)
+{
+   if (vers == calc::v0)
+      exfieldCharge_acc1<calc::V0>();
+   else if (vers == calc::v1)
+      exfieldCharge_acc1<calc::V1>();
+   else if (vers == calc::v3)
+      exfieldCharge_acc1<calc::V3>();
+   else if (vers == calc::v4)
+      exfieldCharge_acc1<calc::V4>();
+   else if (vers == calc::v5)
+      exfieldCharge_acc1<calc::V5>();
+   else if (vers == calc::v6)
+      exfieldCharge_acc1<calc::V6>();
 }
 }

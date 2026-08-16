@@ -192,163 +192,283 @@ TEST_CASE("DLMDA-taper-degenerate", "[ff][dlmda]")
    COMPARE_REALS(dt, 0.0, 1.0e-14);
 }
 
-TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
+TEST_CASE("DLMDA-relslot", "[ff][dlmda]")
 {
-   // Drive mapSubLambda() through the staged schedule directly. Only the
-   // scalar mapping is exercised here; the endpoint mixing needs a system.
+   // The subsystem table of mutate.f:relslot, and the three coupling states
+   // built out of it.
+   static const RdtMask kMask[nRelSlot] = {RdtMask::AE, RdtMask::BE, RdtMask::ENV, RdtMask::LIGA, RdtMask::LIGB};
+   for (int k = 0; k < nRelSlot; ++k) {
+      CAPTURE(k);
+      RdtMask mask;
+      bool in0, in1;
+      relSlot(k, RelState::LIG1, RelState::LIG2, mask, in0, in1);
+      REQUIRE(mask == kMask[k]);
+      // LIG1 = slots 0 and 4, LIG2 = slots 1 and 3.
+      REQUIRE(in0 == (k == 0 or k == 4));
+      REQUIRE(in1 == (k == 1 or k == 3));
+
+      relSlot(k, RelState::NONE, RelState::NONE, mask, in0, in1);
+      // NONE = slots 2, 3 and 4.
+      REQUIRE(in0 == (k == 2 or k == 3 or k == 4));
+      REQUIRE(in1 == in0);
+   }
+
+   // Only a ligand bound to the environment carries the reported count.
+   REQUIRE(relSlotIsCoupled(0));
+   REQUIRE(relSlotIsCoupled(1));
+   for (int k = 2; k < nRelSlot; ++k)
+      REQUIRE_FALSE(relSlotIsCoupled(k));
+
+   // Each state is disjoint from the other coupled one but shares a lone
+   // ligand with the decoupled reference; that overlap is what the relative
+   // driver hoists past the mix.
+   auto slotsOf = [](RelState st) {
+      int bits = 0;
+      for (int k = 0; k < nRelSlot; ++k) {
+         RdtMask mask;
+         bool in0, in1;
+         relSlot(k, st, st, mask, in0, in1);
+         if (in0)
+            bits |= 1 << k;
+      }
+      return bits;
+   };
+   REQUIRE((slotsOf(RelState::LIG1) & slotsOf(RelState::LIG2)) == 0);
+   REQUIRE((slotsOf(RelState::LIG1) & slotsOf(RelState::NONE)) == (1 << 4));
+   REQUIRE((slotsOf(RelState::LIG2) & slotsOf(RelState::NONE)) == (1 << 3));
+}
+
+TEST_CASE("DLMDA-dtneed", "[ff][dlmda]")
+{
+   bool need0, need1;
+
+   // An endpoint is dead only when it contributes neither weight nor either
+   // lambda derivative (dlambda.f:relneed).
+   dtNeed(0.0, 0.0, 0.0, 0.0, 0.0, need0, need1);
+   REQUIRE(need0);
+   REQUIRE_FALSE(need1);
+
+   dtNeed(1.0, 0.0, 0.0, 0.0, 0.0, need0, need1);
+   REQUIRE_FALSE(need0);
+   REQUIRE(need1);
+
+   dtNeed(0.5, 0.0, 0.0, 0.0, 0.0, need0, need1);
+   REQUIRE(need0);
+   REQUIRE(need1);
+
+   // A flat weight with a live first derivative keeps both endpoints, because
+   // the mix still has to supply dE/dL.
+   dtNeed(0.0, 1.0, 0.0, 1.0, 0.0, need0, need1);
+   REQUIRE(need0);
+   REQUIRE(need1);
+   dtNeed(1.0, 1.0, 0.0, 1.0, 0.0, need0, need1);
+   REQUIRE(need0);
+   REQUIRE(need1);
+
+   // A zero chain rule factor kills the derivative even when dw is nonzero:
+   // this is the pinned sub-lambda that lets a term drop an endpoint.
+   dtNeed(0.0, 1.0, 0.0, 0.0, 0.0, need0, need1);
+   REQUIRE(need0);
+   REQUIRE_FALSE(need1);
+
+   // Only the second derivative survives: c2 = d2w*chain^2 + dw*d2chain.
+   dtNeed(1.0, 0.0, 2.0, 1.0, 0.0, need0, need1);
+   REQUIRE(need0);
+   REQUIRE(need1);
+   dtNeed(1.0, 1.0, 0.0, 0.0, 3.0, need0, need1);
+   REQUIRE(need0);
+   REQUIRE(need1);
+
+   // dtWeight takes the linear case separately so a zero sub-lambda never
+   // reaches a zero power.
+   double w, dw, d2w;
+   dtWeight(0.0, 1, w, dw, d2w);
+   COMPARE_REALS(w, 0.0, 1.0e-14);
+   COMPARE_REALS(dw, 1.0, 1.0e-14);
+   COMPARE_REALS(d2w, 0.0, 1.0e-14);
+   dtWeight(0.5, 3, w, dw, d2w);
+   COMPARE_REALS(w, 0.125, 1.0e-14);
+   COMPARE_REALS(dw, 0.75, 1.0e-14);
+   COMPARE_REALS(d2w, 3.0, 1.0e-14);
+}
+
+namespace {
+// The reference three-simulation staged protocol: one run per leg, each
+// declaring its leg and walking its own window over the full main lambda.
+void setStagedLeg(RelStage leg)
+{
    use_relstage = true;
-   relstg2lmda0 = 0.7;
-   relstg2lmda1 = 1.0;
-   relstg1lmda0 = 0.0;
-   relstg1lmda1 = 0.3;
+   relstage = leg;
+   // mutate.f floors these at 1; nothing has run dlmda_mech() here.
+   emdtexp = 1;
+   epdtexp = 1;
+   evdtexp = 1;
+   elmdamap = Lmdamap::QNT;
    vlmdamap = Lmdamap::QNT;
+   qntelmda0 = (leg == RelStage::LIG1) ? 0.7 : 0.0;
+   qntelmda1 = (leg == RelStage::LIG1) ? 1.0 : 0.3;
    qntvlmda0 = 0.3;
    qntvlmda1 = 0.7;
+}
+}
 
-   // lambda = 1: ligand 1 fully coupled, van der Waals at ligand 1.
-   mapAt(1.0);
-   REQUIRE(relstage == RelStage::LIG1_ELE);
-   COMPARE_REALS(elam, 1.0, 1.0e-14);
-   REQUIRE(relstagemix == false);
-   COMPARE_REALS(vlam, 1.0, 1.0e-14);
+TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
+{
+   // Each leg is its own simulation now, so the leg is declared rather than
+   // derived from where the main lambda happens to sit.
+
+   // Ligand 2 is discharged as the main lambda rises; van der Waals sits on it.
+   setStagedLeg(RelStage::LIG2);
+   mapAt(0.0);
+   REQUIRE(emrelst0 == RelState::NONE);
+   REQUIRE(emrelst1 == RelState::LIG2);
+   REQUIRE(evrelst0 == RelState::LIG2);
+   REQUIRE(evrelst1 == RelState::LIG1);
+   COMPARE_REALS(elam, 1.0, 1.0e-7);
+   COMPARE_REALS(vlam, 0.0, 1.0e-14);
+   COMPARE_REALS(dvldlmda, 0.0, 1.0e-14);
+   mapAt(0.15);
+   COMPARE_REALS(elam, 0.5, 1.0e-6);
+   REQUIRE(deldlmda < 0.0); // the coupled weight falls as lambda rises
+   mapAt(0.3);
+   COMPARE_REALS(elam, 0.0, 1.0e-7);
    COMPARE_REALS(deldlmda, 0.0, 1.0e-14);
 
-   // Interior of the ligand 1 discharge leg.
-   mapAt(0.85);
-   REQUIRE(relstage == RelStage::LIG1_ELE);
-   COMPARE_REALS(elam, 0.5, 1.0e-12);
-   REQUIRE(relstagemix == true);
-   REQUIRE(deldlmda > 0.0); // the weight grows with lambda
-   COMPARE_REALS(vlam, 1.0, 1.0e-14);
-
-   // The van der Waals morph leg: both ligands electrostatically decoupled.
-   for (double lambda : {0.7, 0.5, 0.3}) {
+   // Both ligands decoupled while van der Waals morphs from 2 onto 1.
+   setStagedLeg(RelStage::VDWM);
+   for (double lambda : {0.3, 0.5, 0.7}) {
       CAPTURE(lambda);
       mapAt(lambda);
-      REQUIRE(relstage == RelStage::VDW_MORPH);
+      REQUIRE(emrelst0 == RelState::NONE);
+      REQUIRE(emrelst1 == RelState::NONE);
+      REQUIRE(evrelst0 == RelState::LIG2);
+      REQUIRE(evrelst1 == RelState::LIG1);
       COMPARE_REALS(elam, 0.0, 1.0e-14);
-      REQUIRE(relstagemix == false);
       COMPARE_REALS(deldlmda, 0.0, 1.0e-14);
       COMPARE_REALS(d2eldlmda2, 0.0, 1.0e-14);
    }
+   mapAt(0.3);
+   COMPARE_REALS(vlam, 0.0, 1.0e-7);
    mapAt(0.5);
-   COMPARE_REALS(vlam, 0.5, 1.0e-12);
+   COMPARE_REALS(vlam, 0.5, 1.0e-6);
+   mapAt(0.7);
+   COMPARE_REALS(vlam, 1.0, 1.0e-7);
 
-   // Interior of the ligand 0 recharge leg.
-   mapAt(0.15);
-   REQUIRE(relstage == RelStage::LIG0_ELE);
-   COMPARE_REALS(elam, 0.5, 1.0e-12);
-   REQUIRE(relstagemix == true);
-   REQUIRE(deldlmda < 0.0); // the weight grows as lambda falls
-   COMPARE_REALS(vlam, 0.0, 1.0e-14);
-
-   // lambda = 0: ligand 0 fully coupled.
-   mapAt(0.0);
-   REQUIRE(relstage == RelStage::LIG0_ELE);
-   COMPARE_REALS(elam, 1.0, 1.0e-14);
-   REQUIRE(relstagemix == false);
-   COMPARE_REALS(vlam, 0.0, 1.0e-14);
+   // Ligand 1 is charged as the main lambda rises, van der Waals already on it.
+   setStagedLeg(RelStage::LIG1);
+   mapAt(0.7);
+   REQUIRE(emrelst0 == RelState::NONE);
+   REQUIRE(emrelst1 == RelState::LIG1);
+   COMPARE_REALS(elam, 0.0, 1.0e-7);
+   COMPARE_REALS(vlam, 1.0, 1.0e-14);
+   COMPARE_REALS(dvldlmda, 0.0, 1.0e-14);
+   mapAt(0.85);
+   COMPARE_REALS(elam, 0.5, 1.0e-6);
+   REQUIRE(deldlmda > 0.0); // the coupled weight grows with lambda
+   mapAt(1.0);
+   COMPARE_REALS(elam, 1.0, 1.0e-7);
    COMPARE_REALS(deldlmda, 0.0, 1.0e-14);
 
    use_relstage = false;
 }
 
-TEST_CASE("DLMDA-relstage-collapsed-weight", "[ff][dlmda]")
+TEST_CASE("DLMDA-relstage-pinned-endpoints", "[ff][dlmda]")
 {
-   // Just inside a leg, the weight is built by cancellation and collapses onto
-   // zero -- or a little past it -- for about 5e-7 of main lambda past the
-   // decoupled edge. The schedule has to clamp that to zero and report the
-   // morph leg: a LIG leg with no mix means "the weight is 1" to the term
-   // routines, which would switch the entire ligand interaction on inside a
-   // window a lambda dynamics run can wander into. Both legs approach zero from
-   // their own side, so both are checked.
-   use_relstage = true;
-   relstg2lmda0 = 0.7;
-   relstg2lmda1 = 1.0;
-   relstg1lmda0 = 0.0;
-   relstg1lmda1 = 0.3;
-   vlmdamap = Lmdamap::QNT;
-   qntvlmda0 = 0.3;
-   qntvlmda1 = 0.7;
+   // A leg pins the sub-lambdas it is not walking, and a pinned sub-lambda has
+   // a flat chain rule. dtNeed() therefore drops one van der Waals endpoint on
+   // both charging legs, which is where the staged schedule gets most of its
+   // speed: two subsystem evaluations instead of four.
+   double w, dw, d2w;
+   bool need0, need1;
 
-   for (double lambda : {0.7 + 1.0e-7, 0.7 + 5.0e-7, 0.3 - 1.0e-7, 0.3 - 5.0e-7}) {
-      CAPTURE(lambda);
-      mapAt(lambda);
-      // Clamped up from zero or from a slightly negative cancellation result.
-      REQUIRE(elam == 0.0);
-      REQUIRE(relstage == RelStage::VDW_MORPH);
-      REQUIRE(relstagemix == false);
-   }
+   setStagedLeg(RelStage::LIG1);
+   mapAt(0.85);
+   dtWeightNeed(vlam, evdtexp, dvldlmda, d2vldlmda2, w, dw, d2w, need0, need1);
+   REQUIRE_FALSE(need0); // vlam pinned at 1, so only the coupled endpoint runs
+   REQUIRE(need1);
 
-   // Past the collapse the weight survives, and the ordinary leg resumes with
-   // a mix rather than a bare endpoint.
-   for (double lambda : {0.7 + 1.0e-5, 0.3 - 1.0e-5}) {
-      CAPTURE(lambda);
-      mapAt(lambda);
-      REQUIRE(elam > 0.0);
-      REQUIRE(relstage != RelStage::VDW_MORPH);
-      REQUIRE(relstagemix == true);
-   }
+   setStagedLeg(RelStage::LIG2);
+   mapAt(0.15);
+   dtWeightNeed(vlam, evdtexp, dvldlmda, d2vldlmda2, w, dw, d2w, need0, need1);
+   REQUIRE(need0); // vlam pinned at 0, so only the reference endpoint runs
+   REQUIRE_FALSE(need1);
+
+   // On the morph leg the electrostatics are the pinned pair instead.
+   setStagedLeg(RelStage::VDWM);
+   mapAt(0.5);
+   dtWeightNeed(elam, emdtexp, deldlmda, d2eldlmda2, w, dw, d2w, need0, need1);
+   REQUIRE(need0);
+   REQUIRE_FALSE(need1);
+   dtWeightNeed(vlam, evdtexp, dvldlmda, d2vldlmda2, w, dw, d2w, need0, need1);
+   REQUIRE(need0);
+   REQUIRE(need1);
 
    use_relstage = false;
 }
 
 TEST_CASE("DLMDA-relstage-continuity", "[ff][dlmda]")
 {
-   use_relstage = true;
-   relstg2lmda0 = 0.7;
-   relstg2lmda1 = 1.0;
-   relstg1lmda0 = 0.0;
-   relstg1lmda1 = 0.3;
-   vlmdamap = Lmdamap::QNT;
-   qntvlmda0 = 0.3;
-   qntvlmda1 = 0.7;
-
-   // Polarization tracks the multipoles exactly, so emplar stays usable.
-   for (double lambda : {0.95, 0.85, 0.72, 0.5, 0.28, 0.15, 0.05}) {
-      CAPTURE(lambda);
-      mapAt(lambda);
-      COMPARE_REALS(plam, elam, 1.0e-15);
-      COMPARE_REALS(dpldlmda, deldlmda, 1.0e-15);
-      COMPARE_REALS(d2pldlmda2, d2eldlmda2, 1.0e-15);
+   // Polarization stages with the multipoles exactly, so emplar stays usable.
+   for (RelStage leg : {RelStage::LIG2, RelStage::VDWM, RelStage::LIG1}) {
+      setStagedLeg(leg);
+      for (double lambda : {0.05, 0.15, 0.3, 0.5, 0.7, 0.85, 0.95}) {
+         CAPTURE(lambda);
+         mapAt(lambda);
+         COMPARE_REALS(plam, elam, 1.0e-15);
+         COMPARE_REALS(dpldlmda, deldlmda, 1.0e-15);
+         COMPARE_REALS(d2pldlmda2, d2eldlmda2, 1.0e-15);
+         REQUIRE(eprelst0 == emrelst0);
+         REQUIRE(eprelst1 == emrelst1);
+         // The map complement on the ligand 2 leg is clamped into range.
+         REQUIRE(elam >= 0.0);
+         REQUIRE(elam <= 1.0);
+      }
    }
 
-   // The electrostatic weight and its derivative approach each leg boundary
-   // continuously from the inside, so dU/dlambda has no step where one leg
-   // hands over to the next. The weight is flat to machine precision; the
-   // derivative vanishes quadratically, so it is checked against the analytic
-   // bound |dw/dl| <= 30 (eps/w)^2 / w for a window of width w rather than a
-   // fixed tolerance.
-   const double eps = 1.0e-7;
-   const double window = 0.3;
-   const double dbound = 30.0 * (eps / window) * (eps / window) / window;
-   for (double edge : {0.7, 0.3}) {
-      CAPTURE(edge);
-      mapAt(edge + eps);
-      double w_hi = elam, d_hi = deldlmda;
-      mapAt(edge - eps);
-      double w_lo = elam, d_lo = deldlmda;
-      COMPARE_REALS(w_hi, w_lo, 1.0e-14);
-      REQUIRE(std::fabs(d_hi - d_lo) <= dbound);
-      REQUIRE(std::fabs(d_hi) <= dbound);
-      REQUIRE(std::fabs(d_lo) <= dbound);
-   }
+   // The three simulations hand over to each other continuously: the leg
+   // boundaries agree in every sub-lambda, so a free energy assembled from the
+   // three legs has no step (test_eostmap.f:1005-1045).
+   auto sampleAt = [](RelStage leg, double lmda, double& e, double& de, double& v, double& dv) {
+      setStagedLeg(leg);
+      mapAt(lmda);
+      e = elam;
+      de = deldlmda;
+      v = vlam;
+      dv = dvldlmda;
+   };
+   double e0, de0, v0, dv0, e1, de1, v1, dv1;
 
-   // The staged weight is C1 in the main lambda across each leg.
-   auto legMatchesTaper = [](double lambda, double lo, double hi, double sign) {
+   sampleAt(RelStage::LIG2, 0.3, e0, de0, v0, dv0);
+   sampleAt(RelStage::VDWM, 0.3, e1, de1, v1, dv1);
+   COMPARE_REALS(e0, e1, 1.0e-7);
+   COMPARE_REALS(de0, de1, 1.0e-12);
+   COMPARE_REALS(v0, v1, 1.0e-7);
+   COMPARE_REALS(dv0, dv1, 1.0e-12);
+
+   sampleAt(RelStage::VDWM, 0.7, e0, de0, v0, dv0);
+   sampleAt(RelStage::LIG1, 0.7, e1, de1, v1, dv1);
+   COMPARE_REALS(e0, e1, 1.0e-7);
+   COMPARE_REALS(de0, de1, 1.0e-12);
+   COMPARE_REALS(v0, v1, 1.0e-7);
+   COMPARE_REALS(dv0, dv1, 1.0e-12);
+
+   // Each leg's electrostatic weight is the quintic taper of its own window,
+   // complemented on the ligand 2 leg where the ligand is being discharged.
+   auto legMatchesTaper = [](RelStage leg, double lambda, double lo, double hi, double sign) {
       CAPTURE(lambda);
+      setStagedLeg(leg);
       mapAt(lambda);
       double t, dt, d2t;
       quinticTaper(lambda, lo, hi, t, dt, d2t);
       // elam is real, so it holds the weight only to float round-off.
-      COMPARE_REALS(elam, sign < 0.0 ? 1.0 - t : t, 1.0e-7);
-      COMPARE_REALS(deldlmda, sign * dt, 1.0e-14);
-      COMPARE_REALS(d2eldlmda2, sign * d2t, 1.0e-14);
+      COMPARE_REALS(elam, sign < 0.0 ? t : 1.0 - t, 1.0e-6);
+      COMPARE_REALS(deldlmda, sign < 0.0 ? dt : -dt, 1.0e-14);
+      COMPARE_REALS(d2eldlmda2, sign < 0.0 ? d2t : -d2t, 1.0e-14);
    };
    for (double lambda : {0.75, 0.85, 0.95})
-      legMatchesTaper(lambda, relstg2lmda0, relstg2lmda1, -1.0);
+      legMatchesTaper(RelStage::LIG1, lambda, 0.7, 1.0, 1.0);
    for (double lambda : {0.05, 0.15, 0.25})
-      legMatchesTaper(lambda, relstg1lmda0, relstg1lmda1, 1.0);
+      legMatchesTaper(RelStage::LIG2, lambda, 0.0, 0.3, -1.0);
 
    use_relstage = false;
 }

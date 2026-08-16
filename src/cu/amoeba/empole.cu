@@ -124,30 +124,33 @@ void empoleEwaldRealSelf_cu(int vers)
    }
 }
 
+template <class Ver>
 __global__
 static void exfieldDipole_cu1(CountBuffer restrict nem, EnergyBuffer restrict em, VirialBuffer vir_em,
    grad_prec* restrict demx, grad_prec* restrict demy, grad_prec* restrict demz, real* restrict trqx,
-   real* restrict trqy, real* restrict trqz, int vers, int n, real f, real ef1, real ef2, real ef3,
+   real* restrict trqy, real* restrict trqz, int n, real f, real ef1, real ef2, real ef3,
    const real (*restrict rpole)[10], const real* restrict x, const real* restrict y, const real* restrict z)
 {
-   bool do_e = vers & calc::energy;
-   bool do_a = vers & calc::analyz;
-   bool do_g = vers & calc::grad;
-   bool do_v = vers & calc::virial;
+   constexpr bool do_e = Ver::e;
+   constexpr bool do_a = Ver::a;
+   constexpr bool do_g = Ver::g;
+   constexpr bool do_v = Ver::v;
 
    int ithread = ITHREAD;
    for (int ii = ithread; ii < n; ii += STRIDE) {
       real xi = x[ii], yi = y[ii], zi = z[ii];
       real ci = rpole[ii][0], dix = rpole[ii][1], diy = rpole[ii][2], diz = rpole[ii][3];
 
-      if (do_e) {
+      if CONSTEXPR (do_e) {
          real phi = xi * ef1 + yi * ef2 + zi * ef3; // negative potential
          real e = -f * (ci * phi + dix * ef1 + diy * ef2 + diz * ef3);
          atomic_add(e, em, ithread);
-         if (do_a)
-            atomic_add(1, nem, ithread);
+         if CONSTEXPR (do_a) {
+            if (e != 0)
+               atomic_add(1, nem, ithread);
+         }
       }
-      if (do_g) {
+      if CONSTEXPR (do_g) {
          // torque due to the dipole
          real tx = f * (diy * ef3 - diz * ef2);
          real ty = f * (diz * ef1 - dix * ef3);
@@ -162,7 +165,7 @@ static void exfieldDipole_cu1(CountBuffer restrict nem, EnergyBuffer restrict em
          atomic_add(frx, demx, ii);
          atomic_add(fry, demy, ii);
          atomic_add(frz, demz, ii);
-         if (do_v) {
+         if CONSTEXPR (do_v) {
             real vxx = xi * frx;
             real vyy = yi * fry;
             real vzz = zi * frz;
@@ -175,14 +178,32 @@ static void exfieldDipole_cu1(CountBuffer restrict nem, EnergyBuffer restrict em
    }
 }
 
-void exfieldDipole_cu(int vers)
+template <class Ver>
+static void exfieldDipole_cu2()
 {
    real f = electric / dielec;
    real ef1 = extfld::texfld[0], ef2 = extfld::texfld[1], ef3 = extfld::texfld[2];
-   launch_k1b(g::s0, n, exfieldDipole_cu1, nem, em, vir_em, demx, demy, demz, trqx, trqy, trqz, vers, n, f, ef1, ef2,
+   launch_k1b(g::s0, n, exfieldDipole_cu1<Ver>, nem, em, vir_em, demx, demy, demz, trqx, trqy, trqz, n, f, ef1, ef2,
       ef3, rpole, x, y, z);
 }
 
+void exfieldDipole_cu(int vers)
+{
+   if (vers == calc::v0)
+      exfieldDipole_cu2<calc::V0>();
+   else if (vers == calc::v1)
+      exfieldDipole_cu2<calc::V1>();
+   else if (vers == calc::v3)
+      exfieldDipole_cu2<calc::V3>();
+   else if (vers == calc::v4)
+      exfieldDipole_cu2<calc::V4>();
+   else if (vers == calc::v5)
+      exfieldDipole_cu2<calc::V5>();
+   else if (vers == calc::v6)
+      exfieldDipole_cu2<calc::V6>();
+}
+
+template <class Ver>
 __global__
 static void exfieldDipoleDlmda_cu1(CountBuffer restrict nem, EnergyBuffer restrict em, EnergyBuffer restrict demdl,
    VirialBuffer vir_em, VirialBuffer restrict demvirdl,                                //
@@ -190,13 +211,13 @@ static void exfieldDipoleDlmda_cu1(CountBuffer restrict nem, EnergyBuffer restri
    grad_prec* restrict dfmdlx, grad_prec* restrict dfmdly, grad_prec* restrict dfmdlz, //
    real* restrict trqx, real* restrict trqy, real* restrict trqz,                      //
    real* restrict dltrqx, real* restrict dltrqy, real* restrict dltrqz,                //
-   int vers, int n, real f, real ef1, real ef2, real ef3, const real (*restrict rpole)[10],
+   int n, real f, real ef1, real ef2, real ef3, const real (*restrict rpole)[10],
    const int* restrict mut, real elambda, const real* restrict x, const real* restrict y, const real* restrict z)
 {
-   bool do_e = vers & calc::energy;
-   bool do_a = vers & calc::analyz;
-   bool do_g = vers & calc::grad;
-   bool do_v = vers & calc::virial;
+   constexpr bool do_e = Ver::e;
+   constexpr bool do_a = Ver::a;
+   constexpr bool do_g = Ver::g;
+   constexpr bool do_v = Ver::v;
 
    int ithread = ITHREAD;
    for (int ii = ithread; ii < n; ii += STRIDE) {
@@ -207,16 +228,19 @@ static void exfieldDipoleDlmda_cu1(CountBuffer restrict nem, EnergyBuffer restri
       bool muti = mut[ii];
       real s = muti ? elambda : 1;
 
-      if (do_e) {
+      if CONSTEXPR (do_e) {
          real phi = xi * ef1 + yi * ef2 + zi * ef3; // negative potential
          real e = -f * (ci * phi + dix * ef1 + diy * ef2 + diz * ef3);
          if (muti)
             atomic_add(e, demdl, ithread);
-         atomic_add(s * e, em, ithread);
-         if (do_a)
-            atomic_add(1, nem, ithread);
+         e *= s;
+         atomic_add(e, em, ithread);
+         if CONSTEXPR (do_a) {
+            if (e != 0)
+               atomic_add(1, nem, ithread);
+         }
       }
-      if (do_g) {
+      if CONSTEXPR (do_g) {
          // unscaled torque due to the dipole
          real tx = f * (diy * ef3 - diz * ef2);
          real ty = f * (diz * ef1 - dix * ef3);
@@ -239,7 +263,7 @@ static void exfieldDipoleDlmda_cu1(CountBuffer restrict nem, EnergyBuffer restri
             atomic_add(fry, dfmdly, ii);
             atomic_add(frz, dfmdlz, ii);
          }
-         if (do_v) {
+         if CONSTEXPR (do_v) {
             real vxx = xi * frx;
             real vyy = yi * fry;
             real vzz = zi * frz;
@@ -254,12 +278,30 @@ static void exfieldDipoleDlmda_cu1(CountBuffer restrict nem, EnergyBuffer restri
    }
 }
 
-void exfieldDipoleDlmda_cu(int vers)
+template <class Ver>
+static void exfieldDipoleDlmda_cu2()
 {
    real f = electric / dielec;
    real ef1 = extfld::texfld[0], ef2 = extfld::texfld[1], ef3 = extfld::texfld[2];
-   launch_k1b(g::s0, n, exfieldDipoleDlmda_cu1, nem, em, demdl_buf, vir_em, demvirdl_buf, demx, demy, demz, dfmdlx,
-      dfmdly, dfmdlz, trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, vers, n, f, ef1, ef2, ef3, rpole, mut, elam, x, y, z);
+   launch_k1b(g::s0, n, exfieldDipoleDlmda_cu1<Ver>, nem, em, demdl_buf, vir_em, demvirdl_buf, demx, demy, demz,
+      dfmdlx, dfmdly, dfmdlz, trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, n, f, ef1, ef2, ef3, rpole, mut, elam, x, y,
+      z);
+}
+
+void exfieldDipoleDlmda_cu(int vers)
+{
+   if (vers == calc::v0)
+      exfieldDipoleDlmda_cu2<calc::V0>();
+   else if (vers == calc::v1)
+      exfieldDipoleDlmda_cu2<calc::V1>();
+   else if (vers == calc::v3)
+      exfieldDipoleDlmda_cu2<calc::V3>();
+   else if (vers == calc::v4)
+      exfieldDipoleDlmda_cu2<calc::V4>();
+   else if (vers == calc::v5)
+      exfieldDipoleDlmda_cu2<calc::V5>();
+   else if (vers == calc::v6)
+      exfieldDipoleDlmda_cu2<calc::V6>();
 }
 
 __global__

@@ -12,7 +12,6 @@ void empoleData(RcOp);
 void empole(int vers);
 void empole_adt(int vers);
 void empole_rdt(int vers);
-void empole_rdt_staged(int vers);
 void empoleEwaldRecip(int vers);
 void torque(int vers, grad_prec* dx, grad_prec* dy, grad_prec* dz);
 void torque(int vers, grad_prec* dx, grad_prec* dy, grad_prec* dz, const real* tqx, const real* tqy,
@@ -26,6 +25,5 @@ void empoleBegin(int vers);
 void empoleZeroWork(int vers);
 void empoleSaveEndpoint0(int vers);
 void empoleMixEndpoints(int vers);
-void empoleMixStagedEndpoints(int vers);
 void empoleFinish(int vers);
 }

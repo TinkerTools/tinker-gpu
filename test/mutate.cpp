@@ -1,6 +1,8 @@
+#include "ff/amoeba/emplar.h"
 #include "ff/atom.h"
 #include "ff/dlmda.h"
 #include "ff/egvop.h"
+#include "ff/elec.h"
 #include "ff/energy.h"
 #include "ff/evdw.h"
 #include "ff/modamoeba.h"
@@ -9,6 +11,7 @@
 #include "testrt.h"
 #include "tinker9.h"
 
+#include <algorithm>
 #include <array>
 #include <string>
 #include <vector>
@@ -194,9 +197,33 @@ const Fixture kFixtures[] = {
    {"165_water_dlmda_ev_l06", "water2", true, true, true, true, "lmdadrv"},
    {"166_water_dlmda_pv_l06", "water2", true, true, true, true, "lmdadrv"},
    {"167_water_dlmda_epv_l06", "water2", true, true, true, true, "lmdadrv"},
+   {"168_water_rels_ye_vdwm_l030", "water2", true, true, true, true, "rels"},
+   {"169_water_rels_ye_lig1_l070", "water2", true, true, true, true, "rels"},
+   {"170_water_lmda_ast_epin_l05", "water2", true, true, true, true, "pin"},
+   {"171_water_lmda_ast_vpin_l05", "water2", true, true, true, true, "pin"},
+   {"172_water_lmda_adt_epin_l06", "water2", true, true, true, true, "pin"},
+   {"173_water_lmda_adt_vpin_l06", "water2", true, true, true, true, "pin"},
+   {"174_water_lmda_rdt_epin_l07", "water2", true, true, true, true, "pin"},
+   {"175_water_lmda_rdt_vpin_l07", "water2", true, true, true, true, "pin"},
+   {"176_water_rels_ye_vdwm_exp_l050", "water2", true, true, true, true, "rels"},
+   {"177_water_rels_ye_lig2_exp_l030", "water2", true, true, true, true, "rels"},
+   {"178_water_rels_ye_lig1_inv_l070", "water2", true, true, true, true, "rels"},
+   {"179_water_rels_ye_vdwm_vx3_l050", "water2", true, true, true, true, "rels"},
+   {"180_water_rels_ye_lig1_ex3_l085", "water2", true, true, true, true, "rels"},
+   {"181_water_rels_ye_lig2_ix2_l015", "water2", true, true, true, true, "rels"},
 };
 
-void runFixture(const Fixture& fx)
+// How a run should treat the fused multipole/polarization kernel. emplar cannot
+// report interaction counts, so any evaluation that asks for them routes around
+// it -- which is why an ordinary run never exercises it at all.
+enum class Fuse
+{
+   Off,     ///< Ordinary run: counts are requested, so emplar is out of reach.
+   Require, ///< Drop counts, and require that emplar took over.
+   Forbid   ///< Drop counts, and require that it still did not.
+};
+
+void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off)
 {
    std::string dir = TINKER9_DIRSTR "/test/file/mutate/";
    std::string xyzdst = std::string(fx.base) + ".xyz";
@@ -215,14 +242,25 @@ void runFixture(const Fixture& fx)
    double eps_v = testGetEps(2.0e-3, 1.0e-3);
    if (std::string(fx.name).find("_vcorr_") != std::string::npos)
       eps_v = 1.0e-2;
+   // dV/dL is a difference of two endpoint virials of comparable size, so it
+   // loses the leading digits the plain virial keeps, and the references print
+   // it to three decimals. testlmda.cpp uses the same allowance.
+   const double eps_dv = std::max(eps_v, testGetEps(1.0e-2, 2.0e-3));
    const double eps_l = testGetEps(1.0e-3, 1.0e-4);
 
    rc_flag = calc::xyz | calc::mass | calc::vmask;
+   if (fuse != Fuse::Off)
+      rc_flag &= ~calc::analyz;
 
    // These key files enable the lambda-derivative machinery through the
    // "lambda-deriv" keyword, so the Fortran-side use_dlmda needs no nudging here.
    testBeginWithArgs(argc, argv);
    initialize();
+
+   if (fuse == Fuse::Require)
+      REQUIRE(useEmplar());
+   else if (fuse == Fuse::Forbid)
+      REQUIRE_FALSE(useEmplar());
 
    TestReference ref(refpath);
    double ref_e = ref.getEnergy();
@@ -234,6 +272,27 @@ void runFixture(const Fixture& fx)
    const TestLmdaReference& lr = ref.getLmda();
    if (fx.dolmda)
       REQUIRE((int)lr.lgrad.size() >= n);
+
+   // The scalar lambda derivatives vs reference. emplar accumulates
+   // polarization into the multipole buffers, so under the fused kernel the two
+   // terms come back summed in demdl with the polarization slot left at zero;
+   // the split kernels report them separately. Either way the total and the van
+   // der Waals part stand on their own.
+   auto checkLmdaScalars = [&]() {
+      COMPARE_REALS(dedl, lr.dedl[0], eps_l);
+      COMPARE_REALS(devdl, lr.dedl[1], eps_l);
+      COMPARE_REALS(d2edl2, lr.d2edl2[0], eps_l);
+      COMPARE_REALS(d2evdl2, lr.d2edl2[1], eps_l);
+      if (fuse == Fuse::Require) {
+         COMPARE_REALS(demdl + depdl, lr.dedl[2] + lr.dedl[3], eps_l);
+         COMPARE_REALS(d2emdl2 + d2epdl2, lr.d2edl2[2] + lr.d2edl2[3], eps_l);
+      } else {
+         COMPARE_REALS(demdl, lr.dedl[2], eps_l);
+         COMPARE_REALS(depdl, lr.dedl[3], eps_l);
+         COMPARE_REALS(d2emdl2, lr.d2edl2[2], eps_l);
+         COMPARE_REALS(d2epdl2, lr.d2edl2[3], eps_l);
+      }
+   };
 
    // Per-atom lambda gradient (dfsumdl*) vs reference. Valid whenever calc::grad
    // is requested, since lmdachain builds dfsumdl* under its do_g branch.
@@ -262,39 +321,34 @@ void runFixture(const Fixture& fx)
             COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
       if (fx.dolmda) {
-         COMPARE_REALS(dedl, lr.dedl[0], eps_l);
-         COMPARE_REALS(devdl, lr.dedl[1], eps_l);
-         COMPARE_REALS(demdl, lr.dedl[2], eps_l);
-         COMPARE_REALS(depdl, lr.dedl[3], eps_l);
-         COMPARE_REALS(d2edl2, lr.d2edl2[0], eps_l);
-         COMPARE_REALS(d2evdl2, lr.d2edl2[1], eps_l);
-         COMPARE_REALS(d2emdl2, lr.d2edl2[2], eps_l);
-         COMPARE_REALS(d2epdl2, lr.d2edl2[3], eps_l);
+         checkLmdaScalars();
          checkLmdaGrad();
          for (int i = 0; i < 3; ++i)
             for (int j = 0; j < 3; ++j)
-               COMPARE_REALS(dvirdl[i * 3 + j], lr.dvdl[i][j], eps_v);
+               COMPARE_REALS(dvirdl[i * 3 + j], lr.dvdl[i][j], eps_dv);
       }
 
-      // v3
-      energy(calc::v3);
-      COMPARE_REALS(esum, ref_e, eps_e);
-      double eng;
-      int cnt;
-      if (fx.checkm) {
-         ref.getEnergyCountByName("Atomic Multipoles", eng, cnt);
-         COMPARE_COUNT(nem, cnt);
-         COMPARE_ENERGY(em, eng, eps_e);
-      }
-      if (fx.checkp) {
-         ref.getEnergyCountByName("Polarization", eng, cnt);
-         COMPARE_COUNT(nep, cnt);
-         COMPARE_ENERGY(ep, eng, eps_e);
-      }
-      if (fx.checkv) {
-         ref.getEnergyCountByName("Van der Waals", eng, cnt);
-         COMPARE_COUNT(nev, cnt);
-         COMPARE_ENERGY(ev, eng, eps_e);
+      // v3 -- the count buffers are allocated only under calc::analyz.
+      if (fuse == Fuse::Off) {
+         energy(calc::v3);
+         COMPARE_REALS(esum, ref_e, eps_e);
+         double eng;
+         int cnt;
+         if (fx.checkm) {
+            ref.getEnergyCountByName("Atomic Multipoles", eng, cnt);
+            COMPARE_COUNT(nem, cnt);
+            COMPARE_ENERGY(em, eng, eps_e);
+         }
+         if (fx.checkp) {
+            ref.getEnergyCountByName("Polarization", eng, cnt);
+            COMPARE_COUNT(nep, cnt);
+            COMPARE_ENERGY(ep, eng, eps_e);
+         }
+         if (fx.checkv) {
+            ref.getEnergyCountByName("Van der Waals", eng, cnt);
+            COMPARE_COUNT(nev, cnt);
+            COMPARE_ENERGY(ev, eng, eps_e);
+         }
       }
 
       // v4
@@ -302,14 +356,7 @@ void runFixture(const Fixture& fx)
       COMPARE_REALS(esum, ref_e, eps_e);
       COMPARE_GRADIENT(ref_g, eps_g);
       if (fx.dolmda) {
-         COMPARE_REALS(dedl, lr.dedl[0], eps_l);
-         COMPARE_REALS(devdl, lr.dedl[1], eps_l);
-         COMPARE_REALS(demdl, lr.dedl[2], eps_l);
-         COMPARE_REALS(depdl, lr.dedl[3], eps_l);
-         COMPARE_REALS(d2edl2, lr.d2edl2[0], eps_l);
-         COMPARE_REALS(d2evdl2, lr.d2edl2[1], eps_l);
-         COMPARE_REALS(d2emdl2, lr.d2edl2[2], eps_l);
-         COMPARE_REALS(d2epdl2, lr.d2edl2[3], eps_l);
+         checkLmdaScalars();
          checkLmdaGrad();
       }
 
@@ -329,7 +376,7 @@ void runFixture(const Fixture& fx)
          checkLmdaGrad();
          for (int i = 0; i < 3; ++i)
             for (int j = 0; j < 3; ++j)
-               COMPARE_REALS(dvirdl[i * 3 + j], lr.dvdl[i][j], eps_v);
+               COMPARE_REALS(dvirdl[i * 3 + j], lr.dvdl[i][j], eps_dv);
       }
    }
 
@@ -337,16 +384,50 @@ void runFixture(const Fixture& fx)
    testEnd();
 }
 
-void runLegSkipFixture(const Fixture& fx, bool expect4i, bool expect4f)
+// Runs a dual topology fixture twice: once the ordinary way, which asks for
+// interaction counts and so goes through the separate empole and epolar
+// kernels, and once without counts, where emplar fuses the two. Both are
+// checked against the same reference, so the fused kernel has to agree with
+// the split one and with Tinker.
+void runEmplarFixture(const Fixture& fx)
+{
+   runFixture(fx);
+   runFixture(fx, Fuse::Require);
+}
+
+// The single topology lambda-derivative path has no fused equivalent -- it
+// needs the empoledlmda kernel -- so emplarDecide() turns emplar down on
+// use_emast before it considers anything else. Dropping the counts is what
+// makes this check meaningful: with them, emplar is refused for every fixture
+// and the assertion would pass for the wrong reason.
+void runNoEmplarFixture(const Fixture& fx)
+{
+   runFixture(fx);
+   runFixture(fx, Fuse::Forbid);
+   REQUIRE(use_emast);
+}
+
+// Checks which dual topology endpoints the run had to build. dtNeed() decides
+// this per term from the interpolation weight and the chain rule, so it is
+// asserted against the sub-lambda state the fixture left behind.
+void runLegSkipFixture(const Fixture& fx, bool expect0, bool expect1)
 {
    runFixture(fx);
 
-   REQUIRE(use_ele4i == expect4i);
-   REQUIRE(use_pol4i == expect4i);
-   REQUIRE(use_vdw4i == expect4i);
-   REQUIRE(use_ele4f == expect4f);
-   REQUIRE(use_pol4f == expect4f);
-   REQUIRE(use_vdw4f == expect4f);
+   double w, dw, d2w;
+   bool need0, need1;
+
+   dtWeightNeed(elam, emdtexp, deldlmda, d2eldlmda2, w, dw, d2w, need0, need1);
+   REQUIRE(need0 == expect0);
+   REQUIRE(need1 == expect1);
+
+   dtWeightNeed(plam, epdtexp, dpldlmda, d2pldlmda2, w, dw, d2w, need0, need1);
+   REQUIRE(need0 == expect0);
+   REQUIRE(need1 == expect1);
+
+   dtWeightNeed(vlam, evdtexp, dvldlmda, d2vldlmda2, w, dw, d2w, need0, need1);
+   REQUIRE(need0 == expect0);
+   REQUIRE(need1 == expect1);
 }
 } // namespace
 
@@ -388,7 +469,7 @@ TEST_CASE("MUTATE-035_water_ast_ne_m00", "[ff][mutate][ast]") { runFixture(kFixt
 TEST_CASE("MUTATE-036_water_ast_v10", "[ff][mutate][ast]") { runFixture(kFixtures[35]); }
 TEST_CASE("MUTATE-037_water_ast_v05", "[ff][mutate][ast]") { runFixture(kFixtures[36]); }
 TEST_CASE("MUTATE-038_water_ast_v00", "[ff][mutate][ast]") { runFixture(kFixtures[37]); }
-TEST_CASE("MUTATE-039_water_ast_ye_mp05", "[ff][mutate][ast]") { runFixture(kFixtures[38]); }
+TEST_CASE("MUTATE-039_water_ast_ye_mp05", "[ff][mutate][ast]") { runNoEmplarFixture(kFixtures[38]); }
 TEST_CASE("MUTATE-040_water_ast_ne_mp05", "[ff][mutate][ast]") { runFixture(kFixtures[39]); }
 TEST_CASE("MUTATE-041_water_adt_ye_m10", "[ff][mutate][adt]") { runFixture(kFixtures[40]); }
 TEST_CASE("MUTATE-042_water_adt_ne_m10", "[ff][mutate][adt]") { runFixture(kFixtures[41]); }
@@ -468,18 +549,18 @@ TEST_CASE("MUTATE-115_water_exf_rdt_p05", "[ff][mutate][exf]") { runFixture(kFix
 TEST_CASE("MUTATE-116_water_exf_rdt_p00", "[ff][mutate][exf]") { runFixture(kFixtures[115]); }
 TEST_CASE("MUTATE-117_water_exf_adt_mp05", "[ff][mutate][exf]") { runFixture(kFixtures[116]); }
 TEST_CASE("MUTATE-118_water_exf_rdt_m05p05", "[ff][mutate][exf]") { runFixture(kFixtures[117]); }
-TEST_CASE("MUTATE-119_water_adt_ye_l10", "[ff][mutate][emplar]") { runFixture(kFixtures[118]); }
-TEST_CASE("MUTATE-120_water_adt_ne_l10", "[ff][mutate][emplar]") { runFixture(kFixtures[119]); }
-TEST_CASE("MUTATE-121_water_adt_ye_l05", "[ff][mutate][emplar]") { runFixture(kFixtures[120]); }
-TEST_CASE("MUTATE-122_water_adt_ne_l05", "[ff][mutate][emplar]") { runFixture(kFixtures[121]); }
-TEST_CASE("MUTATE-123_water_adt_ye_l00", "[ff][mutate][emplar]") { runFixture(kFixtures[122]); }
-TEST_CASE("MUTATE-124_water_adt_ne_l00", "[ff][mutate][emplar]") { runFixture(kFixtures[123]); }
-TEST_CASE("MUTATE-125_water_rdt_ye_l10", "[ff][mutate][emplar]") { runFixture(kFixtures[124]); }
-TEST_CASE("MUTATE-126_water_rdt_ne_l10", "[ff][mutate][emplar]") { runFixture(kFixtures[125]); }
-TEST_CASE("MUTATE-127_water_rdt_ye_l05", "[ff][mutate][emplar]") { runFixture(kFixtures[126]); }
-TEST_CASE("MUTATE-128_water_rdt_ne_l05", "[ff][mutate][emplar]") { runFixture(kFixtures[127]); }
-TEST_CASE("MUTATE-129_water_rdt_ye_l00", "[ff][mutate][emplar]") { runFixture(kFixtures[128]); }
-TEST_CASE("MUTATE-130_water_rdt_ne_l00", "[ff][mutate][emplar]") { runFixture(kFixtures[129]); }
+TEST_CASE("MUTATE-119_water_adt_ye_l10", "[ff][mutate][emplar]") { runEmplarFixture(kFixtures[118]); }
+TEST_CASE("MUTATE-120_water_adt_ne_l10", "[ff][mutate][emplar]") { runEmplarFixture(kFixtures[119]); }
+TEST_CASE("MUTATE-121_water_adt_ye_l05", "[ff][mutate][emplar]") { runEmplarFixture(kFixtures[120]); }
+TEST_CASE("MUTATE-122_water_adt_ne_l05", "[ff][mutate][emplar]") { runEmplarFixture(kFixtures[121]); }
+TEST_CASE("MUTATE-123_water_adt_ye_l00", "[ff][mutate][emplar]") { runEmplarFixture(kFixtures[122]); }
+TEST_CASE("MUTATE-124_water_adt_ne_l00", "[ff][mutate][emplar]") { runEmplarFixture(kFixtures[123]); }
+TEST_CASE("MUTATE-125_water_rdt_ye_l10", "[ff][mutate][emplar]") { runEmplarFixture(kFixtures[124]); }
+TEST_CASE("MUTATE-126_water_rdt_ne_l10", "[ff][mutate][emplar]") { runEmplarFixture(kFixtures[125]); }
+TEST_CASE("MUTATE-127_water_rdt_ye_l05", "[ff][mutate][emplar]") { runEmplarFixture(kFixtures[126]); }
+TEST_CASE("MUTATE-128_water_rdt_ne_l05", "[ff][mutate][emplar]") { runEmplarFixture(kFixtures[127]); }
+TEST_CASE("MUTATE-129_water_rdt_ye_l00", "[ff][mutate][emplar]") { runEmplarFixture(kFixtures[128]); }
+TEST_CASE("MUTATE-130_water_rdt_ne_l00", "[ff][mutate][emplar]") { runEmplarFixture(kFixtures[129]); }
 TEST_CASE("MUTATE-131_water_qnt_adt_l10", "[ff][mutate][legskip]") { runLegSkipFixture(kFixtures[130], false, true); }
 TEST_CASE("MUTATE-132_water_qnt_adt_l00", "[ff][mutate][legskip]") { runLegSkipFixture(kFixtures[131], true, false); }
 TEST_CASE("MUTATE-133_water_qnt_rdt_l10", "[ff][mutate][legskip]") { runLegSkipFixture(kFixtures[132], false, true); }
@@ -517,6 +598,20 @@ TEST_CASE("MUTATE-164_water_dlmda_ep_l06", "[ff][mutate][lmdadrv]") { runFixture
 TEST_CASE("MUTATE-165_water_dlmda_ev_l06", "[ff][mutate][lmdadrv]") { runFixture(kFixtures[164]); }
 TEST_CASE("MUTATE-166_water_dlmda_pv_l06", "[ff][mutate][lmdadrv]") { runFixture(kFixtures[165]); }
 TEST_CASE("MUTATE-167_water_dlmda_epv_l06", "[ff][mutate][lmdadrv]") { runFixture(kFixtures[166]); }
+TEST_CASE("MUTATE-168_water_rels_ye_vdwm_l030", "[ff][mutate][rels]") { runFixture(kFixtures[167]); }
+TEST_CASE("MUTATE-169_water_rels_ye_lig1_l070", "[ff][mutate][rels]") { runFixture(kFixtures[168]); }
+TEST_CASE("MUTATE-170_water_lmda_ast_epin_l05", "[ff][mutate][pin]") { runFixture(kFixtures[169]); }
+TEST_CASE("MUTATE-171_water_lmda_ast_vpin_l05", "[ff][mutate][pin]") { runFixture(kFixtures[170]); }
+TEST_CASE("MUTATE-172_water_lmda_adt_epin_l06", "[ff][mutate][pin]") { runFixture(kFixtures[171]); }
+TEST_CASE("MUTATE-173_water_lmda_adt_vpin_l06", "[ff][mutate][pin]") { runFixture(kFixtures[172]); }
+TEST_CASE("MUTATE-174_water_lmda_rdt_epin_l07", "[ff][mutate][pin]") { runFixture(kFixtures[173]); }
+TEST_CASE("MUTATE-175_water_lmda_rdt_vpin_l07", "[ff][mutate][pin]") { runFixture(kFixtures[174]); }
+TEST_CASE("MUTATE-176_water_rels_ye_vdwm_exp_l050", "[ff][mutate][rels]") { runFixture(kFixtures[175]); }
+TEST_CASE("MUTATE-177_water_rels_ye_lig2_exp_l030", "[ff][mutate][rels]") { runFixture(kFixtures[176]); }
+TEST_CASE("MUTATE-178_water_rels_ye_lig1_inv_l070", "[ff][mutate][rels]") { runFixture(kFixtures[177]); }
+TEST_CASE("MUTATE-179_water_rels_ye_vdwm_vx3_l050", "[ff][mutate][rels]") { runFixture(kFixtures[178]); }
+TEST_CASE("MUTATE-180_water_rels_ye_lig1_ex3_l085", "[ff][mutate][rels]") { runEmplarFixture(kFixtures[179]); }
+TEST_CASE("MUTATE-181_water_rels_ye_lig2_ix2_l015", "[ff][mutate][rels]") { runFixture(kFixtures[180]); }
 
 
 #endif

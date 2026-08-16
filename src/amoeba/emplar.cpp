@@ -32,8 +32,12 @@ static bool emplarDualMatched()
 {
    if (not polTracksEle())
       return false;
-   if (use_relstage)
-      return true;
+   // The fused kernel evaluates one set of subsystems and mixes them once, so
+   // both terms must name the same endpoints and interpolate identically. This
+   // holds on a staged leg too, where mapRelStage() copies the multipole
+   // coupling states onto polarization but the two exponents stay independent.
+   if (emrelst0 != eprelst0 or emrelst1 != eprelst1)
+      return false;
    return emdtexp == epdtexp;
 }
 
@@ -128,19 +132,26 @@ static void emplarMixEndpoints(int vers)
 
 void emplar_adt(int vers)
 {
+   double w, dw, d2w;
+   bool need0, need1;
+   dtWeightNeed(elam, emdtexp, deldlmda, d2eldlmda2, w, dw, d2w, need0, need1);
+
    emplarBegin(vers);
 
-   if (use_ele4i) {
-      emplarState(vers, RdtMask::ENV, mut, true);
+   // emplar is never reached under analyz, so it carries no count run.
+   bool first = true;
+   if (need0) {
+      emplarState(vers, RdtMask::ENV, mut, first);
+      first = false;
       empoleSaveEndpoint0(vers);
    }
-   if (use_ele4f) {
-      if (use_ele4i)
+   if (need1) {
+      if (need0)
          empoleZeroWork(vers);
-      emplarState(vers, RdtMask::ALL, mut, not use_ele4i);
+      emplarState(vers, RdtMask::ALL, mut, first);
+      if (not need0)
+         empoleSaveEndpoint0(vers);
    }
-   if (not use_ele4i)
-      empoleSaveEndpoint0(vers);
 
    emplarMixEndpoints(vers);
    empoleFinish(vers);
@@ -148,65 +159,23 @@ void emplar_adt(int vers)
 
 void emplar_rdt(int vers)
 {
+   double w, dw, d2w;
+   bool need0, need1;
+   dtWeightNeed(elam, emdtexp, deldlmda, d2eldlmda2, w, dw, d2w, need0, need1);
+
    emplarBegin(vers);
 
-   // E0 = E(B+environment) + E(A).
-   if (use_ele4i) {
-      emplarState(vers, RdtMask::BE, rdt_group, true);
-      emplarState(vers, RdtMask::A, rdt_group, false);
-      empoleSaveEndpoint0(vers);
-   }
-   // E1 = E(A+environment) + E(B).
-   if (use_ele4f) {
-      if (use_ele4i)
-         empoleZeroWork(vers);
-      emplarState(vers, RdtMask::AE, rdt_group, not use_ele4i);
-      emplarState(vers, RdtMask::B, rdt_group, false);
-   }
-   if (not use_ele4i)
-      empoleSaveEndpoint0(vers);
+   const RelDualOps ops = {
+      [](int v, RdtMask mask, bool first) { emplarState(v, mask, rdt_group, first); },
+      [](int v) { empoleZeroWork(v); },
+      [](int v) { empoleSaveEndpoint0(v); },
+      [](int v) { emplarMixEndpoints(v); },
+   };
+   relDualDrive(vers, emrelst0, emrelst1, need0, need1, ops);
 
-   emplarMixEndpoints(vers);
    empoleFinish(vers);
 
    // Restore the full system for whatever runs next.
-   mpoleInitState(calc::v0, RdtMask::ALL, rdt_group, false);
-   polarState(RdtMask::ALL, rdt_group);
-}
-
-// The decoupled reference E(environment) + E(A) + E(B).
-static void emplarStateDecoupled(int vers, bool first_state)
-{
-   emplarState(vers, RdtMask::ENV, rdt_group, first_state);
-   emplarState(vers, RdtMask::LIGA, rdt_group, false);
-   emplarState(vers, RdtMask::LIGB, rdt_group, false);
-}
-
-void emplar_rdt_staged(int vers)
-{
-   emplarBegin(vers);
-
-   if (relstage == RelStage::VDW_MORPH) {
-      emplarStateDecoupled(vers, true);
-   } else {
-      bool lig1 = (relstage == RelStage::LIG1_ELE);
-      if (relstagemix) {
-         emplarStateDecoupled(vers, true);
-         empoleSaveEndpoint0(vers);
-         empoleZeroWork(vers);
-      }
-      emplarState(vers, lig1 ? RdtMask::AE : RdtMask::BE, rdt_group, not relstagemix);
-      emplarState(vers, lig1 ? RdtMask::LIGB : RdtMask::LIGA, rdt_group, false);
-      if (relstagemix) {
-         if (not doubleEq(elam, plam))
-            TINKER_THROW("The electrostatic and polarization lambda values have drifted apart; "
-                         "the fused multipole/polarization dual topology needs them to be equal.");
-         empoleMixStagedEndpoints(vers);
-      }
-   }
-
-   empoleFinish(vers);
-
    mpoleInitState(calc::v0, RdtMask::ALL, rdt_group, false);
    polarState(RdtMask::ALL, rdt_group);
 }

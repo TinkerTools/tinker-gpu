@@ -756,19 +756,28 @@ static void epolarFinish(int vers)
 
 void epolar_adt(int vers)
 {
+   double w, dw, d2w;
+   bool need0, need1;
+   dtWeightNeed(plam, epdtexp, dpldlmda, d2pldlmda2, w, dw, d2w, need0, need1);
+
    epolarBegin(vers);
 
-   if (use_pol4i) {
-      epolarState(vers, RdtMask::ENV, mut, true);
+   // Unlike the multipole and van der Waals terms, polarization analysis does
+   // not retain a coupled-endpoint count when that endpoint is dead; it simply
+   // reports whichever endpoint ran (epolar3.f:2559).
+   bool first = true;
+   if (need0) {
+      epolarState(vers, RdtMask::ENV, mut, first);
+      first = false;
       epolarSaveEndpoint0(vers);
    }
-   if (use_pol4f) {
-      if (use_pol4i)
+   if (need1) {
+      if (need0)
          epolarZeroWork(vers);
-      epolarState(vers, RdtMask::ALL, mut, not use_pol4i);
+      epolarState(vers, RdtMask::ALL, mut, first);
+      if (not need0)
+         epolarSaveEndpoint0(vers);
    }
-   if (not use_pol4i)
-      epolarSaveEndpoint0(vers);
 
    epolarMixEndpoints(vers);
    epolarFinish(vers);
@@ -776,65 +785,24 @@ void epolar_adt(int vers)
 
 void epolar_rdt(int vers)
 {
+   double w, dw, d2w;
+   bool need0, need1;
+   dtWeightNeed(plam, epdtexp, dpldlmda, d2pldlmda2, w, dw, d2w, need0, need1);
+
    epolarBegin(vers);
 
-   // E0 = E(B+environment) + E(A).
-   if (use_pol4i) {
-      epolarState(vers, RdtMask::BE, rdt_group, true);
-      epolarState(vers, RdtMask::A, rdt_group, false);
-      epolarSaveEndpoint0(vers);
-   }
-   // E1 = E(A+environment) + E(B).
-   if (use_pol4f) {
-      if (use_pol4i)
-         epolarZeroWork(vers);
-      epolarState(vers, RdtMask::AE, rdt_group, not use_pol4i);
-      int bvers = (vers == calc::v3 ? calc::v0 : vers);
-      epolarState(bvers, RdtMask::B, rdt_group, false);
-   }
-   if (not use_pol4i)
-      epolarSaveEndpoint0(vers);
-
-   epolarMixEndpoints(vers);
-   epolarFinish(vers);
-
-   // The last state evaluated above leaves rpole and polarity masked down to
-   // ligand B; restore the full system for whatever runs next.
-   mpoleInitState(calc::v0, RdtMask::ALL, rdt_group, false);
-   polarState(RdtMask::ALL, rdt_group);
-}
-
-// The decoupled reference E(environment) + E(A) + E(B); each subsystem
-// polarizes on its own.
-static void epolarStateDecoupled(int vers, bool first_state)
-{
-   epolarState(vers, RdtMask::ENV, rdt_group, first_state);
-   epolarState(vers, RdtMask::LIGA, rdt_group, false);
-   epolarState(vers, RdtMask::LIGB, rdt_group, false);
-}
-
-void epolar_rdt_staged(int vers)
-{
-   epolarBegin(vers);
-
-   if (relstage == RelStage::VDW_MORPH) {
-      epolarStateDecoupled(vers, true);
-   } else {
-      bool lig1 = (relstage == RelStage::LIG1_ELE);
-      if (relstagemix) {
-         epolarStateDecoupled(vers, true);
-         epolarSaveEndpoint0(vers);
-         epolarZeroWork(vers);
-      }
-      epolarState(vers, lig1 ? RdtMask::AE : RdtMask::BE, rdt_group, not relstagemix);
-      int bvers = (vers == calc::v3 ? calc::v0 : vers);
-      epolarState(bvers, lig1 ? RdtMask::LIGB : RdtMask::LIGA, rdt_group, false);
-      if (relstagemix)
-         ep_snap.mix(vers, plam, 1, use_pdlmda, ep_buf, ep_dl);
-   }
+   const RelDualOps ops = {
+      [](int v, RdtMask mask, bool first) { epolarState(v, mask, rdt_group, first); },
+      [](int v) { epolarZeroWork(v); },
+      [](int v) { epolarSaveEndpoint0(v); },
+      [](int v) { epolarMixEndpoints(v); },
+   };
+   relDualDrive(vers, eprelst0, eprelst1, need0, need1, ops);
 
    epolarFinish(vers);
 
+   // The last state evaluated above leaves rpole and polarity masked down to a
+   // subsystem; restore the full system for whatever runs next.
    mpoleInitState(calc::v0, RdtMask::ALL, rdt_group, false);
    polarState(RdtMask::ALL, rdt_group);
 }

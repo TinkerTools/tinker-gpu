@@ -176,7 +176,7 @@ void DualEndpoint::mix(int vers, double lambda, int exponent, bool do_dlmda, con
    const TermBuffer& dl)
 {
    double weight1, dweight1, d2weight1;
-   adtWeight(lambda, exponent, weight1, dweight1, d2weight1);
+   dtWeight(lambda, exponent, weight1, dweight1, d2weight1);
    AccumRef c = cur.ref();
    AccumRef d = dl.ref();
    adtMix(vers, do_dlmda, n, bufferSize(), weight1, dweight1, d2weight1, mBuf.e, c.e, d.e, d.e2,

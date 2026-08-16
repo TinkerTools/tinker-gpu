@@ -1,7 +1,7 @@
  extfield.cpp -- multipole term
 
  Energy Component Breakdown :           Kcal/mole        Interactions
- Atomic Multipoles                        15.9992               35
+ Atomic Multipoles                        15.9992               34
 
  Internal Virial Tensor :                  16.524       -1.716       19.635
                                            -1.716      -12.998       -6.776

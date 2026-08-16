@@ -27,16 +27,76 @@ enum class Lmdamap
    QNT  ///< quintic taper plus endpoint derivative flags
 };
 
-/// Staged relative free energy schedule the main lambda sits in.
+/// Declared leg of the staged relative schedule.
 enum class RelStage
 {
-   LIG1_ELE,
-   VDW_MORPH,
-   LIG0_ELE
+   LIG2, ///< discharge ligand 2 against the decoupled reference
+   VDWM, ///< both ligands decoupled while van der Waals morphs 2 -> 1
+   LIG1  ///< charge ligand 1 against the decoupled reference
 };
+
+/// Coupling state of a relative dual topology.
+enum class RelState
+{
+   LIG1 = 1, ///< ligand 1 bound to the environment, ligand 2 free
+   LIG2 = 2, ///< ligand 2 bound to the environment, ligand 1 free
+   NONE = 3  ///< neither ligand bound
+};
+
+/// The number of parameter-zeroed subsystems a coupling state is built from.
+constexpr int nRelSlot = 5;
 
 /// Parses a Fortran character*3 map selector into an Lmdamap value.
 Lmdamap lmdamapFrom(const char* s);
+
+/// Parses a Fortran character*4 leg selector into a RelStage value.
+RelStage relStageFrom(const char* s);
+
+/// Subsystem slot lookup.
+///     slot   subsystem                  mask
+///       0    ligand 1 with environment  AE
+///       1    ligand 2 with environment  BE
+///       2    environment alone          ENV
+///       3    ligand 1 alone             LIGA
+///       4    ligand 2 alone             LIGB
+void relSlot(int k, RelState ist0, RelState ist1, RdtMask& mask, bool& in0, bool& in1);
+
+/// Whether slot \c k couples a ligand to the environment.
+inline bool relSlotIsCoupled(int k)
+{
+   return k == 0 or k == 1;
+}
+
+/// Power law interpolation weight and its first two derivatives
+/// (dlambda.f:relpowerwt). Used by absolute and relative dual topology alike.
+void dtWeight(double x, int nexp, double& w, double& dw, double& d2w);
+
+/// Live dual topology endpoint test (dlambda.f:relneed). An endpoint has to be
+/// built only when it carries weight or a lambda derivative.
+void dtNeed(double w, double dw, double d2w, double chain, double d2chain, bool& need0, bool& need1);
+
+/// dtWeight followed by dtNeed, the pair every dual topology term needs.
+void dtWeightNeed(double sublmda, int dtexp, double chain, double d2chain, //
+   double& w, double& dw, double& d2w, bool& need0, bool& need1);
+
+/// The accumulator protocol of one dual topology term.
+struct RelDualOps
+{
+   /// Evaluates one subsystem into the work buffer.
+   void (*state)(int vers, RdtMask mask, bool first_state);
+   /// Clears the work buffer, and the interaction count under calc::analyz.
+   void (*zeroWork)(int vers);
+   /// Copies the work buffer aside as endpoint 0.
+   void (*save)(int vers);
+   /// work <- w*work + (1-w)*saved, plus the dE/dL channels.
+   void (*mix)(int vers);
+};
+
+/// Runs one relative dual topology term: builds the two coupling state
+/// endpoints out of parameter-zeroed subsystems and interpolates between them,
+///
+///     E = weight1*E(ist1) + (1-weight1)*E(ist0)
+void relDualDrive(int vers, RelState ist0, RelState ist1, bool need0, bool need1, const RelDualOps& ops);
 
 /// Quintic switching polynomial
 void quinticTaper(double x, double cut, double off, double& taper, double& dtaper, double& d2taper);
@@ -57,7 +117,6 @@ void dlmdaData2(RcOp op);
 /// Mean and population standard deviation of v[begin, begin+count).
 void avgstd(const std::vector<double>& v, int begin, int count, double& avg, double& sd);
 
-void adtWeight(double lmda, int exponent, double& weight, double& dweight, double& d2weight);
 void adtMix(int vers, bool do_dlmda, int n, size_t buffer_size, double weight1, double dweight1, double d2weight1,
    const EnergyBufferTraits::type* e0, EnergyBuffer e1, EnergyBuffer dedl, EnergyBuffer d2edl2, VirialBuffer v0,
    VirialBuffer v1, VirialBuffer dvdl, const grad_prec* gx0, const grad_prec* gy0, const grad_prec* gz0,
@@ -124,14 +183,6 @@ TINKER_EXTERN double qntplmda1;
 TINKER_EXTERN double qntvlmda0;
 TINKER_EXTERN double qntvlmda1;
 
-// Quantized-map endpoint flags: whether each dual topology leg is live.
-TINKER_EXTERN bool use_ele4i;
-TINKER_EXTERN bool use_ele4f;
-TINKER_EXTERN bool use_pol4i;
-TINKER_EXTERN bool use_pol4f;
-TINKER_EXTERN bool use_vdw4i;
-TINKER_EXTERN bool use_vdw4f;
-
 //====================================================================//
 //        staged relative free energy schedule                        //
 //====================================================================//
@@ -140,17 +191,16 @@ TINKER_EXTERN bool use_vdw4f;
 /// When off, the sub-lambdas move together under the ordinary maps above.
 TINKER_EXTERN bool use_relstage;
 
-// Main lambda window from REL-LIG1-ELE-RANGE.
-TINKER_EXTERN double relstg1lmda0;
-TINKER_EXTERN double relstg1lmda1;
-// Main lambda window from REL-LIG2-ELE-RANGE.
-TINKER_EXTERN double relstg2lmda0;
-TINKER_EXTERN double relstg2lmda1;
-
-/// The leg the current main lambda sits in; set by mapSubLambda.
+/// The declared leg, read from the REL-STAGE keyword. Constant for a run.
 TINKER_EXTERN RelStage relstage;
-/// False at the flat ends of a leg, where the mix would be a no-op.
-TINKER_EXTERN bool relstagemix;
+
+// The two coupling states holding each term's interpolation endpoints.
+TINKER_EXTERN RelState emrelst0;
+TINKER_EXTERN RelState emrelst1;
+TINKER_EXTERN RelState eprelst0;
+TINKER_EXTERN RelState eprelst1;
+TINKER_EXTERN RelState evrelst0;
+TINKER_EXTERN RelState evrelst1;
 
 // first and second derivatives of each sub-lambda w.r.t. the main lambda.
 TINKER_EXTERN double deldlmda;
