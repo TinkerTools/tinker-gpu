@@ -211,6 +211,8 @@ const Fixture kFixtures[] = {
    {"179_water_rels_ye_vdwm_vx3_l050", "water2", true, true, true, true, "rels"},
    {"180_water_rels_ye_lig1_ex3_l085", "water2", true, true, true, true, "rels"},
    {"181_water_rels_ye_lig2_ix2_l015", "water2", true, true, true, true, "rels"},
+   {"182_water_ast_v05_annihilate", "water2", true, true, true, true, "ast"},
+   {"183_water_adt_v05_annihilate", "water2", true, true, true, true, "adt"},
 };
 
 // How a run should treat the fused multipole/polarization kernel. emplar cannot
@@ -612,6 +614,8 @@ TEST_CASE("MUTATE-178_water_rels_ye_lig1_inv_l070", "[ff][mutate][rels]") { runF
 TEST_CASE("MUTATE-179_water_rels_ye_vdwm_vx3_l050", "[ff][mutate][rels]") { runFixture(kFixtures[178]); }
 TEST_CASE("MUTATE-180_water_rels_ye_lig1_ex3_l085", "[ff][mutate][rels]") { runEmplarFixture(kFixtures[179]); }
 TEST_CASE("MUTATE-181_water_rels_ye_lig2_ix2_l015", "[ff][mutate][rels]") { runFixture(kFixtures[180]); }
+TEST_CASE("MUTATE-182_water_ast_v05_annihilate", "[ff][mutate][ast]") { runFixture(kFixtures[181]); }
+TEST_CASE("MUTATE-183_water_adt_v05_annihilate", "[ff][mutate][adt]") { runFixture(kFixtures[182]); }
 
 
 #endif
