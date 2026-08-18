@@ -545,10 +545,7 @@ void lmdachain(int vers)
          depdl = 0;
          d2epdl2 = 0;
       }
-      if (use_vdlmda) {
-         d2evdl2 = d2evdl2 * dvldlmda * dvldlmda + devdl * d2vldlmda2;
-         devdl = devdl * dvldlmda;
-      } else {
+      if (not use_vdlmda) {
          devdl = 0;
          d2evdl2 = 0;
       }
@@ -562,7 +559,7 @@ void lmdachain(int vers)
       for (int k = 0; k < 9; ++k) {
          demvirdl[k] = use_edlmda ? demvirdl[k] * deldlmda : 0;
          depvirdl[k] = use_pdlmda ? depvirdl[k] * dpldlmda : 0;
-         devvirdl[k] = use_vdlmda ? devvirdl[k] * dvldlmda : 0;
+         devvirdl[k] = use_vdlmda ? devvirdl[k] : 0;
          dvirdl[k] = demvirdl[k] + depvirdl[k] + devvirdl[k];
       }
    }
@@ -571,9 +568,6 @@ void lmdachain(int vers)
    // undriven term's TermBuffer aliases its gradient slots onto dfsumdl*, and
    // summing that into itself would double count.
    if (do_g) {
-      darray::zero(g::q0, n, dfsumdlx, dfsumdly, dfsumdlz);
-      if (use_vdlmda and dfvdlx)
-         sumGradient(dvldlmda, dfsumdlx, dfsumdly, dfsumdlz, dfvdlx, dfvdly, dfvdlz);
       if (use_edlmda and dfmdlx)
          sumGradient(deldlmda, dfsumdlx, dfsumdly, dfsumdlz, dfmdlx, dfmdly, dfmdlz);
       if (use_pdlmda and dfpdlx)

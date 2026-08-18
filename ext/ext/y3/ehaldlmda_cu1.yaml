@@ -6,20 +6,28 @@ CONSTEXPR_FLAGS: |
   constexpr bool do_a = Ver::a;
   constexpr bool do_g = Ver::g;
   constexpr bool do_v = Ver::v;
+  constexpr bool do_dl1 = Ver::e_dlmda1;
+  constexpr bool do_dl2 = Ver::e_dlmda2;
+  constexpr bool do_gdl = Ver::g_dlmda;
+  constexpr bool do_vdl = Ver::v_dlmda;
 
 COUNT:
   - nev
 ENERGY:
   - ev
+ENERGY_DLMDA1:
   - devdl
+ENERGY_DLMDA2:
   - d2evdl2
 VIRIAL:
   - vev
+VIRIAL_DLMDA:
   - devvirdl
 GRADIENT:
   - gx
   - gy
   - gz
+GRADIENT_DLMDA:
   - gxred_dlmda
   - gyred_dlmda
   - gzred_dlmda
@@ -34,6 +42,7 @@ EXTRA_PARAMS: |
   , int njvdw, real vlam, Vdw vcouple
   , const real* restrict radmin, const real* restrict epsilon
   , const int* restrict jvdw, const int* restrict mut
+  , real dvldl, real d2vldl2
 # IMPLICIT_PARAMS:
 
 I_VARIABLES:
@@ -52,13 +61,15 @@ I_FORCE:
   - register real fix addto:gx
   - register real fiy addto:gy
   - register real fiz addto:gz
-  - register real dfix addto:gxred_dlmda
-  - register real dfiy addto:gyred_dlmda
-  - register real dfiz addto:gzred_dlmda
 K_FORCE:
   - register real fkx addto:gx
   - register real fky addto:gy
   - register real fkz addto:gz
+I_FORCE_DLMDA:
+  - register real dfix addto:gxred_dlmda
+  - register real dfiy addto:gyred_dlmda
+  - register real dfiz addto:gzred_dlmda
+K_FORCE_DLMDA:
   - register real dfkx addto:gxred_dlmda
   - register real dfky addto:gyred_dlmda
   - register real dfkz addto:gzred_dlmda
@@ -81,13 +92,15 @@ SCALED_PAIRWISE_INTERACTION: |
     bool mutik = (@imut@ || @kmut@)
       && (vcouple == Vdw::ANNIHILATE || !(@imut@ && @kmut@));
     real e, de, dedl, d2edl2, dlde;
-    pair_hal_v3<do_g, 0>(r, scalea, rv, eps, cut, off, vlambda,
+    pair_hal_v3<do_g, 0, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, scalea, rv, eps, cut, off, vlambda,
       GHAL, DHAL, SCEXP, SCALPHA, e, de, dedl, d2edl2, dlde);
     if CONSTEXPR (do_e) {
       evtl += floatTo<ebuf_prec>(e);
       if (mutik) {
-        devdltl += floatTo<ebuf_prec>(dedl);
-        d2evdl2tl += floatTo<ebuf_prec>(d2edl2);
+        if CONSTEXPR (do_dl1)
+          devdltl += floatTo<ebuf_prec>(dedl * dvldl);
+        if CONSTEXPR (do_dl2)
+          d2evdl2tl += floatTo<ebuf_prec>(d2edl2 * dvldl * dvldl + dedl * d2vldl2);
       }
       if CONSTEXPR (do_a) {
         if (scalea != 0 and e != 0)
@@ -107,17 +120,19 @@ SCALED_PAIRWISE_INTERACTION: |
       @fky@ -= dedy;
       @fkz@ -= dedz;
       if (mutik) {
-        dlde = dlde * REAL_RECIP(r);
+        dlde = dlde * dvldl * REAL_RECIP(r);
         real dldedx = dlde * xr;
         real dldedy = dlde * yr;
         real dldedz = dlde * zr;
-        @dfix@ += dldedx;
-        @dfiy@ += dldedy;
-        @dfiz@ += dldedz;
-        @dfkx@ -= dldedx;
-        @dfky@ -= dldedy;
-        @dfkz@ -= dldedz;
-        if CONSTEXPR (do_v) {
+        if CONSTEXPR (do_gdl) {
+          @dfix@ += dldedx;
+          @dfiy@ += dldedy;
+          @dfiz@ += dldedz;
+          @dfkx@ -= dldedx;
+          @dfky@ -= dldedy;
+          @dfkz@ -= dldedz;
+        }
+        if CONSTEXPR (do_vdl) {
           devvirdltlxx += floatTo<vbuf_prec>(xr * dldedx);
           devvirdltlyx += floatTo<vbuf_prec>(yr * dldedx);
           devvirdltlzx += floatTo<vbuf_prec>(zr * dldedx);
@@ -154,13 +169,15 @@ FULL_PAIRWISE_INTERACTION: |
     bool mutik = (@imut@ || @kmut@)
       && (vcouple == Vdw::ANNIHILATE || !(@imut@ && @kmut@));
     real e, de, dedl, d2edl2, dlde;
-    pair_hal_v3<do_g, 1>(r, 1, rv, eps, cut, off, vlambda,
+    pair_hal_v3<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, vlambda,
       GHAL, DHAL, SCEXP, SCALPHA, e, de, dedl, d2edl2, dlde);
     if CONSTEXPR (do_e) {
       evtl += floatTo<ebuf_prec>(e);
       if (mutik) {
-        devdltl += floatTo<ebuf_prec>(dedl);
-        d2evdl2tl += floatTo<ebuf_prec>(d2edl2);
+        if CONSTEXPR (do_dl1)
+          devdltl += floatTo<ebuf_prec>(dedl * dvldl);
+        if CONSTEXPR (do_dl2)
+          d2evdl2tl += floatTo<ebuf_prec>(d2edl2 * dvldl * dvldl + dedl * d2vldl2);
       }
       if CONSTEXPR (do_a) {
         if (e != 0)
@@ -180,17 +197,19 @@ FULL_PAIRWISE_INTERACTION: |
       @fky@ -= dedy;
       @fkz@ -= dedz;
       if (mutik) {
-        dlde = dlde * REAL_RECIP(r);
+        dlde = dlde * dvldl * REAL_RECIP(r);
         real dldedx = dlde * xr;
         real dldedy = dlde * yr;
         real dldedz = dlde * zr;
-        @dfix@ += dldedx;
-        @dfiy@ += dldedy;
-        @dfiz@ += dldedz;
-        @dfkx@ -= dldedx;
-        @dfky@ -= dldedy;
-        @dfkz@ -= dldedz;
-        if CONSTEXPR (do_v) {
+        if CONSTEXPR (do_gdl) {
+          @dfix@ += dldedx;
+          @dfiy@ += dldedy;
+          @dfiz@ += dldedz;
+          @dfkx@ -= dldedx;
+          @dfky@ -= dldedy;
+          @dfkz@ -= dldedz;
+        }
+        if CONSTEXPR (do_vdl) {
           devvirdltlxx += floatTo<vbuf_prec>(xr * dldedx);
           devvirdltlyx += floatTo<vbuf_prec>(yr * dldedx);
           devvirdltlzx += floatTo<vbuf_prec>(zr * dldedx);

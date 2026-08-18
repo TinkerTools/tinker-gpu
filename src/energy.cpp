@@ -250,10 +250,8 @@ void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
 
    if (amoeba_evdw(vers))
       if (tscfg("evdw", ecore_vdw)) {
-         if (use_evadt)
-            evdw_adt(vers);
-         else if (use_evrdt)
-            evdw_rdt(vers);
+         if (use_evdt)
+            evdw_dt(vers);
          else
             evdw(vers);
       }
@@ -385,14 +383,14 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             must_wait = true;
             reduceSumOnDevice(&ev_dptr->e_nnintermol, eng_buf_nnintermol, bufsize, g::q0);
          }
-         if (use_dlmda and dedl_buf) {
-            must_wait = true;
-            reduceSumOnDevice(&ev_dptr->dedl, dedl_buf, bufsize, g::q0);
-         }
-         if (use_dlmda and d2edl2_buf) {
-            must_wait = true;
-            reduceSumOnDevice(&ev_dptr->d2edl2, d2edl2_buf, bufsize, g::q0);
-         }
+      }
+      if (use_dlmda and dedl_buf) {
+         must_wait = true;
+         reduceSumOnDevice(&ev_dptr->dedl, dedl_buf, bufferSize(), g::q0);
+      }
+      if (use_dlmda and d2edl2_buf) {
+         must_wait = true;
+         reduceSumOnDevice(&ev_dptr->d2edl2, d2edl2_buf, bufferSize(), g::q0);
       }
    }
 
@@ -420,10 +418,10 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             must_wait = true;
             reduceSum2OnDevice(ev_dptr->v_nnintermol, vir_buf_nnintermol, bufsize, g::q0);
          }
-         if (use_dlmda and dvirdl_buf) {
-            must_wait = true;
-            reduceSum2OnDevice(ev_dptr->dvirdl, dvirdl_buf, bufsize, g::q0);
-         }
+      }
+      if (use_dlmda and dvirdl_buf) {
+         must_wait = true;
+         reduceSum2OnDevice(ev_dptr->dvirdl, dvirdl_buf, bufferSize(), g::q0);
       }
    }
    if (must_wait) {
@@ -444,12 +442,12 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
          if (ecore_nnintermol and eng_buf_nnintermol) {
             energy_nnintermol += toFloatingPoint<energy_prec>(ev_hobj.e_nnintermol);
          }
-         if (use_dlmda and dedl_buf) {
-            dedl += toFloatingPoint<energy_prec>(ev_hobj.dedl);
-         }
-         if (use_dlmda and d2edl2_buf) {
-            d2edl2 += toFloatingPoint<energy_prec>(ev_hobj.d2edl2);
-         }
+      }
+      if (use_dlmda and dedl_buf) {
+         devdl += toFloatingPoint<energy_prec>(ev_hobj.dedl);
+      }
+      if (use_dlmda and d2edl2_buf) {
+         d2evdl2 += toFloatingPoint<energy_prec>(ev_hobj.d2edl2);
       }
       esum = energy_valence + energy_vdw + energy_elec + energy_nnintermol;
    }
@@ -487,14 +485,14 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             for (int iv = 0; iv < 9; ++iv)
                virial_nnintermol[iv] += v2nn[iv];
          }
-         if (use_dlmda and dvirdl_buf) {
-            virial_prec vdl[VirialBufferTraits::N], v2dl[9];
-            for (int iv = 0; iv < (int)VirialBufferTraits::N; ++iv)
-               vdl[iv] = toFloatingPoint<virial_prec>(ev_hobj.dvirdl[iv]);
-            virialReshape(v2dl, vdl);
-            for (int iv = 0; iv < 9; ++iv)
-               dvirdl[iv] += v2dl[iv];
-         }
+      }
+      if (use_dlmda and dvirdl_buf) {
+         virial_prec vdl[VirialBufferTraits::N], v2dl[9];
+         for (int iv = 0; iv < (int)VirialBufferTraits::N; ++iv)
+            vdl[iv] = toFloatingPoint<virial_prec>(ev_hobj.dvirdl[iv]);
+         virialReshape(v2dl, vdl);
+         for (int iv = 0; iv < 9; ++iv)
+            devvirdl[iv] += v2dl[iv];
       }
       for (int iv = 0; iv < 9; ++iv)
          vir[iv] = virial_valence[iv] + virial_vdw[iv] + virial_elec[iv] + virial_nnintermol[iv];
@@ -651,9 +649,9 @@ void egvData(RcOp op)
                darray::deallocate(eng_buf_elec);
             if (useEnergyINN())
                darray::deallocate(eng_buf_nnintermol);
-            if (use_dlmda)
-               darray::deallocate(dedl_buf, d2edl2_buf);
          }
+         if (use_dlmda)
+            darray::deallocate(dedl_buf, d2edl2_buf);
       }
 
       if (op & RcOp::ALLOC) {
@@ -667,9 +665,9 @@ void egvData(RcOp op)
                darray::allocate(sz, &eng_buf_elec);
             if (useEnergyINN())
                darray::allocate(sz, &eng_buf_nnintermol);
-            if (use_dlmda)
-               darray::allocate(sz, &dedl_buf, &d2edl2_buf);
          }
+         if (use_dlmda)
+            darray::allocate(bufferSize(), &dedl_buf, &d2edl2_buf);
       }
    }
 
@@ -683,9 +681,9 @@ void egvData(RcOp op)
                darray::deallocate(vir_buf_elec);
             if (useEnergyINN())
                darray::deallocate(vir_buf_nnintermol);
-            if (use_dlmda)
-               darray::deallocate(dvirdl_buf);
          }
+         if (use_dlmda)
+            darray::deallocate(dvirdl_buf);
       }
 
       if (op & RcOp::ALLOC) {
@@ -699,9 +697,9 @@ void egvData(RcOp op)
                darray::allocate(sz, &vir_buf_elec);
             if (useEnergyINN())
                darray::allocate(sz, &vir_buf_nnintermol);
-            if (use_dlmda)
-               darray::allocate(sz, &dvirdl_buf);
          }
+         if (use_dlmda)
+            darray::allocate(bufferSize(), &dvirdl_buf);
       }
    }
 

@@ -9,12 +9,16 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
    const real* restrict exclude_scale, const real* restrict x, const real* restrict y, const real* restrict z,
    const Spatial::SortedAtom* restrict sorted, int nakpl, const int* restrict iakpl, int niak, const int* restrict iak,
    const int* restrict lst, int njvdw, real vlam, Vdw vcouple, const real* restrict radmin,
-   const real* restrict epsilon, const int* restrict jvdw, const int* restrict mut)
+   const real* restrict epsilon, const int* restrict jvdw, const int* restrict mut, real dvldl, real d2vldl2)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;
    constexpr bool do_g = Ver::g;
    constexpr bool do_v = Ver::v;
+   constexpr bool do_dl1 = Ver::e_dlmda1;
+   constexpr bool do_dl2 = Ver::e_dlmda2;
+   constexpr bool do_gdl = Ver::g_dlmda;
+   constexpr bool do_vdl = Ver::v_dlmda;
    const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
    const int iwarp = ithread / WARP_SIZE;
    const int nwarp = blockDim.x * gridDim.x / WARP_SIZE;
@@ -26,16 +30,19 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
    }
    using ebuf_prec = EnergyBufferTraits::type;
    ebuf_prec evtl;
-   ebuf_prec devdltl;
-   ebuf_prec d2evdl2tl;
    if CONSTEXPR (do_e) {
       evtl = 0;
+   }
+   ebuf_prec devdltl;
+   if CONSTEXPR (do_e) {
       devdltl = 0;
+   }
+   ebuf_prec d2evdl2tl;
+   if CONSTEXPR (do_e) {
       d2evdl2tl = 0;
    }
    using vbuf_prec = VirialBufferTraits::type;
    vbuf_prec vevtlxx, vevtlyx, vevtlzx, vevtlyy, vevtlzy, vevtlzz;
-   vbuf_prec devvirdltlxx, devvirdltlyx, devvirdltlzx, devvirdltlyy, devvirdltlzy, devvirdltlzz;
    if CONSTEXPR (do_v) {
       vevtlxx = 0;
       vevtlyx = 0;
@@ -43,6 +50,9 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
       vevtlyy = 0;
       vevtlzy = 0;
       vevtlzz = 0;
+   }
+   vbuf_prec devvirdltlxx, devvirdltlyx, devvirdltlzx, devvirdltlyy, devvirdltlzy, devvirdltlzz;
+   if CONSTEXPR (do_v) {
       devvirdltlxx = 0;
       devvirdltlyx = 0;
       devvirdltlzx = 0;
@@ -54,8 +64,10 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
    int ijvdw, imut;
    real xk, yk, zk;
    int kjvdw, kmut;
-   real fix, fiy, fiz, dfix, dfiy, dfiz;
-   real fkx, fky, fkz, dfkx, dfky, dfkz;
+   real fix, fiy, fiz;
+   real fkx, fky, fkz;
+   real dfix, dfiy, dfiz;
+   real dfkx, dfky, dfkz;
 
    //* /
    for (int ii = ithread; ii < nexclude; ii += blockDim.x * gridDim.x) {
@@ -63,12 +75,14 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
          fix = 0;
          fiy = 0;
          fiz = 0;
-         dfix = 0;
-         dfiy = 0;
-         dfiz = 0;
          fkx = 0;
          fky = 0;
          fkz = 0;
+      }
+      if CONSTEXPR (do_gdl) {
+         dfix = 0;
+         dfiy = 0;
+         dfiz = 0;
          dfkx = 0;
          dfky = 0;
          dfkz = 0;
@@ -106,13 +120,15 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
          }
          bool mutik = (imut || kmut) && (vcouple == Vdw::ANNIHILATE || !(imut && kmut));
          real e, de, dedl, d2edl2, dlde;
-         pair_hal_v3<do_g, 0>(r, scalea, rv, eps, cut, off, vlambda, GHAL, DHAL, SCEXP, SCALPHA, e, de, dedl, d2edl2,
-            dlde);
+         pair_hal_v3<do_g, 0, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, scalea, rv, eps, cut, off, vlambda, GHAL, DHAL,
+            SCEXP, SCALPHA, e, de, dedl, d2edl2, dlde);
          if CONSTEXPR (do_e) {
             evtl += floatTo<ebuf_prec>(e);
             if (mutik) {
-               devdltl += floatTo<ebuf_prec>(dedl);
-               d2evdl2tl += floatTo<ebuf_prec>(d2edl2);
+               if CONSTEXPR (do_dl1)
+                  devdltl += floatTo<ebuf_prec>(dedl * dvldl);
+               if CONSTEXPR (do_dl2)
+                  d2evdl2tl += floatTo<ebuf_prec>(d2edl2 * dvldl * dvldl + dedl * d2vldl2);
             }
             if CONSTEXPR (do_a) {
                if (scalea != 0 and e != 0)
@@ -132,17 +148,19 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
             fky -= dedy;
             fkz -= dedz;
             if (mutik) {
-               dlde = dlde * REAL_RECIP(r);
+               dlde = dlde * dvldl * REAL_RECIP(r);
                real dldedx = dlde * xr;
                real dldedy = dlde * yr;
                real dldedz = dlde * zr;
-               dfix += dldedx;
-               dfiy += dldedy;
-               dfiz += dldedz;
-               dfkx -= dldedx;
-               dfky -= dldedy;
-               dfkz -= dldedz;
-               if CONSTEXPR (do_v) {
+               if CONSTEXPR (do_gdl) {
+                  dfix += dldedx;
+                  dfiy += dldedy;
+                  dfiz += dldedz;
+                  dfkx -= dldedx;
+                  dfky -= dldedy;
+                  dfkz -= dldedz;
+               }
+               if CONSTEXPR (do_vdl) {
                   devvirdltlxx += floatTo<vbuf_prec>(xr * dldedx);
                   devvirdltlyx += floatTo<vbuf_prec>(yr * dldedx);
                   devvirdltlzx += floatTo<vbuf_prec>(zr * dldedx);
@@ -166,12 +184,14 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
          atomic_add(fix, gx, i);
          atomic_add(fiy, gy, i);
          atomic_add(fiz, gz, i);
-         atomic_add(dfix, gxred_dlmda, i);
-         atomic_add(dfiy, gyred_dlmda, i);
-         atomic_add(dfiz, gzred_dlmda, i);
          atomic_add(fkx, gx, k);
          atomic_add(fky, gy, k);
          atomic_add(fkz, gz, k);
+      }
+      if CONSTEXPR (do_gdl) {
+         atomic_add(dfix, gxred_dlmda, i);
+         atomic_add(dfiy, gyred_dlmda, i);
+         atomic_add(dfiz, gzred_dlmda, i);
          atomic_add(dfkx, gxred_dlmda, k);
          atomic_add(dfky, gyred_dlmda, k);
          atomic_add(dfkz, gzred_dlmda, k);
@@ -184,12 +204,14 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
          fix = 0;
          fiy = 0;
          fiz = 0;
-         dfix = 0;
-         dfiy = 0;
-         dfiz = 0;
          fkx = 0;
          fky = 0;
          fkz = 0;
+      }
+      if CONSTEXPR (do_gdl) {
+         dfix = 0;
+         dfiy = 0;
+         dfiz = 0;
          dfkx = 0;
          dfky = 0;
          dfkz = 0;
@@ -238,13 +260,15 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
             }
             bool mutik = (imut || kmut) && (vcouple == Vdw::ANNIHILATE || !(imut && kmut));
             real e, de, dedl, d2edl2, dlde;
-            pair_hal_v3<do_g, 1>(r, 1, rv, eps, cut, off, vlambda, GHAL, DHAL, SCEXP, SCALPHA, e, de, dedl, d2edl2,
-               dlde);
+            pair_hal_v3<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, vlambda, GHAL, DHAL,
+               SCEXP, SCALPHA, e, de, dedl, d2edl2, dlde);
             if CONSTEXPR (do_e) {
                evtl += floatTo<ebuf_prec>(e);
                if (mutik) {
-                  devdltl += floatTo<ebuf_prec>(dedl);
-                  d2evdl2tl += floatTo<ebuf_prec>(d2edl2);
+                  if CONSTEXPR (do_dl1)
+                     devdltl += floatTo<ebuf_prec>(dedl * dvldl);
+                  if CONSTEXPR (do_dl2)
+                     d2evdl2tl += floatTo<ebuf_prec>(d2edl2 * dvldl * dvldl + dedl * d2vldl2);
                }
                if CONSTEXPR (do_a) {
                   if (e != 0)
@@ -264,17 +288,19 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
                fky -= dedy;
                fkz -= dedz;
                if (mutik) {
-                  dlde = dlde * REAL_RECIP(r);
+                  dlde = dlde * dvldl * REAL_RECIP(r);
                   real dldedx = dlde * xr;
                   real dldedy = dlde * yr;
                   real dldedz = dlde * zr;
-                  dfix += dldedx;
-                  dfiy += dldedy;
-                  dfiz += dldedz;
-                  dfkx -= dldedx;
-                  dfky -= dldedy;
-                  dfkz -= dldedz;
-                  if CONSTEXPR (do_v) {
+                  if CONSTEXPR (do_gdl) {
+                     dfix += dldedx;
+                     dfiy += dldedy;
+                     dfiz += dldedz;
+                     dfkx -= dldedx;
+                     dfky -= dldedy;
+                     dfkz -= dldedz;
+                  }
+                  if CONSTEXPR (do_vdl) {
                      devvirdltlxx += floatTo<vbuf_prec>(xr * dldedx);
                      devvirdltlyx += floatTo<vbuf_prec>(yr * dldedx);
                      devvirdltlzx += floatTo<vbuf_prec>(zr * dldedx);
@@ -304,6 +330,8 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
             fix = __shfl_sync(ALL_LANES, fix, ilane + 1);
             fiy = __shfl_sync(ALL_LANES, fiy, ilane + 1);
             fiz = __shfl_sync(ALL_LANES, fiz, ilane + 1);
+         }
+         if CONSTEXPR (do_gdl) {
             dfix = __shfl_sync(ALL_LANES, dfix, ilane + 1);
             dfiy = __shfl_sync(ALL_LANES, dfiy, ilane + 1);
             dfiz = __shfl_sync(ALL_LANES, dfiz, ilane + 1);
@@ -314,12 +342,14 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
          atomic_add(fix, gx, i);
          atomic_add(fiy, gy, i);
          atomic_add(fiz, gz, i);
-         atomic_add(dfix, gxred_dlmda, i);
-         atomic_add(dfiy, gyred_dlmda, i);
-         atomic_add(dfiz, gzred_dlmda, i);
          atomic_add(fkx, gx, k);
          atomic_add(fky, gy, k);
          atomic_add(fkz, gz, k);
+      }
+      if CONSTEXPR (do_gdl) {
+         atomic_add(dfix, gxred_dlmda, i);
+         atomic_add(dfiy, gyred_dlmda, i);
+         atomic_add(dfiz, gzred_dlmda, i);
          atomic_add(dfkx, gxred_dlmda, k);
          atomic_add(dfky, gyred_dlmda, k);
          atomic_add(dfkz, gzred_dlmda, k);
@@ -331,12 +361,14 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
          fix = 0;
          fiy = 0;
          fiz = 0;
-         dfix = 0;
-         dfiy = 0;
-         dfiz = 0;
          fkx = 0;
          fky = 0;
          fkz = 0;
+      }
+      if CONSTEXPR (do_gdl) {
+         dfix = 0;
+         dfiy = 0;
+         dfiz = 0;
          dfkx = 0;
          dfky = 0;
          dfkz = 0;
@@ -376,13 +408,15 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
             }
             bool mutik = (imut || kmut) && (vcouple == Vdw::ANNIHILATE || !(imut && kmut));
             real e, de, dedl, d2edl2, dlde;
-            pair_hal_v3<do_g, 1>(r, 1, rv, eps, cut, off, vlambda, GHAL, DHAL, SCEXP, SCALPHA, e, de, dedl, d2edl2,
-               dlde);
+            pair_hal_v3<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, vlambda, GHAL, DHAL,
+               SCEXP, SCALPHA, e, de, dedl, d2edl2, dlde);
             if CONSTEXPR (do_e) {
                evtl += floatTo<ebuf_prec>(e);
                if (mutik) {
-                  devdltl += floatTo<ebuf_prec>(dedl);
-                  d2evdl2tl += floatTo<ebuf_prec>(d2edl2);
+                  if CONSTEXPR (do_dl1)
+                     devdltl += floatTo<ebuf_prec>(dedl * dvldl);
+                  if CONSTEXPR (do_dl2)
+                     d2evdl2tl += floatTo<ebuf_prec>(d2edl2 * dvldl * dvldl + dedl * d2vldl2);
                }
                if CONSTEXPR (do_a) {
                   if (e != 0)
@@ -402,17 +436,19 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
                fky -= dedy;
                fkz -= dedz;
                if (mutik) {
-                  dlde = dlde * REAL_RECIP(r);
+                  dlde = dlde * dvldl * REAL_RECIP(r);
                   real dldedx = dlde * xr;
                   real dldedy = dlde * yr;
                   real dldedz = dlde * zr;
-                  dfix += dldedx;
-                  dfiy += dldedy;
-                  dfiz += dldedz;
-                  dfkx -= dldedx;
-                  dfky -= dldedy;
-                  dfkz -= dldedz;
-                  if CONSTEXPR (do_v) {
+                  if CONSTEXPR (do_gdl) {
+                     dfix += dldedx;
+                     dfiy += dldedy;
+                     dfiz += dldedz;
+                     dfkx -= dldedx;
+                     dfky -= dldedy;
+                     dfkz -= dldedz;
+                  }
+                  if CONSTEXPR (do_vdl) {
                      devvirdltlxx += floatTo<vbuf_prec>(xr * dldedx);
                      devvirdltlyx += floatTo<vbuf_prec>(yr * dldedx);
                      devvirdltlzx += floatTo<vbuf_prec>(zr * dldedx);
@@ -441,6 +477,8 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
             fix = __shfl_sync(ALL_LANES, fix, ilane + 1);
             fiy = __shfl_sync(ALL_LANES, fiy, ilane + 1);
             fiz = __shfl_sync(ALL_LANES, fiz, ilane + 1);
+         }
+         if CONSTEXPR (do_gdl) {
             dfix = __shfl_sync(ALL_LANES, dfix, ilane + 1);
             dfiy = __shfl_sync(ALL_LANES, dfiy, ilane + 1);
             dfiz = __shfl_sync(ALL_LANES, dfiz, ilane + 1);
@@ -451,12 +489,14 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
          atomic_add(fix, gx, i);
          atomic_add(fiy, gy, i);
          atomic_add(fiz, gz, i);
-         atomic_add(dfix, gxred_dlmda, i);
-         atomic_add(dfiy, gyred_dlmda, i);
-         atomic_add(dfiz, gzred_dlmda, i);
          atomic_add(fkx, gx, k);
          atomic_add(fky, gy, k);
          atomic_add(fkz, gz, k);
+      }
+      if CONSTEXPR (do_gdl) {
+         atomic_add(dfix, gxred_dlmda, i);
+         atomic_add(dfiy, gyred_dlmda, i);
+         atomic_add(dfiz, gzred_dlmda, i);
          atomic_add(dfkx, gxred_dlmda, k);
          atomic_add(dfky, gyred_dlmda, k);
          atomic_add(dfkz, gzred_dlmda, k);
@@ -468,11 +508,17 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
    }
    if CONSTEXPR (do_e) {
       atomic_add(evtl, ev, ithread);
+   }
+   if CONSTEXPR (do_dl1) {
       atomic_add(devdltl, devdl, ithread);
+   }
+   if CONSTEXPR (do_dl2) {
       atomic_add(d2evdl2tl, d2evdl2, ithread);
    }
    if CONSTEXPR (do_v) {
       atomic_add(vevtlxx, vevtlyx, vevtlzx, vevtlyy, vevtlzy, vevtlzz, vev, ithread);
+   }
+   if CONSTEXPR (do_vdl) {
       atomic_add(devvirdltlxx, devvirdltlyx, devvirdltlzx, devvirdltlyy, devvirdltlzy, devvirdltlzz, devvirdl, ithread);
    }
 }

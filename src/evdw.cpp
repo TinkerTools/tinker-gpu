@@ -6,6 +6,7 @@
 #include "ff/potent.h"
 #include "ff/termbuf.h"
 #include "math/zero.h"
+#include "seq/ost.h"
 #include "tool/error.h"
 #include "tool/externfunc.h"
 #include "tool/iofortstr.h"
@@ -90,8 +91,7 @@ void evdwData(RcOp op)
 
       if (vdwtyp == Vdw::HAL) {
          darray::deallocate(ired, kred, xred, yred, zred, gxred, gyred, gzred);
-         if (use_evast)
-            darray::deallocate(gxred_dlmda, gyred_dlmda, gzred_dlmda);
+         darray::deallocate(gxred_dlmda, gyred_dlmda, gzred_dlmda);
       }
 
       darray::deallocate(jvdw, radmin, epsilon);
@@ -107,8 +107,9 @@ void evdwData(RcOp op)
       if (rc_a)
          bufferDeallocate(rc_flag, nev);
       ev_buf.manage(op, rc_flag, {}, {}, false);
-      ev_dl.manage(op, rc_flag, {}, {}, false);
-      ev_snap.manage(op, rc_flag, false);
+      devdl_buf = nullptr;
+      d2evdl2_buf = nullptr;
+      devvirdl_buf = nullptr;
       nev = nullptr;
       gxred_dlmda = nullptr;
       gyred_dlmda = nullptr;
@@ -141,7 +142,6 @@ void evdwData(RcOp op)
       else
          assert(false);
 
-      ev_snap.manage(op, rc_flag, use_evdt);
 
       FstrView str1 = vdwpot::vdwindex;
       if (str1 == "CLASS")
@@ -175,11 +175,12 @@ void evdwData(RcOp op)
       else
          assert(false);
 
+      const int dlmask = lmdaDerivMask(rc_flag, use_vdlmda);
       if (vdwtyp == Vdw::HAL) {
          darray::allocate(n, &ired, &kred, &xred, &yred, &zred);
          if (rc_flag & calc::grad) {
             darray::allocate(n, &gxred, &gyred, &gzred);
-            if (use_evast)
+            if (dlmask & calc::grad_dlmda)
                darray::allocate(n, &gxred_dlmda, &gyred_dlmda, &gzred_dlmda);
          } else {
             gxred = nullptr;
@@ -401,12 +402,11 @@ void evdwData(RcOp op)
 
       nev = nullptr;
       ev_buf.manage(op, rc_flag, {&ev, &vir_ev, &devx, &devy, &devz},
-         {eng_buf_vdw, vir_buf_vdw, gx_vdw, gy_vdw, gz_vdw}, rc_a or use_evdt, //
+         {eng_buf_vdw, vir_buf_vdw, gx_vdw, gy_vdw, gz_vdw}, rc_a, //
          {&energy_ev, &virial_ev}, {&energy_vdw, &virial_vdw});
-      ev_dl.manage(op, rc_flag, {&devdl_buf, &devvirdl_buf, &dfvdlx, &dfvdly, &dfvdlz, &d2evdl2_buf},
-         {dedl_buf, dvirdl_buf, dfsumdlx, dfsumdly, dfsumdlz, d2edl2_buf},
-         use_vdlmda, //
-         {&devdl, &devvirdl, &d2evdl2}, {&dedl, &dvirdl, &d2edl2}, use_vdlmda);
+      devdl_buf = (dlmask & calc::energy_dlmda1) ? dedl_buf : nullptr;
+      d2evdl2_buf = (dlmask & calc::energy_dlmda2) ? d2edl2_buf : nullptr;
+      devvirdl_buf = (dlmask & calc::virial_dlmda) ? dvirdl_buf : nullptr;
       if (rc_a)
          bufferAllocate(rc_flag, &nev);
    }
@@ -537,13 +537,8 @@ static void evdwZeroBuffers(int vers)
 
 static void evdwBegin(int vers)
 {
-   auto rc_a = rc_flag & calc::analyz;
-
    zeroOnHost(energy_ev, virial_ev);
-   if (use_vdlmda)
-      zeroOnHost(devdl, d2evdl2, devvirdl);
    evdwZeroBuffers(vers);
-   ev_dl.zero(vers);
 }
 
 static void evdwKernel(int vers)
@@ -565,10 +560,9 @@ static void evdwKernel(int vers)
 static void evdwFinish(int vers, energy_prec elrcv, virial_prec vlrcv, energy_prec delrcv = 0, energy_prec d2elrcv = 0,
    virial_prec dvlrcv = 0)
 {
-   auto rc_a = rc_flag & calc::analyz;
    auto do_e = vers & calc::energy;
    auto do_v = vers & calc::virial;
-   auto do_g = vers & calc::grad;
+   const int vdl = lmdaDerivVers(vers, use_vdlmda);
 
    if (do_e) {
       if (elrcv != 0) {
@@ -576,15 +570,13 @@ static void evdwFinish(int vers, energy_prec elrcv, virial_prec vlrcv, energy_pr
          energy_ev += corr;
          energy_vdw += corr;
       }
-      if (use_vdlmda and delrcv != 0) {
+      if ((vdl & calc::energy_dlmda1) and delrcv != 0) {
          energy_prec corr = delrcv / boxVolume();
          devdl += corr;
-         dedl += corr;
       }
-      if (use_vdlmda and d2elrcv != 0) {
+      if ((vdl & calc::energy_dlmda2) and d2elrcv != 0) {
          energy_prec corr = d2elrcv / boxVolume();
          d2evdl2 += corr;
-         d2edl2 += corr;
       }
    }
    if (do_v) {
@@ -597,18 +589,14 @@ static void evdwFinish(int vers, energy_prec elrcv, virial_prec vlrcv, energy_pr
          virial_vdw[4] += term;
          virial_vdw[8] += term;
       }
-      if (use_vdlmda and dvlrcv != 0) {
+      if ((vdl & calc::virial_dlmda) and dvlrcv != 0) {
          virial_prec term = dvlrcv / boxVolume();
          devvirdl[0] += term;
          devvirdl[4] += term;
          devvirdl[8] += term;
-         dvirdl[0] += term;
-         dvirdl[4] += term;
-         dvirdl[8] += term;
       }
    }
    ev_buf.flush(vers);
-   ev_dl.flush(vers);
 }
 
 void evdw(int vers)
@@ -618,6 +606,116 @@ void evdw(int vers)
    evdwFinish(vers, elrc_vol, vlrc_vol);
 }
 
+// A pair is unordered but the cell index is not, so both orderings are set.
+static void dtCellSet(unsigned& bits, int gi, int gk)
+{
+   bits |= 1u << (3 * gi + gk);
+   bits |= 1u << (3 * gk + gi);
+}
+
+// The pair types one coupling state claims, as the union of its subsystems.
+// A state's slots are disjoint (relSlot: LIG1 = {env+ligA} u {ligB}, LIG2 =
+// {env+ligB} u {ligA}, NONE = {env} u {ligA} u {ligB}), so the union here is
+// the same total the slot-by-slot evaluation used to accumulate.
+static unsigned dtStateBits(RelState ist)
+{
+   unsigned bits = 0;
+   for (int k = 0; k < nRelSlot; ++k) {
+      RdtMask mask;
+      bool in, dup;
+      relSlot(k, ist, ist, mask, in, dup);
+      if (not in)
+         continue;
+      for (int gi = 0; gi < 3; ++gi)
+         for (int gk = gi; gk < 3; ++gk)
+            if (rdtPairActive(mask, gi, gk))
+               dtCellSet(bits, gi, gk);
+   }
+   return bits;
+}
+
+// The counted pairs of the reported endpoint (dlmda.cpp:relDualDrive). Within
+// that endpoint a single ligand-plus-environment subsystem carries the whole
+// count if there is one; a decoupled endpoint has none, so its subsystems sum.
+static unsigned dtCountBits(RelState reported)
+{
+   bool coupled = false;
+   for (int k = 0; k < nRelSlot and not coupled; ++k) {
+      RdtMask mask;
+      bool in, dup;
+      relSlot(k, reported, reported, mask, in, dup);
+      coupled = in and relSlotIsCoupled(k);
+   }
+
+   unsigned bits = 0;
+   for (int k = 0; k < nRelSlot; ++k) {
+      RdtMask mask;
+      bool in, dup;
+      relSlot(k, reported, reported, mask, in, dup);
+      if (not in or (coupled and not relSlotIsCoupled(k)))
+         continue;
+      for (int gi = 0; gi < 3; ++gi)
+         for (int gk = gi; gk < 3; ++gk)
+            if (rdtPairActive(mask, gi, gk))
+               dtCellSet(bits, gi, gk);
+   }
+   return bits;
+}
+
+// E = w*E1 + (1-w)*E0, so dE/dl = dw*(E1-E0) and d2E/dl2 = d2w*(E1-E0), which
+// is what adtMix used to form from the two finished endpoints. The sub-lambda
+// chain rule is folded in here, so what leaves the kernel is already in main
+// lambda units. Both terms of the second-derivative chain rule are proportional
+// to E1-E0, so the whole of it collapses onto one scalar per endpoint.
+// need0/need1 are not consulted: a dead endpoint already falls out with every
+// weight at zero.
+static void dtWeightsToCoef(EhalDtCoef& c, double w, double dw, double d2w)
+{
+   c.a0 = 1 - w;
+   c.a1 = w;
+   double b = use_vdlmda ? dw * dvldlmda : 0;
+   double d2 = use_vdlmda ? d2w * dvldlmda * dvldlmda + dw * d2vldlmda2 : 0;
+   c.b0 = -b;
+   c.b1 = b;
+   c.c0 = -d2;
+   c.c1 = d2;
+}
+
+// Absolute dual topology. Endpoint 1 is the fully coupled system; endpoint 0 is
+// the same system at vlam = 0, where the softcore annihilates exactly the pairs
+// it touches. Groups are the binary mut flags.
+static EhalDtCoef ehalDtCoefAdt(double w, double dw, double d2w)
+{
+   EhalDtCoef c;
+   dtWeightsToCoef(c, w, dw, d2w);
+   c.in0bits = 0;
+   c.in1bits = 0;
+   for (int gi = 0; gi < 2; ++gi) {
+      for (int gk = gi; gk < 2; ++gk) {
+         dtCellSet(c.in1bits, gi, gk);
+         bool soft = (vcouple == Vdw::DECOUPLE) ? (gi != gk) : (gi or gk);
+         if (not soft)
+            dtCellSet(c.in0bits, gi, gk);
+      }
+   }
+   // Analysis reports the coupled endpoint's count even when that endpoint
+   // carries no weight (ehal3.f:1243-1251), so the counted set is not a subset
+   // of the live endpoints and cannot be gated on need1.
+   c.cntbits = c.in1bits;
+   return c;
+}
+
+// Relative dual topology. Groups are the ternary rdt_group labels.
+static EhalDtCoef ehalDtCoefRdt(double w, double dw, double d2w, bool need1)
+{
+   EhalDtCoef c;
+   dtWeightsToCoef(c, w, dw, d2w);
+   c.in0bits = dtStateBits(evrelst0);
+   c.in1bits = dtStateBits(evrelst1);
+   c.cntbits = dtCountBits(need1 ? evrelst1 : evrelst0);
+   return c;
+}
+
 // Interpolates the long-range correction between two endpoint values and hands
 // the result, with its lambda derivatives, to evdwFinish.
 static void evdwFinishMixed(int vers, double weight1, double dweight1, double d2weight1, energy_prec elrc0,
@@ -625,65 +723,16 @@ static void evdwFinishMixed(int vers, double weight1, double dweight1, double d2
 {
    energy_prec mix_elrc = weight1 * elrc1 + (1 - weight1) * elrc0;
    virial_prec mix_vlrc = weight1 * vlrc1 + (1 - weight1) * vlrc0;
-   energy_prec mix_delrc = dweight1 * (elrc1 - elrc0);
-   energy_prec mix_d2elrc = d2weight1 * (elrc1 - elrc0);
-   virial_prec mix_dvlrc = dweight1 * (vlrc1 - vlrc0);
+   energy_prec mix_delrc = dweight1 * dvldlmda * (elrc1 - elrc0);
+   energy_prec mix_d2elrc = (d2weight1 * dvldlmda * dvldlmda + dweight1 * d2vldlmda2) * (elrc1 - elrc0);
+   virial_prec mix_dvlrc = dweight1 * dvldlmda * (vlrc1 - vlrc0);
    evdwFinish(vers, mix_elrc, mix_vlrc, mix_delrc, mix_d2elrc, mix_dvlrc);
 }
 
-void evdw_adt(int vers)
+void evdw_dt(int vers)
 {
    assert(vdwtyp == Vdw::HAL);
-
-   real vlam_orig = vlam;
-
-   double weight1, dweight1, d2weight1;
-   bool need0, need1;
-   dtWeightNeed(vlam_orig, evdtexp, dvldlmda, d2vldlmda2, weight1, dweight1, d2weight1, need0, need1);
-
-   evdwBegin(vers);
-
-   // As for the multipoles, analysis reports the coupled endpoint's count even
-   // when that endpoint carries no weight, so it is evaluated for the count
-   // alone (ehal3.f:1243-1251). ev_buf.zero() keeps nev; evdwZeroBuffers()
-   // would clear the very thing this exists to preserve.
-   int wvers = vers;
-   if ((vers & calc::analyz) and not need1) {
-      vlam = 1;
-      evdwKernel(vers);
-      ev_buf.zero(vers);
-      wvers = vers & ~calc::analyz;
-   }
-
-   if (need0) {
-      vlam = 0;
-      evdwKernel(wvers);
-      ev_snap.save(wvers, ev_buf);
-   }
-   if (need1) {
-      if (need0)
-         evdwZeroBuffers(wvers);
-      vlam = 1;
-      evdwKernel(wvers);
-      if (not need0)
-         ev_snap.save(wvers, ev_buf);
-   }
-   vlam = vlam_orig;
-
-   ev_snap.mix(vers, vlam_orig, evdtexp, use_vdlmda, ev_buf, ev_dl);
-
-   // A dead endpoint's correction is aliased onto the live one, so that the
-   // interpolation is an identity there just as it is for the energy buffers.
-   energy_prec elrc0 = need0 ? elrc0_vol : elrc1_vol;
-   energy_prec elrc1 = need1 ? elrc1_vol : elrc0_vol;
-   virial_prec vlrc0 = need0 ? vlrc0_vol : vlrc1_vol;
-   virial_prec vlrc1 = need1 ? vlrc1_vol : vlrc0_vol;
-   evdwFinishMixed(vers, weight1, dweight1, d2weight1, elrc0, elrc1, vlrc0, vlrc1);
-}
-
-void evdw_rdt(int vers)
-{
-   assert(vdwtyp == Vdw::HAL);
+   const bool relative = use_evrdt;
 
    double weight1, dweight1, d2weight1;
    bool need0, need1;
@@ -691,31 +740,32 @@ void evdw_rdt(int vers)
 
    evdwBegin(vers);
 
-   const RelDualOps ops = {
-      [](int v, RdtMask mask, bool) { ehalSubsys(v, mask); },
-      [](int v) { evdwZeroBuffers(v); },
-      [](int v) { ev_snap.save(v, ev_buf); },
-      [](int v) { ev_snap.mix(v, vlam, evdtexp, use_vdlmda, ev_buf, ev_dl); },
-   };
-   relDualDrive(vers, evrelst0, evrelst1, need0, need1, ops);
+   ehalDt(vers,
+      relative ? ehalDtCoefRdt(weight1, dweight1, d2weight1, need1)
+               : ehalDtCoefAdt(weight1, dweight1, d2weight1));
 
-   // Each endpoint's correction is the sum over the subsystems its coupling
-   // state claims, exactly as its energy is.
-   energy_prec elrc0 = 0, elrc1 = 0;
-   virial_prec vlrc0 = 0, vlrc1 = 0;
-   for (int k = 0; k < nRelSlot; ++k) {
-      RdtMask mask;
-      bool in0, in1;
-      relSlot(k, evrelst0, evrelst1, mask, in0, in1);
-      if (in0) {
-         elrc0 += elrc_slot[k];
-         vlrc0 += vlrc_slot[k];
+   energy_prec elrc0, elrc1;
+   virial_prec vlrc0, vlrc1;
+   if (relative) {
+      elrc0 = 0, elrc1 = 0, vlrc0 = 0, vlrc1 = 0;
+      for (int k = 0; k < nRelSlot; ++k) {
+         RdtMask mask;
+         bool in0, in1;
+         relSlot(k, evrelst0, evrelst1, mask, in0, in1);
+         if (in0) {
+            elrc0 += elrc_slot[k];
+            vlrc0 += vlrc_slot[k];
+         }
+         if (in1) {
+            elrc1 += elrc_slot[k];
+            vlrc1 += vlrc_slot[k];
+         }
       }
-      if (in1) {
-         elrc1 += elrc_slot[k];
-         vlrc1 += vlrc_slot[k];
-      }
+   } else {
+      elrc0 = elrc0_vol, elrc1 = elrc1_vol;
+      vlrc0 = vlrc0_vol, vlrc1 = vlrc1_vol;
    }
+
    if (not need0) {
       elrc0 = elrc1;
       vlrc0 = vlrc1;
@@ -723,6 +773,7 @@ void evdw_rdt(int vers)
       elrc1 = elrc0;
       vlrc1 = vlrc0;
    }
+
    evdwFinishMixed(vers, weight1, dweight1, d2weight1, elrc0, elrc1, vlrc0, vlrc1);
 }
 }
@@ -761,13 +812,13 @@ void egauss(int vers)
 TINKER_FVOID2(acc1, cu1, ehal, int);
 void ehal(int vers)
 {
-   TINKER_FCALL2(acc1, cu1, ehal, vers);
+   TINKER_FCALL2(acc1, cu1, ehal, lmdaDerivVers(vers, use_evast));
 }
 
-TINKER_FVOID2(acc0, cu1, ehalSubsys, int, RdtMask);
-void ehalSubsys(int vers, RdtMask rdt_mask)
+TINKER_FVOID2(acc0, cu1, ehalDt, int, const EhalDtCoef&);
+void ehalDt(int vers, const EhalDtCoef& coef)
 {
-   TINKER_FCALL2(acc0, cu1, ehalSubsys, vers, rdt_mask);
+   TINKER_FCALL2(acc0, cu1, ehalDt, lmdaDerivVers(vers, use_vdlmda), coef);
 }
 
 TINKER_FVOID2(acc1, cu1, ehalReduceXyz);

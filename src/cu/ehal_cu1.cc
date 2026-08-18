@@ -1,5 +1,5 @@
 // ck.py Version 3.1.0
-template <class Ver, class STYP>
+template <class Ver>
 __global__
 void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer restrict ev, VirialBuffer restrict vev,
    grad_prec* restrict gx, grad_prec* restrict gy, grad_prec* restrict gz, real cut, real off,
@@ -7,7 +7,7 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
    const real* restrict x, const real* restrict y, const real* restrict z, const Spatial::SortedAtom* restrict sorted,
    int nakpl, const int* restrict iakpl, int niak, const int* restrict iak, const int* restrict lst, int njvdw,
    real vlam, Vdw vcouple, const real* restrict radmin, const real* restrict epsilon, const int* restrict jvdw,
-   const int* restrict grp, RdtMask rdt_mask)
+   const int* restrict mut)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;
@@ -63,32 +63,27 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
       yi = y[i];
       zi = z[i];
       ijvdw = jvdw[i];
-      imut = grp[i];
+      imut = mut[i];
       xk = x[k];
       yk = y[k];
       zk = z[k];
       kjvdw = jvdw[k];
-      kmut = grp[k];
+      kmut = mut[k];
 
       constexpr bool incl = true;
-      bool include = incl;
-      if CONSTEXPR (eq<STYP, SUBSYS>())
-         include = rdtPairActive(rdt_mask, imut, kmut);
       real xr = xi - xk;
       real yr = yi - yk;
       real zr = zi - zk;
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off * off and include) {
+      if (r2 <= off * off and incl) {
          real r = REAL_SQRT(r2);
          real rv = radmin[ijvdw * njvdw + kjvdw];
          real eps = epsilon[ijvdw * njvdw + kjvdw];
          real vlambda = 1;
-         if CONSTEXPR (eq<STYP, NON_SUBSYS>()) {
-            if (vcouple == Vdw::DECOUPLE) {
-               vlambda = (imut == kmut ? 1 : vlam);
-            } else if (vcouple == Vdw::ANNIHILATE) {
-               vlambda = (imut || kmut ? vlam : 1);
-            }
+         if (vcouple == Vdw::DECOUPLE) {
+            vlambda = (imut == kmut ? 1 : vlam);
+         } else if (vcouple == Vdw::ANNIHILATE) {
+            vlambda = (imut || kmut ? vlam : 1);
          }
          real e, de;
          pair_hal_v2<do_g, 0>(r, scalea, rv, eps, cut, off, vlambda, GHAL, DHAL, SCEXP, SCALPHA, e, de);
@@ -157,12 +152,12 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
       ijvdw = jvdw[i];
-      imut = grp[i];
+      imut = mut[i];
       xk = sorted[atomk].x;
       yk = sorted[atomk].y;
       zk = sorted[atomk].z;
       kjvdw = jvdw[k];
-      kmut = grp[k];
+      kmut = mut[k];
 
       unsigned int info0 = info[iw * WARP_SIZE + ilane];
       for (int j = 0; j < WARP_SIZE; ++j) {
@@ -170,8 +165,6 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
          bool incl = iid < kid and kid < n;
          int srcmask = 1 << srclane;
          incl = incl and (info0 & srcmask) == 0;
-         if CONSTEXPR (eq<STYP, SUBSYS>())
-            incl = incl and rdtPairActive(rdt_mask, imut, kmut);
          real xr = xi - xk;
          real yr = yi - yk;
          real zr = zi - zk;
@@ -181,12 +174,10 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
             real rv = radmin[ijvdw * njvdw + kjvdw];
             real eps = epsilon[ijvdw * njvdw + kjvdw];
             real vlambda = 1;
-            if CONSTEXPR (eq<STYP, NON_SUBSYS>()) {
-               if (vcouple == Vdw::DECOUPLE) {
-                  vlambda = (imut == kmut ? 1 : vlam);
-               } else if (vcouple == Vdw::ANNIHILATE) {
-                  vlambda = (imut || kmut ? vlam : 1);
-               }
+            if (vcouple == Vdw::DECOUPLE) {
+               vlambda = (imut == kmut ? 1 : vlam);
+            } else if (vcouple == Vdw::ANNIHILATE) {
+               vlambda = (imut || kmut ? vlam : 1);
             }
             real e, de;
             pair_hal_v2<do_g, 1>(r, 1, rv, eps, cut, off, vlambda, GHAL, DHAL, SCEXP, SCALPHA, e, de);
@@ -262,17 +253,15 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
       ijvdw = jvdw[i];
-      imut = grp[i];
+      imut = mut[i];
       xk = sorted[atomk].x;
       yk = sorted[atomk].y;
       zk = sorted[atomk].z;
       kjvdw = jvdw[k];
-      kmut = grp[k];
+      kmut = mut[k];
 
       for (int j = 0; j < WARP_SIZE; ++j) {
          bool incl = atomk > 0;
-         if CONSTEXPR (eq<STYP, SUBSYS>())
-            incl = incl and rdtPairActive(rdt_mask, imut, kmut);
          real xr = xi - xk;
          real yr = yi - yk;
          real zr = zi - zk;
@@ -282,12 +271,10 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
             real rv = radmin[ijvdw * njvdw + kjvdw];
             real eps = epsilon[ijvdw * njvdw + kjvdw];
             real vlambda = 1;
-            if CONSTEXPR (eq<STYP, NON_SUBSYS>()) {
-               if (vcouple == Vdw::DECOUPLE) {
-                  vlambda = (imut == kmut ? 1 : vlam);
-               } else if (vcouple == Vdw::ANNIHILATE) {
-                  vlambda = (imut || kmut ? vlam : 1);
-               }
+            if (vcouple == Vdw::DECOUPLE) {
+               vlambda = (imut == kmut ? 1 : vlam);
+            } else if (vcouple == Vdw::ANNIHILATE) {
+               vlambda = (imut || kmut ? vlam : 1);
             }
             real e, de;
             pair_hal_v2<do_g, 1>(r, 1, rv, eps, cut, off, vlambda, GHAL, DHAL, SCEXP, SCALPHA, e, de);

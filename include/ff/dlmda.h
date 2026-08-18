@@ -137,10 +137,35 @@ TINKER_EXTERN bool use_ost;
 TINKER_EXTERN bool use_meta;
 TINKER_EXTERN bool use_ti;
 
-/// Forces the energy term on when a lambda-dynamics method is active.
-inline int lmdaVers(int vers)
+/// The lambda-derivative channels a term can be asked for, as calc bits.
+inline int lmdaDerivMask(int flag, bool term_driven)
 {
-   return use_mainlmda ? (vers | calc::energy) : vers;
+   if (not term_driven)
+      return 0;
+   bool reduced = (use_ti or use_meta) and not use_ost;
+   int b = 0;
+   if (flag & calc::energy) {
+      b += calc::energy_dlmda1;
+      if (not reduced)
+         b += calc::energy_dlmda2;
+   }
+   if ((flag & calc::grad) and not reduced)
+      b += calc::grad_dlmda;
+   if (flag & calc::virial)
+      b += calc::virial_dlmda;
+   return b;
+}
+
+inline int lmdaDerivVers(int vers, bool term_driven)
+{
+   if (not term_driven)
+      return vers;
+   bool reduced = (use_ti or use_meta) and not use_ost;
+   if (vers == calc::v1)
+      return reduced ? calc::v7 : calc::v9;
+   if (vers == calc::v4)
+      return reduced ? calc::v8 : calc::v10;
+   return vers;
 }
 
 /// The one main lambda, mirroring mutant::lambda. Whichever method owns it --
@@ -231,10 +256,8 @@ TINKER_EXTERN real* polarityorig;
 // lambda derivative accumulators.
 TINKER_EXTERN TermBuffer em_dl;
 TINKER_EXTERN TermBuffer ep_dl;
-TINKER_EXTERN TermBuffer ev_dl;
 TINKER_EXTERN DualEndpoint em_snap;
 TINKER_EXTERN DualEndpoint ep_snap;
-TINKER_EXTERN DualEndpoint ev_snap;
 
 TINKER_EXTERN EnergyBuffer dedl_buf;
 TINKER_EXTERN EnergyBuffer demdl_buf;
@@ -275,9 +298,6 @@ TINKER_EXTERN grad_prec* dfpdlz;
 TINKER_EXTERN grad_prec* dfsumdlx;
 TINKER_EXTERN grad_prec* dfsumdly;
 TINKER_EXTERN grad_prec* dfsumdlz;
-TINKER_EXTERN grad_prec* dfvdlx;
-TINKER_EXTERN grad_prec* dfvdly;
-TINKER_EXTERN grad_prec* dfvdlz;
 
 TINKER_EXTERN real* dltrqx;
 TINKER_EXTERN real* dltrqy;
@@ -302,13 +322,4 @@ extern "C"
       int foo;
    };
 
-   class SUBSYS
-   {
-      int foo;
-   };
-
-   class NON_SUBSYS
-   {
-      int foo;
-   };
 }

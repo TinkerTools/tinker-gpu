@@ -269,7 +269,7 @@ void lf_lpiston_npt(int istep, time_prec dt_ps)
    bool save = 0 == (istep % inform::iwrite);
    double eksum_new = 0.0;
 
-   if (!save and !use_ost)
+   if (!save and !use_dlmda)
       vers1 &= ~calc::energy;
    time_prec t2 = 0.5 * dt_ps;
    T_prec temp;
@@ -288,7 +288,7 @@ void lf_lpiston_npt(int istep, time_prec dt_ps)
             darray::copy(g::q0, n, leapfrog_x, xpos);
             darray::copy(g::q0, n, leapfrog_y, ypos);
             darray::copy(g::q0, n, leapfrog_z, zpos);
-            energy(lmdaVers(vers1));
+            energy(vers1);
          }
 
       } else {
@@ -304,7 +304,7 @@ void lf_lpiston_npt(int istep, time_prec dt_ps)
          }
 
          copyPosToXyz(true);
-         energy(lmdaVers(vers1));
+         energy(vers1);
       }
 
       // in step 1, vx(new) and vxold are opposite from notation
@@ -363,7 +363,7 @@ void lf_lpiston_npt(int istep, time_prec dt_ps)
       leapfrog_vzold);
    lf_langevin_piston(dt_ps, press);
    copyPosToXyz(true);
-   energy(lmdaVers(vers1));
+   energy(vers1);
 
    // propagate the lambda particle.
    if (use_ost)

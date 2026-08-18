@@ -31,8 +31,7 @@ void BasicIntegrator::plan(int istep)
    // toggle off virial for MC barostat
    if (mcbaro)
       vers1 &= ~calc::virial;
-   // toggle off energy if neither save, mcbaro, nor use_ost
-   if (not save and not mcbaro and not use_ost)
+   if (not save and not mcbaro and not use_dlmda)
       vers1 &= ~calc::energy;
 }
 
@@ -90,7 +89,7 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
       m_prop->pos(dt);
       m_prop->rattle(dt);
       copyPosToXyz(true);
-      energy(lmdaVers(vers1));
+      energy(vers1);
       // propagate the lambda particle
       if (use_ost)
          eostDyn(istep);
@@ -109,7 +108,7 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
       for (int ifast = 1; ifast < nrespa; ++ifast) {
          m_prop->pos(dta);
          copyPosToXyz(false);
-         energy(lmdaVers(vers1), RESPA_FAST, respaTSConfig());
+         energy(vers1, RESPA_FAST, respaTSConfig());
          m_prop->velR0(dta);
          if (vers1 & calc::virial) {
             if (atomic) {
@@ -127,7 +126,7 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
       copyPosToXyz(true);
 
       // fast force
-      energy(lmdaVers(vers1), RESPA_FAST, respaTSConfig());
+      energy(vers1, RESPA_FAST, respaTSConfig());
       darray::copy(g::q0, n, gx1, gx);
       darray::copy(g::q0, n, gy1, gy);
       darray::copy(g::q0, n, gz1, gz);
@@ -144,7 +143,7 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
       }
 
       // slow force
-      energy(lmdaVers(vers1), RESPA_SLOW, respaTSConfig());
+      energy(vers1, RESPA_SLOW, respaTSConfig());
       // propagate the lambda particle
       if (use_ost)
          eostDyn(istep);
@@ -202,7 +201,7 @@ VerletIntegrator::VerletIntegrator(ThermostatEnum te, BarostatEnum be)
 
 void VerletIntegrator::KickOff()
 {
-   energy(lmdaVers((calc::grad | calc::virial) & rc_flag));
+   energy((calc::grad | calc::virial) & rc_flag);
 }
 }
 
@@ -226,18 +225,18 @@ RespaIntegrator::RespaIntegrator(ThermostatEnum te, BarostatEnum be)
 void RespaIntegrator::KickOff()
 {
    // save fast gradients to gx1 etc.
-   energy(lmdaVers(calc::grad), RESPA_FAST, respaTSConfig());
+   energy(calc::grad, RESPA_FAST, respaTSConfig());
    darray::copy(g::q0, n, gx1, gx);
    darray::copy(g::q0, n, gy1, gy);
    darray::copy(g::q0, n, gz1, gz);
 
    // save slow gradients to gx2 etc.
-   energy(lmdaVers(calc::grad), RESPA_SLOW, respaTSConfig());
+   energy(calc::grad, RESPA_SLOW, respaTSConfig());
    darray::copy(g::q0, n, gx2, gx);
    darray::copy(g::q0, n, gy2, gy);
    darray::copy(g::q0, n, gz2, gz);
 
-   energy(lmdaVers((calc::grad | calc::virial) & rc_flag));
+   energy((calc::grad | calc::virial) & rc_flag);
 }
 }
 
@@ -378,7 +377,7 @@ static void nhc_npt(int istep, time_prec dt)
    mdPosAxbv(eterm2, poly);
    copyPosToXyz(true);
 
-   energy(lmdaVers(vers1));
+   energy(vers1);
 
    // propagate the lambda particle.
    if (use_ost)
@@ -422,7 +421,7 @@ void Nhc96Integrator::kickoff()
       gnh[i] = 0;
    }
    qnh[0] *= mdstuf::nfree;
-   energy(lmdaVers(calc::grad | calc::virial));
+   energy(calc::grad | calc::virial);
 }
 
 Nhc96Integrator::Nhc96Integrator()
@@ -501,7 +500,7 @@ const char* LeapFrogLPIntegrator::name() const
 
 void LeapFrogLPIntegrator::kickoff()
 {
-   energy(lmdaVers(calc::energy | calc::grad | calc::virial));
+   energy(calc::energy | calc::grad | calc::virial);
 }
 
 LeapFrogLPIntegrator::LeapFrogLPIntegrator()

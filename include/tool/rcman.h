@@ -97,6 +97,10 @@ extern "C"
    struct EngGrad;
    struct Grad;
    struct GradVir;
+   struct EngGradVirDlmda1;
+   struct EngGradDlmda1;
+   struct EngGradVirDlmda2;
+   struct EngGradDlmda2;
 }
 
 namespace tinker {
@@ -115,8 +119,14 @@ struct calc
    static constexpr int analyz = 0x080; ///< Evaluate number of interactions.
    static constexpr int md = 0x100;     ///< Run MD simulation.
 
+   static constexpr int energy_dlmda1 = 0x200; ///< Evaluate first lambda derivative energy.
+   static constexpr int energy_dlmda2 = 0x400; ///< Evaluate second lambda derivative energy.
+   static constexpr int grad_dlmda = 0x800;    ///< Evaluate lambda derivative energy gradient.
+   static constexpr int virial_dlmda = 0x1000;  ///< Evaluate lambda derivative virial tensor.
+
    /// Bits mask to clear energy-irrelevant flags.
-   static constexpr int vmask = energy + grad + virial + analyz;
+   static constexpr int vmask = energy + grad + virial + analyz + energy_dlmda1 + energy_dlmda2 + grad_dlmda
+      + virial_dlmda;
    /// Similar to Tinker energy routines. Energy only.
    static constexpr int v0 = energy;
    /// Similar to version 1 Tinker energy routines.
@@ -131,6 +141,12 @@ struct calc
    static constexpr int v5 = grad;
    /// Gradient and virial.
    static constexpr int v6 = grad + virial;
+   // thermodynamic integration and metadynamics
+   static constexpr int v7 = v1 + energy_dlmda1 + virial_dlmda;
+   static constexpr int v8 = v4 + energy_dlmda1;
+   // orthogonal space sampling
+   static constexpr int v9 = v1 + energy_dlmda1 + energy_dlmda2 + grad_dlmda + virial_dlmda;
+   static constexpr int v10 = v4 + energy_dlmda1 + energy_dlmda2 + grad_dlmda;
 
    using V0 = Eng;
    using V1 = EngGradVir;
@@ -138,6 +154,10 @@ struct calc
    using V4 = EngGrad;
    using V5 = Grad;
    using V6 = GradVir;
+   using V7 = EngGradVirDlmda1;
+   using V8 = EngGradDlmda1;
+   using V9 = EngGradVirDlmda2;
+   using V10 = EngGradDlmda2;
 
    /// \brief Sanity checks for version constants.
    template <int USE>
@@ -149,8 +169,16 @@ struct calc
       static constexpr int a = USE & calc::analyz;
       static constexpr int g = USE & calc::grad;
       static constexpr int v = USE & calc::virial;
+      static constexpr int e_dlmda1 = USE & calc::energy_dlmda1;
+      static constexpr int e_dlmda2 = USE & calc::energy_dlmda2;
+      static constexpr int g_dlmda = USE & calc::grad_dlmda;
+      static constexpr int v_dlmda = USE & calc::virial_dlmda;
       static_assert(v ? (bool)g : true, "If calc::virial, must calc::grad.");
       static_assert(a ? (bool)e : true, "If calc::analyz, must calc::energy.");
+      static_assert(e_dlmda1 ? (bool)e : true, "If calc::energy_dlmda1, must calc::energy.");
+      static_assert(e_dlmda2 ? (bool)e : true, "If calc::energy_dlmda2, must calc::energy.");
+      static_assert(g_dlmda ? (bool)g : true, "If calc::grad_dlmda, must calc::grad.");
+      static_assert(v_dlmda ? (bool)g : true, "If calc::virial_dlmda, must calc::grad.");
    };
 };
 }
@@ -168,6 +196,14 @@ extern "C"
    struct Grad : public tinker::calc::Vers<tinker::calc::v5>
    {};
    struct GradVir : public tinker::calc::Vers<tinker::calc::v6>
+   {};
+   struct EngGradVirDlmda1 : public tinker::calc::Vers<tinker::calc::v7>
+   {};
+   struct EngGradDlmda1 : public tinker::calc::Vers<tinker::calc::v8>
+   {};
+   struct EngGradVirDlmda2 : public tinker::calc::Vers<tinker::calc::v9>
+   {};
+   struct EngGradDlmda2 : public tinker::calc::Vers<tinker::calc::v10>
    {};
 }
 

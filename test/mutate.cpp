@@ -225,7 +225,13 @@ enum class Fuse
    Forbid   ///< Drop counts, and require that it still did not.
 };
 
-void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off)
+enum class LmdaMode
+{
+   Default,
+   ThermIntg,
+};
+
+void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = LmdaMode::Default)
 {
    std::string dir = TINKER9_DIRSTR "/test/file/mutate/";
    std::string xyzdst = std::string(fx.base) + ".xyz";
@@ -233,7 +239,11 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off)
    std::string refpath = std::string(TINKER9_DIRSTR "/test/ref/mutate/") + fx.name + ".txt";
 
    TestFile fxyz(dir + xyzdst, xyzdst);
-   TestFile fkey(dir + keyname, keyname);
+   // TI owns the main lambda and starts at the first schedule window. These
+   // four fixtures all reference lambda 0.5, so keep that operating point
+   // instead of accepting TI's default first window at lambda 1.
+   const char* keyextra = lmdaMode == LmdaMode::ThermIntg ? "\ntherm-intg\nti-window 0.5\n" : "";
+   TestFile fkey(dir + keyname, keyname, keyextra);
    TestFile fprm(TINKER9_DIRSTR "/test/file/commit_6fe8e913/water03.prm");
 
    const char* argv[] = {"dummy", xyzdst.c_str(), "-k", keyname.c_str()};
@@ -259,6 +269,23 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off)
    testBeginWithArgs(argc, argv);
    initialize();
 
+   // The ordinary lambda-derivative fixtures request every derivative channel,
+   // while TI requests only the first energy derivative (and the derivative
+   // virial when the base version has a virial). Verify the dispatch contract
+   // here as well as checking the resulting quantities below.
+   const bool reducedLmda = lmdaMode == LmdaMode::ThermIntg;
+   if (use_dlmda) {
+      REQUIRE(lmdaDerivVers(calc::v1, use_dlmda) == (reducedLmda ? calc::v7 : calc::v9));
+      REQUIRE(lmdaDerivVers(calc::v4, use_dlmda) == (reducedLmda ? calc::v8 : calc::v10));
+   }
+   if (reducedLmda) {
+      REQUIRE(use_dlmda);
+      REQUIRE(use_ti);
+      REQUIRE(use_mainlmda);
+      REQUIRE(use_vdlmda);
+      COMPARE_REALS(lambda, 0.5, eps_l);
+   }
+
    if (fuse == Fuse::Require)
       REQUIRE(useEmplar());
    else if (fuse == Fuse::Forbid)
@@ -280,17 +307,23 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off)
    // terms come back summed in demdl with the polarization slot left at zero;
    // the split kernels report them separately. Either way the total and the van
    // der Waals part stand on their own.
-   auto checkLmdaScalars = [&]() {
+   auto checkLmdaFirstScalars = [&]() {
       COMPARE_REALS(dedl, lr.dedl[0], eps_l);
       COMPARE_REALS(devdl, lr.dedl[1], eps_l);
-      COMPARE_REALS(d2edl2, lr.d2edl2[0], eps_l);
-      COMPARE_REALS(d2evdl2, lr.d2edl2[1], eps_l);
       if (fuse == Fuse::Require) {
          COMPARE_REALS(demdl + depdl, lr.dedl[2] + lr.dedl[3], eps_l);
-         COMPARE_REALS(d2emdl2 + d2epdl2, lr.d2edl2[2] + lr.d2edl2[3], eps_l);
       } else {
          COMPARE_REALS(demdl, lr.dedl[2], eps_l);
          COMPARE_REALS(depdl, lr.dedl[3], eps_l);
+      }
+   };
+
+   auto checkLmdaSecondScalars = [&]() {
+      COMPARE_REALS(d2edl2, lr.d2edl2[0], eps_l);
+      COMPARE_REALS(d2evdl2, lr.d2edl2[1], eps_l);
+      if (fuse == Fuse::Require) {
+         COMPARE_REALS(d2emdl2 + d2epdl2, lr.d2edl2[2] + lr.d2edl2[3], eps_l);
+      } else {
          COMPARE_REALS(d2emdl2, lr.d2edl2[2], eps_l);
          COMPARE_REALS(d2epdl2, lr.d2edl2[3], eps_l);
       }
@@ -323,8 +356,11 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off)
             COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
       if (fx.dolmda) {
-         checkLmdaScalars();
-         checkLmdaGrad();
+         checkLmdaFirstScalars();
+         if (not reducedLmda) {
+            checkLmdaSecondScalars();
+            checkLmdaGrad();
+         }
          for (int i = 0; i < 3; ++i)
             for (int j = 0; j < 3; ++j)
                COMPARE_REALS(dvirdl[i * 3 + j], lr.dvdl[i][j], eps_dv);
@@ -358,15 +394,16 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off)
       COMPARE_REALS(esum, ref_e, eps_e);
       COMPARE_GRADIENT(ref_g, eps_g);
       if (fx.dolmda) {
-         checkLmdaScalars();
-         checkLmdaGrad();
+         checkLmdaFirstScalars();
+         if (not reducedLmda) {
+            checkLmdaSecondScalars();
+            checkLmdaGrad();
+         }
       }
 
       // level 5 -- gradient only (no energy, no virial)
       energy(calc::v5);
       COMPARE_GRADIENT(ref_g, eps_g);
-      if (fx.dolmda)
-         checkLmdaGrad();
 
       // level 6 -- gradient + virial (no energy)
       energy(calc::v6);
@@ -374,12 +411,6 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off)
       for (int i = 0; i < 3; ++i)
          for (int j = 0; j < 3; ++j)
             COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
-      if (fx.dolmda) {
-         checkLmdaGrad();
-         for (int i = 0; i < 3; ++i)
-            for (int j = 0; j < 3; ++j)
-               COMPARE_REALS(dvirdl[i * 3 + j], lr.dvdl[i][j], eps_dv);
-      }
    }
 
    finish();
@@ -395,6 +426,14 @@ void runEmplarFixture(const Fixture& fx)
 {
    runFixture(fx);
    runFixture(fx, Fuse::Require);
+}
+
+// Reuses a full lambda-scaled fixture with THERM-INTG appended to its temporary
+// key file. runFixture still exercises v0, v1, v3, v4, v5 and v6, with the
+// lambda-driven kernels receiving v7 for v1 and v8 for v4.
+void runThermIntgFixture(const Fixture& fx)
+{
+   runFixture(fx, Fuse::Off, LmdaMode::ThermIntg);
 }
 
 // The single topology lambda-derivative path has no fused equivalent -- it
@@ -617,5 +656,9 @@ TEST_CASE("MUTATE-181_water_rels_ye_lig2_ix2_l015", "[ff][mutate][rels]") { runF
 TEST_CASE("MUTATE-182_water_ast_v05_annihilate", "[ff][mutate][ast]") { runFixture(kFixtures[181]); }
 TEST_CASE("MUTATE-183_water_adt_v05_annihilate", "[ff][mutate][adt]") { runFixture(kFixtures[182]); }
 
+TEST_CASE("MUTATE-TI-076_water_qnt_ast_l05", "[ff][mutate][ti][ast]") { runThermIntgFixture(kFixtures[75]); }
+TEST_CASE("MUTATE-TI-079_water_qnt_adt_l05", "[ff][mutate][ti][adt]") { runThermIntgFixture(kFixtures[78]); }
+TEST_CASE("MUTATE-TI-082_water_qnt_rdt_l05", "[ff][mutate][ti][rdt]") { runThermIntgFixture(kFixtures[81]); }
+TEST_CASE("MUTATE-TI-176_water_rels_ye_vdwm_exp_l050", "[ff][mutate][ti][rels]") {runThermIntgFixture(kFixtures[175]);}
 
 #endif

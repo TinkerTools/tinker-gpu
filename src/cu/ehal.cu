@@ -110,9 +110,10 @@ namespace tinker {
 #endif
 #include "ehal_cu1.cc"
 #include "ehaldlmda_cu1.cc"
+#include "ehaldt_cu1.cc"
 
-template <class Ver, class STYP>
-static void ehal_cu3(RdtMask rdt_mask)
+template <class Ver>
+static void ehal_cu3()
 {
    constexpr bool do_g = Ver::g;
 
@@ -120,74 +121,147 @@ static void ehal_cu3(RdtMask rdt_mask)
    const real cut = switchCut(Switch::VDW);
    const real off = switchOff(Switch::VDW);
 
+   if CONSTEXPR (do_g)
+      darray::zero(g::q0, n, gxred, gyred, gzred);
+
+   int ngrid = gpuGridSize(BLOCK_DIM);
+   auto ker1 = ehal_cu1<Ver>;
+   ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, vir_ev, gxred, gyred, gzred, cut, off,
+      st.si1.bit0, nvexclude, vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak,
+      st.iak, st.lst, njvdw, vlam, vcouple, radmin, epsilon, jvdw, mut);
+
+   if CONSTEXPR (do_g)
+      ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);
+}
+
+template <class Ver>
+static void ehaldlmda_cu3()
+{
+   constexpr bool do_g = Ver::g;
+   constexpr bool do_gdl = Ver::g_dlmda;
+
+   const auto& st = *vspatial_v2_unit;
+   const real cut = switchCut(Switch::VDW);
+   const real off = switchOff(Switch::VDW);
+
    if CONSTEXPR (do_g) {
       darray::zero(g::q0, n, gxred, gyred, gzred);
-      if CONSTEXPR (eq<STYP, NON_SUBSYS>()) {
-         if (use_evast)
-            darray::zero(g::q0, n, gxred_dlmda, gyred_dlmda, gzred_dlmda);
-      }
+      if CONSTEXPR (do_gdl)
+         darray::zero(g::q0, n, gxred_dlmda, gyred_dlmda, gzred_dlmda);
    }
 
    int ngrid = gpuGridSize(BLOCK_DIM);
-   if CONSTEXPR (eq<STYP, SUBSYS>()) {
-      auto ker1 = ehal_cu1<Ver, SUBSYS>;
-      ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, vir_ev, gxred, gyred, gzred, cut, off,
-         st.si1.bit0, nvexclude, vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak,
-         st.iak, st.lst, njvdw, vlam, vcouple, radmin, epsilon, jvdw, rdt_group, rdt_mask);
-   } else {
-      if (use_evast) {
-         auto ker1 = ehaldlmda_cu1<Ver>;
-         ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, devdl_buf, d2evdl2_buf, vir_ev,
-            devvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0,
-            nvexclude, vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak,
-            st.lst, njvdw, vlam, vcouple, radmin, epsilon, jvdw, mut);
-      } else {
-         auto ker1 = ehal_cu1<Ver, NON_SUBSYS>;
-         ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, vir_ev, gxred, gyred, gzred, cut,
-            off, st.si1.bit0, nvexclude, vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl,
-            st.niak, st.iak, st.lst, njvdw, vlam, vcouple, radmin, epsilon, jvdw, mut, RdtMask::ALL);
-      }
-   }
+   auto ker1 = ehaldlmda_cu1<Ver>;
+   ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, devdl_buf, d2evdl2_buf, vir_ev,
+      devvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0, nvexclude,
+      vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, njvdw,
+      vlam, vcouple, radmin, epsilon, jvdw, mut, dvldlmda, d2vldlmda2);
 
    if CONSTEXPR (do_g) {
       ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);
-      if CONSTEXPR (eq<STYP, NON_SUBSYS>()) {
-         if (use_evast)
-            ehalResolveGradient(gxred_dlmda, gyred_dlmda, gzred_dlmda, dfvdlx, dfvdly, dfvdlz);
-      }
+      if CONSTEXPR (do_gdl)
+         ehalResolveGradient(gxred_dlmda, gyred_dlmda, gzred_dlmda, dfsumdlx, dfsumdly, dfsumdlz);
    }
 }
 
 void ehal_cu(int vers)
 {
+   if (use_evast) {
+      if (vers == calc::v0)
+         ehaldlmda_cu3<calc::V0>();
+      else if (vers == calc::v1)
+         ehaldlmda_cu3<calc::V1>();
+      else if (vers == calc::v3)
+         ehaldlmda_cu3<calc::V3>();
+      else if (vers == calc::v4)
+         ehaldlmda_cu3<calc::V4>();
+      else if (vers == calc::v5)
+         ehaldlmda_cu3<calc::V5>();
+      else if (vers == calc::v6)
+         ehaldlmda_cu3<calc::V6>();
+      else if (vers == calc::v7)
+         ehaldlmda_cu3<calc::V7>();
+      else if (vers == calc::v8)
+         ehaldlmda_cu3<calc::V8>();
+      else if (vers == calc::v9)
+         ehaldlmda_cu3<calc::V9>();
+      else if (vers == calc::v10)
+         ehaldlmda_cu3<calc::V10>();
+      return;
+   }
+
    if (vers == calc::v0)
-      ehal_cu3<calc::V0, NON_SUBSYS>(RdtMask::ALL);
+      ehal_cu3<calc::V0>();
    else if (vers == calc::v1)
-      ehal_cu3<calc::V1, NON_SUBSYS>(RdtMask::ALL);
+      ehal_cu3<calc::V1>();
    else if (vers == calc::v3)
-      ehal_cu3<calc::V3, NON_SUBSYS>(RdtMask::ALL);
+      ehal_cu3<calc::V3>();
    else if (vers == calc::v4)
-      ehal_cu3<calc::V4, NON_SUBSYS>(RdtMask::ALL);
+      ehal_cu3<calc::V4>();
    else if (vers == calc::v5)
-      ehal_cu3<calc::V5, NON_SUBSYS>(RdtMask::ALL);
+      ehal_cu3<calc::V5>();
    else if (vers == calc::v6)
-      ehal_cu3<calc::V6, NON_SUBSYS>(RdtMask::ALL);
+      ehal_cu3<calc::V6>();
 }
 
-void ehalSubsys_cu(int vers, RdtMask rdt_mask)
+template <class Ver>
+static void ehaldt_cu3(const EhalDtCoef& coef)
+{
+   constexpr bool do_g = Ver::g;
+   constexpr bool do_gdl = Ver::g_dlmda;
+
+   const auto& st = *vspatial_v2_unit;
+   const real cut = switchCut(Switch::VDW);
+   const real off = switchOff(Switch::VDW);
+
+   // The relative schedule labels atoms by ligand; the absolute one only knows
+   // mutated from not.
+   const int* grp = use_rel ? rdt_group : mut;
+
+   if CONSTEXPR (do_g) {
+      darray::zero(g::q0, n, gxred, gyred, gzred);
+      if CONSTEXPR (do_gdl)
+         darray::zero(g::q0, n, gxred_dlmda, gyred_dlmda, gzred_dlmda);
+   }
+
+   int ngrid = gpuGridSize(BLOCK_DIM);
+   auto ker1 = ehaldt_cu1<Ver>;
+   ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, devdl_buf, d2evdl2_buf, vir_ev,
+      devvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0, nvexclude,
+      vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, njvdw,
+      radmin, epsilon, jvdw, grp, coef.in0bits, coef.in1bits, coef.cntbits, coef.a0, coef.a1, coef.b0, coef.b1,
+      coef.c0, coef.c1);
+
+   if CONSTEXPR (do_g) {
+      ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);
+      // The weights already carry the chain rule, so this is dF/dlambda in main
+      // lambda units and lmdachain has nothing left to scale.
+      if CONSTEXPR (do_gdl)
+         ehalResolveGradient(gxred_dlmda, gyred_dlmda, gzred_dlmda, dfsumdlx, dfsumdly, dfsumdlz);
+   }
+}
+
+void ehalDt_cu(int vers, const EhalDtCoef& coef)
 {
    if (vers == calc::v0)
-      ehal_cu3<calc::V0, SUBSYS>(rdt_mask);
+      ehaldt_cu3<calc::V0>(coef);
    else if (vers == calc::v1)
-      ehal_cu3<calc::V1, SUBSYS>(rdt_mask);
+      ehaldt_cu3<calc::V1>(coef);
    else if (vers == calc::v3)
-      ehal_cu3<calc::V3, SUBSYS>(rdt_mask);
+      ehaldt_cu3<calc::V3>(coef);
    else if (vers == calc::v4)
-      ehal_cu3<calc::V4, SUBSYS>(rdt_mask);
+      ehaldt_cu3<calc::V4>(coef);
    else if (vers == calc::v5)
-      ehal_cu3<calc::V5, SUBSYS>(rdt_mask);
+      ehaldt_cu3<calc::V5>(coef);
    else if (vers == calc::v6)
-      ehal_cu3<calc::V6, SUBSYS>(rdt_mask);
+      ehaldt_cu3<calc::V6>(coef);
+   else if (vers == calc::v7)
+      ehaldt_cu3<calc::V7>(coef);
+   else if (vers == calc::v8)
+      ehaldt_cu3<calc::V8>(coef);
+   else if (vers == calc::v9)
+      ehaldt_cu3<calc::V9>(coef);
+   else if (vers == calc::v10)
+      ehaldt_cu3<calc::V10>(coef);
 }
-
 }

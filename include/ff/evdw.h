@@ -66,9 +66,7 @@ void evdwData(RcOp);
 /// \ingroup vdw
 void evdw(int vers);
 /// \ingroup vdw
-void evdw_adt(int vers);
-/// \ingroup vdw
-void evdw_rdt(int vers);
+void evdw_dt(int vers);
 
 /// \ingroup vdw
 /// \brief Lennard-Jones 12-6 potential.
@@ -107,7 +105,17 @@ void egauss(int vers);
 /// \f[ t=5,\ \alpha=0.7 \f]
 void ehal(int vers);
 /// \ingroup vdw
-void ehalSubsys(int vers, RdtMask rdt_mask);
+struct EhalDtCoef
+{
+   unsigned in0bits, in1bits, cntbits;
+   real a0, a1; ///< energy, virial, gradient
+   real b0, b1; ///< dE/dlambda
+   real c0, c1; ///< d2E/dlambda2, energy channel only
+};
+
+/// \ingroup vdw
+/// \brief One fused pass over both dual topology endpoints.
+void ehalDt(int vers, const EhalDtCoef& coef);
 
 /// \ingroup vdw
 void ehalReduceXyz();
@@ -196,7 +204,7 @@ TINKER_EXTERN int njvdw;
 TINKER_EXTERN grad_prec* gxred;
 TINKER_EXTERN grad_prec* gyred;
 TINKER_EXTERN grad_prec* gzred;
-/// \brief Lambda derivatives on Halgren reduced VDW sites, resolved into dfvdlx/y/z.
+/// \brief Lambda derivatives on Halgren reduced VDW sites, resolved into dfsumdl*.
 TINKER_EXTERN grad_prec* gxred_dlmda;
 TINKER_EXTERN grad_prec* gyred_dlmda;
 TINKER_EXTERN grad_prec* gzred_dlmda;

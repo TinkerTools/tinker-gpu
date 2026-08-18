@@ -1,0 +1,219 @@
+OUTPUT_DIR: src/cu
+KERNEL_NAME: ehaldt_cu1
+TEMPLATE_PARAMS: template <class Ver>
+CONSTEXPR_FLAGS: |
+  constexpr bool do_e = Ver::e;
+  constexpr bool do_a = Ver::a;
+  constexpr bool do_g = Ver::g;
+  constexpr bool do_v = Ver::v;
+  constexpr bool do_dl1 = Ver::e_dlmda1;
+  constexpr bool do_dl2 = Ver::e_dlmda2;
+  constexpr bool do_gdl = Ver::g_dlmda;
+  constexpr bool do_vdl = Ver::v_dlmda;
+
+COUNT:
+  - nev
+ENERGY:
+  - ev
+ENERGY_DLMDA1:
+  - devdl
+ENERGY_DLMDA2:
+  - d2evdl2
+VIRIAL:
+  - vev
+VIRIAL_DLMDA:
+  - devvirdl
+GRADIENT:
+  - gx
+  - gy
+  - gz
+GRADIENT_DLMDA:
+  - dgx
+  - dgy
+  - dgz
+
+CUT_DISTANCE: cut
+OFF_DISTANCE: 'off'
+
+EXCLUDE_INFO: info
+SCALE_1X_TYPE: real_const_array
+
+EXTRA_PARAMS: |
+  , int njvdw
+  , const real* restrict radmin, const real* restrict epsilon
+  , const int* restrict jvdw, const int* restrict mut
+  , unsigned in0bits, unsigned in1bits, unsigned cntbits
+  , real a0, real a1, real b0, real b1, real c0, real c1
+# IMPLICIT_PARAMS:
+
+I_VARIABLES:
+  - register real xi   from:x
+  - register real yi   from:y
+  - register real zi   from:z
+  - register int ijvdw from:jvdw
+  - register int igrp  from:mut
+K_VARIABLES:
+  - register real xk   from:x
+  - register real yk   from:y
+  - register real zk   from:z
+  - register int kjvdw from:jvdw
+  - register int kgrp  from:mut
+I_FORCE:
+  - register real fix addto:gx
+  - register real fiy addto:gy
+  - register real fiz addto:gz
+K_FORCE:
+  - register real fkx addto:gx
+  - register real fky addto:gy
+  - register real fkz addto:gz
+I_FORCE_DLMDA:
+  - register real dfix addto:dgx
+  - register real dfiy addto:dgy
+  - register real dfiz addto:dgz
+K_FORCE_DLMDA:
+  - register real dfkx addto:dgx
+  - register real dfky addto:dgy
+  - register real dfkz addto:dgz
+
+SCALED_PAIRWISE_INTERACTION: |
+  int cell = 3 * @igrp@ + @kgrp@;
+  bool in0 = (in0bits >> cell) & 1;
+  bool in1 = (in1bits >> cell) & 1;
+  bool cnt = (cntbits >> cell) & 1;
+  bool include = incl and (in0 or in1 or cnt);
+  real xr = @xi@ - @xk@;
+  real yr = @yi@ - @yk@;
+  real zr = @zi@ - @zk@;
+  real r2 = image2(xr, yr, zr);
+  if (r2 <= off * off and include) {
+    real r = REAL_SQRT(r2);
+    real rv = radmin[@ijvdw@ * njvdw + @kjvdw@];
+    real eps = epsilon[@ijvdw@ * njvdw + @kjvdw@];
+    real wa = (in0 ? a0 : 0) + (in1 ? a1 : 0);
+    real wb = (in0 ? b0 : 0) + (in1 ? b1 : 0);
+    real wc = (in0 ? c0 : 0) + (in1 ? c1 : 0);
+    real e, de;
+    pair_hal_v2<do_g, 0>(r, scalea, rv, eps, cut, off, 1,
+      GHAL, DHAL, SCEXP, SCALPHA, e, de);
+    if CONSTEXPR (do_e) {
+      evtl += floatTo<ebuf_prec>(wa * e);
+      if CONSTEXPR (do_dl1)
+        devdltl += floatTo<ebuf_prec>(wb * e);
+      if CONSTEXPR (do_dl2)
+        d2evdl2tl += floatTo<ebuf_prec>(wc * e);
+      if CONSTEXPR (do_a) {
+        // The count is of the unweighted interaction, and of the reported
+        // endpoint only, which is not always one of the live ones.
+        if (cnt and scalea != 0 and e != 0)
+          nevtl += 1;
+      }
+    }
+    if CONSTEXPR (do_g) {
+      de = de * REAL_RECIP(r);
+      real dedx = de * xr;
+      real dedy = de * yr;
+      real dedz = de * zr;
+      real ax = wa * dedx, ay = wa * dedy, az = wa * dedz;
+      real bx = wb * dedx, by = wb * dedy, bz = wb * dedz;
+      @fix@ += ax;
+      @fiy@ += ay;
+      @fiz@ += az;
+      @fkx@ -= ax;
+      @fky@ -= ay;
+      @fkz@ -= az;
+      if CONSTEXPR (do_gdl) {
+        @dfix@ += bx;
+        @dfiy@ += by;
+        @dfiz@ += bz;
+        @dfkx@ -= bx;
+        @dfky@ -= by;
+        @dfkz@ -= bz;
+      }
+      if CONSTEXPR (do_v) {
+        vevtlxx += floatTo<vbuf_prec>(xr * ax);
+        vevtlyx += floatTo<vbuf_prec>(yr * ax);
+        vevtlzx += floatTo<vbuf_prec>(zr * ax);
+        vevtlyy += floatTo<vbuf_prec>(yr * ay);
+        vevtlzy += floatTo<vbuf_prec>(zr * ay);
+        vevtlzz += floatTo<vbuf_prec>(zr * az);
+        if CONSTEXPR (do_vdl) {
+          devvirdltlxx += floatTo<vbuf_prec>(xr * bx);
+          devvirdltlyx += floatTo<vbuf_prec>(yr * bx);
+          devvirdltlzx += floatTo<vbuf_prec>(zr * bx);
+          devvirdltlyy += floatTo<vbuf_prec>(yr * by);
+          devvirdltlzy += floatTo<vbuf_prec>(zr * by);
+          devvirdltlzz += floatTo<vbuf_prec>(zr * bz);
+        }
+      }
+    }
+  }
+FULL_PAIRWISE_INTERACTION: |
+  int cell = 3 * @igrp@ + @kgrp@;
+  bool in0 = (in0bits >> cell) & 1;
+  bool in1 = (in1bits >> cell) & 1;
+  bool cnt = (cntbits >> cell) & 1;
+  incl = incl and (in0 or in1 or cnt);
+  real xr = @xi@ - @xk@;
+  real yr = @yi@ - @yk@;
+  real zr = @zi@ - @zk@;
+  real r2 = image2(xr, yr, zr);
+  if (r2 <= off * off and incl) {
+    real r = REAL_SQRT(r2);
+    real rv = radmin[@ijvdw@ * njvdw + @kjvdw@];
+    real eps = epsilon[@ijvdw@ * njvdw + @kjvdw@];
+    real wa = (in0 ? a0 : 0) + (in1 ? a1 : 0);
+    real wb = (in0 ? b0 : 0) + (in1 ? b1 : 0);
+    real wc = (in0 ? c0 : 0) + (in1 ? c1 : 0);
+    real e, de;
+    pair_hal_v2<do_g, 1>(r, 1, rv, eps, cut, off, 1,
+      GHAL, DHAL, SCEXP, SCALPHA, e, de);
+    if CONSTEXPR (do_e) {
+      evtl += floatTo<ebuf_prec>(wa * e);
+      if CONSTEXPR (do_dl1)
+        devdltl += floatTo<ebuf_prec>(wb * e);
+      if CONSTEXPR (do_dl2)
+        d2evdl2tl += floatTo<ebuf_prec>(wc * e);
+      if CONSTEXPR (do_a) {
+        if (cnt and e != 0)
+          nevtl += 1;
+      }
+    }
+    if CONSTEXPR (do_g) {
+      de = de * REAL_RECIP(r);
+      real dedx = de * xr;
+      real dedy = de * yr;
+      real dedz = de * zr;
+      real ax = wa * dedx, ay = wa * dedy, az = wa * dedz;
+      real bx = wb * dedx, by = wb * dedy, bz = wb * dedz;
+      @fix@ += ax;
+      @fiy@ += ay;
+      @fiz@ += az;
+      @fkx@ -= ax;
+      @fky@ -= ay;
+      @fkz@ -= az;
+      if CONSTEXPR (do_gdl) {
+        @dfix@ += bx;
+        @dfiy@ += by;
+        @dfiz@ += bz;
+        @dfkx@ -= bx;
+        @dfky@ -= by;
+        @dfkz@ -= bz;
+      }
+      if CONSTEXPR (do_v) {
+        vevtlxx += floatTo<vbuf_prec>(xr * ax);
+        vevtlyx += floatTo<vbuf_prec>(yr * ax);
+        vevtlzx += floatTo<vbuf_prec>(zr * ax);
+        vevtlyy += floatTo<vbuf_prec>(yr * ay);
+        vevtlzy += floatTo<vbuf_prec>(zr * ay);
+        vevtlzz += floatTo<vbuf_prec>(zr * az);
+        if CONSTEXPR (do_vdl) {
+          devvirdltlxx += floatTo<vbuf_prec>(xr * bx);
+          devvirdltlyx += floatTo<vbuf_prec>(yr * bx);
+          devvirdltlzx += floatTo<vbuf_prec>(zr * bx);
+          devvirdltlyy += floatTo<vbuf_prec>(yr * by);
+          devvirdltlzy += floatTo<vbuf_prec>(zr * by);
+          devvirdltlzz += floatTo<vbuf_prec>(zr * bz);
+        }
+      }
+    }
+  }

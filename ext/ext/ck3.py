@@ -641,7 +641,11 @@ class KernelWriter:
             if len(kfrcs.shared.keys()):
                 raise ValueError('F_FORCE cannot be put on shared memory.')
             k1, v1 = 'DECLARE_PARAMS_I_AND_K', ivars.declare() + kvars.declare()
+            ifdl = VariableDefinitions('i', config['I_FORCE_DLMDA']) if 'I_FORCE_DLMDA' in keys else None
+            kfdl = VariableDefinitions('k', config['K_FORCE_DLMDA']) if 'K_FORCE_DLMDA' in keys else None
             k2, v2 = 'DECLARE_FORCE_I_AND_K', ifrcs.declare() + kfrcs.declare()
+            if ifdl is not None:
+                v2 = v2 + ifdl.declare() + kfdl.declare()
             d[k1], d[k2] = v1, v2
 
             # i and k in exclude block
@@ -684,6 +688,17 @@ class KernelWriter:
             v2 = 'using ebuf_prec = EnergyBufferTraits::type;\n'
             v2 = v2 + '%s if CONSTEXPR (do_e) {%s}' % (decl, zero)
             v3 = 'if CONSTEXPR (do_e) {%s}' % total
+            for kdl, gate in [('ENERGY_DLMDA1', 'do_dl1'), ('ENERGY_DLMDA2', 'do_dl2')]:
+                if kdl not in keys:
+                    continue
+                decl, zero, total = '', '', ''
+                for t in config[kdl]:
+                    v1 = v1 + ', EnergyBuffer restrict {}'.format(t)
+                    decl = decl + 'ebuf_prec {}tl;'.format(t)
+                    zero = zero + '{}tl = 0;'.format(t)
+                    total = total + 'atomic_add({}tl, {}, ithread);'.format(t, t)
+                v2 = v2 + '%s if CONSTEXPR (do_e) {%s}' % (decl, zero)
+                v3 = v3 + 'if CONSTEXPR (%s) {%s}' % (gate, total)
         d[k1], d[k2], d[k3] = v1, v2, v3
 
         # virial
@@ -708,6 +723,22 @@ class KernelWriter:
             v2 = 'using vbuf_prec = VirialBufferTraits::type;\n'
             v2 = v2 + '%s if CONSTEXPR (do_v) {%s}' % (decl, zero)
             v3 = 'if CONSTEXPR (do_v) {%s}' % total
+            if 'VIRIAL_DLMDA' in keys:
+                decl, zero, total = '', '', ''
+                for t in config['VIRIAL_DLMDA']:
+                    v1 = v1 + ', VirialBuffer restrict {}'.format(t)
+                    decl = decl + 'vbuf_prec {}tlxx'.format(t)
+                    zero = zero + '{}tlxx = 0;'.format(t)
+                    total = total + 'atomic_add({}tlxx'.format(t)
+                    for sufx in ['yx', 'zx', 'yy', 'zy', 'zz']:
+                        decl = decl + ', {}tl{}'.format(t, sufx)
+                        zero = zero + '{}tl{} = 0;'.format(t, sufx)
+                        total = total + ', {}tl{}'.format(t, sufx)
+                    decl = decl + ';'
+                    zero = zero + '\n'
+                    total = total + ', {}, ithread);'.format(t)
+                v2 = v2 + '%s if CONSTEXPR (do_v) {%s}' % (decl, zero)
+                v3 = v3 + 'if CONSTEXPR (do_vdl) {%s}' % total
         d[k1], d[k2], d[k3] = v1, v2, v3
 
         if use_ikvars:
@@ -724,6 +755,9 @@ class KernelWriter:
                 vcfg = config[kcfg]
                 for t in vcfg:
                     v = v + ', grad_prec* restrict {}'.format(t)
+                if 'GRADIENT_DLMDA' in keys:
+                    for t in config['GRADIENT_DLMDA']:
+                        v = v + ', grad_prec* restrict {}'.format(t)
             k1, v1 = 'KERNEL_ZERO_LOCAL_FORCE', ifrcs.zero() + kfrcs.zero()
             k2, v2 = 'KERNEL_SAVE_LOCAL_FORCE', ifrcs.save() + kfrcs.save()
             k3, v3 = 'KERNEL_SHUFFLE_LOCAL_FORCE_I', ifrcs.shuffle()
@@ -733,8 +767,13 @@ class KernelWriter:
                 if 'constexpr bool do_g =' in vcfg:
                     v1 = 'if CONSTEXPR (do_g) {%s}' % v1
                     v2 = 'if CONSTEXPR (do_g) {%s}' % v2
+                    if ifdl is not None:
+                        v1 = v1 + 'if CONSTEXPR (do_gdl) {%s}' % (ifdl.zero() + kfdl.zero())
+                        v2 = v2 + 'if CONSTEXPR (do_gdl) {%s}' % (ifdl.save() + kfdl.save())
                 if v3 != '':
                     v3 = 'if CONSTEXPR (do_g) {%s}' % v3
+                    if ifdl is not None:
+                        v3 = v3 + 'if CONSTEXPR (do_gdl) {%s}' % ifdl.shuffle()
             d[k], d[k1], d[k2], d[k3] = v, v1, v2, v3
 
             # klane -- True only if ivar uses shared memory
@@ -791,6 +830,9 @@ class KernelWriter:
             v1 = kvars.ikreplace(v1)
             v1 = ifrcs.ikreplace(v1)
             v1 = kfrcs.ikreplace(v1)
+            if ifdl is not None:
+                v1 = ifdl.ikreplace(v1)
+                v1 = kfdl.ikreplace(v1)
             v2 = v1  # in case no scaled pairwise interaction is given
         kcfg = self.yk_scaled_pairwise
         if kcfg in keys:
@@ -799,6 +841,9 @@ class KernelWriter:
             v2 = kvars.ikreplace(v2)
             v2 = ifrcs.ikreplace(v2)
             v2 = kfrcs.ikreplace(v2)
+            if ifdl is not None:
+                v2 = ifdl.ikreplace(v2)
+                v2 = kfdl.ikreplace(v2)
         d[k1], d[k2] = v1, v2
 
         # single loop
