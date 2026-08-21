@@ -153,7 +153,7 @@ static void ehaldlmda_cu3()
    int ngrid = gpuGridSize(BLOCK_DIM);
    auto ker1 = ehaldlmda_cu1<Ver>;
    ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, devdl_buf, d2evdl2_buf, vir_ev,
-      devvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0, nvexclude,
+      dvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0, nvexclude,
       vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, njvdw,
       vlam, vcouple, radmin, epsilon, jvdw, mut, dvldlmda, d2vldlmda2);
 
@@ -205,7 +205,7 @@ void ehal_cu(int vers)
 }
 
 template <class Ver>
-static void ehaldt_cu3(const EhalDtCoef& coef)
+static void ehaldt_cu3(const DtCoef& coef)
 {
    constexpr bool do_g = Ver::g;
    constexpr bool do_gdl = Ver::g_dlmda;
@@ -227,21 +227,19 @@ static void ehaldt_cu3(const EhalDtCoef& coef)
    int ngrid = gpuGridSize(BLOCK_DIM);
    auto ker1 = ehaldt_cu1<Ver>;
    ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, devdl_buf, d2evdl2_buf, vir_ev,
-      devvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0, nvexclude,
+      dvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0, nvexclude,
       vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, njvdw,
       radmin, epsilon, jvdw, grp, coef.in0bits, coef.in1bits, coef.cntbits, coef.a0, coef.a1, coef.b0, coef.b1,
       coef.c0, coef.c1);
 
    if CONSTEXPR (do_g) {
       ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);
-      // The weights already carry the chain rule, so this is dF/dlambda in main
-      // lambda units and lmdachain has nothing left to scale.
       if CONSTEXPR (do_gdl)
          ehalResolveGradient(gxred_dlmda, gyred_dlmda, gzred_dlmda, dfsumdlx, dfsumdly, dfsumdlz);
    }
 }
 
-void ehalDt_cu(int vers, const EhalDtCoef& coef)
+void ehalDt_cu(int vers, const DtCoef& coef)
 {
    if (vers == calc::v0)
       ehaldt_cu3<calc::V0>(coef);

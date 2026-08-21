@@ -105,17 +105,8 @@ void egauss(int vers);
 /// \f[ t=5,\ \alpha=0.7 \f]
 void ehal(int vers);
 /// \ingroup vdw
-struct EhalDtCoef
-{
-   unsigned in0bits, in1bits, cntbits;
-   real a0, a1; ///< energy, virial, gradient
-   real b0, b1; ///< dE/dlambda
-   real c0, c1; ///< d2E/dlambda2, energy channel only
-};
-
-/// \ingroup vdw
 /// \brief One fused pass over both dual topology endpoints.
-void ehalDt(int vers, const EhalDtCoef& coef);
+void ehalDt(int vers, const DtCoef& coef);
 
 /// \ingroup vdw
 void ehalReduceXyz();

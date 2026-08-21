@@ -91,10 +91,6 @@ void gridPut_cu1(const real* restrict x, const real* restrict y, const real* res
       } // end if (PCHG or DISP)
 
       if CONSTEXPR (eq<T, MPOLE>()) {
-         bsplgen<3, bsorder>(w1, thetai1, array);
-         bsplgen<3, bsorder>(w2, thetai2, array);
-         bsplgen<3, bsorder>(w3, thetai3, array);
-
          real fmpi0 = fmp[i][MPL_PME_0];
          real fmpix = fmp[i][MPL_PME_X];
          real fmpiy = fmp[i][MPL_PME_Y];
@@ -105,6 +101,14 @@ void gridPut_cu1(const real* restrict x, const real* restrict y, const real* res
          real fmpixy = fmp[i][MPL_PME_XY];
          real fmpixz = fmp[i][MPL_PME_XZ];
          real fmpiyz = fmp[i][MPL_PME_YZ];
+
+         if (fmpi0 == 0 and fmpix == 0 and fmpiy == 0 and fmpiz == 0 and fmpixx == 0 and fmpiyy == 0
+            and fmpizz == 0 and fmpixy == 0 and fmpixz == 0 and fmpiyz == 0)
+            continue;
+
+         bsplgen<3, bsorder>(w1, thetai1, array);
+         bsplgen<3, bsorder>(w2, thetai2, array);
+         bsplgen<3, bsorder>(w3, thetai3, array);
          for (int iz = 0; iz < bsorder; ++iz) {
             int zbase = igrid3 + iz;
             zbase -= (zbase >= nfft3 ? nfft3 : 0);
@@ -907,12 +911,12 @@ void fphiUind2_cu(PMEUnit pme_u, real (*fdip_phi1)[10], real (*fdip_phi2)[10])
       st.qgrid, recipa, recipb, recipc);
 }
 
-template <bool DO_E, bool DO_V, bool DO_DL>
+template <bool DO_E, bool DO_V, bool DO_DL, bool DO_DT = false>
 __global__
 static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[2], real (*restrict dlqgrid)[2],
    const real* restrict bsmod1, const real* restrict bsmod2, const real* restrict bsmod3, real f, real aewald,
    TINKER_IMAGE_PARAMS, real box_volume, EnergyBuffer restrict gpu_e, VirialBuffer restrict gpu_vir,
-   VirialBuffer restrict dl_vir)
+   VirialBuffer restrict dl_vir, real wv, real wdv)
 {
    int ithread = threadIdx.x + blockIdx.x * blockDim.x;
    int stride = blockDim.x * gridDim.x;
@@ -938,7 +942,7 @@ static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[
       vctlzz = 0;
    }
    vbuf_prec dvctlxx, dvctlyx, dvctlzx, dvctlyy, dvctlzy, dvctlzz;
-   if CONSTEXPR (DO_V and DO_DL) {
+   if CONSTEXPR (DO_V and (DO_DL or DO_DT)) {
       dvctlxx = 0;
       dvctlyx = 0;
       dvctlzx = 0;
@@ -1004,6 +1008,20 @@ static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[
                real vyy = (h2 * h2 * vterm - eterm);
                real vzy = h2 * h3 * vterm;
                real vzz = (h3 * h3 * vterm - eterm);
+               if CONSTEXPR (DO_DT) {
+                  vctlxx += floatTo<vbuf_prec>(wv * vxx);
+                  vctlyx += floatTo<vbuf_prec>(wv * vyx);
+                  vctlzx += floatTo<vbuf_prec>(wv * vzx);
+                  vctlyy += floatTo<vbuf_prec>(wv * vyy);
+                  vctlzy += floatTo<vbuf_prec>(wv * vzy);
+                  vctlzz += floatTo<vbuf_prec>(wv * vzz);
+                  dvctlxx += floatTo<vbuf_prec>(wdv * vxx);
+                  dvctlyx += floatTo<vbuf_prec>(wdv * vyx);
+                  dvctlzx += floatTo<vbuf_prec>(wdv * vzx);
+                  dvctlyy += floatTo<vbuf_prec>(wdv * vyy);
+                  dvctlzy += floatTo<vbuf_prec>(wdv * vzy);
+                  dvctlzz += floatTo<vbuf_prec>(wdv * vzz);
+               } else {
                vctlxx += floatTo<vbuf_prec>(vxx);
                vctlyx += floatTo<vbuf_prec>(vyx);
                vctlzx += floatTo<vbuf_prec>(vzx);
@@ -1015,13 +1033,14 @@ static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[
                   real dstruc2dl = 2 * (gridx * dlgridx + gridy * dlgridy);
                   real dldeterm = 0.5f * f * expterm * dstruc2dl;
                   real dldvterm = (2 / hsq) * (1 - term) * dldeterm;
-                  dvctlxx += floatTo<vbuf_prec>(h1 * h1 * dldvterm - dldeterm);
-                  dvctlyx += floatTo<vbuf_prec>(h1 * h2 * dldvterm);
-                  dvctlzx += floatTo<vbuf_prec>(h1 * h3 * dldvterm);
-                  dvctlyy += floatTo<vbuf_prec>(h2 * h2 * dldvterm - dldeterm);
-                  dvctlzy += floatTo<vbuf_prec>(h2 * h3 * dldvterm);
-                  dvctlzz += floatTo<vbuf_prec>(h3 * h3 * dldvterm - dldeterm);
+                  dvctlxx += floatTo<vbuf_prec>(wdv * (h1 * h1 * dldvterm - dldeterm));
+                  dvctlyx += floatTo<vbuf_prec>(wdv * h1 * h2 * dldvterm);
+                  dvctlzx += floatTo<vbuf_prec>(wdv * h1 * h3 * dldvterm);
+                  dvctlyy += floatTo<vbuf_prec>(wdv * (h2 * h2 * dldvterm - dldeterm));
+                  dvctlzy += floatTo<vbuf_prec>(wdv * h2 * h3 * dldvterm);
+                  dvctlzz += floatTo<vbuf_prec>(wdv * (h3 * h3 * dldvterm - dldeterm));
                }
+               } // end else (not DO_DT)
             }
          } // end if (e or v)
       }
@@ -1040,15 +1059,15 @@ static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[
    }
    if CONSTEXPR (DO_V) {
       atomic_add(vctlxx, vctlyx, vctlzx, vctlyy, vctlzy, vctlzz, gpu_vir, ithread);
-      if CONSTEXPR (DO_DL) {
+      if CONSTEXPR (DO_DL or DO_DT) {
          atomic_add(dvctlxx, dvctlyx, dvctlzx, dvctlyy, dvctlzy, dvctlzz, dl_vir, ithread);
       }
    }
 }
 
-template <bool DO_E, bool DO_V, bool DO_DL>
+template <bool DO_E, bool DO_V, bool DO_DL, bool DO_DT = false>
 static void pmeConv_cu2(PMEUnit pme_u, PMEUnit dlpme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir,
-   VirialBuffer dl_vir)
+   VirialBuffer dl_vir, real wv = 1, real wdv = 0)
 {
    auto& st = *pme_u;
    real(*restrict qgrid)[2] = reinterpret_cast<real(*)[2]>(st.qgrid);
@@ -1067,11 +1086,11 @@ static void pmeConv_cu2(PMEUnit pme_u, PMEUnit dlpme_u, EnergyBuffer gpu_e, Viri
    real aewald = st.aewald;
    real box_volume = boxVolume();
 
-   auto ker = pmeConv_cu1<DO_E, DO_V, DO_DL>;
+   auto ker = pmeConv_cu1<DO_E, DO_V, DO_DL, DO_DT>;
    auto stream = use_pme_stream ? g::spme : g::s0;
    int ngrid = gpuGridSize(BLOCK_DIM);
    ker<<<ngrid, BLOCK_DIM, 0, stream>>>(n1, n2, n3, qgrid, dlqgrid, bsmod1, bsmod2, bsmod3, f, aewald,
-      TINKER_IMAGE_ARGS, box_volume, gpu_e, gpu_vir, dl_vir);
+      TINKER_IMAGE_ARGS, box_volume, gpu_e, gpu_vir, dl_vir, wv, wdv);
 }
 
 void pmeConv_cu(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
@@ -1091,12 +1110,25 @@ void pmeConv_cu(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
    }
 }
 
-void pmeConvDlmda_cu(PMEUnit pme_u, PMEUnit dlpme_u, VirialBuffer gpu_vir, VirialBuffer dl_vir)
+void pmeConvDlmda_cu(PMEUnit pme_u, PMEUnit dlpme_u, VirialBuffer gpu_vir, VirialBuffer dl_vir, real wdv)
 {
    if (gpu_vir == nullptr or dl_vir == nullptr)
       pmeConv_cu2<false, false, true>(pme_u, dlpme_u, nullptr, nullptr, nullptr);
    else
-      pmeConv_cu2<false, true, true>(pme_u, dlpme_u, nullptr, gpu_vir, dl_vir);
+      pmeConv_cu2<false, true, true>(pme_u, dlpme_u, nullptr, gpu_vir, dl_vir, 1, wdv);
+}
+
+void pmeConvDt_cu(PMEUnit pme_u, VirialBuffer gpu_vir, real wv, VirialBuffer dl_vir, real wdv)
+{
+   if (gpu_vir == nullptr) {
+      pmeConv_cu2<false, false, false>(pme_u, PMEUnit(), nullptr, nullptr, nullptr);
+      return;
+   }
+   if (dl_vir == nullptr) {
+      dl_vir = gpu_vir;
+      wdv = 0;
+   }
+   pmeConv_cu2<false, true, false, true>(pme_u, PMEUnit(), nullptr, gpu_vir, dl_vir, wv, wdv);
 }
 }
 
@@ -1164,6 +1196,32 @@ void rpoleToCmp_cu()
 void rpoleToCmpDlmda_cu()
 {
    launch_k1s(g::s0, n, rpoleToCmpDlmda_cu1, n, cmp, dlcmp, rpole, mut, elam);
+}
+
+__global__
+void rpoleToCmpState_cu1(int n, real (*restrict cmp)[10], const real (*restrict rpole)[MPL_TOTAL],
+   RdtMask mask, const int* restrict group)
+{
+   unsigned active_mask = static_cast<unsigned>(mask);
+   for (int i = ITHREAD; i < n; i += STRIDE) {
+      unsigned atom_mask = static_cast<unsigned>(RdtMask::ENV);
+      if (group[i] == 1)
+         atom_mask = static_cast<unsigned>(RdtMask::LIGA);
+      else if (group[i] == 2)
+         atom_mask = static_cast<unsigned>(RdtMask::LIGB);
+      if (active_mask & atom_mask) {
+         rpoleToCmpAtomI(i, cmp, rpole);
+      } else {
+         #pragma unroll
+         for (int k = 0; k < 10; ++k)
+            cmp[i][k] = 0;
+      }
+   }
+}
+
+void rpoleToCmpState_cu(RdtMask mask, const int* group)
+{
+   launch_k1s(g::s0, n, rpoleToCmpState_cu1, n, cmp, rpole, mask, group);
 }
 
 __global__

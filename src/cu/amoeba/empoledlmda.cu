@@ -10,7 +10,7 @@
 #include "seq/launch.h"
 
 namespace tinker {
-template <bool do_e, bool do_g, bool do_v>
+template <class Ver>
 __global__
 void empoleEwaldRecipDlmdaGeneric_cu1(int n, real f,                                          //
    EnergyBuffer restrict em, EnergyBuffer restrict demdl, EnergyBuffer restrict d2emdl2, //
@@ -23,8 +23,17 @@ void empoleEwaldRecipDlmdaGeneric_cu1(int n, real f,                            
    const real (*restrict cphi)[10], const real (*restrict fphi)[20],                   //
    const real (*restrict dlcmp)[10], const real (*restrict dlfmp)[10],                 //
    const real (*restrict dlcphi)[10], const real (*restrict dlfphi)[20],               //
-   int nfft1, int nfft2, int nfft3, TINKER_IMAGE_PARAMS)
+   int nfft1, int nfft2, int nfft3, TINKER_IMAGE_PARAMS, real deldl, real d2eldl2)
 {
+   constexpr bool do_e = Ver::e;
+   constexpr bool do_g = Ver::g;
+   constexpr bool do_v = Ver::v;
+   constexpr bool do_dl1 = Ver::e_dlmda1;
+   constexpr bool do_dl2 = Ver::e_dlmda2;
+   constexpr bool do_gdl = Ver::g_dlmda;
+   constexpr bool do_tdl = Ver::g_dlmda or Ver::v_dlmda;
+   constexpr bool do_vdl = Ver::v_dlmda;
+
    int ithread = ITHREAD;
    for (int i = ithread; i < n; i += STRIDE) {
       real e, dle, d2le;
@@ -39,8 +48,10 @@ void empoleEwaldRecipDlmdaGeneric_cu1(int n, real f,                            
       if CONSTEXPR (do_e) {
          emrecipEnergyForceAtomI<true, false>(i, dlfmp, dlfphi, d2le, unused, unused, unused);
          atomic_add(0.5f * e * f, em, ithread);
-         atomic_add(dle * f, demdl, ithread);
-         atomic_add(d2le * f, d2emdl2, ithread);
+         if CONSTEXPR (do_dl1)
+            atomic_add(dle * f * deldl, demdl, ithread);
+         if CONSTEXPR (do_dl2)
+            atomic_add((d2le * deldl * deldl + dle * d2eldl2) * f, d2emdl2, ithread);
       }
 
       if CONSTEXPR (do_g) {
@@ -62,9 +73,11 @@ void empoleEwaldRecipDlmdaGeneric_cu1(int n, real f,                            
          real dlh1 = recipa.x * dlf1 + recipb.x * dlf2 + recipc.x * dlf3;
          real dlh2 = recipa.y * dlf1 + recipb.y * dlf2 + recipc.y * dlf3;
          real dlh3 = recipa.z * dlf1 + recipb.z * dlf2 + recipc.z * dlf3;
-         atomic_add(dlh1 * f, dfmdlx, i);
-         atomic_add(dlh2 * f, dfmdly, i);
-         atomic_add(dlh3 * f, dfmdlz, i);
+         if CONSTEXPR (do_gdl) {
+            atomic_add(dlh1 * f * deldl, dfmdlx, i);
+            atomic_add(dlh2 * f * deldl, dfmdly, i);
+            atomic_add(dlh3 * f * deldl, dfmdlz, i);
+         }
 
          // resolve site torques then increment forces and virial
          real tem[3], t1[3], t2[3];
@@ -73,21 +86,26 @@ void empoleEwaldRecipDlmdaGeneric_cu1(int n, real f,                            
          atomic_add(tem[1] * f, trqy, i);
          atomic_add(tem[2] * f, trqz, i);
 
-         emrecipTorqueAtomI(i, dlcmp, cphi, t1);
-         emrecipTorqueAtomI(i, cmp, dlcphi, t2);
-         atomic_add((t1[0] + t2[0]) * f, dltrqx, i);
-         atomic_add((t1[1] + t2[1]) * f, dltrqy, i);
-         atomic_add((t1[2] + t2[2]) * f, dltrqz, i);
+         if CONSTEXPR (do_tdl) {
+            emrecipTorqueAtomI(i, dlcmp, cphi, t1);
+            emrecipTorqueAtomI(i, cmp, dlcphi, t2);
+            atomic_add((t1[0] + t2[0]) * f * deldl, dltrqx, i);
+            atomic_add((t1[1] + t2[1]) * f * deldl, dltrqy, i);
+            atomic_add((t1[2] + t2[2]) * f * deldl, dltrqz, i);
+         }
 
          if CONSTEXPR (do_v) {
             real v[6], v1[6], v2[6];
             emrecipVirialAtomI(i, cmp, cphi, v);
             atomic_add(v[0] * f, v[1] * f, v[2] * f, v[3] * f, v[4] * f, v[5] * f, vir_em, ithread);
 
-            emrecipVirialAtomI(i, dlcmp, cphi, v1);
-            emrecipVirialAtomI(i, cmp, dlcphi, v2);
-            atomic_add((v1[0] + v2[0]) * f, (v1[1] + v2[1]) * f, (v1[2] + v2[2]) * f, (v1[3] + v2[3]) * f,
-               (v1[4] + v2[4]) * f, (v1[5] + v2[5]) * f, demvirdl, ithread);
+            if CONSTEXPR (do_vdl) {
+               emrecipVirialAtomI(i, dlcmp, cphi, v1);
+               emrecipVirialAtomI(i, cmp, dlcphi, v2);
+               atomic_add((v1[0] + v2[0]) * f * deldl, (v1[1] + v2[1]) * f * deldl,
+                  (v1[2] + v2[2]) * f * deldl, (v1[3] + v2[3]) * f * deldl, (v1[4] + v2[4]) * f * deldl,
+                  (v1[5] + v2[5]) * f * deldl, demvirdl, ithread);
+            }
          } // end if (do_v)
       } // end if (do_g)
    }
@@ -96,8 +114,6 @@ void empoleEwaldRecipDlmdaGeneric_cu1(int n, real f,                            
 template <class Ver>
 static void empoleEwaldRecipDlmdaGeneric_cu()
 {
-   constexpr bool do_e = Ver::e;
-   constexpr bool do_g = Ver::g;
    constexpr bool do_v = Ver::v;
 
    const PMEUnit pu = epme_unit;
@@ -112,14 +128,14 @@ static void empoleEwaldRecipDlmdaGeneric_cu()
 
    if CONSTEXPR (do_v) {
       if (vir_m) {
-         pmeConvDlmda(pu, dlpu, vir_m, demvirdl_buf);
+         pmeConvDlmda(pu, dlpu, vir_m, dvirdl_buf, deldlmda);
          auto size = bufferSize() * VirialBufferTraits::value;
          sumVirialBuffer(size, vir_em, vir_m);
       } else {
-         pmeConvDlmda(pu, dlpu, vir_em, demvirdl_buf);
+         pmeConvDlmda(pu, dlpu, vir_em, dvirdl_buf, deldlmda);
       }
    } else {
-      pmeConvDlmda(pu, dlpu, nullptr, nullptr);
+      pmeConvDlmda(pu, dlpu, nullptr, nullptr, deldlmda);
    }
 
    fftback(pu);
@@ -135,12 +151,12 @@ static void empoleEwaldRecipDlmdaGeneric_cu()
    const int nfft3 = st.nfft3;
    const real f = electric / dielec;
 
-   launch_k1b(g::s0, n, empoleEwaldRecipDlmdaGeneric_cu1<do_e, do_g, do_v>,  //
-      n, f, em, demdl_buf, d2emdl2_buf, vir_em, demvirdl_buf,         //
-      demx, demy, demz, dfmdlx, dfmdly, dfmdlz,                       //
+   launch_k1b(g::s0, n, empoleEwaldRecipDlmdaGeneric_cu1<Ver>,         //
+      n, f, em, demdl_buf, d2emdl2_buf, vir_em, dvirdl_buf,           //
+      demx, demy, demz, dfsumdlx, dfsumdly, dfsumdlz,                 //
       trqx, trqy, trqz, dltrqx, dltrqy, dltrqz,                       //
       cmp, fmp, cphi, fphi, dlcmp, dlfmp, dlcphi, dlfphi,             //
-      nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS);
+      nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS, deldlmda, d2eldlmda2);
 }
 
 void empoleEwaldRecipDlmda_cu(int vers)
@@ -157,5 +173,13 @@ void empoleEwaldRecipDlmda_cu(int vers)
       empoleEwaldRecipDlmdaGeneric_cu<calc::V5>();
    else if (vers == calc::v6)
       empoleEwaldRecipDlmdaGeneric_cu<calc::V6>();
+   else if (vers == calc::v7)
+      empoleEwaldRecipDlmdaGeneric_cu<calc::V7>();
+   else if (vers == calc::v8)
+      empoleEwaldRecipDlmdaGeneric_cu<calc::V8>();
+   else if (vers == calc::v9)
+      empoleEwaldRecipDlmdaGeneric_cu<calc::V9>();
+   else if (vers == calc::v10)
+      empoleEwaldRecipDlmdaGeneric_cu<calc::V10>();
 }
 }

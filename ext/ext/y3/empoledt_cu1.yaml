@@ -1,0 +1,303 @@
+OUTPUT_DIR: src/cu/amoeba
+KERNEL_NAME: empoledt_cu1
+TEMPLATE_PARAMS: template<class Ver, class ETYP>
+CONSTEXPR_FLAGS: |
+  constexpr bool do_e = Ver::e;
+  constexpr bool do_a = Ver::a;
+  constexpr bool do_g = Ver::g;
+  constexpr bool do_v = Ver::v;
+  constexpr bool do_dl1 = Ver::e_dlmda1;
+  constexpr bool do_dl2 = Ver::e_dlmda2;
+  constexpr bool do_gdl = Ver::g_dlmda;
+  constexpr bool do_tdl = Ver::g_dlmda or Ver::v_dlmda;
+  constexpr bool do_vdl = Ver::v_dlmda;
+
+COUNT:
+  - nem
+ENERGY:
+  - em
+ENERGY_DLMDA1:
+  - demdl
+ENERGY_DLMDA2:
+  - d2emdl2
+VIRIAL:
+  - vem
+VIRIAL_DLMDA:
+  - demvirdl
+GRADIENT:
+  - gx
+  - gy
+  - gz
+GRADIENT_DLMDA:
+  - dfmdlx
+  - dfmdly
+  - dfmdlz
+
+# CUT_DISTANCE:
+OFF_DISTANCE: 'off'
+
+EXCLUDE_INFO: mdpuinfo
+SCALE_1X_TYPE: real4_const_array,0
+
+EXTRA_PARAMS: |
+  , real* restrict trqx, real* restrict trqy, real* restrict trqz
+  , real* restrict dltrqx, real* restrict dltrqy, real* restrict dltrqz
+  , const real (*restrict rpole)[10], const int* restrict grp
+  , real f, real aewald
+  , unsigned in0bits, unsigned in1bits, unsigned cntbits
+  , real a0, real a1, real b0, real b1, real c0, real c1
+# IMPLICIT_PARAMS:
+
+I_VARIABLES:
+  - shared real xi   from:x
+  - shared real yi   from:y
+  - shared real zi   from:z
+  - shared real ci   from:rpole,MPL_PME_0
+  - shared real dix  from:rpole,MPL_PME_X
+  - shared real diy  from:rpole,MPL_PME_Y
+  - shared real diz  from:rpole,MPL_PME_Z
+  - shared real qixx from:rpole,MPL_PME_XX
+  - shared real qixy from:rpole,MPL_PME_XY
+  - shared real qixz from:rpole,MPL_PME_XZ
+  - shared real qiyy from:rpole,MPL_PME_YY
+  - shared real qiyz from:rpole,MPL_PME_YZ
+  - shared real qizz from:rpole,MPL_PME_ZZ
+  - register int igrp from:grp
+K_VARIABLES:
+  - shared   real xk   from:x
+  - shared   real yk   from:y
+  - shared   real zk   from:z
+  - shared   real ck   from:rpole,MPL_PME_0
+  - shared   real dkx  from:rpole,MPL_PME_X
+  - shared   real dky  from:rpole,MPL_PME_Y
+  - shared   real dkz  from:rpole,MPL_PME_Z
+  - register real qkxx from:rpole,MPL_PME_XX
+  - register real qkxy from:rpole,MPL_PME_XY
+  - register real qkxz from:rpole,MPL_PME_XZ
+  - register real qkyy from:rpole,MPL_PME_YY
+  - register real qkyz from:rpole,MPL_PME_YZ
+  - register real qkzz from:rpole,MPL_PME_ZZ
+  - register int kgrp from:grp
+I_FORCE:
+  - register real frcxi addto:gx
+  - register real frcyi addto:gy
+  - register real frczi addto:gz
+  - register real trqxi addto:trqx
+  - register real trqyi addto:trqy
+  - register real trqzi addto:trqz
+  - register real dltrqxi addto:dltrqx onlyif:(do_gdl||do_vdl)
+  - register real dltrqyi addto:dltrqy onlyif:(do_gdl||do_vdl)
+  - register real dltrqzi addto:dltrqz onlyif:(do_gdl||do_vdl)
+K_FORCE:
+  - register real frcxk addto:gx
+  - register real frcyk addto:gy
+  - register real frczk addto:gz
+  - register real trqxk addto:trqx
+  - register real trqyk addto:trqy
+  - register real trqzk addto:trqz
+  - register real dltrqxk addto:dltrqx onlyif:(do_gdl||do_vdl)
+  - register real dltrqyk addto:dltrqy onlyif:(do_gdl||do_vdl)
+  - register real dltrqzk addto:dltrqz onlyif:(do_gdl||do_vdl)
+I_FORCE_DLMDA:
+  - register real dfrcxi addto:dfmdlx
+  - register real dfrcyi addto:dfmdly
+  - register real dfrczi addto:dfmdlz
+K_FORCE_DLMDA:
+  - register real dfrcxk addto:dfmdlx
+  - register real dfrcyk addto:dfmdly
+  - register real dfrczk addto:dfmdlz
+
+SCALED_PAIRWISE_INTERACTION: |
+  int cell = 3 * @igrp@ + @kgrp@;
+  bool in0 = (in0bits >> cell) & 1;
+  bool in1 = (in1bits >> cell) & 1;
+  bool cnt = (cntbits >> cell) & 1;
+  {
+    bool include = incl and (in0 or in1 or cnt);
+    real wa = (in0 ? a0 : 0) + (in1 ? a1 : 0);
+    real wb = (in0 ? b0 : 0) + (in1 ? b1 : 0);
+    real wc = (in0 ? c0 : 0) + (in1 ? c1 : 0);
+    real xr = @xk@ - @xi@;
+    real yr = @yk@ - @yi@;
+    real zr = @zk@ - @zi@;
+    real r2 = image2(xr, yr, zr);
+    if (r2 <= off * off and include) {
+      real e, vxx, vyx, vzx, vyy, vzy, vzz;
+      real e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1;
+      real pfrcxi = 0, pfrcyi = 0, pfrczi = 0;
+      real pfrcxk = 0, pfrcyk = 0, pfrczk = 0;
+      real ptrqxi = 0, ptrqyi = 0, ptrqzi = 0;
+      real ptrqxk = 0, ptrqyk = 0, ptrqzk = 0;
+      pair_mpole_v2<Ver, ETYP>(
+        r2, xr, yr, zr, 1,
+        @ci@, @dix@, @diy@, @diz@, @qixx@, @qixy@, @qixz@, @qiyy@, @qiyz@, @qizz@,
+        @ck@, @dkx@, @dky@, @dkz@, @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@,
+        f, aewald,
+        pfrcxi, pfrcyi, pfrczi, pfrcxk, pfrcyk, pfrczk,
+        ptrqxi, ptrqyi, ptrqzi, ptrqxk, ptrqyk, ptrqzk,
+        e, vxx, vyx, vzx, vyy, vzy, vzz);
+      pair_mpole_v2<Ver, NON_EWALD>(
+        r2, xr, yr, zr, scalea - 1,
+        @ci@, @dix@, @diy@, @diz@, @qixx@, @qixy@, @qixz@, @qiyy@, @qiyz@, @qizz@,
+        @ck@, @dkx@, @dky@, @dkz@, @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@,
+        f, aewald,
+        pfrcxi, pfrcyi, pfrczi, pfrcxk, pfrcyk, pfrczk,
+        ptrqxi, ptrqyi, ptrqzi, ptrqxk, ptrqyk, ptrqzk,
+        e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1);
+      if CONSTEXPR (do_e) {
+        e = e + e1;
+      }
+      if CONSTEXPR (do_v) {
+        vxx = vxx + vxx1;
+        vyx = vyx + vyx1;
+        vzx = vzx + vzx1;
+        vyy = vyy + vyy1;
+        vzy = vzy + vzy1;
+        vzz = vzz + vzz1;
+      }
+      if CONSTEXPR (do_e) {
+        emtl += floatTo<ebuf_prec>(wa * e);
+        if CONSTEXPR (do_dl1)
+          demdltl += floatTo<ebuf_prec>(wb * e);
+        if CONSTEXPR (do_dl2)
+          d2emdl2tl += floatTo<ebuf_prec>(wc * e);
+        if CONSTEXPR (do_a) {
+          if (cnt and scalea != 0 and e != 0)
+            nemtl += 1;
+        }
+      }
+      if CONSTEXPR (do_g) {
+        @frcxi@ += wa * pfrcxi;
+        @frcyi@ += wa * pfrcyi;
+        @frczi@ += wa * pfrczi;
+        @frcxk@ += wa * pfrcxk;
+        @frcyk@ += wa * pfrcyk;
+        @frczk@ += wa * pfrczk;
+        @trqxi@ += wa * ptrqxi;
+        @trqyi@ += wa * ptrqyi;
+        @trqzi@ += wa * ptrqzi;
+        @trqxk@ += wa * ptrqxk;
+        @trqyk@ += wa * ptrqyk;
+        @trqzk@ += wa * ptrqzk;
+        if CONSTEXPR (do_gdl) {
+          @dfrcxi@ += wb * pfrcxi;
+          @dfrcyi@ += wb * pfrcyi;
+          @dfrczi@ += wb * pfrczi;
+          @dfrcxk@ += wb * pfrcxk;
+          @dfrcyk@ += wb * pfrcyk;
+          @dfrczk@ += wb * pfrczk;
+        }
+        if CONSTEXPR (do_tdl) {
+          @dltrqxi@ += wb * ptrqxi;
+          @dltrqyi@ += wb * ptrqyi;
+          @dltrqzi@ += wb * ptrqzi;
+          @dltrqxk@ += wb * ptrqxk;
+          @dltrqyk@ += wb * ptrqyk;
+          @dltrqzk@ += wb * ptrqzk;
+        }
+      }
+      if CONSTEXPR (do_v) {
+        vemtlxx += floatTo<vbuf_prec>(wa * vxx);
+        vemtlyx += floatTo<vbuf_prec>(wa * vyx);
+        vemtlzx += floatTo<vbuf_prec>(wa * vzx);
+        vemtlyy += floatTo<vbuf_prec>(wa * vyy);
+        vemtlzy += floatTo<vbuf_prec>(wa * vzy);
+        vemtlzz += floatTo<vbuf_prec>(wa * vzz);
+        if CONSTEXPR (do_vdl) {
+          demvirdltlxx += floatTo<vbuf_prec>(wb * vxx);
+          demvirdltlyx += floatTo<vbuf_prec>(wb * vyx);
+          demvirdltlzx += floatTo<vbuf_prec>(wb * vzx);
+          demvirdltlyy += floatTo<vbuf_prec>(wb * vyy);
+          demvirdltlzy += floatTo<vbuf_prec>(wb * vzy);
+          demvirdltlzz += floatTo<vbuf_prec>(wb * vzz);
+        }
+      }
+    } // end if (include)
+  }
+FULL_PAIRWISE_INTERACTION: |
+  int cell = 3 * @igrp@ + @kgrp@;
+  bool in0 = (in0bits >> cell) & 1;
+  bool in1 = (in1bits >> cell) & 1;
+  bool cnt = (cntbits >> cell) & 1;
+  {
+    incl = incl and (in0 or in1 or cnt);
+    real wa = (in0 ? a0 : 0) + (in1 ? a1 : 0);
+    real wb = (in0 ? b0 : 0) + (in1 ? b1 : 0);
+    real wc = (in0 ? c0 : 0) + (in1 ? c1 : 0);
+    real xr = @xk@ - @xi@;
+    real yr = @yk@ - @yi@;
+    real zr = @zk@ - @zi@;
+    real r2 = image2(xr, yr, zr);
+    if (r2 <= off * off and incl) {
+      real e, vxx, vyx, vzx, vyy, vzy, vzz;
+      real pfrcxi = 0, pfrcyi = 0, pfrczi = 0;
+      real pfrcxk = 0, pfrcyk = 0, pfrczk = 0;
+      real ptrqxi = 0, ptrqyi = 0, ptrqzi = 0;
+      real ptrqxk = 0, ptrqyk = 0, ptrqzk = 0;
+      pair_mpole_v2<Ver, ETYP>(
+        r2, xr, yr, zr, 1,
+        @ci@, @dix@, @diy@, @diz@, @qixx@, @qixy@, @qixz@, @qiyy@, @qiyz@, @qizz@,
+        @ck@, @dkx@, @dky@, @dkz@, @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@,
+        f, aewald,
+        pfrcxi, pfrcyi, pfrczi, pfrcxk, pfrcyk, pfrczk,
+        ptrqxi, ptrqyi, ptrqzi, ptrqxk, ptrqyk, ptrqzk,
+        e, vxx, vyx, vzx, vyy, vzy, vzz);
+      if CONSTEXPR (do_e) {
+        emtl += floatTo<ebuf_prec>(wa * e);
+        if CONSTEXPR (do_dl1)
+          demdltl += floatTo<ebuf_prec>(wb * e);
+        if CONSTEXPR (do_dl2)
+          d2emdl2tl += floatTo<ebuf_prec>(wc * e);
+        if CONSTEXPR (do_a) {
+          if (cnt and e != 0)
+            nemtl += 1;
+        }
+      }
+      if CONSTEXPR (do_g) {
+        @frcxi@ += wa * pfrcxi;
+        @frcyi@ += wa * pfrcyi;
+        @frczi@ += wa * pfrczi;
+        @frcxk@ += wa * pfrcxk;
+        @frcyk@ += wa * pfrcyk;
+        @frczk@ += wa * pfrczk;
+        @trqxi@ += wa * ptrqxi;
+        @trqyi@ += wa * ptrqyi;
+        @trqzi@ += wa * ptrqzi;
+        @trqxk@ += wa * ptrqxk;
+        @trqyk@ += wa * ptrqyk;
+        @trqzk@ += wa * ptrqzk;
+        if CONSTEXPR (do_gdl) {
+          @dfrcxi@ += wb * pfrcxi;
+          @dfrcyi@ += wb * pfrcyi;
+          @dfrczi@ += wb * pfrczi;
+          @dfrcxk@ += wb * pfrcxk;
+          @dfrcyk@ += wb * pfrcyk;
+          @dfrczk@ += wb * pfrczk;
+        }
+        if CONSTEXPR (do_tdl) {
+          @dltrqxi@ += wb * ptrqxi;
+          @dltrqyi@ += wb * ptrqyi;
+          @dltrqzi@ += wb * ptrqzi;
+          @dltrqxk@ += wb * ptrqxk;
+          @dltrqyk@ += wb * ptrqyk;
+          @dltrqzk@ += wb * ptrqzk;
+        }
+      }
+      if CONSTEXPR (do_v) {
+        vemtlxx += floatTo<vbuf_prec>(wa * vxx);
+        vemtlyx += floatTo<vbuf_prec>(wa * vyx);
+        vemtlzx += floatTo<vbuf_prec>(wa * vzx);
+        vemtlyy += floatTo<vbuf_prec>(wa * vyy);
+        vemtlzy += floatTo<vbuf_prec>(wa * vzy);
+        vemtlzz += floatTo<vbuf_prec>(wa * vzz);
+        if CONSTEXPR (do_vdl) {
+          demvirdltlxx += floatTo<vbuf_prec>(wb * vxx);
+          demvirdltlyx += floatTo<vbuf_prec>(wb * vyx);
+          demvirdltlzx += floatTo<vbuf_prec>(wb * vzx);
+          demvirdltlyy += floatTo<vbuf_prec>(wb * vyy);
+          demvirdltlzy += floatTo<vbuf_prec>(wb * vzy);
+          demvirdltlzz += floatTo<vbuf_prec>(wb * vzz);
+        }
+      }
+    } // end if (include)
+  }

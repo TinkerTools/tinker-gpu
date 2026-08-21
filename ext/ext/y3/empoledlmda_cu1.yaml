@@ -6,20 +6,29 @@ CONSTEXPR_FLAGS: |
   constexpr bool do_a = Ver::a;
   constexpr bool do_g = Ver::g;
   constexpr bool do_v = Ver::v;
+  constexpr bool do_dl1 = Ver::e_dlmda1;
+  constexpr bool do_dl2 = Ver::e_dlmda2;
+  constexpr bool do_gdl = Ver::g_dlmda;
+  constexpr bool do_tdl = Ver::g_dlmda or Ver::v_dlmda;
+  constexpr bool do_vdl = Ver::v_dlmda;
 
 COUNT:
   - nem
 ENERGY:
   - em
+ENERGY_DLMDA1:
   - demdl
+ENERGY_DLMDA2:
   - d2emdl2
 VIRIAL:
   - vem
+VIRIAL_DLMDA:
   - demvirdl
 GRADIENT:
   - gx
   - gy
   - gz
+GRADIENT_DLMDA:
   - dfmdlx
   - dfmdly
   - dfmdlz
@@ -35,6 +44,7 @@ EXTRA_PARAMS: |
   , real* restrict dltrqx, real* restrict dltrqy, real* restrict dltrqz
   , const real (*restrict rpole)[10], const int* restrict mut
   , real f, real aewald, real elambda
+  , real deldl, real d2eldl2
 # IMPLICIT_PARAMS:
 
 I_VARIABLES:
@@ -71,28 +81,30 @@ I_FORCE:
   - register real frcxi addto:gx
   - register real frcyi addto:gy
   - register real frczi addto:gz
-  - register real dfrcxi addto:dfmdlx
-  - register real dfrcyi addto:dfmdly
-  - register real dfrczi addto:dfmdlz
   - register real trqxi addto:trqx
   - register real trqyi addto:trqy
   - register real trqzi addto:trqz
-  - register real dltrqxi addto:dltrqx
-  - register real dltrqyi addto:dltrqy
-  - register real dltrqzi addto:dltrqz
+  - register real dltrqxi addto:dltrqx onlyif:(do_gdl||do_vdl)
+  - register real dltrqyi addto:dltrqy onlyif:(do_gdl||do_vdl)
+  - register real dltrqzi addto:dltrqz onlyif:(do_gdl||do_vdl)
 K_FORCE:
   - register real frcxk addto:gx
   - register real frcyk addto:gy
   - register real frczk addto:gz
-  - register real dfrcxk addto:dfmdlx
-  - register real dfrcyk addto:dfmdly
-  - register real dfrczk addto:dfmdlz
   - register real trqxk addto:trqx
   - register real trqyk addto:trqy
   - register real trqzk addto:trqz
-  - register real dltrqxk addto:dltrqx
-  - register real dltrqyk addto:dltrqy
-  - register real dltrqzk addto:dltrqz
+  - register real dltrqxk addto:dltrqx onlyif:(do_gdl||do_vdl)
+  - register real dltrqyk addto:dltrqy onlyif:(do_gdl||do_vdl)
+  - register real dltrqzk addto:dltrqz onlyif:(do_gdl||do_vdl)
+I_FORCE_DLMDA:
+  - register real dfrcxi addto:dfmdlx
+  - register real dfrcyi addto:dfmdly
+  - register real dfrczi addto:dfmdlz
+K_FORCE_DLMDA:
+  - register real dfrcxk addto:dfmdlx
+  - register real dfrcyk addto:dfmdly
+  - register real dfrczk addto:dfmdlz
 
 SCALED_PAIRWISE_INTERACTION: |
   real xr = @xk@ - @xi@;
@@ -145,31 +157,41 @@ SCALED_PAIRWISE_INTERACTION: |
       dlscale = 1;
     }
     if (@muti@ or @mutk@) {
+      real d2w = d2scale * deldl * deldl + dlscale * d2eldl2;
+      real dlw = dlscale * deldl;
       if CONSTEXPR (do_e) {
-        demdltl += floatTo<ebuf_prec>(dlscale * e);
-        d2emdl2tl += floatTo<ebuf_prec>(d2scale * e);
+        if CONSTEXPR (do_dl1)
+          demdltl += floatTo<ebuf_prec>(dlw * e);
+        if CONSTEXPR (do_dl2)
+          d2emdl2tl += floatTo<ebuf_prec>(d2w * e);
       }
       if CONSTEXPR (do_g) {
-        @dfrcxi@ += dlscale * pfrcxi;
-        @dfrcyi@ += dlscale * pfrcyi;
-        @dfrczi@ += dlscale * pfrczi;
-        @dfrcxk@ += dlscale * pfrcxk;
-        @dfrcyk@ += dlscale * pfrcyk;
-        @dfrczk@ += dlscale * pfrczk;
-        @dltrqxi@ += dlscale * ptrqxi;
-        @dltrqyi@ += dlscale * ptrqyi;
-        @dltrqzi@ += dlscale * ptrqzi;
-        @dltrqxk@ += dlscale * ptrqxk;
-        @dltrqyk@ += dlscale * ptrqyk;
-        @dltrqzk@ += dlscale * ptrqzk;
-      }
-      if CONSTEXPR (do_v) {
-        demvirdltlxx += floatTo<vbuf_prec>(dlscale * vxx);
-        demvirdltlyx += floatTo<vbuf_prec>(dlscale * vyx);
-        demvirdltlzx += floatTo<vbuf_prec>(dlscale * vzx);
-        demvirdltlyy += floatTo<vbuf_prec>(dlscale * vyy);
-        demvirdltlzy += floatTo<vbuf_prec>(dlscale * vzy);
-        demvirdltlzz += floatTo<vbuf_prec>(dlscale * vzz);
+        if CONSTEXPR (do_gdl) {
+          @dfrcxi@ += dlw * pfrcxi;
+          @dfrcyi@ += dlw * pfrcyi;
+          @dfrczi@ += dlw * pfrczi;
+          @dfrcxk@ += dlw * pfrcxk;
+          @dfrcyk@ += dlw * pfrcyk;
+          @dfrczk@ += dlw * pfrczk;
+        }
+        if CONSTEXPR (do_tdl) {
+          @dltrqxi@ += dlw * ptrqxi;
+          @dltrqyi@ += dlw * ptrqyi;
+          @dltrqzi@ += dlw * ptrqzi;
+          @dltrqxk@ += dlw * ptrqxk;
+          @dltrqyk@ += dlw * ptrqyk;
+          @dltrqzk@ += dlw * ptrqzk;
+        }
+        if CONSTEXPR (do_v) {
+          if CONSTEXPR (do_vdl) {
+            demvirdltlxx += floatTo<vbuf_prec>(dlw * vxx);
+            demvirdltlyx += floatTo<vbuf_prec>(dlw * vyx);
+            demvirdltlzx += floatTo<vbuf_prec>(dlw * vzx);
+            demvirdltlyy += floatTo<vbuf_prec>(dlw * vyy);
+            demvirdltlzy += floatTo<vbuf_prec>(dlw * vzy);
+            demvirdltlzz += floatTo<vbuf_prec>(dlw * vzz);
+          }
+        }
       }
     }
     if CONSTEXPR (do_e) {
@@ -234,31 +256,41 @@ FULL_PAIRWISE_INTERACTION: |
       dlscale = 1;
     }
     if (@muti@ or @mutk@) {
+      real d2w = d2scale * deldl * deldl + dlscale * d2eldl2;
+      real dlw = dlscale * deldl;
       if CONSTEXPR (do_e) {
-        demdltl += floatTo<ebuf_prec>(dlscale * e);
-        d2emdl2tl += floatTo<ebuf_prec>(d2scale * e);
+        if CONSTEXPR (do_dl1)
+          demdltl += floatTo<ebuf_prec>(dlw * e);
+        if CONSTEXPR (do_dl2)
+          d2emdl2tl += floatTo<ebuf_prec>(d2w * e);
       }
       if CONSTEXPR (do_g) {
-        @dfrcxi@ += dlscale * pfrcxi;
-        @dfrcyi@ += dlscale * pfrcyi;
-        @dfrczi@ += dlscale * pfrczi;
-        @dfrcxk@ += dlscale * pfrcxk;
-        @dfrcyk@ += dlscale * pfrcyk;
-        @dfrczk@ += dlscale * pfrczk;
-        @dltrqxi@ += dlscale * ptrqxi;
-        @dltrqyi@ += dlscale * ptrqyi;
-        @dltrqzi@ += dlscale * ptrqzi;
-        @dltrqxk@ += dlscale * ptrqxk;
-        @dltrqyk@ += dlscale * ptrqyk;
-        @dltrqzk@ += dlscale * ptrqzk;
-      }
-      if CONSTEXPR (do_v) {
-        demvirdltlxx += floatTo<vbuf_prec>(dlscale * vxx);
-        demvirdltlyx += floatTo<vbuf_prec>(dlscale * vyx);
-        demvirdltlzx += floatTo<vbuf_prec>(dlscale * vzx);
-        demvirdltlyy += floatTo<vbuf_prec>(dlscale * vyy);
-        demvirdltlzy += floatTo<vbuf_prec>(dlscale * vzy);
-        demvirdltlzz += floatTo<vbuf_prec>(dlscale * vzz);
+        if CONSTEXPR (do_gdl) {
+          @dfrcxi@ += dlw * pfrcxi;
+          @dfrcyi@ += dlw * pfrcyi;
+          @dfrczi@ += dlw * pfrczi;
+          @dfrcxk@ += dlw * pfrcxk;
+          @dfrcyk@ += dlw * pfrcyk;
+          @dfrczk@ += dlw * pfrczk;
+        }
+        if CONSTEXPR (do_tdl) {
+          @dltrqxi@ += dlw * ptrqxi;
+          @dltrqyi@ += dlw * ptrqyi;
+          @dltrqzi@ += dlw * ptrqzi;
+          @dltrqxk@ += dlw * ptrqxk;
+          @dltrqyk@ += dlw * ptrqyk;
+          @dltrqzk@ += dlw * ptrqzk;
+        }
+        if CONSTEXPR (do_v) {
+          if CONSTEXPR (do_vdl) {
+            demvirdltlxx += floatTo<vbuf_prec>(dlw * vxx);
+            demvirdltlyx += floatTo<vbuf_prec>(dlw * vyx);
+            demvirdltlzx += floatTo<vbuf_prec>(dlw * vzx);
+            demvirdltlyy += floatTo<vbuf_prec>(dlw * vyy);
+            demvirdltlzy += floatTo<vbuf_prec>(dlw * vzy);
+            demvirdltlzz += floatTo<vbuf_prec>(dlw * vzz);
+          }
+        }
       }
     }
     if CONSTEXPR (do_e) {

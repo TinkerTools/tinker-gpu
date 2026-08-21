@@ -1,4 +1,5 @@
 #include "ff/amoeba/empole.h"
+#include "ff/amoeba/emplar.h"
 #include "ff/dlmda.h"
 #include "ff/elec.h"
 #include "ff/energy.h"
@@ -10,9 +11,11 @@
 #include "ff/potent.h"
 #include "ff/termbuf.h"
 #include "math/zero.h"
+#include "tool/darray.h"
 #include "tool/error.h"
 #include "tool/externfunc.h"
 #include "tool/platform.h"
+#include <tinker/detail/extfld.hh>
 #include <tinker/detail/mplpot.hh>
 #include <tinker/detail/mutant.hh>
 
@@ -25,26 +28,43 @@ void empoleData(RcOp op)
       return;
 
    auto rc_a = rc_flag & calc::analyz;
+   const bool snapshot = use_emdt and useEmplar();
 
    if (op & RcOp::DEALLOC) {
       if (rc_a)
          bufferDeallocate(rc_flag, nem);
       em_buf.manage(op, rc_flag, {}, {}, false);
-      em_dl.manage(op, rc_flag, {}, {}, false);
       em_snap.manage(op, rc_flag, false);
+      if (rc_a)
+         darray::deallocate(demdl_buf, d2emdl2_buf);
+      demdl_buf = nullptr;
+      d2emdl2_buf = nullptr;
       nem = nullptr;
    }
 
    if (op & RcOp::ALLOC) {
       nem = nullptr;
       em_buf.manage(op, rc_flag, {&em, &vir_em, &demx, &demy, &demz},
-         {eng_buf_elec, vir_buf_elec, gx_elec, gy_elec, gz_elec}, rc_a or use_emdt, //
+         {eng_buf_elec, vir_buf_elec, gx_elec, gy_elec, gz_elec}, rc_a or snapshot, //
          {&energy_em, &virial_em}, {&energy_elec, &virial_elec});
-      em_dl.manage(op, rc_flag, {&demdl_buf, &demvirdl_buf, &dfmdlx, &dfmdly, &dfmdlz, &d2emdl2_buf},
-         {dedl_buf, dvirdl_buf, dfsumdlx, dfsumdly, dfsumdlz, d2edl2_buf},
-         use_edlmda, //
-         {&demdl, &demvirdl, &d2emdl2}, {&dedl, &dvirdl, &d2edl2}, use_edlmda);
-      em_snap.manage(op, rc_flag, use_emdt);
+      em_snap.manage(op, rc_flag, snapshot);
+
+      const int dlmask = lmdaDerivMask(rc_flag, use_edlmda);
+      demdl_buf = nullptr;
+      d2emdl2_buf = nullptr;
+      if (dlmask & calc::energy_dlmda1) {
+         if (rc_a)
+            darray::allocate(bufferSize(), &demdl_buf);
+         else
+            demdl_buf = dedl_buf;
+      }
+      if (dlmask & calc::energy_dlmda2) {
+         if (rc_a)
+            darray::allocate(bufferSize(), &d2emdl2_buf);
+         else
+            d2emdl2_buf = d2edl2_buf;
+      }
+
       if (rc_a)
          bufferAllocate(rc_flag, &nem);
    }
@@ -57,7 +77,7 @@ namespace tinker {
 TINKER_FVOID2(acc1, cu1, empoleNonEwald, int);
 static void empoleNonEwald(int vers)
 {
-   TINKER_FCALL2(acc1, cu1, empoleNonEwald, vers);
+   TINKER_FCALL2(acc1, cu1, empoleNonEwald, lmdaDerivVers(vers, use_emast));
 }
 }
 
@@ -65,14 +85,14 @@ namespace tinker {
 TINKER_FVOID2(acc1, cu1, empoleEwaldRealSelf, int);
 static void empoleEwaldRealSelf(int vers)
 {
-   TINKER_FCALL2(acc1, cu1, empoleEwaldRealSelf, vers);
+   TINKER_FCALL2(acc1, cu1, empoleEwaldRealSelf, lmdaDerivVers(vers, use_emast));
 }
 
 TINKER_FVOID2(acc0, cu1, empoleEwaldRecipDlmda, int);
 void empoleEwaldRecip(int vers)
 {
    if (use_emast) {
-      TINKER_FCALL2(acc0, cu1, empoleEwaldRecipDlmda, vers);
+      TINKER_FCALL2(acc0, cu1, empoleEwaldRecipDlmda, lmdaDerivVers(vers, use_emast));
       return;
    }
    int use_cf = 0;
@@ -100,9 +120,14 @@ void empoleBegin(int vers)
 {
    zeroOnHost(energy_em, virial_em);
    if (use_edlmda)
-      zeroOnHost(demdl, d2emdl2, demvirdl);
+      zeroOnHost(demdl, d2emdl2);
    empoleZeroWork(vers);
-   em_dl.zero(vers);
+   if (rc_flag & calc::analyz) {
+      if (demdl_buf)
+         darray::zero(g::q0, bufferSize(), demdl_buf);
+      if (d2emdl2_buf)
+         darray::zero(g::q0, bufferSize(), d2emdl2_buf);
+   }
 }
 
 static void empoleKernel(int vers)
@@ -113,18 +138,21 @@ static void empoleKernel(int vers)
       empoleNonEwald(vers);
 }
 
-static void empoleState(int vers, RdtMask mask, const int* group, bool prepare_splines)
-{
-   mpoleInitState(vers, mask, group, prepare_splines);
-   empoleKernel(vers);
-   exfield(vers, 1);
-   torque(vers, demx, demy, demz, trqx, trqy, trqz, vir_em);
-}
-
 void empoleFinish(int vers)
 {
    em_buf.flush(vers);
-   em_dl.flush(vers);
+   if (rc_flag & calc::analyz) {
+      if (demdl_buf) {
+         energy_prec e = energyReduce(demdl_buf);
+         demdl += e;
+         dedl += e;
+      }
+      if (d2emdl2_buf) {
+         energy_prec e = energyReduce(d2emdl2_buf);
+         d2emdl2 += e;
+         d2edl2 += e;
+      }
+   }
 }
 
 void empole(int vers)
@@ -137,8 +165,8 @@ void empole(int vers)
    empoleKernel(vers);
    exfield(vers, 1);
    torque(vers, demx, demy, demz);
-   if (use_emast)
-      torque(vers, dfmdlx, dfmdly, dfmdlz, dltrqx, dltrqy, dltrqz, demvirdl_buf);
+   if (use_emast and dltrqx)
+      torque(vers, dfsumdlx, dfsumdly, dfsumdlz, dltrqx, dltrqy, dltrqz, dvirdl_buf);
    if (do_v) {
       VirialBuffer u2 = vir_trq;
       virial_prec v2[9];
@@ -159,65 +187,121 @@ void empoleSaveEndpoint0(int vers)
 
 void empoleMixEndpoints(int vers)
 {
-   em_snap.mix(vers, elam, emdtexp, use_edlmda, em_buf, em_dl);
+   double w, dw, d2w;
+   dtWeight(elam, emdtexp, w, dw, d2w);
+   const double dweight = dw * deldlmda;
+   const double d2weight = d2w * deldlmda * deldlmda + dw * d2eldlmda2;
+   const AccumRef dl = {demdl_buf, dvirdl_buf, dfsumdlx, dfsumdly, dfsumdlz, d2emdl2_buf};
+   em_snap.mix(vers, w, dweight, d2weight, use_edlmda, em_buf, dl);
 }
 
-void empole_adt(int vers)
+TINKER_FVOID2(acc0, cu1, empoleDt, int, const DtCoef&, int);
+void empoleDt(int vers, const DtCoef& coef, int nself)
 {
-   double w, dw, d2w;
-   bool need0, need1;
-   dtWeightNeed(elam, emdtexp, deldlmda, d2eldlmda2, w, dw, d2w, need0, need1);
-
-   empoleBegin(vers);
-
-   // Analysis reports the interaction count of the fully coupled endpoint even
-   // when that endpoint carries no weight, so it is built for the count alone
-   // and its energy discarded (empole3.f:2419-2427). em_buf.zero() rather than
-   // empoleZeroWork(), which would clear the count this exists to keep.
-   int wvers = vers;
-   bool first = true;
-   if ((vers & calc::analyz) and not need1) {
-      empoleState(vers, RdtMask::ALL, mut, true);
-      em_buf.zero(vers);
-      wvers = vers & ~calc::analyz;
-      first = false;
-   }
-
-   if (need0) {
-      empoleState(wvers, RdtMask::ENV, mut, first);
-      first = false;
-      empoleSaveEndpoint0(wvers);
-   }
-   if (need1) {
-      if (need0)
-         empoleZeroWork(wvers);
-      empoleState(wvers, RdtMask::ALL, mut, first);
-      if (not need0)
-         empoleSaveEndpoint0(wvers);
-   }
-
-   empoleMixEndpoints(vers);
-   empoleFinish(vers);
+   TINKER_FCALL2(acc0, cu1, empoleDt, vers, coef, nself);
 }
 
-void empole_rdt(int vers)
+TINKER_FVOID2(acc0, cu1, empoleEwaldRecipDt, int, RdtMask, real, real, real);
+void empoleEwaldRecipDt(int vers, RdtMask mask, real wa, real wb, real wc)
 {
-   double w, dw, d2w;
-   bool need0, need1;
-   dtWeightNeed(elam, emdtexp, deldlmda, d2eldlmda2, w, dw, d2w, need0, need1);
+   TINKER_FCALL2(acc0, cu1, empoleEwaldRecipDt, vers, mask, wa, wb, wc);
+}
 
-   empoleBegin(vers);
+TINKER_FVOID2(acc0, cu1, exfieldDipoleDt, int, const DtCoef&);
+static void exfieldDt(int vers, const DtCoef& coef)
+{
+   if (not extfld::use_exfld)
+      return;
+   TINKER_FCALL2(acc0, cu1, exfieldDipoleDt, vers, coef);
+}
 
-   const RelDualOps ops = {
-      [](int v, RdtMask mask, bool first) { empoleState(v, mask, rdt_group, first); },
-      [](int v) { empoleZeroWork(v); },
-      [](int v) { empoleSaveEndpoint0(v); },
-      [](int v) { empoleMixEndpoints(v); },
+static DtCoef empoleDtCoefAdt(double w, double dw, double d2w)
+{
+   DtCoef c;
+   dtWeightsToCoef(c, w, dw, d2w, deldlmda, d2eldlmda2, use_edlmda);
+   c.in0bits = 0;
+   c.in1bits = 0;
+   dtCellSet(c.in0bits, 0, 0);
+   for (int gi = 0; gi < 2; ++gi)
+      for (int gk = gi; gk < 2; ++gk)
+         dtCellSet(c.in1bits, gi, gk);
+   c.cntbits = c.in1bits;
+   return c;
+}
+
+// Relative dual topology. Groups are the ternary rdt_group labels.
+static DtCoef empoleDtCoefRdt(double w, double dw, double d2w, bool need1)
+{
+   DtCoef c;
+   dtWeightsToCoef(c, w, dw, d2w, deldlmda, d2eldlmda2, use_edlmda);
+   c.in0bits = dtStateBits(emrelst0);
+   c.in1bits = dtStateBits(emrelst1);
+   c.cntbits = dtCountBits(need1 ? emrelst1 : emrelst0);
+   return c;
+}
+
+static void empoleRecipDt(int vers, const DtCoef& c)
+{
+   struct Pass
+   {
+      RdtMask mask;
+      bool in0, in1;
    };
-   relDualDrive(vers, emrelst0, emrelst1, need0, need1, ops);
+   Pass pass[nRelSlot];
+   int npass = 0;
+
+   if (use_emrdt) {
+      for (int k = 0; k < nRelSlot; ++k) {
+         RdtMask mask;
+         bool in0, in1;
+         relSlot(k, emrelst0, emrelst1, mask, in0, in1);
+         if (in0 or in1)
+            pass[npass++] = {mask, in0, in1};
+      }
+   } else {
+      pass[npass++] = {RdtMask::ENV, true, false};
+      pass[npass++] = {RdtMask::ALL, false, true};
+   }
+
+   for (int k = 0; k < npass; ++k) {
+      real wa = (pass[k].in0 ? c.a0 : 0) + (pass[k].in1 ? c.a1 : 0);
+      real wb = (pass[k].in0 ? c.b0 : 0) + (pass[k].in1 ? c.b1 : 0);
+      real wc = (pass[k].in0 ? c.c0 : 0) + (pass[k].in1 ? c.c1 : 0);
+      if (wa == 0 and wb == 0 and wc == 0)
+         continue;
+      empoleEwaldRecipDt(vers, pass[k].mask, wa, wb, wc);
+   }
+}
+
+void empole_dt(int vers)
+{
+   const int dvers = lmdaDerivVers(vers, use_edlmda);
+   auto do_g = vers & calc::grad;
+
+   double w, dw, d2w;
+   bool need0, need1;
+   dtWeightNeed(elam, emdtexp, deldlmda, d2eldlmda2, w, dw, d2w, need0, need1);
+
+   empoleBegin(vers);
+
+   mpoleInitDt(vers);
+
+   const DtCoef coef =
+      use_emrdt ? empoleDtCoefRdt(w, dw, d2w, need1) : empoleDtCoefAdt(w, dw, d2w);
+
+   const int nself = use_emrdt ? dtCountSlots(need1 ? emrelst1 : emrelst0) : 1;
+
+   empoleDt(dvers, coef, nself);
+   if (useEwald())
+      empoleRecipDt(dvers, coef);
+   exfieldDt(dvers, coef);
+
+   if (do_g) {
+      torque(vers, demx, demy, demz, trqx, trqy, trqz, vir_em);
+      if (dltrqx)
+         torque(vers, dfsumdlx, dfsumdly, dfsumdlz, dltrqx, dltrqy, dltrqz, dvirdl_buf);
+   }
 
    empoleFinish(vers);
-
-   mpoleInitState(calc::v0, RdtMask::ALL, rdt_group, false);
 }
 }

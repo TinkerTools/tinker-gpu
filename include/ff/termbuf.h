@@ -89,6 +89,9 @@ public:
    void mix(int vers, double lambda, int exponent, bool do_dlmda, const TermBuffer& cur,
       const TermBuffer& dl);
 
+   void mix(int vers, double weight1, double dweight1, double d2weight1, bool do_dlmda,
+      const TermBuffer& cur, AccumRef dl);
+
 private:
    AccumRef mBuf;
    int mFlag = 0;

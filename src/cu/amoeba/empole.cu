@@ -37,8 +37,8 @@ static void empole_cu()
 
       if CONSTEXPR (do_e) {
          if CONSTEXPR (eq<LTYP, DLMDA>()) {
-            launch_k1b(g::s0, n, empoleSelfDlmda_cu<do_a>, //
-               nem, em, demdl_buf, d2emdl2_buf, rpole, mut, n, f, aewald, elam);
+            launch_k1b(g::s0, n, empoleSelfDlmda_cu<Ver>, //
+               nem, em, demdl_buf, d2emdl2_buf, rpole, mut, n, f, aewald, elam, deldlmda, d2eldlmda2);
          } else {
             launch_k1b(g::s0, n, empoleSelf_cu<do_a>, //
                nem, em, rpole, n, f, aewald);
@@ -48,9 +48,9 @@ static void empole_cu()
    int ngrid = gpuGridSize(BLOCK_DIM);
    if CONSTEXPR (eq<LTYP, DLMDA>()) {
       empoledlmda_cu1<Ver, ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, demdl_buf, d2emdl2_buf,
-         vir_em, demvirdl_buf, demx, demy, demz, dfmdlx, dfmdly, dfmdlz, off, st.si1.bit0, nmdpuexclude, mdpuexclude,
-         mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, trqx, trqy, trqz,
-         dltrqx, dltrqy, dltrqz, rpole, mut, f, aewald, elam);
+         vir_em, dvirdl_buf, demx, demy, demz, dfsumdlx, dfsumdly, dfsumdlz, off, st.si1.bit0, nmdpuexclude,
+         mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst,
+         trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, rpole, mut, f, aewald, elam, deldlmda, d2eldlmda2);
    } else {
       empole_cu1<Ver, ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, vir_em, demx, demy, demz,
          off, st.si1.bit0, nmdpuexclude, mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl,
@@ -73,6 +73,14 @@ void empoleNonEwald_cu(int vers)
          empole_cu<calc::V5, NON_EWALD,DLMDA>();
       } else if (vers == calc::v6) {
          empole_cu<calc::V6, NON_EWALD,DLMDA>();
+      } else if (vers == calc::v7) {
+         empole_cu<calc::V7, NON_EWALD,DLMDA>();
+      } else if (vers == calc::v8) {
+         empole_cu<calc::V8, NON_EWALD,DLMDA>();
+      } else if (vers == calc::v9) {
+         empole_cu<calc::V9, NON_EWALD,DLMDA>();
+      } else if (vers == calc::v10) {
+         empole_cu<calc::V10, NON_EWALD,DLMDA>();
       }
    } else {
       if (vers == calc::v0) {
@@ -106,6 +114,14 @@ void empoleEwaldRealSelf_cu(int vers)
          empole_cu<calc::V5, EWALD,DLMDA>();
       } else if (vers == calc::v6) {
          empole_cu<calc::V6, EWALD,DLMDA>();
+      } else if (vers == calc::v7) {
+         empole_cu<calc::V7, EWALD,DLMDA>();
+      } else if (vers == calc::v8) {
+         empole_cu<calc::V8, EWALD,DLMDA>();
+      } else if (vers == calc::v9) {
+         empole_cu<calc::V9, EWALD,DLMDA>();
+      } else if (vers == calc::v10) {
+         empole_cu<calc::V10, EWALD,DLMDA>();
       }
    } else {
       if (vers == calc::v0) {
@@ -212,12 +228,18 @@ static void exfieldDipoleDlmda_cu1(CountBuffer restrict nem, EnergyBuffer restri
    real* restrict trqx, real* restrict trqy, real* restrict trqz,                      //
    real* restrict dltrqx, real* restrict dltrqy, real* restrict dltrqz,                //
    int n, real f, real ef1, real ef2, real ef3, const real (*restrict rpole)[10],
-   const int* restrict mut, real elambda, const real* restrict x, const real* restrict y, const real* restrict z)
+   const int* restrict mut, real elambda, const real* restrict x, const real* restrict y, const real* restrict z,
+   EnergyBuffer restrict d2emdl2, real deldl, real d2eldl2)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;
    constexpr bool do_g = Ver::g;
    constexpr bool do_v = Ver::v;
+   constexpr bool do_dl1 = Ver::e_dlmda1;
+   constexpr bool do_dl2 = Ver::e_dlmda2;
+   constexpr bool do_gdl = Ver::g_dlmda;
+   constexpr bool do_tdl = Ver::g_dlmda or Ver::v_dlmda;
+   constexpr bool do_vdl = Ver::v_dlmda;
 
    int ithread = ITHREAD;
    for (int ii = ithread; ii < n; ii += STRIDE) {
@@ -231,8 +253,12 @@ static void exfieldDipoleDlmda_cu1(CountBuffer restrict nem, EnergyBuffer restri
       if CONSTEXPR (do_e) {
          real phi = xi * ef1 + yi * ef2 + zi * ef3; // negative potential
          real e = -f * (ci * phi + dix * ef1 + diy * ef2 + diz * ef3);
-         if (muti)
-            atomic_add(e, demdl, ithread);
+         if (muti) {
+            if CONSTEXPR (do_dl1)
+               atomic_add(deldl * e, demdl, ithread);
+            if CONSTEXPR (do_dl2)
+               atomic_add(d2eldl2 * e, d2emdl2, ithread);
+         }
          e *= s;
          atomic_add(e, em, ithread);
          if CONSTEXPR (do_a) {
@@ -256,12 +282,16 @@ static void exfieldDipoleDlmda_cu1(CountBuffer restrict nem, EnergyBuffer restri
          atomic_add(s * fry, demy, ii);
          atomic_add(s * frz, demz, ii);
          if (muti) {
-            atomic_add(tx, dltrqx, ii);
-            atomic_add(ty, dltrqy, ii);
-            atomic_add(tz, dltrqz, ii);
-            atomic_add(frx, dfmdlx, ii);
-            atomic_add(fry, dfmdly, ii);
-            atomic_add(frz, dfmdlz, ii);
+            if CONSTEXPR (do_tdl) {
+               atomic_add(deldl * tx, dltrqx, ii);
+               atomic_add(deldl * ty, dltrqy, ii);
+               atomic_add(deldl * tz, dltrqz, ii);
+            }
+            if CONSTEXPR (do_gdl) {
+               atomic_add(deldl * frx, dfmdlx, ii);
+               atomic_add(deldl * fry, dfmdly, ii);
+               atomic_add(deldl * frz, dfmdlz, ii);
+            }
          }
          if CONSTEXPR (do_v) {
             real vxx = xi * frx;
@@ -271,8 +301,12 @@ static void exfieldDipoleDlmda_cu1(CountBuffer restrict nem, EnergyBuffer restri
             real vxz = (zi * frx + xi * frz) / 2;
             real vyz = (zi * fry + yi * frz) / 2;
             atomic_add(s * vxx, s * vxy, s * vxz, s * vyy, s * vyz, s * vzz, vir_em, ithread);
-            if (muti)
-               atomic_add(vxx, vxy, vxz, vyy, vyz, vzz, demvirdl, ithread);
+            if CONSTEXPR (do_vdl) {
+               if (muti) {
+                  atomic_add(deldl * vxx, deldl * vxy, deldl * vxz, deldl * vyy, deldl * vyz, deldl * vzz,
+                     demvirdl, ithread);
+               }
+            }
          }
       }
    }
@@ -283,9 +317,9 @@ static void exfieldDipoleDlmda_cu2()
 {
    real f = electric / dielec;
    real ef1 = extfld::texfld[0], ef2 = extfld::texfld[1], ef3 = extfld::texfld[2];
-   launch_k1b(g::s0, n, exfieldDipoleDlmda_cu1<Ver>, nem, em, demdl_buf, vir_em, demvirdl_buf, demx, demy, demz,
-      dfmdlx, dfmdly, dfmdlz, trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, n, f, ef1, ef2, ef3, rpole, mut, elam, x, y,
-      z);
+   launch_k1b(g::s0, n, exfieldDipoleDlmda_cu1<Ver>, nem, em, demdl_buf, vir_em, dvirdl_buf, demx, demy, demz,
+      dfsumdlx, dfsumdly, dfsumdlz, trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, n, f, ef1, ef2, ef3, rpole, mut, elam,
+      x, y, z, d2emdl2_buf, deldlmda, d2eldlmda2);
 }
 
 void exfieldDipoleDlmda_cu(int vers)
@@ -302,6 +336,14 @@ void exfieldDipoleDlmda_cu(int vers)
       exfieldDipoleDlmda_cu2<calc::V5>();
    else if (vers == calc::v6)
       exfieldDipoleDlmda_cu2<calc::V6>();
+   else if (vers == calc::v7)
+      exfieldDipoleDlmda_cu2<calc::V7>();
+   else if (vers == calc::v8)
+      exfieldDipoleDlmda_cu2<calc::V8>();
+   else if (vers == calc::v9)
+      exfieldDipoleDlmda_cu2<calc::V9>();
+   else if (vers == calc::v10)
+      exfieldDipoleDlmda_cu2<calc::V10>();
 }
 
 __global__

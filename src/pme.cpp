@@ -308,10 +308,16 @@ void pmeConv(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
    TINKER_FCALL2(acc1, cu1, pmeConv, pme_u, gpu_e, gpu_vir);
 }
 
-TINKER_FVOID2(acc0, cu1, pmeConvDlmda, PMEUnit, PMEUnit, VirialBuffer, VirialBuffer);
-void pmeConvDlmda(PMEUnit pme_u, PMEUnit dlpme_u, VirialBuffer gpu_vir, VirialBuffer dl_vir)
+TINKER_FVOID2(acc0, cu1, pmeConvDt, PMEUnit, VirialBuffer, real, VirialBuffer, real);
+void pmeConvDt(PMEUnit pme_u, VirialBuffer gpu_vir, real wv, VirialBuffer dl_vir, real wdv)
 {
-   TINKER_FCALL2(acc0, cu1, pmeConvDlmda, pme_u, dlpme_u, gpu_vir, dl_vir);
+   TINKER_FCALL2(acc0, cu1, pmeConvDt, pme_u, gpu_vir, wv, dl_vir, wdv);
+}
+
+TINKER_FVOID2(acc0, cu1, pmeConvDlmda, PMEUnit, PMEUnit, VirialBuffer, VirialBuffer, real);
+void pmeConvDlmda(PMEUnit pme_u, PMEUnit dlpme_u, VirialBuffer gpu_vir, VirialBuffer dl_vir, real wdv)
+{
+   TINKER_FCALL2(acc0, cu1, pmeConvDlmda, pme_u, dlpme_u, gpu_vir, dl_vir, wdv);
 }
 }
 
@@ -358,6 +364,12 @@ TINKER_FVOID2(acc0, cu1, rpoleToCmpDlmda);
 void rpoleToCmpDlmda()
 {
    TINKER_FCALL2(acc0, cu1, rpoleToCmpDlmda);
+}
+
+TINKER_FVOID2(acc0, cu1, rpoleToCmpState, RdtMask, const int*);
+void rpoleToCmpState(RdtMask mask, const int* group)
+{
+   TINKER_FCALL2(acc0, cu1, rpoleToCmpState, mask, group);
 }
 
 TINKER_FVOID2(acc1, cu1, cmpToFmp, PMEUnit, const real (*)[10], real (*)[10]);

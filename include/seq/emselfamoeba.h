@@ -41,12 +41,16 @@ void empoleSelf_cu(CountBuffer restrict nem, EnergyBuffer restrict em, const rea
    }
 }
 
-template <bool do_a>
+template <class Ver>
 __global__
 void empoleSelfDlmda_cu(CountBuffer restrict nem, EnergyBuffer restrict em, EnergyBuffer restrict demdl,
    EnergyBuffer restrict d2emdl2, const real (*restrict rpole)[10], const int* restrict mut, int n, real f,
-   real aewald, real elambda)
+   real aewald, real elambda, real deldl, real d2eldl2)
 {
+   constexpr bool do_a = Ver::a;
+   constexpr bool do_dl1 = Ver::e_dlmda1;
+   constexpr bool do_dl2 = Ver::e_dlmda2;
+
    real aewald_sq_2 = 2 * aewald * aewald;
    real fterm = -f * aewald * 0.5f * (real)(M_2_SQRTPI);
 
@@ -54,8 +58,10 @@ void empoleSelfDlmda_cu(CountBuffer restrict nem, EnergyBuffer restrict em, Ener
       int offset = threadIdx.x + blockIdx.x * blockDim.x;
       real e = empoleSelfEnergyAtomI(i, rpole, fterm, aewald_sq_2);
       if (mut[i]) {
-         atomic_add(2 * elambda * e, demdl, offset);
-         atomic_add(2 * e, d2emdl2, offset);
+         if CONSTEXPR (do_dl1)
+            atomic_add(2 * elambda * deldl * e, demdl, offset);
+         if CONSTEXPR (do_dl2)
+            atomic_add((2 * deldl * deldl + 2 * elambda * d2eldl2) * e, d2emdl2, offset);
          e *= elambda * elambda;
       }
       atomic_add(e, em, offset);

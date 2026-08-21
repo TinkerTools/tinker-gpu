@@ -1,7 +1,7 @@
 // ck.py Version 3.1.0
 template <class Ver, class ETYP>
 __global__
-void empoledlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, EnergyBuffer restrict em,
+void empoledt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, EnergyBuffer restrict em,
    EnergyBuffer restrict demdl, EnergyBuffer restrict d2emdl2, VirialBuffer restrict vem,
    VirialBuffer restrict demvirdl, grad_prec* restrict gx, grad_prec* restrict gy, grad_prec* restrict gz,
    grad_prec* restrict dfmdlx, grad_prec* restrict dfmdly, grad_prec* restrict dfmdlz, real off,
@@ -9,8 +9,9 @@ void empoledlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, Energ
    const real (*restrict exclude_scale)[4], const real* restrict x, const real* restrict y, const real* restrict z,
    const Spatial::SortedAtom* restrict sorted, int nakpl, const int* restrict iakpl, int niak, const int* restrict iak,
    const int* restrict lst, real* restrict trqx, real* restrict trqy, real* restrict trqz, real* restrict dltrqx,
-   real* restrict dltrqy, real* restrict dltrqz, const real (*restrict rpole)[10], const int* restrict mut, real f,
-   real aewald, real elambda, real deldl, real d2eldl2)
+   real* restrict dltrqy, real* restrict dltrqz, const real (*restrict rpole)[10], const int* restrict grp, real f,
+   real aewald, unsigned in0bits, unsigned in1bits, unsigned cntbits, real a0, real a1, real b0, real b1, real c0,
+   real c1)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;
@@ -65,11 +66,11 @@ void empoledlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, Energ
    __shared__ real xi[BLOCK_DIM], yi[BLOCK_DIM], zi[BLOCK_DIM], ci[BLOCK_DIM], dix[BLOCK_DIM], diy[BLOCK_DIM],
       diz[BLOCK_DIM], qixx[BLOCK_DIM], qixy[BLOCK_DIM], qixz[BLOCK_DIM], qiyy[BLOCK_DIM], qiyz[BLOCK_DIM],
       qizz[BLOCK_DIM];
-   __shared__ int muti[BLOCK_DIM];
+   int igrp;
    __shared__ real xk[BLOCK_DIM], yk[BLOCK_DIM], zk[BLOCK_DIM], ck[BLOCK_DIM], dkx[BLOCK_DIM], dky[BLOCK_DIM],
       dkz[BLOCK_DIM];
    real qkxx, qkxy, qkxz, qkyy, qkyz, qkzz;
-   int mutk;
+   int kgrp;
    real frcxi, frcyi, frczi, trqxi, trqyi, trqzi, dltrqxi, dltrqyi, dltrqzi;
    real frcxk, frcyk, frczk, trqxk, trqyk, trqzk, dltrqxk, dltrqyk, dltrqzk;
    real dfrcxi, dfrcyi, dfrczi;
@@ -130,7 +131,7 @@ void empoledlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, Energ
       qiyy[klane] = rpole[i][MPL_PME_YY];
       qiyz[klane] = rpole[i][MPL_PME_YZ];
       qizz[klane] = rpole[i][MPL_PME_ZZ];
-      muti[klane] = mut[i];
+      igrp = grp[i];
       xk[threadIdx.x] = x[k];
       yk[threadIdx.x] = y[k];
       zk[threadIdx.x] = z[k];
@@ -144,120 +145,109 @@ void empoledlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, Energ
       qkyy = rpole[k][MPL_PME_YY];
       qkyz = rpole[k][MPL_PME_YZ];
       qkzz = rpole[k][MPL_PME_ZZ];
-      mutk = mut[k];
+      kgrp = grp[k];
 
       constexpr bool incl = true;
-      real xr = xk[threadIdx.x] - xi[klane];
-      real yr = yk[threadIdx.x] - yi[klane];
-      real zr = zk[threadIdx.x] - zi[klane];
-      real r2 = image2(xr, yr, zr);
-      if (r2 <= off * off and incl) {
-         real e, vxx, vyx, vzx, vyy, vzy, vzz;
-         real e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1;
-         real pfrcxi = 0, pfrcyi = 0, pfrczi = 0;
-         real pfrcxk = 0, pfrcyk = 0, pfrczk = 0;
-         real ptrqxi = 0, ptrqyi = 0, ptrqzi = 0;
-         real ptrqxk = 0, ptrqyk = 0, ptrqzk = 0;
-         pair_mpole_v2<Ver, ETYP>(r2, xr, yr, zr, 1, ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane],
-            qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], ck[threadIdx.x], dkx[threadIdx.x],
-            dky[threadIdx.x], dkz[threadIdx.x], qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, f, aewald, pfrcxi, pfrcyi, pfrczi,
-            pfrcxk, pfrcyk, pfrczk, ptrqxi, ptrqyi, ptrqzi, ptrqxk, ptrqyk, ptrqzk, e, vxx, vyx, vzx, vyy, vzy, vzz);
-         pair_mpole_v2<Ver, NON_EWALD>(r2, xr, yr, zr, scalea - 1, ci[klane], dix[klane], diy[klane], diz[klane],
-            qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], ck[threadIdx.x],
-            dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x], qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, f, aewald, pfrcxi,
-            pfrcyi, pfrczi, pfrcxk, pfrcyk, pfrczk, ptrqxi, ptrqyi, ptrqzi, ptrqxk, ptrqyk, ptrqzk, e1, vxx1, vyx1,
-            vzx1, vyy1, vzy1, vzz1);
-         if CONSTEXPR (do_e) {
-            e = e + e1;
-         }
-         if CONSTEXPR (do_v) {
-            vxx = vxx + vxx1;
-            vyx = vyx + vyx1;
-            vzx = vzx + vzx1;
-            vyy = vyy + vyy1;
-            vzy = vzy + vzy1;
-            vzz = vzz + vzz1;
-         }
-         real scalelmda = 1;
-         real dlscale = 0;
-         real d2scale = 0;
-         if (muti[klane] and mutk) {
-            scalelmda = elambda * elambda;
-            dlscale = 2 * elambda;
-            d2scale = 2;
-         } else if (muti[klane] or mutk) {
-            scalelmda = elambda;
-            dlscale = 1;
-         }
-         if (muti[klane] or mutk) {
-            real d2w = d2scale * deldl * deldl + dlscale * d2eldl2;
-            real dlw = dlscale * deldl;
+      int cell = 3 * igrp + kgrp;
+      bool in0 = (in0bits >> cell) & 1;
+      bool in1 = (in1bits >> cell) & 1;
+      bool cnt = (cntbits >> cell) & 1;
+      {
+         bool include = incl and (in0 or in1 or cnt);
+         real wa = (in0 ? a0 : 0) + (in1 ? a1 : 0);
+         real wb = (in0 ? b0 : 0) + (in1 ? b1 : 0);
+         real wc = (in0 ? c0 : 0) + (in1 ? c1 : 0);
+         real xr = xk[threadIdx.x] - xi[klane];
+         real yr = yk[threadIdx.x] - yi[klane];
+         real zr = zk[threadIdx.x] - zi[klane];
+         real r2 = image2(xr, yr, zr);
+         if (r2 <= off * off and include) {
+            real e, vxx, vyx, vzx, vyy, vzy, vzz;
+            real e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1;
+            real pfrcxi = 0, pfrcyi = 0, pfrczi = 0;
+            real pfrcxk = 0, pfrcyk = 0, pfrczk = 0;
+            real ptrqxi = 0, ptrqyi = 0, ptrqzi = 0;
+            real ptrqxk = 0, ptrqyk = 0, ptrqzk = 0;
+            pair_mpole_v2<Ver, ETYP>(r2, xr, yr, zr, 1, ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane],
+               qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], ck[threadIdx.x], dkx[threadIdx.x],
+               dky[threadIdx.x], dkz[threadIdx.x], qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, f, aewald, pfrcxi, pfrcyi,
+               pfrczi, pfrcxk, pfrcyk, pfrczk, ptrqxi, ptrqyi, ptrqzi, ptrqxk, ptrqyk, ptrqzk, e, vxx, vyx, vzx, vyy,
+               vzy, vzz);
+            pair_mpole_v2<Ver, NON_EWALD>(r2, xr, yr, zr, scalea - 1, ci[klane], dix[klane], diy[klane], diz[klane],
+               qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], ck[threadIdx.x],
+               dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x], qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, f, aewald,
+               pfrcxi, pfrcyi, pfrczi, pfrcxk, pfrcyk, pfrczk, ptrqxi, ptrqyi, ptrqzi, ptrqxk, ptrqyk, ptrqzk, e1, vxx1,
+               vyx1, vzx1, vyy1, vzy1, vzz1);
             if CONSTEXPR (do_e) {
+               e = e + e1;
+            }
+            if CONSTEXPR (do_v) {
+               vxx = vxx + vxx1;
+               vyx = vyx + vyx1;
+               vzx = vzx + vzx1;
+               vyy = vyy + vyy1;
+               vzy = vzy + vzy1;
+               vzz = vzz + vzz1;
+            }
+            if CONSTEXPR (do_e) {
+               emtl += floatTo<ebuf_prec>(wa * e);
                if CONSTEXPR (do_dl1)
-                  demdltl += floatTo<ebuf_prec>(dlw * e);
+                  demdltl += floatTo<ebuf_prec>(wb * e);
                if CONSTEXPR (do_dl2)
-                  d2emdl2tl += floatTo<ebuf_prec>(d2w * e);
+                  d2emdl2tl += floatTo<ebuf_prec>(wc * e);
+               if CONSTEXPR (do_a) {
+                  if (cnt and scalea != 0 and e != 0)
+                     nemtl += 1;
+               }
             }
             if CONSTEXPR (do_g) {
+               frcxi += wa * pfrcxi;
+               frcyi += wa * pfrcyi;
+               frczi += wa * pfrczi;
+               frcxk += wa * pfrcxk;
+               frcyk += wa * pfrcyk;
+               frczk += wa * pfrczk;
+               trqxi += wa * ptrqxi;
+               trqyi += wa * ptrqyi;
+               trqzi += wa * ptrqzi;
+               trqxk += wa * ptrqxk;
+               trqyk += wa * ptrqyk;
+               trqzk += wa * ptrqzk;
                if CONSTEXPR (do_gdl) {
-                  dfrcxi += dlw * pfrcxi;
-                  dfrcyi += dlw * pfrcyi;
-                  dfrczi += dlw * pfrczi;
-                  dfrcxk += dlw * pfrcxk;
-                  dfrcyk += dlw * pfrcyk;
-                  dfrczk += dlw * pfrczk;
+                  dfrcxi += wb * pfrcxi;
+                  dfrcyi += wb * pfrcyi;
+                  dfrczi += wb * pfrczi;
+                  dfrcxk += wb * pfrcxk;
+                  dfrcyk += wb * pfrcyk;
+                  dfrczk += wb * pfrczk;
                }
                if CONSTEXPR (do_tdl) {
-                  dltrqxi += dlw * ptrqxi;
-                  dltrqyi += dlw * ptrqyi;
-                  dltrqzi += dlw * ptrqzi;
-                  dltrqxk += dlw * ptrqxk;
-                  dltrqyk += dlw * ptrqyk;
-                  dltrqzk += dlw * ptrqzk;
-               }
-               if CONSTEXPR (do_v) {
-                  if CONSTEXPR (do_vdl) {
-                     demvirdltlxx += floatTo<vbuf_prec>(dlw * vxx);
-                     demvirdltlyx += floatTo<vbuf_prec>(dlw * vyx);
-                     demvirdltlzx += floatTo<vbuf_prec>(dlw * vzx);
-                     demvirdltlyy += floatTo<vbuf_prec>(dlw * vyy);
-                     demvirdltlzy += floatTo<vbuf_prec>(dlw * vzy);
-                     demvirdltlzz += floatTo<vbuf_prec>(dlw * vzz);
-                  }
+                  dltrqxi += wb * ptrqxi;
+                  dltrqyi += wb * ptrqyi;
+                  dltrqzi += wb * ptrqzi;
+                  dltrqxk += wb * ptrqxk;
+                  dltrqyk += wb * ptrqyk;
+                  dltrqzk += wb * ptrqzk;
                }
             }
-         }
-         if CONSTEXPR (do_e) {
-            e *= scalelmda;
-            emtl += floatTo<ebuf_prec>(e);
-            if CONSTEXPR (do_a) {
-               if (scalea != 0 and e != 0)
-                  nemtl += 1;
+            if CONSTEXPR (do_v) {
+               vemtlxx += floatTo<vbuf_prec>(wa * vxx);
+               vemtlyx += floatTo<vbuf_prec>(wa * vyx);
+               vemtlzx += floatTo<vbuf_prec>(wa * vzx);
+               vemtlyy += floatTo<vbuf_prec>(wa * vyy);
+               vemtlzy += floatTo<vbuf_prec>(wa * vzy);
+               vemtlzz += floatTo<vbuf_prec>(wa * vzz);
+               if CONSTEXPR (do_vdl) {
+                  demvirdltlxx += floatTo<vbuf_prec>(wb * vxx);
+                  demvirdltlyx += floatTo<vbuf_prec>(wb * vyx);
+                  demvirdltlzx += floatTo<vbuf_prec>(wb * vzx);
+                  demvirdltlyy += floatTo<vbuf_prec>(wb * vyy);
+                  demvirdltlzy += floatTo<vbuf_prec>(wb * vzy);
+                  demvirdltlzz += floatTo<vbuf_prec>(wb * vzz);
+               }
             }
-         }
-         if CONSTEXPR (do_g) {
-            frcxi += scalelmda * pfrcxi;
-            frcyi += scalelmda * pfrcyi;
-            frczi += scalelmda * pfrczi;
-            frcxk += scalelmda * pfrcxk;
-            frcyk += scalelmda * pfrcyk;
-            frczk += scalelmda * pfrczk;
-            trqxi += scalelmda * ptrqxi;
-            trqyi += scalelmda * ptrqyi;
-            trqzi += scalelmda * ptrqzi;
-            trqxk += scalelmda * ptrqxk;
-            trqyk += scalelmda * ptrqyk;
-            trqzk += scalelmda * ptrqzk;
-         }
-         if CONSTEXPR (do_v) {
-            vemtlxx += floatTo<vbuf_prec>(scalelmda * vxx);
-            vemtlyx += floatTo<vbuf_prec>(scalelmda * vyx);
-            vemtlzx += floatTo<vbuf_prec>(scalelmda * vzx);
-            vemtlyy += floatTo<vbuf_prec>(scalelmda * vyy);
-            vemtlzy += floatTo<vbuf_prec>(scalelmda * vzy);
-            vemtlzz += floatTo<vbuf_prec>(scalelmda * vzz);
-         }
-      } // end if (include)
+         } // end if (include)
+      }
 
       if CONSTEXPR (do_g) {
          atomic_add(frcxi, gx, i);
@@ -355,7 +345,7 @@ void empoledlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, Energ
       qiyy[threadIdx.x] = rpole[i][MPL_PME_YY];
       qiyz[threadIdx.x] = rpole[i][MPL_PME_YZ];
       qizz[threadIdx.x] = rpole[i][MPL_PME_ZZ];
-      muti[threadIdx.x] = mut[i];
+      igrp = grp[i];
       xk[threadIdx.x] = sorted[atomk].x;
       yk[threadIdx.x] = sorted[atomk].y;
       zk[threadIdx.x] = sorted[atomk].z;
@@ -369,7 +359,7 @@ void empoledlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, Energ
       qkyy = rpole[k][MPL_PME_YY];
       qkyz = rpole[k][MPL_PME_YZ];
       qkzz = rpole[k][MPL_PME_ZZ];
-      mutk = mut[k];
+      kgrp = grp[k];
       __syncwarp();
 
       unsigned int mdpuinfo0 = mdpuinfo[iw * WARP_SIZE + ilane];
@@ -379,103 +369,92 @@ void empoledlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, Energ
          bool incl = iid < kid and kid < n;
          int srcmask = 1 << srclane;
          incl = incl and (mdpuinfo0 & srcmask) == 0;
-         real xr = xk[threadIdx.x] - xi[klane];
-         real yr = yk[threadIdx.x] - yi[klane];
-         real zr = zk[threadIdx.x] - zi[klane];
-         real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
-            real e, vxx, vyx, vzx, vyy, vzy, vzz;
-            real pfrcxi = 0, pfrcyi = 0, pfrczi = 0;
-            real pfrcxk = 0, pfrcyk = 0, pfrczk = 0;
-            real ptrqxi = 0, ptrqyi = 0, ptrqzi = 0;
-            real ptrqxk = 0, ptrqyk = 0, ptrqzk = 0;
-            pair_mpole_v2<Ver, ETYP>(r2, xr, yr, zr, 1, ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane],
-               qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], ck[threadIdx.x], dkx[threadIdx.x],
-               dky[threadIdx.x], dkz[threadIdx.x], qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, f, aewald, pfrcxi, pfrcyi,
-               pfrczi, pfrcxk, pfrcyk, pfrczk, ptrqxi, ptrqyi, ptrqzi, ptrqxk, ptrqyk, ptrqzk, e, vxx, vyx, vzx, vyy,
-               vzy, vzz);
-            real scalelmda = 1;
-            real dlscale = 0;
-            real d2scale = 0;
-            if (muti[klane] and mutk) {
-               scalelmda = elambda * elambda;
-               dlscale = 2 * elambda;
-               d2scale = 2;
-            } else if (muti[klane] or mutk) {
-               scalelmda = elambda;
-               dlscale = 1;
-            }
-            if (muti[klane] or mutk) {
-               real d2w = d2scale * deldl * deldl + dlscale * d2eldl2;
-               real dlw = dlscale * deldl;
+         int cell = 3 * igrp + kgrp;
+         bool in0 = (in0bits >> cell) & 1;
+         bool in1 = (in1bits >> cell) & 1;
+         bool cnt = (cntbits >> cell) & 1;
+         {
+            incl = incl and (in0 or in1 or cnt);
+            real wa = (in0 ? a0 : 0) + (in1 ? a1 : 0);
+            real wb = (in0 ? b0 : 0) + (in1 ? b1 : 0);
+            real wc = (in0 ? c0 : 0) + (in1 ? c1 : 0);
+            real xr = xk[threadIdx.x] - xi[klane];
+            real yr = yk[threadIdx.x] - yi[klane];
+            real zr = zk[threadIdx.x] - zi[klane];
+            real r2 = image2(xr, yr, zr);
+            if (r2 <= off * off and incl) {
+               real e, vxx, vyx, vzx, vyy, vzy, vzz;
+               real pfrcxi = 0, pfrcyi = 0, pfrczi = 0;
+               real pfrcxk = 0, pfrcyk = 0, pfrczk = 0;
+               real ptrqxi = 0, ptrqyi = 0, ptrqzi = 0;
+               real ptrqxk = 0, ptrqyk = 0, ptrqzk = 0;
+               pair_mpole_v2<Ver, ETYP>(r2, xr, yr, zr, 1, ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane],
+                  qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], ck[threadIdx.x], dkx[threadIdx.x],
+                  dky[threadIdx.x], dkz[threadIdx.x], qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, f, aewald, pfrcxi, pfrcyi,
+                  pfrczi, pfrcxk, pfrcyk, pfrczk, ptrqxi, ptrqyi, ptrqzi, ptrqxk, ptrqyk, ptrqzk, e, vxx, vyx, vzx, vyy,
+                  vzy, vzz);
                if CONSTEXPR (do_e) {
+                  emtl += floatTo<ebuf_prec>(wa * e);
                   if CONSTEXPR (do_dl1)
-                     demdltl += floatTo<ebuf_prec>(dlw * e);
+                     demdltl += floatTo<ebuf_prec>(wb * e);
                   if CONSTEXPR (do_dl2)
-                     d2emdl2tl += floatTo<ebuf_prec>(d2w * e);
+                     d2emdl2tl += floatTo<ebuf_prec>(wc * e);
+                  if CONSTEXPR (do_a) {
+                     if (cnt and e != 0)
+                        nemtl += 1;
+                  }
                }
                if CONSTEXPR (do_g) {
+                  frcxi += wa * pfrcxi;
+                  frcyi += wa * pfrcyi;
+                  frczi += wa * pfrczi;
+                  frcxk += wa * pfrcxk;
+                  frcyk += wa * pfrcyk;
+                  frczk += wa * pfrczk;
+                  trqxi += wa * ptrqxi;
+                  trqyi += wa * ptrqyi;
+                  trqzi += wa * ptrqzi;
+                  trqxk += wa * ptrqxk;
+                  trqyk += wa * ptrqyk;
+                  trqzk += wa * ptrqzk;
                   if CONSTEXPR (do_gdl) {
-                     dfrcxi += dlw * pfrcxi;
-                     dfrcyi += dlw * pfrcyi;
-                     dfrczi += dlw * pfrczi;
-                     dfrcxk += dlw * pfrcxk;
-                     dfrcyk += dlw * pfrcyk;
-                     dfrczk += dlw * pfrczk;
+                     dfrcxi += wb * pfrcxi;
+                     dfrcyi += wb * pfrcyi;
+                     dfrczi += wb * pfrczi;
+                     dfrcxk += wb * pfrcxk;
+                     dfrcyk += wb * pfrcyk;
+                     dfrczk += wb * pfrczk;
                   }
                   if CONSTEXPR (do_tdl) {
-                     dltrqxi += dlw * ptrqxi;
-                     dltrqyi += dlw * ptrqyi;
-                     dltrqzi += dlw * ptrqzi;
-                     dltrqxk += dlw * ptrqxk;
-                     dltrqyk += dlw * ptrqyk;
-                     dltrqzk += dlw * ptrqzk;
-                  }
-                  if CONSTEXPR (do_v) {
-                     if CONSTEXPR (do_vdl) {
-                        demvirdltlxx += floatTo<vbuf_prec>(dlw * vxx);
-                        demvirdltlyx += floatTo<vbuf_prec>(dlw * vyx);
-                        demvirdltlzx += floatTo<vbuf_prec>(dlw * vzx);
-                        demvirdltlyy += floatTo<vbuf_prec>(dlw * vyy);
-                        demvirdltlzy += floatTo<vbuf_prec>(dlw * vzy);
-                        demvirdltlzz += floatTo<vbuf_prec>(dlw * vzz);
-                     }
+                     dltrqxi += wb * ptrqxi;
+                     dltrqyi += wb * ptrqyi;
+                     dltrqzi += wb * ptrqzi;
+                     dltrqxk += wb * ptrqxk;
+                     dltrqyk += wb * ptrqyk;
+                     dltrqzk += wb * ptrqzk;
                   }
                }
-            }
-            if CONSTEXPR (do_e) {
-               e *= scalelmda;
-               emtl += floatTo<ebuf_prec>(e);
-               if CONSTEXPR (do_a) {
-                  if (e != 0)
-                     nemtl += 1;
+               if CONSTEXPR (do_v) {
+                  vemtlxx += floatTo<vbuf_prec>(wa * vxx);
+                  vemtlyx += floatTo<vbuf_prec>(wa * vyx);
+                  vemtlzx += floatTo<vbuf_prec>(wa * vzx);
+                  vemtlyy += floatTo<vbuf_prec>(wa * vyy);
+                  vemtlzy += floatTo<vbuf_prec>(wa * vzy);
+                  vemtlzz += floatTo<vbuf_prec>(wa * vzz);
+                  if CONSTEXPR (do_vdl) {
+                     demvirdltlxx += floatTo<vbuf_prec>(wb * vxx);
+                     demvirdltlyx += floatTo<vbuf_prec>(wb * vyx);
+                     demvirdltlzx += floatTo<vbuf_prec>(wb * vzx);
+                     demvirdltlyy += floatTo<vbuf_prec>(wb * vyy);
+                     demvirdltlzy += floatTo<vbuf_prec>(wb * vzy);
+                     demvirdltlzz += floatTo<vbuf_prec>(wb * vzz);
+                  }
                }
-            }
-            if CONSTEXPR (do_g) {
-               frcxi += scalelmda * pfrcxi;
-               frcyi += scalelmda * pfrcyi;
-               frczi += scalelmda * pfrczi;
-               frcxk += scalelmda * pfrcxk;
-               frcyk += scalelmda * pfrcyk;
-               frczk += scalelmda * pfrczk;
-               trqxi += scalelmda * ptrqxi;
-               trqyi += scalelmda * ptrqyi;
-               trqzi += scalelmda * ptrqzi;
-               trqxk += scalelmda * ptrqxk;
-               trqyk += scalelmda * ptrqyk;
-               trqzk += scalelmda * ptrqzk;
-            }
-            if CONSTEXPR (do_v) {
-               vemtlxx += floatTo<vbuf_prec>(scalelmda * vxx);
-               vemtlyx += floatTo<vbuf_prec>(scalelmda * vyx);
-               vemtlzx += floatTo<vbuf_prec>(scalelmda * vzx);
-               vemtlyy += floatTo<vbuf_prec>(scalelmda * vyy);
-               vemtlzy += floatTo<vbuf_prec>(scalelmda * vzy);
-               vemtlzz += floatTo<vbuf_prec>(scalelmda * vzz);
-            }
-         } // end if (include)
+            } // end if (include)
+         }
 
          iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
+         igrp = __shfl_sync(ALL_LANES, igrp, ilane + 1);
          if CONSTEXPR (do_g) {
             frcxi = __shfl_sync(ALL_LANES, frcxi, ilane + 1);
             frcyi = __shfl_sync(ALL_LANES, frcyi, ilane + 1);
@@ -585,7 +564,7 @@ void empoledlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, Energ
       qiyy[threadIdx.x] = rpole[i][MPL_PME_YY];
       qiyz[threadIdx.x] = rpole[i][MPL_PME_YZ];
       qizz[threadIdx.x] = rpole[i][MPL_PME_ZZ];
-      muti[threadIdx.x] = mut[i];
+      igrp = grp[i];
       xk[threadIdx.x] = sorted[atomk].x;
       yk[threadIdx.x] = sorted[atomk].y;
       zk[threadIdx.x] = sorted[atomk].z;
@@ -599,109 +578,98 @@ void empoledlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, Energ
       qkyy = rpole[k][MPL_PME_YY];
       qkyz = rpole[k][MPL_PME_YZ];
       qkzz = rpole[k][MPL_PME_ZZ];
-      mutk = mut[k];
+      kgrp = grp[k];
       __syncwarp();
 
       for (int j = 0; j < WARP_SIZE; ++j) {
          int srclane = (ilane + j) & (WARP_SIZE - 1);
          int klane = srclane + threadIdx.x - ilane;
          bool incl = atomk > 0;
-         real xr = xk[threadIdx.x] - xi[klane];
-         real yr = yk[threadIdx.x] - yi[klane];
-         real zr = zk[threadIdx.x] - zi[klane];
-         real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
-            real e, vxx, vyx, vzx, vyy, vzy, vzz;
-            real pfrcxi = 0, pfrcyi = 0, pfrczi = 0;
-            real pfrcxk = 0, pfrcyk = 0, pfrczk = 0;
-            real ptrqxi = 0, ptrqyi = 0, ptrqzi = 0;
-            real ptrqxk = 0, ptrqyk = 0, ptrqzk = 0;
-            pair_mpole_v2<Ver, ETYP>(r2, xr, yr, zr, 1, ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane],
-               qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], ck[threadIdx.x], dkx[threadIdx.x],
-               dky[threadIdx.x], dkz[threadIdx.x], qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, f, aewald, pfrcxi, pfrcyi,
-               pfrczi, pfrcxk, pfrcyk, pfrczk, ptrqxi, ptrqyi, ptrqzi, ptrqxk, ptrqyk, ptrqzk, e, vxx, vyx, vzx, vyy,
-               vzy, vzz);
-            real scalelmda = 1;
-            real dlscale = 0;
-            real d2scale = 0;
-            if (muti[klane] and mutk) {
-               scalelmda = elambda * elambda;
-               dlscale = 2 * elambda;
-               d2scale = 2;
-            } else if (muti[klane] or mutk) {
-               scalelmda = elambda;
-               dlscale = 1;
-            }
-            if (muti[klane] or mutk) {
-               real d2w = d2scale * deldl * deldl + dlscale * d2eldl2;
-               real dlw = dlscale * deldl;
+         int cell = 3 * igrp + kgrp;
+         bool in0 = (in0bits >> cell) & 1;
+         bool in1 = (in1bits >> cell) & 1;
+         bool cnt = (cntbits >> cell) & 1;
+         {
+            incl = incl and (in0 or in1 or cnt);
+            real wa = (in0 ? a0 : 0) + (in1 ? a1 : 0);
+            real wb = (in0 ? b0 : 0) + (in1 ? b1 : 0);
+            real wc = (in0 ? c0 : 0) + (in1 ? c1 : 0);
+            real xr = xk[threadIdx.x] - xi[klane];
+            real yr = yk[threadIdx.x] - yi[klane];
+            real zr = zk[threadIdx.x] - zi[klane];
+            real r2 = image2(xr, yr, zr);
+            if (r2 <= off * off and incl) {
+               real e, vxx, vyx, vzx, vyy, vzy, vzz;
+               real pfrcxi = 0, pfrcyi = 0, pfrczi = 0;
+               real pfrcxk = 0, pfrcyk = 0, pfrczk = 0;
+               real ptrqxi = 0, ptrqyi = 0, ptrqzi = 0;
+               real ptrqxk = 0, ptrqyk = 0, ptrqzk = 0;
+               pair_mpole_v2<Ver, ETYP>(r2, xr, yr, zr, 1, ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane],
+                  qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], ck[threadIdx.x], dkx[threadIdx.x],
+                  dky[threadIdx.x], dkz[threadIdx.x], qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, f, aewald, pfrcxi, pfrcyi,
+                  pfrczi, pfrcxk, pfrcyk, pfrczk, ptrqxi, ptrqyi, ptrqzi, ptrqxk, ptrqyk, ptrqzk, e, vxx, vyx, vzx, vyy,
+                  vzy, vzz);
                if CONSTEXPR (do_e) {
+                  emtl += floatTo<ebuf_prec>(wa * e);
                   if CONSTEXPR (do_dl1)
-                     demdltl += floatTo<ebuf_prec>(dlw * e);
+                     demdltl += floatTo<ebuf_prec>(wb * e);
                   if CONSTEXPR (do_dl2)
-                     d2emdl2tl += floatTo<ebuf_prec>(d2w * e);
+                     d2emdl2tl += floatTo<ebuf_prec>(wc * e);
+                  if CONSTEXPR (do_a) {
+                     if (cnt and e != 0)
+                        nemtl += 1;
+                  }
                }
                if CONSTEXPR (do_g) {
+                  frcxi += wa * pfrcxi;
+                  frcyi += wa * pfrcyi;
+                  frczi += wa * pfrczi;
+                  frcxk += wa * pfrcxk;
+                  frcyk += wa * pfrcyk;
+                  frczk += wa * pfrczk;
+                  trqxi += wa * ptrqxi;
+                  trqyi += wa * ptrqyi;
+                  trqzi += wa * ptrqzi;
+                  trqxk += wa * ptrqxk;
+                  trqyk += wa * ptrqyk;
+                  trqzk += wa * ptrqzk;
                   if CONSTEXPR (do_gdl) {
-                     dfrcxi += dlw * pfrcxi;
-                     dfrcyi += dlw * pfrcyi;
-                     dfrczi += dlw * pfrczi;
-                     dfrcxk += dlw * pfrcxk;
-                     dfrcyk += dlw * pfrcyk;
-                     dfrczk += dlw * pfrczk;
+                     dfrcxi += wb * pfrcxi;
+                     dfrcyi += wb * pfrcyi;
+                     dfrczi += wb * pfrczi;
+                     dfrcxk += wb * pfrcxk;
+                     dfrcyk += wb * pfrcyk;
+                     dfrczk += wb * pfrczk;
                   }
                   if CONSTEXPR (do_tdl) {
-                     dltrqxi += dlw * ptrqxi;
-                     dltrqyi += dlw * ptrqyi;
-                     dltrqzi += dlw * ptrqzi;
-                     dltrqxk += dlw * ptrqxk;
-                     dltrqyk += dlw * ptrqyk;
-                     dltrqzk += dlw * ptrqzk;
-                  }
-                  if CONSTEXPR (do_v) {
-                     if CONSTEXPR (do_vdl) {
-                        demvirdltlxx += floatTo<vbuf_prec>(dlw * vxx);
-                        demvirdltlyx += floatTo<vbuf_prec>(dlw * vyx);
-                        demvirdltlzx += floatTo<vbuf_prec>(dlw * vzx);
-                        demvirdltlyy += floatTo<vbuf_prec>(dlw * vyy);
-                        demvirdltlzy += floatTo<vbuf_prec>(dlw * vzy);
-                        demvirdltlzz += floatTo<vbuf_prec>(dlw * vzz);
-                     }
+                     dltrqxi += wb * ptrqxi;
+                     dltrqyi += wb * ptrqyi;
+                     dltrqzi += wb * ptrqzi;
+                     dltrqxk += wb * ptrqxk;
+                     dltrqyk += wb * ptrqyk;
+                     dltrqzk += wb * ptrqzk;
                   }
                }
-            }
-            if CONSTEXPR (do_e) {
-               e *= scalelmda;
-               emtl += floatTo<ebuf_prec>(e);
-               if CONSTEXPR (do_a) {
-                  if (e != 0)
-                     nemtl += 1;
+               if CONSTEXPR (do_v) {
+                  vemtlxx += floatTo<vbuf_prec>(wa * vxx);
+                  vemtlyx += floatTo<vbuf_prec>(wa * vyx);
+                  vemtlzx += floatTo<vbuf_prec>(wa * vzx);
+                  vemtlyy += floatTo<vbuf_prec>(wa * vyy);
+                  vemtlzy += floatTo<vbuf_prec>(wa * vzy);
+                  vemtlzz += floatTo<vbuf_prec>(wa * vzz);
+                  if CONSTEXPR (do_vdl) {
+                     demvirdltlxx += floatTo<vbuf_prec>(wb * vxx);
+                     demvirdltlyx += floatTo<vbuf_prec>(wb * vyx);
+                     demvirdltlzx += floatTo<vbuf_prec>(wb * vzx);
+                     demvirdltlyy += floatTo<vbuf_prec>(wb * vyy);
+                     demvirdltlzy += floatTo<vbuf_prec>(wb * vzy);
+                     demvirdltlzz += floatTo<vbuf_prec>(wb * vzz);
+                  }
                }
-            }
-            if CONSTEXPR (do_g) {
-               frcxi += scalelmda * pfrcxi;
-               frcyi += scalelmda * pfrcyi;
-               frczi += scalelmda * pfrczi;
-               frcxk += scalelmda * pfrcxk;
-               frcyk += scalelmda * pfrcyk;
-               frczk += scalelmda * pfrczk;
-               trqxi += scalelmda * ptrqxi;
-               trqyi += scalelmda * ptrqyi;
-               trqzi += scalelmda * ptrqzi;
-               trqxk += scalelmda * ptrqxk;
-               trqyk += scalelmda * ptrqyk;
-               trqzk += scalelmda * ptrqzk;
-            }
-            if CONSTEXPR (do_v) {
-               vemtlxx += floatTo<vbuf_prec>(scalelmda * vxx);
-               vemtlyx += floatTo<vbuf_prec>(scalelmda * vyx);
-               vemtlzx += floatTo<vbuf_prec>(scalelmda * vzx);
-               vemtlyy += floatTo<vbuf_prec>(scalelmda * vyy);
-               vemtlzy += floatTo<vbuf_prec>(scalelmda * vzy);
-               vemtlzz += floatTo<vbuf_prec>(scalelmda * vzz);
-            }
-         } // end if (include)
+            } // end if (include)
+         }
 
+         igrp = __shfl_sync(ALL_LANES, igrp, ilane + 1);
          if CONSTEXPR (do_g) {
             frcxi = __shfl_sync(ALL_LANES, frcxi, ilane + 1);
             frcyi = __shfl_sync(ALL_LANES, frcyi, ilane + 1);

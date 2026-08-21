@@ -79,6 +79,45 @@ void dtNeed(double w, double dw, double d2w, double chain, double d2chain, bool&
 void dtWeightNeed(double sublmda, int dtexp, double chain, double d2chain, //
    double& w, double& dw, double& d2w, bool& need0, bool& need1);
 
+/// \ingroup ff
+/// The group-pair coefficients of one fused dual topology pass. A pair is
+/// classified by the groups of its two atoms, and the nine bits of each mask
+/// are those 3x3 cells, `1u << (3*gi + gk)`.
+///
+///     E     <- (in0 ? a0 : 0) + (in1 ? a1 : 0)  times the pair energy
+///     dE/dL <- (in0 ? b0 : 0) + (in1 ? b1 : 0)  times the same
+///     d2E   <- (in0 ? c0 : 0) + (in1 ? c1 : 0)  times the same
+///
+/// so one pass over the pair list covers both endpoints and the interpolation
+/// between them. The sub-lambda chain rule is folded into b and c, so what the
+/// kernel writes is already in main lambda units.
+struct DtCoef
+{
+   unsigned in0bits, in1bits, cntbits;
+   real a0, a1; ///< energy, virial, gradient
+   real b0, b1; ///< dE/dlambda
+   real c0, c1; ///< d2E/dlambda2, energy channel only
+};
+
+/// A pair is unordered but the cell index is not, so both orderings are set.
+void dtCellSet(unsigned& bits, int gi, int gk);
+
+/// The pair types one coupling state claims, as the union of its subsystems.
+unsigned dtStateBits(RelState ist);
+
+/// The pair types the reported endpoint counts under \c calc::analyz.
+unsigned dtCountBits(RelState reported);
+
+/// How many subsystems the reported endpoint counts, for a term that reports
+/// the same count in every one of them.
+int dtCountSlots(RelState reported);
+
+/// Fills the six mixing weights of \c DtCoef from the interpolation weight and
+/// its two derivatives. \c chain and \c d2chain are the sub-lambda derivatives
+/// of the term; \c driven is false when the main lambda does not drive the
+/// term, which leaves every derivative weight at zero.
+void dtWeightsToCoef(DtCoef& c, double w, double dw, double d2w, double chain, double d2chain, bool driven);
+
 /// The accumulator protocol of one dual topology term.
 struct RelDualOps
 {
@@ -254,7 +293,6 @@ TINKER_EXTERN real (*poleorig)[MPL_TOTAL];
 TINKER_EXTERN real* polarityorig;
 
 // lambda derivative accumulators.
-TINKER_EXTERN TermBuffer em_dl;
 TINKER_EXTERN TermBuffer ep_dl;
 TINKER_EXTERN DualEndpoint em_snap;
 TINKER_EXTERN DualEndpoint ep_snap;
@@ -279,19 +317,12 @@ TINKER_EXTERN energy_prec d2emdl2;
 TINKER_EXTERN energy_prec d2epdl2;
 TINKER_EXTERN energy_prec d2evdl2;
 
-TINKER_EXTERN VirialBuffer demvirdl_buf;
 TINKER_EXTERN VirialBuffer depvirdl_buf;
-TINKER_EXTERN VirialBuffer devvirdl_buf;
 TINKER_EXTERN VirialBuffer dvirdl_buf;
 
-TINKER_EXTERN virial_prec demvirdl[9];
 TINKER_EXTERN virial_prec depvirdl[9];
-TINKER_EXTERN virial_prec devvirdl[9];
 TINKER_EXTERN virial_prec dvirdl[9];
 
-TINKER_EXTERN grad_prec* dfmdlx;
-TINKER_EXTERN grad_prec* dfmdly;
-TINKER_EXTERN grad_prec* dfmdlz;
 TINKER_EXTERN grad_prec* dfpdlx;
 TINKER_EXTERN grad_prec* dfpdly;
 TINKER_EXTERN grad_prec* dfpdlz;

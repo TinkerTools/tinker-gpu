@@ -50,7 +50,7 @@ static void mpoleInitBuffers(int vers, bool use_vir_trq)
 {
    if (vers & calc::grad) {
       darray::zero(g::q0, n, trqx, trqy, trqz);
-      if (use_emast) {
+      if (dltrqx) {
          darray::zero(g::q0, n, dltrqx, dltrqy, dltrqz);
       }
    }
@@ -58,12 +58,14 @@ static void mpoleInitBuffers(int vers, bool use_vir_trq)
       darray::zero(g::q0, bufferSize(), vir_trq);
 }
 
-static void mpoleInitEwald(bool do_dlmda, bool prepare_splines, bool prepare_polar_splines)
+static void mpoleInitEwald(bool do_dlmda, bool prepare_splines, bool prepare_polar_splines, bool build_cmp = true)
 {
-   if (do_dlmda)
-      rpoleToCmpDlmda(); // fills both cmp (lambda scaled) and dlcmp (d cmp / d lambda)
-   else
-      rpoleToCmp();
+   if (build_cmp) {
+      if (do_dlmda)
+         rpoleToCmpDlmda(); // fills both cmp (lambda scaled) and dlcmp (d cmp / d lambda)
+      else
+         rpoleToCmp();
+   }
    if (vir_m)
       darray::zero(g::q0, bufferSize(), vir_m);
    if (prepare_splines && (pltfm_config & Platform::CUDA)) {
@@ -95,6 +97,15 @@ void mpoleInit(int vers, bool do_dlmda)
 
    if (useEwald())
       mpoleInitEwald(do_dlmda, true, true);
+}
+
+void mpoleInitDt(int vers)
+{
+   mpoleInitBuffers(vers, false);
+   chkpole();
+   rotpole(true);
+   if (useEwald())
+      mpoleInitEwald(false, true, false, false);
 }
 
 void mpoleInitState(int vers, RdtMask mask, const int* group, bool first_state, bool polar)

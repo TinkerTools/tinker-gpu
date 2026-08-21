@@ -85,7 +85,13 @@ static void mpoleData(RcOp op)
 
       if (rc_flag & calc::grad) {
          darray::allocate(n, &trqx, &trqy, &trqz);
-         if (use_emast) darray::allocate(n, &dltrqx, &dltrqy, &dltrqz);
+         if (lmdaDerivMask(rc_flag, use_edlmda) & (calc::grad_dlmda | calc::virial_dlmda)) {
+            darray::allocate(n, &dltrqx, &dltrqy, &dltrqz);
+         } else {
+            dltrqx = nullptr;
+            dltrqy = nullptr;
+            dltrqz = nullptr;
+         }
       } else {
          trqx = nullptr;
          trqy = nullptr;
@@ -863,7 +869,7 @@ void exfield(int vers, int useDipole)
 
    if (useDipole) {
       if (use_emast)
-         TINKER_FCALL2(acc0, cu1, exfieldDipoleDlmda, vers);
+         TINKER_FCALL2(acc0, cu1, exfieldDipoleDlmda, lmdaDerivVers(vers, use_emast));
       else
          TINKER_FCALL2(acc1, cu1, exfieldDipole, vers);
    } else {

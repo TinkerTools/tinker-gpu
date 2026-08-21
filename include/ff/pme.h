@@ -1,4 +1,5 @@
 #pragma once
+#include "ff/dlmda.h"
 #include "ff/energybuffer.h"
 #include "tool/fft.h"
 #include "tool/genunit.h"
@@ -75,7 +76,8 @@ void pmeConv(PMEUnit);                 // update grid
 void pmeConv(PMEUnit, VirialBuffer v); // update grid and accumulate vterm
 void pmeConv(PMEUnit, EnergyBuffer e); // update grid and accumulate eterm
 void pmeConv(PMEUnit, EnergyBuffer e, VirialBuffer v);
-void pmeConvDlmda(PMEUnit, PMEUnit, VirialBuffer, VirialBuffer);
+void pmeConvDlmda(PMEUnit, PMEUnit, VirialBuffer, VirialBuffer, real wdv);
+void pmeConvDt(PMEUnit, VirialBuffer v, real wv, VirialBuffer dv, real wdv);
 
 void fphiMpole(PMEUnit, real (*out_fphi)[20]);
 void fphiUind(PMEUnit, real (*fdip_phi1)[10], real (*fdip_phi2)[10], real (*fdip_sum_phi)[20]);
@@ -83,6 +85,7 @@ void fphiUind2(PMEUnit, real (*fdip_phi1)[10], real (*fdip_phi2)[10]);
 
 void rpoleToCmp();
 void rpoleToCmpDlmda();
+void rpoleToCmpState(RdtMask mask, const int* group);
 void cmpToFmp(PMEUnit, const real (*cmp)[10], real (*fmp)[10]);
 void cuindToFuind(PMEUnit,
                   const real (*cind)[3],

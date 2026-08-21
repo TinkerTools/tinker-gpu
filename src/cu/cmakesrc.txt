@@ -3,6 +3,7 @@ amoeba/binding.cu
 amoeba/emplar.cu
 amoeba/empole.cu
 amoeba/empoledlmda.cu
+amoeba/empoledt.cu
 amoeba/epolar.cu
 amoeba/field.cu
 amoeba/pcg.cu

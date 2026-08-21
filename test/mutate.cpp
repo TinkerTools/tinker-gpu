@@ -302,13 +302,18 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
    if (fx.dolmda)
       REQUIRE((int)lr.lgrad.size() >= n);
 
-   // The scalar lambda derivatives vs reference. emplar accumulates
-   // polarization into the multipole buffers, so under the fused kernel the two
-   // terms come back summed in demdl with the polarization slot left at zero;
-   // the split kernels report them separately. Either way the total and the van
-   // der Waals part stand on their own.
+   // The scalar lambda derivatives vs reference. The per-term split is an
+   // analysis feature: only there does a term keep an energy derivative buffer
+   // of its own, and everywhere else the terms add into the shared one, which is
+   // reduced straight into the total. So the breakdown is checked under analysis
+   // and the total is checked always. Polarization is the exception either way:
+   // its derivative arrives in sub-lambda units, so it stays private whenever it
+   // is driven and lmdachain folds it into the total after scaling.
+   const bool splitTerms = rc_flag & calc::analyz;
    auto checkLmdaFirstScalars = [&]() {
       COMPARE_REALS(dedl, lr.dedl[0], eps_l);
+      if (not splitTerms)
+         return;
       COMPARE_REALS(devdl, lr.dedl[1], eps_l);
       if (fuse == Fuse::Require) {
          COMPARE_REALS(demdl + depdl, lr.dedl[2] + lr.dedl[3], eps_l);
@@ -320,6 +325,8 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
 
    auto checkLmdaSecondScalars = [&]() {
       COMPARE_REALS(d2edl2, lr.d2edl2[0], eps_l);
+      if (not splitTerms)
+         return;
       COMPARE_REALS(d2evdl2, lr.d2edl2[1], eps_l);
       if (fuse == Fuse::Require) {
          COMPARE_REALS(d2emdl2 + d2epdl2, lr.d2edl2[2] + lr.d2edl2[3], eps_l);

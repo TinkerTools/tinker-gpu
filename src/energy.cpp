@@ -267,10 +267,8 @@ void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
 
    if (amoeba_empole(vers))
       if (tscfg("empole", ecore_ele)) {
-         if (use_emadt)
-            empole_adt(vers);
-         else if (use_emrdt)
-            empole_rdt(vers);
+         if (use_emdt)
+            empole_dt(vers);
          else
             empole(vers);
       }
@@ -444,10 +442,10 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
          }
       }
       if (use_dlmda and dedl_buf) {
-         devdl += toFloatingPoint<energy_prec>(ev_hobj.dedl);
+         dedl += toFloatingPoint<energy_prec>(ev_hobj.dedl);
       }
       if (use_dlmda and d2edl2_buf) {
-         d2evdl2 += toFloatingPoint<energy_prec>(ev_hobj.d2edl2);
+         d2edl2 += toFloatingPoint<energy_prec>(ev_hobj.d2edl2);
       }
       esum = energy_valence + energy_vdw + energy_elec + energy_nnintermol;
    }
@@ -492,7 +490,7 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             vdl[iv] = toFloatingPoint<virial_prec>(ev_hobj.dvirdl[iv]);
          virialReshape(v2dl, vdl);
          for (int iv = 0; iv < 9; ++iv)
-            devvirdl[iv] += v2dl[iv];
+            dvirdl[iv] += v2dl[iv];
       }
       for (int iv = 0; iv < 9; ++iv)
          vir[iv] = virial_valence[iv] + virial_vdw[iv] + virial_elec[iv] + virial_nnintermol[iv];
@@ -569,8 +567,9 @@ void energyData(RcOp op)
    // Must follow evdw_data() and echarge_data().
    RcMan echglj42{echgljData, op};
 
-   RcMan empole42{empoleData, op};
+   // Must precede empoleData(), which sizes its buffers by useEmplar().
    RcMan emplar42{emplarData, op};
+   RcMan empole42{empoleData, op};
    RcMan epolar42{epolarData, op};
 
    // HIPPO

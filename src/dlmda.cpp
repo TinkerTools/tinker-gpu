@@ -7,6 +7,7 @@
 #include "ff/evdw.h"
 #include "ff/potent.h"
 #include "md/osrw.h"
+#include "seq/ost.h"
 #include "tool/darray.h"
 #include "tool/error.h"
 #include "tool/externfunc.h"
@@ -101,6 +102,103 @@ void relSlot(int k, RelState ist0, RelState ist1, RdtMask& mask, bool& in0, bool
    mask = kMask[k];
    in0 = kMember[k][(int)ist0 - 1];
    in1 = kMember[k][(int)ist1 - 1];
+}
+
+void dtCellSet(unsigned& bits, int gi, int gk)
+{
+   bits |= 1u << (3 * gi + gk);
+   bits |= 1u << (3 * gk + gi);
+}
+
+// A state's slots are disjoint (relSlot: LIG1 = {env+ligA} u {ligB}, LIG2 =
+// {env+ligB} u {ligA}, NONE = {env} u {ligA} u {ligB}), so the union here is
+// the same total the slot-by-slot evaluation used to accumulate.
+unsigned dtStateBits(RelState ist)
+{
+   unsigned bits = 0;
+   for (int k = 0; k < nRelSlot; ++k) {
+      RdtMask mask;
+      bool in, dup;
+      relSlot(k, ist, ist, mask, in, dup);
+      if (not in)
+         continue;
+      for (int gi = 0; gi < 3; ++gi)
+         for (int gk = gi; gk < 3; ++gk)
+            if (rdtPairActive(mask, gi, gk))
+               dtCellSet(bits, gi, gk);
+   }
+   return bits;
+}
+
+// Mirrors the count gating of relDualDrive below. Within the reported endpoint
+// a single ligand-plus-environment subsystem carries the whole count if there
+// is one; a decoupled endpoint has none, so its subsystems sum.
+unsigned dtCountBits(RelState reported)
+{
+   bool coupled = false;
+   for (int k = 0; k < nRelSlot and not coupled; ++k) {
+      RdtMask mask;
+      bool in, dup;
+      relSlot(k, reported, reported, mask, in, dup);
+      coupled = in and relSlotIsCoupled(k);
+   }
+
+   unsigned bits = 0;
+   for (int k = 0; k < nRelSlot; ++k) {
+      RdtMask mask;
+      bool in, dup;
+      relSlot(k, reported, reported, mask, in, dup);
+      if (not in or (coupled and not relSlotIsCoupled(k)))
+         continue;
+      for (int gi = 0; gi < 3; ++gi)
+         for (int gk = gi; gk < 3; ++gk)
+            if (rdtPairActive(mask, gi, gk))
+               dtCellSet(bits, gi, gk);
+   }
+   return bits;
+}
+
+// How many subsystems the reported endpoint counts, by the same gating. A term
+// whose count does not depend on the subsystem's parameters -- the Ewald self
+// energy counts every atom whether or not its multipoles were zeroed -- reports
+// its whole count once per counted pass, so it needs the number of passes
+// rather than the set of pair types.
+int dtCountSlots(RelState reported)
+{
+   bool coupled = false;
+   for (int k = 0; k < nRelSlot and not coupled; ++k) {
+      RdtMask mask;
+      bool in, dup;
+      relSlot(k, reported, reported, mask, in, dup);
+      coupled = in and relSlotIsCoupled(k);
+   }
+
+   int nslot = 0;
+   for (int k = 0; k < nRelSlot; ++k) {
+      RdtMask mask;
+      bool in, dup;
+      relSlot(k, reported, reported, mask, in, dup);
+      if (in and (not coupled or relSlotIsCoupled(k)))
+         ++nslot;
+   }
+   return nslot;
+}
+
+// E = w*E1 + (1-w)*E0, so dE/dl = dw*(E1-E0) and d2E/dl2 = d2w*(E1-E0), which
+// is what adtMix used to form from the two finished endpoints. Both terms of
+// the second-derivative chain rule are proportional to E1-E0, so the whole of
+// it collapses onto one scalar per endpoint. need0/need1 are not consulted: a
+// dead endpoint already falls out with every weight at zero.
+void dtWeightsToCoef(DtCoef& c, double w, double dw, double d2w, double chain, double d2chain, bool driven)
+{
+   c.a0 = 1 - w;
+   c.a1 = w;
+   double b = driven ? dw * chain : 0;
+   double d2 = driven ? d2w * chain * chain + dw * d2chain : 0;
+   c.b0 = -b;
+   c.b1 = b;
+   c.c0 = -d2;
+   c.c1 = d2;
 }
 
 void dtWeight(double x, int nexp, double& w, double& dw, double& d2w)
@@ -525,51 +623,26 @@ void lmdachain(int vers)
    auto do_v = vers & calc::virial;
    auto do_g = vers & calc::grad;
 
-   // A term the main lambda does not drive leaves the chain rule entirely: it
-   // ran the ordinary kernel, so its raw derivative slots are meaningless and
-   // are cleared rather than scaled.
-
-   // Chain rule for the scalar energy derivatives.
    if (do_e) {
-      if (use_edlmda) {
-         d2emdl2 = d2emdl2 * deldlmda * deldlmda + demdl * d2eldlmda2;
-         demdl = demdl * deldlmda;
-      } else {
-         demdl = 0;
-         d2emdl2 = 0;
-      }
       if (use_pdlmda) {
          d2epdl2 = d2epdl2 * dpldlmda * dpldlmda + depdl * d2pldlmda2;
          depdl = depdl * dpldlmda;
+         dedl += depdl;
+         d2edl2 += d2epdl2;
       } else {
          depdl = 0;
          d2epdl2 = 0;
       }
-      if (not use_vdlmda) {
-         devdl = 0;
-         d2evdl2 = 0;
-      }
-
-      dedl = demdl + depdl + devdl;
-      d2edl2 = d2emdl2 + d2epdl2 + d2evdl2;
    }
 
-   // Chain rule for the virial derivative (first derivative only).
    if (do_v) {
       for (int k = 0; k < 9; ++k) {
-         demvirdl[k] = use_edlmda ? demvirdl[k] * deldlmda : 0;
          depvirdl[k] = use_pdlmda ? depvirdl[k] * dpldlmda : 0;
-         devvirdl[k] = use_vdlmda ? devvirdl[k] : 0;
-         dvirdl[k] = demvirdl[k] + depvirdl[k] + devvirdl[k];
+         dvirdl[k] += depvirdl[k];
       }
    }
 
-   // Chain rule for the per-atom force derivatives. The null checks stay: an
-   // undriven term's TermBuffer aliases its gradient slots onto dfsumdl*, and
-   // summing that into itself would double count.
    if (do_g) {
-      if (use_edlmda and dfmdlx)
-         sumGradient(deldlmda, dfsumdlx, dfsumdly, dfsumdlz, dfmdlx, dfmdly, dfmdlz);
       if (use_pdlmda and dfpdlx)
          sumGradient(dpldlmda, dfsumdlx, dfsumdly, dfsumdlz, dfpdlx, dfpdly, dfpdlz);
    }
