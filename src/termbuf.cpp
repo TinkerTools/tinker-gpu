@@ -6,7 +6,7 @@
 
 namespace tinker {
 void TermBuffer::manage(RcOp op, int flag, TermSlots slots, AccumRef shared, bool need_private,
-   HostAccum term, HostAccum category, bool chain_rule)
+   HostAccum term, HostAccum category)
 {
    if (op & RcOp::DEALLOC) {
       // Frees what ALLOC recorded.
@@ -30,7 +30,6 @@ void TermBuffer::manage(RcOp op, int flag, TermSlots slots, AccumRef shared, boo
       mCategory = HostAccum{};
       mFlag = 0;
       mAllocated = false;
-      mChainRule = false;
    }
 
    if (op & RcOp::ALLOC) {
@@ -40,7 +39,6 @@ void TermBuffer::manage(RcOp op, int flag, TermSlots slots, AccumRef shared, boo
       mCategory = category;
       mFlag = flag;
       mAllocated = need_private;
-      mChainRule = chain_rule;
 
       // Start out aliased onto the category accumulator, then take ownership if
       // the policy calls for it.
@@ -101,17 +99,17 @@ void TermBuffer::flush(int vers) const
    // Under analyz the term reports a per-term host breakdown and the category
    // total is accumulated on the host; otherwise the results go back into the
    // category device buffers. The two are alternatives, not complements.
-   if ((mFlag & calc::analyz) or mChainRule) {
+   if (mFlag & calc::analyz) {
       if (do_e and mTerm.e) {
          energy_prec e = energyReduce(*mSlots.e);
          *mTerm.e += e;
-         if (mCategory.e and not mChainRule)
+         if (mCategory.e)
             *mCategory.e += e;
       }
       if (do_e and mSlots.e2 and mTerm.e2) {
          energy_prec e = energyReduce(*mSlots.e2);
          *mTerm.e2 += e;
-         if (mCategory.e2 and not mChainRule)
+         if (mCategory.e2)
             *mCategory.e2 += e;
       }
       if (do_v and mTerm.v) {
@@ -119,7 +117,7 @@ void TermBuffer::flush(int vers) const
          virialReduce(v, *mSlots.v);
          for (int iv = 0; iv < 9; ++iv) {
             (*mTerm.v)[iv] += v[iv];
-            if (mCategory.v and not mChainRule)
+            if (mCategory.v)
                (*mCategory.v)[iv] += v[iv];
          }
       }
@@ -133,9 +131,8 @@ void TermBuffer::flush(int vers) const
          sumVirialBuffer(bsize * VirialBufferTraits::value, mShared.v, *mSlots.v);
    }
 
-   // The gradient lands in the category gradient -- except in chain-rule mode,
-   // where lmdachain scales the private force derivatives and sums them.
-   if (do_g and not mChainRule)
+   // The gradient lands in the category gradient.
+   if (do_g)
       sumGradient(mShared.gx, mShared.gy, mShared.gz, *mSlots.gx, *mSlots.gy, *mSlots.gz);
 }
 
@@ -172,13 +169,6 @@ void DualEndpoint::save(int vers, const TermBuffer& cur)
    }
 }
 
-void DualEndpoint::mix(int vers, double lambda, int exponent, bool do_dlmda, const TermBuffer& cur,
-   const TermBuffer& dl)
-{
-   double weight1, dweight1, d2weight1;
-   dtWeight(lambda, exponent, weight1, dweight1, d2weight1);
-   mix(vers, weight1, dweight1, d2weight1, do_dlmda, cur, dl.ref());
-}
 
 void DualEndpoint::mix(int vers, double weight1, double dweight1, double d2weight1, bool do_dlmda,
    const TermBuffer& cur, AccumRef d)

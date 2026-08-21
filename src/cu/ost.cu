@@ -15,8 +15,10 @@ void adtMixEnergy_cu1(size_t buffer_size, energy_prec weight1, energy_prec dweig
       auto diff = e1i - e0i;
       e1[i] = floatTo<EnergyBufferTraits::type>(weight1 * e1i + (1 - weight1) * e0i);
       if CONSTEXPR (eq<LTYP, DLMDA>()) {
-         dedl[i] += floatTo<EnergyBufferTraits::type>(dweight1 * diff);
-         d2edl2[i] += floatTo<EnergyBufferTraits::type>(d2weight1 * diff);
+         if (dedl)
+            dedl[i] += floatTo<EnergyBufferTraits::type>(dweight1 * diff);
+         if (d2edl2)
+            d2edl2[i] += floatTo<EnergyBufferTraits::type>(d2weight1 * diff);
       }
    }
 }
@@ -31,7 +33,8 @@ void adtMixVirial_cu1(size_t size, virial_prec weight1, virial_prec dweight1, co
       auto v1i = toFloatGrad<virial_prec>(v1[0][i]);
       v1[0][i] = floatTo<VirialBufferTraits::type>(weight1 * v1i + (1 - weight1) * v0i);
       if CONSTEXPR (eq<LTYP, DLMDA>())
-         dvdl[0][i] += floatTo<VirialBufferTraits::type>(dweight1 * (v1i - v0i));
+         if (dvdl)
+            dvdl[0][i] += floatTo<VirialBufferTraits::type>(dweight1 * (v1i - v0i));
    }
 }
 
@@ -52,9 +55,11 @@ void adtMixGradient_cu1(int n, real weight1, real dweight1, const grad_prec* res
       gy1[i] = floatTo<grad_prec>(weight1 * y1 + (1 - weight1) * y0);
       gz1[i] = floatTo<grad_prec>(weight1 * z1 + (1 - weight1) * z0);
       if CONSTEXPR (eq<LTYP, DLMDA>()) {
-         dgxdl[i] += floatTo<grad_prec>(dweight1 * (x1 - x0));
-         dgydl[i] += floatTo<grad_prec>(dweight1 * (y1 - y0));
-         dgzdl[i] += floatTo<grad_prec>(dweight1 * (z1 - z0));
+         if (dgxdl) {
+            dgxdl[i] += floatTo<grad_prec>(dweight1 * (x1 - x0));
+            dgydl[i] += floatTo<grad_prec>(dweight1 * (y1 - y0));
+            dgzdl[i] += floatTo<grad_prec>(dweight1 * (z1 - z0));
+         }
       }
    }
 }

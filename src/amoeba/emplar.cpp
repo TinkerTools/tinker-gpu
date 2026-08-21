@@ -119,7 +119,6 @@ static void emplarBegin(int vers)
 {
    empoleBegin(vers);
    zeroOnHost(energy_ep, virial_ep);
-   ep_dl.zero(vers);
 }
 
 static void emplarMixEndpoints(int vers)

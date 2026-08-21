@@ -195,7 +195,7 @@ TINKER_EXTERN int njvdw;
 TINKER_EXTERN grad_prec* gxred;
 TINKER_EXTERN grad_prec* gyred;
 TINKER_EXTERN grad_prec* gzred;
-/// \brief Lambda derivatives on Halgren reduced VDW sites, resolved into dfsumdl*.
+/// \brief Lambda derivatives on Halgren reduced VDW sites, resolved into dfdl*.
 TINKER_EXTERN grad_prec* gxred_dlmda;
 TINKER_EXTERN grad_prec* gyred_dlmda;
 TINKER_EXTERN grad_prec* gzred_dlmda;

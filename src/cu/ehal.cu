@@ -160,7 +160,7 @@ static void ehaldlmda_cu3()
    if CONSTEXPR (do_g) {
       ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);
       if CONSTEXPR (do_gdl)
-         ehalResolveGradient(gxred_dlmda, gyred_dlmda, gzred_dlmda, dfsumdlx, dfsumdly, dfsumdlz);
+         ehalResolveGradient(gxred_dlmda, gyred_dlmda, gzred_dlmda, dfdlx, dfdly, dfdlz);
    }
 }
 
@@ -235,7 +235,7 @@ static void ehaldt_cu3(const DtCoef& coef)
    if CONSTEXPR (do_g) {
       ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);
       if CONSTEXPR (do_gdl)
-         ehalResolveGradient(gxred_dlmda, gyred_dlmda, gzred_dlmda, dfsumdlx, dfsumdly, dfsumdlz);
+         ehalResolveGradient(gxred_dlmda, gyred_dlmda, gzred_dlmda, dfdlx, dfdly, dfdlz);
    }
 }
 

@@ -48,7 +48,7 @@ static void empole_cu()
    int ngrid = gpuGridSize(BLOCK_DIM);
    if CONSTEXPR (eq<LTYP, DLMDA>()) {
       empoledlmda_cu1<Ver, ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, demdl_buf, d2emdl2_buf,
-         vir_em, dvirdl_buf, demx, demy, demz, dfsumdlx, dfsumdly, dfsumdlz, off, st.si1.bit0, nmdpuexclude,
+         vir_em, dvirdl_buf, demx, demy, demz, dfdlx, dfdly, dfdlz, off, st.si1.bit0, nmdpuexclude,
          mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst,
          trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, rpole, mut, f, aewald, elam, deldlmda, d2eldlmda2);
    } else {
@@ -318,7 +318,7 @@ static void exfieldDipoleDlmda_cu2()
    real f = electric / dielec;
    real ef1 = extfld::texfld[0], ef2 = extfld::texfld[1], ef3 = extfld::texfld[2];
    launch_k1b(g::s0, n, exfieldDipoleDlmda_cu1<Ver>, nem, em, demdl_buf, vir_em, dvirdl_buf, demx, demy, demz,
-      dfsumdlx, dfsumdly, dfsumdlz, trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, n, f, ef1, ef2, ef3, rpole, mut, elam,
+      dfdlx, dfdly, dfdlz, trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, n, f, ef1, ef2, ef3, rpole, mut, elam,
       x, y, z, d2emdl2_buf, deldlmda, d2eldlmda2);
 }
 

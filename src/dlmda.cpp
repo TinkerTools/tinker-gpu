@@ -616,35 +616,4 @@ void mapSubLambda()
 
 }
 
-void lmdachain(int vers)
-{
-   // Applies the chain rule using the sub-lambda derivatives computed by mapSubLambda.
-   auto do_e = vers & calc::energy;
-   auto do_v = vers & calc::virial;
-   auto do_g = vers & calc::grad;
-
-   if (do_e) {
-      if (use_pdlmda) {
-         d2epdl2 = d2epdl2 * dpldlmda * dpldlmda + depdl * d2pldlmda2;
-         depdl = depdl * dpldlmda;
-         dedl += depdl;
-         d2edl2 += d2epdl2;
-      } else {
-         depdl = 0;
-         d2epdl2 = 0;
-      }
-   }
-
-   if (do_v) {
-      for (int k = 0; k < 9; ++k) {
-         depvirdl[k] = use_pdlmda ? depvirdl[k] * dpldlmda : 0;
-         dvirdl[k] += depvirdl[k];
-      }
-   }
-
-   if (do_g) {
-      if (use_pdlmda and dfpdlx)
-         sumGradient(dpldlmda, dfsumdlx, dfsumdly, dfsumdlz, dfpdlx, dfpdly, dfpdlz);
-   }
-}
 }

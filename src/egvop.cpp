@@ -7,6 +7,8 @@ namespace tinker {
 void zeroEGV(int vers)
 {
    size_t bsize = bufferSize();
+   const int dlmask = lmdaDerivMask(vers, use_dlmda);
+
    if (vers & calc::energy) {
       zeroOnHost(esum, energy_valence, energy_vdw, energy_elec);
       zeroOnDevice3Async(bsize, eng_buf, eng_buf_vdw, eng_buf_elec);
@@ -16,9 +18,13 @@ void zeroEGV(int vers)
          zeroOnDeviceAsync(bsize, eng_buf_nnintermol);
       }
 
-      if (use_dlmda) {
-         zeroOnHost(dedl, demdl, depdl, devdl, d2edl2, d2emdl2, d2epdl2, d2evdl2);
+      if (dlmask & calc::energy_dlmda1) {
+         zeroOnHost(dedl, demdl, depdl, devdl);
          zeroOnDeviceAsync(bsize, dedl_buf);
+      }
+
+      if (dlmask & calc::energy_dlmda2) {
+         zeroOnHost(d2edl2, d2emdl2, d2epdl2, d2evdl2);
          zeroOnDeviceAsync(bsize, d2edl2_buf);
       }
    }
@@ -32,8 +38,8 @@ void zeroEGV(int vers)
          zeroOnDeviceAsync(bsize, vir_buf_nnintermol);
       }
 
-      if (use_dlmda) {
-         zeroOnHost(dvirdl, depvirdl);
+      if (dlmask & calc::virial_dlmda) {
+         zeroOnHost(dvirdl);
          zeroOnDeviceAsync(bsize, dvirdl_buf);
       }
    }
@@ -45,8 +51,8 @@ void zeroEGV(int vers)
          zeroOnDevice3Async(n, gx_nnintermol, gy_nnintermol, gz_nnintermol);
       }
 
-      if (use_dlmda) {
-         zeroOnDevice3Async(n, dfsumdlx, dfsumdly, dfsumdlz);
+      if (dlmask & (calc::grad_dlmda | calc::virial_dlmda)) {
+         zeroOnDevice3Async(n, dfdlx, dfdly, dfdlz);
       }
    }
 }

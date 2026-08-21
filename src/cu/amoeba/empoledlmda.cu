@@ -153,7 +153,7 @@ static void empoleEwaldRecipDlmdaGeneric_cu()
 
    launch_k1b(g::s0, n, empoleEwaldRecipDlmdaGeneric_cu1<Ver>,         //
       n, f, em, demdl_buf, d2emdl2_buf, vir_em, dvirdl_buf,           //
-      demx, demy, demz, dfsumdlx, dfsumdly, dfsumdlz,                 //
+      demx, demy, demz, dfdlx, dfdly, dfdlz,                 //
       trqx, trqy, trqz, dltrqx, dltrqy, dltrqz,                       //
       cmp, fmp, cphi, fphi, dlcmp, dlfmp, dlcphi, dlfphi,             //
       nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS, deldlmda, d2eldlmda2);

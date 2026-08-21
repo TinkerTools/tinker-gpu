@@ -354,6 +354,7 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
    auto do_e = vers & calc::energy;
    auto do_v = vers & calc::virial;
    auto do_g = vers & calc::grad;
+   const int dlmask = lmdaDerivMask(vers, use_dlmda);
 
    bool must_wait = false;
    ev_hobj.e_val = 0;
@@ -382,11 +383,11 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             reduceSumOnDevice(&ev_dptr->e_nnintermol, eng_buf_nnintermol, bufsize, g::q0);
          }
       }
-      if (use_dlmda and dedl_buf) {
+      if ((dlmask & calc::energy_dlmda1) and dedl_buf) {
          must_wait = true;
          reduceSumOnDevice(&ev_dptr->dedl, dedl_buf, bufferSize(), g::q0);
       }
-      if (use_dlmda and d2edl2_buf) {
+      if ((dlmask & calc::energy_dlmda2) and d2edl2_buf) {
          must_wait = true;
          reduceSumOnDevice(&ev_dptr->d2edl2, d2edl2_buf, bufferSize(), g::q0);
       }
@@ -417,7 +418,7 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             reduceSum2OnDevice(ev_dptr->v_nnintermol, vir_buf_nnintermol, bufsize, g::q0);
          }
       }
-      if (use_dlmda and dvirdl_buf) {
+      if ((dlmask & calc::virial_dlmda) and dvirdl_buf) {
          must_wait = true;
          reduceSum2OnDevice(ev_dptr->dvirdl, dvirdl_buf, bufferSize(), g::q0);
       }
@@ -441,10 +442,10 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             energy_nnintermol += toFloatingPoint<energy_prec>(ev_hobj.e_nnintermol);
          }
       }
-      if (use_dlmda and dedl_buf) {
+      if ((dlmask & calc::energy_dlmda1) and dedl_buf) {
          dedl += toFloatingPoint<energy_prec>(ev_hobj.dedl);
       }
-      if (use_dlmda and d2edl2_buf) {
+      if ((dlmask & calc::energy_dlmda2) and d2edl2_buf) {
          d2edl2 += toFloatingPoint<energy_prec>(ev_hobj.d2edl2);
       }
       esum = energy_valence + energy_vdw + energy_elec + energy_nnintermol;
@@ -484,7 +485,7 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
                virial_nnintermol[iv] += v2nn[iv];
          }
       }
-      if (use_dlmda and dvirdl_buf) {
+      if ((dlmask & calc::virial_dlmda) and dvirdl_buf) {
          virial_prec vdl[VirialBufferTraits::N], v2dl[9];
          for (int iv = 0; iv < (int)VirialBufferTraits::N; ++iv)
             vdl[iv] = toFloatingPoint<virial_prec>(ev_hobj.dvirdl[iv]);
@@ -504,13 +505,10 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
          sumGradient(gx, gy, gz, gx_nnintermol, gy_nnintermol, gz_nnintermol);
    }
 
-   if (use_dlmda) {
-      lmdachain(vers);
-      if (use_ost or use_meta) {
-         bool ecore_ost = false;
-         if (fts("eost", ecore_ost, tsflag, tsconfig))
-            eostBias(vers);
-      }
+   if (use_ost or use_meta) {
+      bool ecore_ost = false;
+      if (fts("eost", ecore_ost, tsflag, tsconfig))
+         eostBias(vers);
    }
 }
 
@@ -628,6 +626,7 @@ namespace tinker {
 void egvData(RcOp op)
 {
    auto rc_a = rc_flag & calc::analyz;
+   const int dlmask = lmdaDerivMask(rc_flag, use_dlmda);
 
    if (op & RcOp::DEALLOC) {
       deviceMemoryDeallocate(ev_dptr);
@@ -648,9 +647,11 @@ void egvData(RcOp op)
                darray::deallocate(eng_buf_elec);
             if (useEnergyINN())
                darray::deallocate(eng_buf_nnintermol);
+            if (dlmask & calc::energy_dlmda1)
+               darray::deallocate(dedl_buf);
+            if (dlmask & calc::energy_dlmda2)
+               darray::deallocate(d2edl2_buf);
          }
-         if (use_dlmda)
-            darray::deallocate(dedl_buf, d2edl2_buf);
       }
 
       if (op & RcOp::ALLOC) {
@@ -664,9 +665,11 @@ void egvData(RcOp op)
                darray::allocate(sz, &eng_buf_elec);
             if (useEnergyINN())
                darray::allocate(sz, &eng_buf_nnintermol);
+            if (dlmask & calc::energy_dlmda1)
+               darray::allocate(sz, &dedl_buf);
+            if (dlmask & calc::energy_dlmda2)
+               darray::allocate(sz, &d2edl2_buf);
          }
-         if (use_dlmda)
-            darray::allocate(bufferSize(), &dedl_buf, &d2edl2_buf);
       }
    }
 
@@ -681,7 +684,7 @@ void egvData(RcOp op)
             if (useEnergyINN())
                darray::deallocate(vir_buf_nnintermol);
          }
-         if (use_dlmda)
+         if (dlmask & calc::virial_dlmda)
             darray::deallocate(dvirdl_buf);
       }
 
@@ -697,7 +700,7 @@ void egvData(RcOp op)
             if (useEnergyINN())
                darray::allocate(sz, &vir_buf_nnintermol);
          }
-         if (use_dlmda)
+         if (dlmask & calc::virial_dlmda)
             darray::allocate(bufferSize(), &dvirdl_buf);
       }
    }
@@ -711,13 +714,13 @@ void egvData(RcOp op)
             darray::deallocate(gx_elec, gy_elec, gz_elec);
          if (useEnergyINN())
             darray::deallocate(gx_nnintermol, gy_nnintermol, gz_nnintermol);
-         if (use_dlmda)
-            darray::deallocate(dfsumdlx, dfsumdly, dfsumdlz);
+         if (dlmask & (calc::grad_dlmda | calc::virial_dlmda))
+            darray::deallocate(dfdlx, dfdly, dfdlz);
       }
 
       if (op & RcOp::ALLOC) {
          zeroOnHost(gx, gy, gz, gx_vdw, gy_vdw, gz_vdw, gx_elec, gy_elec, gz_elec, gx_nnintermol, gy_nnintermol,
-            gz_nnintermol, dfsumdlx, dfsumdly, dfsumdlz);
+            gz_nnintermol, dfdlx, dfdly, dfdlz);
          darray::allocate(n, &gx, &gy, &gz);
          if (useEnergyVdw())
             darray::allocate(n, &gx_vdw, &gy_vdw, &gz_vdw);
@@ -725,8 +728,8 @@ void egvData(RcOp op)
             darray::allocate(n, &gx_elec, &gy_elec, &gz_elec);
          if (useEnergyINN())
             darray::allocate(n, &gx_nnintermol, &gy_nnintermol, &gz_nnintermol);
-         if (use_dlmda)
-            darray::allocate(n, &dfsumdlx, &dfsumdly, &dfsumdlz);
+         if (dlmask & (calc::grad_dlmda | calc::virial_dlmda))
+            darray::allocate(n, &dfdlx, &dfdly, &dfdlz);
       }
    }
 }

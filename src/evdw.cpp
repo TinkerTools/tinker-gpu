@@ -546,9 +546,10 @@ static void evdwZeroBuffers(int vers)
       darray::zero(g::q0, bufferSize(), nev);
    ev_buf.zero(vers);
    if (rc_a) {
-      if (devdl_buf)
+      const int vdl = lmdaDerivVers(vers, use_vdlmda);
+      if (vdl & calc::energy_dlmda1)
          darray::zero(g::q0, bufferSize(), devdl_buf);
-      if (d2evdl2_buf)
+      if (vdl & calc::energy_dlmda2)
          darray::zero(g::q0, bufferSize(), d2evdl2_buf);
    }
 }
@@ -619,12 +620,12 @@ static void evdwFinish(int vers, energy_prec elrcv, virial_prec vlrcv, energy_pr
    }
    ev_buf.flush(vers);
    if (rc_a) {
-      if (devdl_buf) {
+      if (vdl & calc::energy_dlmda1) {
          energy_prec e = energyReduce(devdl_buf);
          devdl += e;
          dedl += e;
       }
-      if (d2evdl2_buf) {
+      if (vdl & calc::energy_dlmda2) {
          energy_prec e = energyReduce(d2evdl2_buf);
          d2evdl2 += e;
          d2edl2 += e;

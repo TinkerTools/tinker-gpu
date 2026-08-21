@@ -51,7 +51,7 @@ class TermBuffer
 public:
    /// Binds the slots and allocates or frees as the policy requires.
    void manage(RcOp op, int flag, TermSlots slots, AccumRef shared, bool need_private,
-      HostAccum term = {}, HostAccum category = {}, bool chain_rule = false);
+      HostAccum term = {}, HostAccum category = {});
 
    /// The accumulators as a kernel argument.
    AccumRef ref() const;
@@ -72,7 +72,6 @@ private:
    HostAccum mCategory;
    int mFlag = 0;
    bool mAllocated = false;
-   bool mChainRule = false;
 };
 
 /// \ingroup ff
@@ -84,10 +83,6 @@ public:
 
    /// Copies the current accumulators aside as endpoint 0.
    void save(int vers, const TermBuffer& cur);
-
-   /// Overwrites the accumulators with `w*E1 + (1-w)*E0`
-   void mix(int vers, double lambda, int exponent, bool do_dlmda, const TermBuffer& cur,
-      const TermBuffer& dl);
 
    void mix(int vers, double weight1, double dweight1, double d2weight1, bool do_dlmda,
       const TermBuffer& cur, AccumRef dl);

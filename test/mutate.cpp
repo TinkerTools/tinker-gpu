@@ -336,11 +336,11 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
       }
    };
 
-   // Per-atom lambda gradient (dfsumdl*) vs reference. Valid whenever calc::grad
-   // is requested, since lmdachain builds dfsumdl* under its do_g branch.
+   // Per-atom lambda gradient (dfdl*) vs reference. Valid whenever calc::grad
+   // is requested, since lmdachain builds dfdl* under its do_g branch.
    auto checkLmdaGrad = [&]() {
       std::vector<double> lx(n), ly(n), lz(n);
-      copyGradient(calc::grad, lx.data(), ly.data(), lz.data(), dfsumdlx, dfsumdly, dfsumdlz);
+      copyGradient(calc::grad, lx.data(), ly.data(), lz.data(), dfdlx, dfdly, dfdlz);
       for (int i = 0; i < n; ++i) {
          COMPARE_REALS(lx[i], lr.lgrad[i][0], eps_g);
          COMPARE_REALS(ly[i], lr.lgrad[i][1], eps_g);

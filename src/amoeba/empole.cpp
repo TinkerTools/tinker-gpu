@@ -118,14 +118,13 @@ void empoleZeroWork(int vers)
 
 void empoleBegin(int vers)
 {
+   const int dlmask = lmdaDerivMask(vers, use_edlmda);
    zeroOnHost(energy_em, virial_em);
-   if (use_edlmda)
-      zeroOnHost(demdl, d2emdl2);
    empoleZeroWork(vers);
    if (rc_flag & calc::analyz) {
-      if (demdl_buf)
+      if (dlmask & calc::energy_dlmda1)
          darray::zero(g::q0, bufferSize(), demdl_buf);
-      if (d2emdl2_buf)
+      if (dlmask & calc::energy_dlmda2)
          darray::zero(g::q0, bufferSize(), d2emdl2_buf);
    }
 }
@@ -140,14 +139,15 @@ static void empoleKernel(int vers)
 
 void empoleFinish(int vers)
 {
+   const int dlmask = lmdaDerivMask(vers, use_edlmda);
    em_buf.flush(vers);
    if (rc_flag & calc::analyz) {
-      if (demdl_buf) {
+      if (dlmask & calc::energy_dlmda1) {
          energy_prec e = energyReduce(demdl_buf);
          demdl += e;
          dedl += e;
       }
-      if (d2emdl2_buf) {
+      if (dlmask & calc::energy_dlmda2) {
          energy_prec e = energyReduce(d2emdl2_buf);
          d2emdl2 += e;
          d2edl2 += e;
@@ -165,8 +165,8 @@ void empole(int vers)
    empoleKernel(vers);
    exfield(vers, 1);
    torque(vers, demx, demy, demz);
-   if (use_emast and dltrqx)
-      torque(vers, dfsumdlx, dfsumdly, dfsumdlz, dltrqx, dltrqy, dltrqz, dvirdl_buf);
+   if (lmdaDerivMask(vers, use_emast) & (calc::grad_dlmda | calc::virial_dlmda))
+      torque(vers, dfdlx, dfdly, dfdlz, dltrqx, dltrqy, dltrqz, dvirdl_buf);
    if (do_v) {
       VirialBuffer u2 = vir_trq;
       virial_prec v2[9];
@@ -191,7 +191,7 @@ void empoleMixEndpoints(int vers)
    dtWeight(elam, emdtexp, w, dw, d2w);
    const double dweight = dw * deldlmda;
    const double d2weight = d2w * deldlmda * deldlmda + dw * d2eldlmda2;
-   const AccumRef dl = {demdl_buf, dvirdl_buf, dfsumdlx, dfsumdly, dfsumdlz, d2emdl2_buf};
+   const AccumRef dl = {demdl_buf, dvirdl_buf, dfdlx, dfdly, dfdlz, d2emdl2_buf};
    em_snap.mix(vers, w, dweight, d2weight, use_edlmda, em_buf, dl);
 }
 
@@ -298,8 +298,8 @@ void empole_dt(int vers)
 
    if (do_g) {
       torque(vers, demx, demy, demz, trqx, trqy, trqz, vir_em);
-      if (dltrqx)
-         torque(vers, dfsumdlx, dfsumdly, dfsumdlz, dltrqx, dltrqy, dltrqz, dvirdl_buf);
+      if (dvers & (calc::grad_dlmda | calc::virial_dlmda))
+         torque(vers, dfdlx, dfdly, dfdlz, dltrqx, dltrqy, dltrqz, dvirdl_buf);
    }
 
    empoleFinish(vers);

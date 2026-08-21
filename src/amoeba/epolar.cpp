@@ -61,8 +61,11 @@ void epolarData(RcOp op)
       if (rc_a)
          bufferDeallocate(rc_flag, nep);
       ep_buf.manage(op, rc_flag, {}, {}, false);
-      ep_dl.manage(op, rc_flag, {}, {}, false);
       ep_snap.manage(op, rc_flag, false);
+      if (rc_a)
+         darray::deallocate(depdl_buf, d2epdl2_buf);
+      depdl_buf = nullptr;
+      d2epdl2_buf = nullptr;
       nep = nullptr;
       polar_active_mask = 0;
 
@@ -418,10 +421,21 @@ void epolarData(RcOp op)
       ep_buf.manage(op, rc_flag, {&ep, &vir_ep, &depx, &depy, &depz},
          {eng_buf_elec, vir_buf_elec, gx_elec, gy_elec, gz_elec}, rc_a or use_epdt, //
          {&energy_ep, &virial_ep}, {&energy_elec, &virial_elec});
-      ep_dl.manage(op, rc_flag, {&depdl_buf, &depvirdl_buf, &dfpdlx, &dfpdly, &dfpdlz, &d2epdl2_buf},
-         {dedl_buf, dvirdl_buf, dfsumdlx, dfsumdly, dfsumdlz, d2edl2_buf},
-         use_pdlmda, //
-         {&depdl, &depvirdl, &d2epdl2}, {&dedl, &dvirdl, &d2edl2}, use_pdlmda);
+      const int dlmask = lmdaDerivMask(rc_flag, use_pdlmda);
+      depdl_buf = nullptr;
+      d2epdl2_buf = nullptr;
+      if (dlmask & calc::energy_dlmda1) {
+         if (rc_a)
+            darray::allocate(bufferSize(), &depdl_buf);
+         else
+            depdl_buf = dedl_buf;
+      }
+      if (dlmask & calc::energy_dlmda2) {
+         if (rc_a)
+            darray::allocate(bufferSize(), &d2epdl2_buf);
+         else
+            d2epdl2_buf = d2edl2_buf;
+      }
       ep_snap.manage(op, rc_flag, use_epdt);
       if (rc_a)
          bufferAllocate(rc_flag, &nep);
@@ -696,11 +710,15 @@ static void epolarZeroWork(int vers)
 
 static void epolarBegin(int vers)
 {
+   const int dlmask = lmdaDerivMask(vers, use_pdlmda);
    zeroOnHost(energy_ep, virial_ep);
-   if (use_pdlmda)
-      zeroOnHost(depdl, d2epdl2, depvirdl);
    epolarZeroWork(vers);
-   ep_dl.zero(vers);
+   if (rc_flag & calc::analyz) {
+      if (dlmask & calc::energy_dlmda1)
+         darray::zero(g::q0, bufferSize(), depdl_buf);
+      if (dlmask & calc::energy_dlmda2)
+         darray::zero(g::q0, bufferSize(), d2epdl2_buf);
+   }
 }
 
 static bool epolarStateHasActiveSite(RdtMask mask)
@@ -744,14 +762,30 @@ static void epolarSaveEndpoint0(int vers)
 
 static void epolarMixEndpoints(int vers)
 {
-   ep_snap.mix(vers, plam, epdtexp, use_pdlmda, ep_buf, ep_dl);
+   double w, dw, d2w;
+   dtWeight(plam, epdtexp, w, dw, d2w);
+   const double dweight = dw * dpldlmda;
+   const double d2weight = d2w * dpldlmda * dpldlmda + dw * d2pldlmda2;
+   const AccumRef dl = {depdl_buf, dvirdl_buf, dfdlx, dfdly, dfdlz, d2epdl2_buf};
+   ep_snap.mix(vers, w, dweight, d2weight, use_pdlmda, ep_buf, dl);
 }
 
 static void epolarFinish(int vers)
 {
-   // epolar() has already folded vir_trq into virial_ep by this point.
+   const int dlmask = lmdaDerivMask(vers, use_pdlmda);
    ep_buf.flush(vers);
-   ep_dl.flush(vers);
+   if (rc_flag & calc::analyz) {
+      if (dlmask & calc::energy_dlmda1) {
+         energy_prec e = energyReduce(depdl_buf);
+         depdl += e;
+         dedl += e;
+      }
+      if (dlmask & calc::energy_dlmda2) {
+         energy_prec e = energyReduce(d2epdl2_buf);
+         d2epdl2 += e;
+         d2edl2 += e;
+      }
+   }
 }
 
 void epolar_adt(int vers)

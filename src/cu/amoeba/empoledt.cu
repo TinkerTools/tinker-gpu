@@ -104,13 +104,13 @@ static void empoledt_cu(const DtCoef& c, const int* grp, int nself)
    int ngrid = gpuGridSize(BLOCK_DIM);
    if (useEwald()) {
       empoledt_cu1<Ver, EWALD><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, demdl_buf,
-         d2emdl2_buf, vir_em, dvirdl_buf, demx, demy, demz, dfsumdlx, dfsumdly, dfsumdlz, off, st.si1.bit0,
+         d2emdl2_buf, vir_em, dvirdl_buf, demx, demy, demz, dfdlx, dfdly, dfdlz, off, st.si1.bit0,
          nmdpuexclude, mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak,
          st.iak, st.lst, trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, rpole, grp, f, aewald, c.in0bits, c.in1bits,
          c.cntbits, c.a0, c.a1, c.b0, c.b1, c.c0, c.c1);
    } else {
       empoledt_cu1<Ver, NON_EWALD><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, demdl_buf,
-         d2emdl2_buf, vir_em, dvirdl_buf, demx, demy, demz, dfsumdlx, dfsumdly, dfsumdlz, off, st.si1.bit0,
+         d2emdl2_buf, vir_em, dvirdl_buf, demx, demy, demz, dfdlx, dfdly, dfdlz, off, st.si1.bit0,
          nmdpuexclude, mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak,
          st.iak, st.lst, trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, rpole, grp, f, aewald, c.in0bits, c.in1bits,
          c.cntbits, c.a0, c.a1, c.b0, c.b1, c.c0, c.c1);
@@ -241,7 +241,7 @@ static void exfielddt_cu(const DtCoef& c, const int* grp)
    real f = electric / dielec;
    real ef1 = extfld::texfld[0], ef2 = extfld::texfld[1], ef3 = extfld::texfld[2];
    launch_k1b(g::s0, n, exfieldDipoleDt_cu1<Ver>, nem, em, demdl_buf, d2emdl2_buf, vir_em, dvirdl_buf, demx,
-      demy, demz, dfsumdlx, dfsumdly, dfsumdlz, trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, n, f, ef1, ef2, ef3, rpole,
+      demy, demz, dfdlx, dfdly, dfdlz, trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, n, f, ef1, ef2, ef3, rpole,
       grp, x, y, z, c.in0bits, c.in1bits, c.cntbits, c.a0, c.a1, c.b0, c.b1, c.c0, c.c1);
 }
 
@@ -384,7 +384,7 @@ static void empolerecipdt_cu(RdtMask mask, const int* grp, real wa, real wb, rea
 
    launch_k1b(g::s0, n, empoleEwaldRecipDt_cu1<Ver>,                    //
       n, f, em, demdl_buf, d2emdl2_buf, vir_em, dvirdl_buf,             //
-      demx, demy, demz, dfsumdlx, dfsumdly, dfsumdlz,                   //
+      demx, demy, demz, dfdlx, dfdly, dfdlz,                   //
       trqx, trqy, trqz, dltrqx, dltrqy, dltrqz,                         //
       cmp, fmp, cphi, fphi,                                             //
       st.nfft1, st.nfft2, st.nfft3, TINKER_IMAGE_ARGS, wa, wb, wc);

@@ -144,9 +144,6 @@ void quinticTaper(double x, double cut, double off, double& taper, double& dtape
 /// Waals sub-lambdas and their derivatives (dlambda.f:refreshsublmda).
 void mapSubLambda();
 
-/// Applies the sub-lambda chain rule to the term derivatives.
-void lmdachain(int vers);
-
 bool polTracksEle();
 
 /// Reads the shared lambda-dynamics state from the Fortran modules.
@@ -293,7 +290,6 @@ TINKER_EXTERN real (*poleorig)[MPL_TOTAL];
 TINKER_EXTERN real* polarityorig;
 
 // lambda derivative accumulators.
-TINKER_EXTERN TermBuffer ep_dl;
 TINKER_EXTERN DualEndpoint em_snap;
 TINKER_EXTERN DualEndpoint ep_snap;
 
@@ -317,18 +313,13 @@ TINKER_EXTERN energy_prec d2emdl2;
 TINKER_EXTERN energy_prec d2epdl2;
 TINKER_EXTERN energy_prec d2evdl2;
 
-TINKER_EXTERN VirialBuffer depvirdl_buf;
 TINKER_EXTERN VirialBuffer dvirdl_buf;
 
-TINKER_EXTERN virial_prec depvirdl[9];
 TINKER_EXTERN virial_prec dvirdl[9];
 
-TINKER_EXTERN grad_prec* dfpdlx;
-TINKER_EXTERN grad_prec* dfpdly;
-TINKER_EXTERN grad_prec* dfpdlz;
-TINKER_EXTERN grad_prec* dfsumdlx;
-TINKER_EXTERN grad_prec* dfsumdly;
-TINKER_EXTERN grad_prec* dfsumdlz;
+TINKER_EXTERN grad_prec* dfdlx;
+TINKER_EXTERN grad_prec* dfdly;
+TINKER_EXTERN grad_prec* dfdlz;
 
 TINKER_EXTERN real* dltrqx;
 TINKER_EXTERN real* dltrqy;

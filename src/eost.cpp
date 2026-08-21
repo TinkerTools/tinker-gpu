@@ -884,7 +884,7 @@ void eostData(RcOp op)
 void eostBias(int vers)
 {
    // dedl is the unbiased dU/dlambda for this configuration, accumulated by the
-   // energy terms and chain ruled by lmdachain just above. Nothing below writes
+   // energy terms, each already in main lambda units. Nothing below writes
    // it, so it stays valid until eostDyn/eMetaDyn consume it after energy()
    // returns; zeroEGV zeroes it again at the top of the next evaluation.
    if (use_meta) {
@@ -907,11 +907,11 @@ void eostBias(int vers)
    if (vers & calc::energy)
       esum += bgbias - bostlmda;
 
-   // The g bias depends on dU/dlambda, whose gradient/virial are dfsumdl* and
+   // The g bias depends on dU/dlambda, whose gradient/virial are dfdl* and
    // dvirdl, so these are the OSRW second-order Cartesian terms. The force term
    // runs on device via sumGradient.
-   if ((vers & calc::grad) && dfsumdlx)
-      sumGradient(bdgdfl, gx, gy, gz, dfsumdlx, dfsumdly, dfsumdlz);
+   if (lmdaDerivMask(vers, use_dlmda) & calc::grad_dlmda)
+      sumGradient(bdgdfl, gx, gy, gz, dfdlx, dfdly, dfdlz);
    if (vers & calc::virial)
       for (int k = 0; k < 9; ++k)
          vir[k] += bdgdfl * dvirdl[k];

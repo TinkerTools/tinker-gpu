@@ -203,7 +203,8 @@ TestlmdaResult testlmdaEvaluate(const FdTestOptions& opts)
       for (int k = 0; k < 9; ++k)
          r.dvirdl[k] = dvirdl[k];
 
-      copyGradientFlat(calc::grad, r.dfdl, dfsumdlx, dfsumdly, dfsumdlz);
+      if (lmdaDerivMask(calc::v1, keylmda) & calc::grad_dlmda)
+         copyGradientFlat(calc::grad, r.dfdl, dfdlx, dfdly, dfdlz);
    }
 
    // ---- Numerical lambda derivatives ---------------------------------------
