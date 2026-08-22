@@ -119,8 +119,6 @@ void mpoleInitStateDt(int vers, RdtMask mask, const int* group, bool first_state
       chkpole();
    }
    rotpoleState(mask, group);
-   // cmp and vir_m are rebuilt every pass: rpole is masked down to this
-   // subsystem, so the reciprocal space input differs from one pass to the next.
    if (useEwald())
       mpoleInitEwald(false, first_state, first_state);
 }

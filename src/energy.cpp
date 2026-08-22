@@ -281,10 +281,8 @@ void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
       }
    if (amoeba_emplar(vers))
       if (tscfg("emplar", ecore_ele)) {
-         if (use_emadt)
-            emplar_adt(vers);
-         else if (use_emrdt)
-            emplar_rdt(vers);
+         if (use_emdt)
+            emplar_dt(vers);
          else
             emplar(vers);
       }

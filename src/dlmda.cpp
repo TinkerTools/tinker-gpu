@@ -259,75 +259,6 @@ void dtPassWeights(const DtCoef& c, const DtPass& p, real& wa, real& wb, real& w
    wc = (p.in0 ? c.c0 : 0) + (p.in1 ? c.c1 : 0);
 }
 
-void relDualDrive(int vers, RelState ist0, RelState ist1, bool need0, bool need1, const RelDualOps& ops)
-{
-   // dtNeed() never clears both endpoints: w is either 1, making need1 true,
-   // or not 1, making need0 true.
-   const auto do_a = vers & calc::analyz;
-   const int qvers = vers & ~calc::analyz; // evaluate, but do not count
-
-   int only0[nRelSlot], only1[nRelSlot], both[nRelSlot];
-   int n0 = 0, n1 = 0, nb = 0;
-   for (int k = 0; k < nRelSlot; ++k) {
-      RdtMask mask;
-      bool in0, in1;
-      relSlot(k, ist0, ist1, mask, in0, in1);
-      in0 = in0 and need0;
-      in1 = in1 and need1;
-      if (in0 and in1)
-         both[nb++] = k;
-      else if (in0)
-         only0[n0++] = k;
-      else if (in1)
-         only1[n1++] = k;
-   }
-
-   // The count is reported from endpoint 1 when it is live, else endpoint 0.
-   // Within that endpoint a single ligand-plus-environment subsystem carries
-   // the whole count if there is one; a decoupled endpoint has none, so its
-   // subsystems sum instead (empole3.f:2584-2650).
-   const RelState reported = need1 ? ist1 : ist0;
-   bool coupled = false;
-   for (int k = 0; k < nRelSlot and not coupled; ++k) {
-      RdtMask mask;
-      bool in0, in1;
-      relSlot(k, reported, reported, mask, in0, in1);
-      coupled = in0 and relSlotIsCoupled(k);
-   }
-
-   bool first = true;
-   auto run = [&](int k, bool reportedPass) {
-      RdtMask mask;
-      bool in0, in1;
-      relSlot(k, ist0, ist1, mask, in0, in1);
-      bool counts = do_a and reportedPass and (not coupled or relSlotIsCoupled(k));
-      ops.state(counts ? vers : qvers, mask, first);
-      first = false;
-   };
-
-   // Endpoint 0 runs first so that the reported pass is the one whose counts
-   // survive the zeroWork() between the two.
-   if (need0) {
-      for (int i = 0; i < n0; ++i)
-         run(only0[i], not need1);
-      ops.save(vers);
-   }
-   if (need1) {
-      if (need0)
-         ops.zeroWork(vers);
-      for (int i = 0; i < n1; ++i)
-         run(only1[i], true);
-      // Alias the dead endpoint 0 onto endpoint 1 so the mix is an identity.
-      if (not need0)
-         ops.save(vers);
-   }
-   ops.mix(vers);
-
-   // The shared subsystems ride on top of the mixed result. Their counts are
-   // unaffected by the mix, so the gating above still applies to them.
-   for (int i = 0; i < nb; ++i)
-      run(both[i], true);
-}
 
 void dlmda_mech()
 {
@@ -431,17 +362,6 @@ void avgstd(const std::vector<double>& v, int begin, int count, double& avg, dou
    sd = std::sqrt(var > 0.0 ? var : 0.0);
 }
 
-TINKER_FVOID2(acc0, cu1, adtMix, int, bool, int, size_t, double, double, double, const EnergyBufferTraits::type*,
-   EnergyBuffer, EnergyBuffer, EnergyBuffer, VirialBuffer, VirialBuffer, VirialBuffer, const grad_prec*,
-   const grad_prec*, const grad_prec*, grad_prec*, grad_prec*, grad_prec*, grad_prec*, grad_prec*, grad_prec*);
-void adtMix(int vers, bool do_dlmda, int n, size_t buffer_size, double weight1, double dweight1, double d2weight1,
-   const EnergyBufferTraits::type* e0, EnergyBuffer e1, EnergyBuffer dedl, EnergyBuffer d2edl2, VirialBuffer v0,
-   VirialBuffer v1, VirialBuffer dvdl, const grad_prec* gx0, const grad_prec* gy0, const grad_prec* gz0,
-   grad_prec* gx1, grad_prec* gy1, grad_prec* gz1, grad_prec* dgxdl, grad_prec* dgydl, grad_prec* dgzdl)
-{
-   TINKER_FCALL2(acc0, cu1, adtMix, vers, do_dlmda, n, buffer_size, weight1, dweight1, d2weight1, e0, e1, dedl,
-      d2edl2, v0, v1, dvdl, gx0, gy0, gz0, gx1, gy1, gz1, dgxdl, dgydl, dgzdl);
-}
 }
 
 namespace tinker {

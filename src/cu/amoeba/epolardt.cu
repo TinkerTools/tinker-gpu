@@ -130,12 +130,13 @@ static void epolar0DotProdDt_cu1(int n, real f, EnergyBuffer restrict ep, Energy
 
 // The dot product owns all three energy channels of a dual topology pass: the
 // energy itself and both of its lambda derivatives.
-void epolar0DotProdDt_cu(int vers, const real (*gpu_uind)[3], const real (*gpu_udirp)[3], real wa, real wb, real wc)
+void epolar0DotProdDt_cu(int vers, const real (*gpu_uind)[3], const real (*gpu_udirp)[3], EnergyBuffer out_e,
+   real wa, real wb, real wc)
 {
    const real f = -0.5 * electric / dielec;
    const bool do_dl1 = vers & calc::energy_dlmda1;
    const bool do_dl2 = vers & calc::energy_dlmda2;
-   launch_k1b(g::s0, n, epolar0DotProdDt_cu1, n, f, ep, depdl_buf, d2epdl2_buf, gpu_uind, gpu_udirp,
+   launch_k1b(g::s0, n, epolar0DotProdDt_cu1, n, f, out_e, depdl_buf, d2epdl2_buf, gpu_uind, gpu_udirp,
       polarity_inv, wa, wb, wc, do_dl1, do_dl2);
 }
 
@@ -154,12 +155,12 @@ static void epolarPairwiseExtfieldDt_cu1(CountBuffer restrict nep, EnergyBuffer 
 
 // Only an analysis run reaches this, and lmdaDerivVers() leaves calc::v3 alone,
 // so there is no lambda derivative channel to feed.
-void epolarPairwiseExtfieldDt_cu(const real (*uind)[3], real wa)
+void epolarPairwiseExtfieldDt_cu(const real (*uind)[3], EnergyBuffer out_e, real wa)
 {
    const real f = -0.5 * electric / dielec;
    real ex1 = extfld::texfld[0];
    real ex2 = extfld::texfld[1];
    real ex3 = extfld::texfld[2];
-   launch_k1b(g::s0, n, epolarPairwiseExtfieldDt_cu1, nep, ep, uind, n, f, ex1, ex2, ex3, wa);
+   launch_k1b(g::s0, n, epolarPairwiseExtfieldDt_cu1, nep, out_e, uind, n, f, ex1, ex2, ex3, wa);
 }
 }

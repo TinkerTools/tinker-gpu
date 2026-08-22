@@ -759,13 +759,15 @@ static void epolarKernel(int vers, bool use_cfgrad)
 
 TINKER_FVOID2(acc0, cu1, epolarNonEwaldDt, int, const real (*)[3], const real (*)[3], real, real);
 TINKER_FVOID2(acc0, cu1, epolarEwaldRealDt, int, const real (*)[3], const real (*)[3], real, real);
-TINKER_FVOID2(acc0, cu1, epolar0DotProdDt, int, const real (*)[3], const real (*)[3], real, real, real);
-TINKER_FVOID2(acc0, cu1, epolarPairwiseExtfieldDt, const real (*)[3], real);
-TINKER_FVOID2(acc0, cu1, epolarEwaldRecipSelfDt, int, const real (*)[3], const real (*)[3], const RecipDt&);
+TINKER_FVOID2(acc0, cu1, epolar0DotProdDt, int, const real (*)[3], const real (*)[3], EnergyBuffer, real, real, real);
+TINKER_FVOID2(acc0, cu1, epolarPairwiseExtfieldDt, const real (*)[3], EnergyBuffer, real);
+TINKER_FVOID2(acc0, cu1, epolarEwaldRecipSelfDt, int, const real (*)[3], const real (*)[3], EnergyBuffer,
+   VirialBuffer, grad_prec*, grad_prec*, grad_prec*, const RecipDt&);
 
-void epolarEwaldRecipSelfDt(int vers, const RecipDt& dt)
+void epolarEwaldRecipSelfDt(int vers, EnergyBuffer out_e, VirialBuffer out_v, grad_prec* out_gx,
+   grad_prec* out_gy, grad_prec* out_gz, const RecipDt& dt)
 {
-   TINKER_FCALL2(acc0, cu1, epolarEwaldRecipSelfDt, vers, uind, uinp, dt);
+   TINKER_FCALL2(acc0, cu1, epolarEwaldRecipSelfDt, vers, uind, uinp, out_e, out_v, out_gx, out_gy, out_gz, dt);
 }
 
 // The lambda-derivative sinks a pass writes into, gated by what the version
@@ -812,17 +814,17 @@ static void epolarState(int vers, RdtMask mask, const int* group, bool first_sta
 
    induce(uind, uinp);
    if (edot)
-      TINKER_FCALL2(acc0, cu1, epolar0DotProdDt, vers, uind, udirp, wa, wb, wc);
+      TINKER_FCALL2(acc0, cu1, epolar0DotProdDt, vers, uind, udirp, ep, wa, wb, wc);
    if (vers != calc::v0) {
       if (useEwald()) {
          TINKER_FCALL2(acc0, cu1, epolarEwaldRealDt, vers, uind, uinp, wa, wb);
-         epolarEwaldRecipSelfDt(vers, epolarRecipDt(vers, wa, wb));
+         epolarEwaldRecipSelfDt(vers, ep, vir_ep, depx, depy, depz, epolarRecipDt(vers, wa, wb));
       } else {
          TINKER_FCALL2(acc0, cu1, epolarNonEwaldDt, vers, uind, uinp, wa, wb);
       }
    }
    if (extfld::use_exfld and (vers & calc::analyz))
-      TINKER_FCALL2(acc0, cu1, epolarPairwiseExtfieldDt, uind, wa);
+      TINKER_FCALL2(acc0, cu1, epolarPairwiseExtfieldDt, uind, ep, wa);
 }
 
 // Whether one subsystem's interactions are the ones analysis reports.

@@ -1,5 +1,4 @@
 #include "ff/amoeba/empole.h"
-#include "ff/amoeba/emplar.h"
 #include "ff/dlmda.h"
 #include "ff/elec.h"
 #include "ff/energy.h"
@@ -28,13 +27,11 @@ void empoleData(RcOp op)
       return;
 
    auto rc_a = rc_flag & calc::analyz;
-   const bool snapshot = use_emdt and useEmplar();
 
    if (op & RcOp::DEALLOC) {
       if (rc_a)
          bufferDeallocate(rc_flag, nem);
       em_buf.manage(op, rc_flag, {}, {}, false);
-      em_snap.manage(op, rc_flag, false);
       if (rc_a)
          darray::deallocate(demdl_buf, d2emdl2_buf);
       demdl_buf = nullptr;
@@ -45,9 +42,8 @@ void empoleData(RcOp op)
    if (op & RcOp::ALLOC) {
       nem = nullptr;
       em_buf.manage(op, rc_flag, {&em, &vir_em, &demx, &demy, &demz},
-         {eng_buf_elec, vir_buf_elec, gx_elec, gy_elec, gz_elec}, rc_a or snapshot, //
+         {eng_buf_elec, vir_buf_elec, gx_elec, gy_elec, gz_elec}, rc_a, //
          {&energy_em, &virial_em}, {&energy_elec, &virial_elec});
-      em_snap.manage(op, rc_flag, snapshot);
 
       const int dlmask = lmdaDerivMask(rc_flag, use_edlmda);
       demdl_buf = nullptr;
@@ -180,20 +176,6 @@ void empole(int vers)
    empoleFinish(vers);
 }
 
-void empoleSaveEndpoint0(int vers)
-{
-   em_snap.save(vers, em_buf);
-}
-
-void empoleMixEndpoints(int vers)
-{
-   double w, dw, d2w;
-   dtWeight(elam, emdtexp, w, dw, d2w);
-   const double dweight = dw * deldlmda;
-   const double d2weight = d2w * deldlmda * deldlmda + dw * d2eldlmda2;
-   const AccumRef dl = {demdl_buf, dvirdl_buf, dfdlx, dfdly, dfdlz, d2emdl2_buf};
-   em_snap.mix(vers, w, dweight, d2weight, use_edlmda, em_buf, dl);
-}
 
 TINKER_FVOID2(acc0, cu1, empoleDt, int, const DtCoef&, int);
 void empoleDt(int vers, const DtCoef& coef, int nself)

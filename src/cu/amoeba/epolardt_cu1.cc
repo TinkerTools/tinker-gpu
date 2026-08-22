@@ -64,8 +64,6 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
    int jpk;
    real frcxi, frcyi, frczi, ufld0i, ufld1i, ufld2i, dufld0i, dufld1i, dufld2i, dufld3i, dufld4i, dufld5i;
    real frcxk, frcyk, frczk, ufld0k, ufld1k, ufld2k, dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k;
-   real dfrcxi, dfrcyi, dfrczi;
-   real dfrcxk, dfrcyk, dfrczk;
 
    //* /
    for (int ii = ithread; ii < nexclude; ii += blockDim.x * gridDim.x) {
@@ -95,14 +93,6 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
          dufld3k = 0;
          dufld4k = 0;
          dufld5k = 0;
-      }
-      if CONSTEXPR (do_gdl) {
-         dfrcxi = 0;
-         dfrcyi = 0;
-         dfrczi = 0;
-         dfrcxk = 0;
-         dfrcyk = 0;
-         dfrczk = 0;
       }
 
       int i = exclude[ii][0];
@@ -163,8 +153,6 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
          real pga = thlval[njpolar * jpi[klane] + jpk];
          real e, vxx, vyx, vzx, vyy, vzy, vzz;
          real e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1;
-         real pfrcxi = 0, pfrcyi = 0, pfrczi = 0;
-         real pfrcxk = 0, pfrcyk = 0, pfrczk = 0;
          pair_polar_v2<Ver, ETYP>(r2, xr, yr, zr, 1, 1, 1, //
             ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane], qixy[klane], qixz[klane], qiyy[klane],
             qiyz[klane], qizz[klane], uidx[klane], uidy[klane], uidz[klane], uipx[klane], uipy[klane], uipz[klane],
@@ -173,8 +161,8 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
             ukdx[threadIdx.x], ukdy[threadIdx.x], ukdz[threadIdx.x], ukpx[threadIdx.x], ukpy[threadIdx.x],
             ukpz[threadIdx.x], pdk, pga, //
             f, aewald,                   //
-            pfrcxi, pfrcyi, pfrczi, pfrcxk, pfrcyk, pfrczk, ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k, dufld0i,
-            dufld1i, dufld2i, dufld3i, dufld4i, dufld5i, dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, //
+            frcxi, frcyi, frczi, frcxk, frcyk, frczk, ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k, dufld0i, dufld1i,
+            dufld2i, dufld3i, dufld4i, dufld5i, dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, //
             e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1);
          pair_polar_v2<Ver, NON_EWALD>(r2, xr, yr, zr, scaleb - 1, scalec - 1, scaled - 1, //
             ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane], qixy[klane], qixz[klane], qiyy[klane],
@@ -184,8 +172,8 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
             ukdx[threadIdx.x], ukdy[threadIdx.x], ukdz[threadIdx.x], ukpx[threadIdx.x], ukpy[threadIdx.x],
             ukpz[threadIdx.x], pdk, pga, //
             f, aewald,                   //
-            pfrcxi, pfrcyi, pfrczi, pfrcxk, pfrcyk, pfrczk, ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k, dufld0i,
-            dufld1i, dufld2i, dufld3i, dufld4i, dufld5i, dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, //
+            frcxi, frcyi, frczi, frcxk, frcyk, frczk, ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k, dufld0i, dufld1i,
+            dufld2i, dufld3i, dufld4i, dufld5i, dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, //
             e, vxx, vyx, vzx, vyy, vzy, vzz);
          if CONSTEXPR (do_e) {
             e = e + e1;
@@ -193,22 +181,6 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
             if CONSTEXPR (do_a) {
                if (scalec != 0 and e != 0) // pscale != 0
                   neptl += 1;
-            }
-         }
-         if CONSTEXPR (do_g) {
-            frcxi += wa * pfrcxi;
-            frcyi += wa * pfrcyi;
-            frczi += wa * pfrczi;
-            frcxk += wa * pfrcxk;
-            frcyk += wa * pfrcyk;
-            frczk += wa * pfrczk;
-            if CONSTEXPR (do_gdl) {
-               dfrcxi += wb * pfrcxi;
-               dfrcyi += wb * pfrcyi;
-               dfrczi += wb * pfrczi;
-               dfrcxk += wb * pfrcxk;
-               dfrcyk += wb * pfrcyk;
-               dfrczk += wb * pfrczk;
             }
          }
          if CONSTEXPR (do_v) {
@@ -236,9 +208,15 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
       } // end if (include)
 
       if CONSTEXPR (do_g) {
-         atomic_add(frcxi, gx, i);
-         atomic_add(frcyi, gy, i);
-         atomic_add(frczi, gz, i);
+         atomic_add(wa * frcxi, gx, i);
+         if CONSTEXPR (do_gdl)
+            atomic_add(wb * frcxi, dgx, i);
+         atomic_add(wa * frcyi, gy, i);
+         if CONSTEXPR (do_gdl)
+            atomic_add(wb * frcyi, dgy, i);
+         atomic_add(wa * frczi, gz, i);
+         if CONSTEXPR (do_gdl)
+            atomic_add(wb * frczi, dgz, i);
          atomic_add(ufld0i, &ufld[i][0]);
          atomic_add(ufld1i, &ufld[i][1]);
          atomic_add(ufld2i, &ufld[i][2]);
@@ -248,9 +226,15 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
          atomic_add(dufld3i, &dufld[i][3]);
          atomic_add(dufld4i, &dufld[i][4]);
          atomic_add(dufld5i, &dufld[i][5]);
-         atomic_add(frcxk, gx, k);
-         atomic_add(frcyk, gy, k);
-         atomic_add(frczk, gz, k);
+         atomic_add(wa * frcxk, gx, k);
+         if CONSTEXPR (do_gdl)
+            atomic_add(wb * frcxk, dgx, k);
+         atomic_add(wa * frcyk, gy, k);
+         if CONSTEXPR (do_gdl)
+            atomic_add(wb * frcyk, dgy, k);
+         atomic_add(wa * frczk, gz, k);
+         if CONSTEXPR (do_gdl)
+            atomic_add(wb * frczk, dgz, k);
          atomic_add(ufld0k, &ufld[k][0]);
          atomic_add(ufld1k, &ufld[k][1]);
          atomic_add(ufld2k, &ufld[k][2]);
@@ -260,14 +244,6 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
          atomic_add(dufld3k, &dufld[k][3]);
          atomic_add(dufld4k, &dufld[k][4]);
          atomic_add(dufld5k, &dufld[k][5]);
-      }
-      if CONSTEXPR (do_gdl) {
-         atomic_add(dfrcxi, dgx, i);
-         atomic_add(dfrcyi, dgy, i);
-         atomic_add(dfrczi, dgz, i);
-         atomic_add(dfrcxk, dgx, k);
-         atomic_add(dfrcyk, dgy, k);
-         atomic_add(dfrczk, dgz, k);
       }
    }
    // */
@@ -298,14 +274,6 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
          dufld3k = 0;
          dufld4k = 0;
          dufld5k = 0;
-      }
-      if CONSTEXPR (do_gdl) {
-         dfrcxi = 0;
-         dfrcyi = 0;
-         dfrczi = 0;
-         dfrcxk = 0;
-         dfrcyk = 0;
-         dfrczk = 0;
       }
 
       int tri, tx, ty;
@@ -376,8 +344,6 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
          if (r2 <= off * off and incl) {
             real pga = thlval[njpolar * jpi[klane] + jpk];
             real e, vxx, vyx, vzx, vyy, vzy, vzz;
-            real pfrcxi = 0, pfrcyi = 0, pfrczi = 0;
-            real pfrcxk = 0, pfrcyk = 0, pfrczk = 0;
             pair_polar_v2<Ver, ETYP>(r2, xr, yr, zr, 1, 1, 1, //
                ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane], qixy[klane], qixz[klane], qiyy[klane],
                qiyz[klane], qizz[klane], uidx[klane], uidy[klane], uidz[klane], uipx[klane], uipy[klane], uipz[klane],
@@ -386,7 +352,7 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
                ukdx[threadIdx.x], ukdy[threadIdx.x], ukdz[threadIdx.x], ukpx[threadIdx.x], ukpy[threadIdx.x],
                ukpz[threadIdx.x], pdk, pga, //
                f, aewald,                   //
-               pfrcxi, pfrcyi, pfrczi, pfrcxk, pfrcyk, pfrczk, ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k, dufld0i,
+               frcxi, frcyi, frczi, frcxk, frcyk, frczk, ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k, dufld0i,
                dufld1i, dufld2i, dufld3i, dufld4i, dufld5i, dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, //
                e, vxx, vyx, vzx, vyy, vzy, vzz);
             if CONSTEXPR (do_e) {
@@ -394,22 +360,6 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
                if CONSTEXPR (do_a) {
                   if (e != 0)
                      neptl += 1;
-               }
-            }
-            if CONSTEXPR (do_g) {
-               frcxi += wa * pfrcxi;
-               frcyi += wa * pfrcyi;
-               frczi += wa * pfrczi;
-               frcxk += wa * pfrcxk;
-               frcyk += wa * pfrcyk;
-               frczk += wa * pfrczk;
-               if CONSTEXPR (do_gdl) {
-                  dfrcxi += wb * pfrcxi;
-                  dfrcyi += wb * pfrcyi;
-                  dfrczi += wb * pfrczi;
-                  dfrcxk += wb * pfrcxk;
-                  dfrcyk += wb * pfrcyk;
-                  dfrczk += wb * pfrczk;
                }
             }
             if CONSTEXPR (do_v) {
@@ -445,17 +395,18 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
             dufld4i = __shfl_sync(ALL_LANES, dufld4i, ilane + 1);
             dufld5i = __shfl_sync(ALL_LANES, dufld5i, ilane + 1);
          }
-         if CONSTEXPR (do_gdl) {
-            dfrcxi = __shfl_sync(ALL_LANES, dfrcxi, ilane + 1);
-            dfrcyi = __shfl_sync(ALL_LANES, dfrcyi, ilane + 1);
-            dfrczi = __shfl_sync(ALL_LANES, dfrczi, ilane + 1);
-         }
       }
 
       if CONSTEXPR (do_g) {
-         atomic_add(frcxi, gx, i);
-         atomic_add(frcyi, gy, i);
-         atomic_add(frczi, gz, i);
+         atomic_add(wa * frcxi, gx, i);
+         if CONSTEXPR (do_gdl)
+            atomic_add(wb * frcxi, dgx, i);
+         atomic_add(wa * frcyi, gy, i);
+         if CONSTEXPR (do_gdl)
+            atomic_add(wb * frcyi, dgy, i);
+         atomic_add(wa * frczi, gz, i);
+         if CONSTEXPR (do_gdl)
+            atomic_add(wb * frczi, dgz, i);
          atomic_add(ufld0i, &ufld[i][0]);
          atomic_add(ufld1i, &ufld[i][1]);
          atomic_add(ufld2i, &ufld[i][2]);
@@ -465,9 +416,15 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
          atomic_add(dufld3i, &dufld[i][3]);
          atomic_add(dufld4i, &dufld[i][4]);
          atomic_add(dufld5i, &dufld[i][5]);
-         atomic_add(frcxk, gx, k);
-         atomic_add(frcyk, gy, k);
-         atomic_add(frczk, gz, k);
+         atomic_add(wa * frcxk, gx, k);
+         if CONSTEXPR (do_gdl)
+            atomic_add(wb * frcxk, dgx, k);
+         atomic_add(wa * frcyk, gy, k);
+         if CONSTEXPR (do_gdl)
+            atomic_add(wb * frcyk, dgy, k);
+         atomic_add(wa * frczk, gz, k);
+         if CONSTEXPR (do_gdl)
+            atomic_add(wb * frczk, dgz, k);
          atomic_add(ufld0k, &ufld[k][0]);
          atomic_add(ufld1k, &ufld[k][1]);
          atomic_add(ufld2k, &ufld[k][2]);
@@ -477,14 +434,6 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
          atomic_add(dufld3k, &dufld[k][3]);
          atomic_add(dufld4k, &dufld[k][4]);
          atomic_add(dufld5k, &dufld[k][5]);
-      }
-      if CONSTEXPR (do_gdl) {
-         atomic_add(dfrcxi, dgx, i);
-         atomic_add(dfrcyi, dgy, i);
-         atomic_add(dfrczi, dgz, i);
-         atomic_add(dfrcxk, dgx, k);
-         atomic_add(dfrcyk, dgy, k);
-         atomic_add(dfrczk, dgz, k);
       }
       __syncwarp();
    }
@@ -515,14 +464,6 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
          dufld3k = 0;
          dufld4k = 0;
          dufld5k = 0;
-      }
-      if CONSTEXPR (do_gdl) {
-         dfrcxi = 0;
-         dfrcyi = 0;
-         dfrczi = 0;
-         dfrcxk = 0;
-         dfrcyk = 0;
-         dfrczk = 0;
       }
 
       int ty = iak[iw];
@@ -585,8 +526,6 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
          if (r2 <= off * off and incl) {
             real pga = thlval[njpolar * jpi[klane] + jpk];
             real e, vxx, vyx, vzx, vyy, vzy, vzz;
-            real pfrcxi = 0, pfrcyi = 0, pfrczi = 0;
-            real pfrcxk = 0, pfrcyk = 0, pfrczk = 0;
             pair_polar_v2<Ver, ETYP>(r2, xr, yr, zr, 1, 1, 1, //
                ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane], qixy[klane], qixz[klane], qiyy[klane],
                qiyz[klane], qizz[klane], uidx[klane], uidy[klane], uidz[klane], uipx[klane], uipy[klane], uipz[klane],
@@ -595,7 +534,7 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
                ukdx[threadIdx.x], ukdy[threadIdx.x], ukdz[threadIdx.x], ukpx[threadIdx.x], ukpy[threadIdx.x],
                ukpz[threadIdx.x], pdk, pga, //
                f, aewald,                   //
-               pfrcxi, pfrcyi, pfrczi, pfrcxk, pfrcyk, pfrczk, ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k, dufld0i,
+               frcxi, frcyi, frczi, frcxk, frcyk, frczk, ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k, dufld0i,
                dufld1i, dufld2i, dufld3i, dufld4i, dufld5i, dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, //
                e, vxx, vyx, vzx, vyy, vzy, vzz);
             if CONSTEXPR (do_e) {
@@ -603,22 +542,6 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
                if CONSTEXPR (do_a) {
                   if (e != 0)
                      neptl += 1;
-               }
-            }
-            if CONSTEXPR (do_g) {
-               frcxi += wa * pfrcxi;
-               frcyi += wa * pfrcyi;
-               frczi += wa * pfrczi;
-               frcxk += wa * pfrcxk;
-               frcyk += wa * pfrcyk;
-               frczk += wa * pfrczk;
-               if CONSTEXPR (do_gdl) {
-                  dfrcxi += wb * pfrcxi;
-                  dfrcyi += wb * pfrcyi;
-                  dfrczi += wb * pfrczi;
-                  dfrcxk += wb * pfrcxk;
-                  dfrcyk += wb * pfrcyk;
-                  dfrczk += wb * pfrczk;
                }
             }
             if CONSTEXPR (do_v) {
@@ -653,17 +576,18 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
             dufld4i = __shfl_sync(ALL_LANES, dufld4i, ilane + 1);
             dufld5i = __shfl_sync(ALL_LANES, dufld5i, ilane + 1);
          }
-         if CONSTEXPR (do_gdl) {
-            dfrcxi = __shfl_sync(ALL_LANES, dfrcxi, ilane + 1);
-            dfrcyi = __shfl_sync(ALL_LANES, dfrcyi, ilane + 1);
-            dfrczi = __shfl_sync(ALL_LANES, dfrczi, ilane + 1);
-         }
       }
 
       if CONSTEXPR (do_g) {
-         atomic_add(frcxi, gx, i);
-         atomic_add(frcyi, gy, i);
-         atomic_add(frczi, gz, i);
+         atomic_add(wa * frcxi, gx, i);
+         if CONSTEXPR (do_gdl)
+            atomic_add(wb * frcxi, dgx, i);
+         atomic_add(wa * frcyi, gy, i);
+         if CONSTEXPR (do_gdl)
+            atomic_add(wb * frcyi, dgy, i);
+         atomic_add(wa * frczi, gz, i);
+         if CONSTEXPR (do_gdl)
+            atomic_add(wb * frczi, dgz, i);
          atomic_add(ufld0i, &ufld[i][0]);
          atomic_add(ufld1i, &ufld[i][1]);
          atomic_add(ufld2i, &ufld[i][2]);
@@ -673,9 +597,15 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
          atomic_add(dufld3i, &dufld[i][3]);
          atomic_add(dufld4i, &dufld[i][4]);
          atomic_add(dufld5i, &dufld[i][5]);
-         atomic_add(frcxk, gx, k);
-         atomic_add(frcyk, gy, k);
-         atomic_add(frczk, gz, k);
+         atomic_add(wa * frcxk, gx, k);
+         if CONSTEXPR (do_gdl)
+            atomic_add(wb * frcxk, dgx, k);
+         atomic_add(wa * frcyk, gy, k);
+         if CONSTEXPR (do_gdl)
+            atomic_add(wb * frcyk, dgy, k);
+         atomic_add(wa * frczk, gz, k);
+         if CONSTEXPR (do_gdl)
+            atomic_add(wb * frczk, dgz, k);
          atomic_add(ufld0k, &ufld[k][0]);
          atomic_add(ufld1k, &ufld[k][1]);
          atomic_add(ufld2k, &ufld[k][2]);
@@ -685,14 +615,6 @@ void epolardt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBu
          atomic_add(dufld3k, &dufld[k][3]);
          atomic_add(dufld4k, &dufld[k][4]);
          atomic_add(dufld5k, &dufld[k][5]);
-      }
-      if CONSTEXPR (do_gdl) {
-         atomic_add(dfrcxi, dgx, i);
-         atomic_add(dfrcyi, dgy, i);
-         atomic_add(dfrczi, dgz, i);
-         atomic_add(dfrcxk, dgx, k);
-         atomic_add(dfrcyk, dgy, k);
-         atomic_add(dfrczk, dgz, k);
       }
       __syncwarp();
    }

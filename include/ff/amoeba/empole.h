@@ -26,7 +26,5 @@ void mpoleScale(real factor);
 
 void empoleBegin(int vers);
 void empoleZeroWork(int vers);
-void empoleSaveEndpoint0(int vers);
-void empoleMixEndpoints(int vers);
 void empoleFinish(int vers);
 }

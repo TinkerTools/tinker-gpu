@@ -1,7 +1,9 @@
 #include "ff/amoeba/emplar.h"
 #include "ff/amoeba/empole.h"
 #include "ff/amoeba/epolar.h"
+#include "ff/amoeba/induce.h"
 #include "ff/dlmda.h"
+#include "ff/termbuf.h"
 #include "ff/elec.h"
 #include "ff/energy.h"
 #include "ff/evdw.h"
@@ -12,6 +14,7 @@
 #include "math/zero.h"
 #include "tool/error.h"
 #include "tool/externfunc.h"
+#include <tinker/detail/extfld.hh>
 #include <tinker/detail/mplpot.hh>
 
 #include <cassert>
@@ -105,15 +108,16 @@ void emplar(int vers)
    }
 }
 
-/// Evaluates one dual topology state
-static void emplarState(int vers, RdtMask mask, const int* group, bool first_state)
+
+TINKER_FVOID2(acc0, cu1, emplarDt, int, real, real, real);
+static void emplarDt(int vers, real wa, real wb, real wc)
 {
-   mpoleInitState(vers, mask, group, first_state, true);
-   polarState(mask, group);
-   emplarKernel(vers);
-   exfield(vers, 1);
-   torque(vers, demx, demy, demz, trqx, trqy, trqz, vir_em);
+   TINKER_FCALL2(acc0, cu1, emplarDt, vers, wa, wb, wc);
 }
+
+TINKER_FVOID2(acc0, cu1, epolar0DotProdDt, int, const real (*)[3], const real (*)[3], EnergyBuffer, real, real,
+   real);
+TINKER_FVOID2(acc0, cu1, exfieldDipoleDt, int, const DtCoef&);
 
 static void emplarBegin(int vers)
 {
@@ -121,61 +125,108 @@ static void emplarBegin(int vers)
    zeroOnHost(energy_ep, virial_ep);
 }
 
-static void emplarMixEndpoints(int vers)
+// Where a pass sends its polarization reciprocal-space lambda derivatives. The
+// energy channels are absent by construction: the dot product owns those.
+static RecipDt emplarRecipDt(int vers, real wa, real wb)
+{
+   RecipDt dt;
+   dt.wa = wa;
+   dt.wb = wb;
+   if (vers & calc::virial_dlmda)
+      dt.vdl = dvirdl_buf;
+   if (vers & calc::grad_dlmda) {
+      dt.dgx = dfdlx;
+      dt.dgy = dfdly;
+      dt.dgz = dfdlz;
+   }
+   // The lambda torque feeds both the lambda gradient and the torque part of
+   // the lambda virial, so either one is reason enough to accumulate it.
+   if (vers & (calc::grad_dlmda | calc::virial_dlmda)) {
+      dt.dltrqx = dltrqx;
+      dt.dltrqy = dltrqy;
+      dt.dltrqz = dltrqz;
+   }
+   return dt;
+}
+
+/// Evaluates one dual topology subsystem straight into the fused accumulators.
+/// The pass masks rpole and polarity first, so one set of weights covers
+/// everything it touches, and nothing is reduced or copied aside between passes.
+static void emplarState(int vers, RdtMask mask, const int* group, bool first_state, //
+   real wa, real wb, real wc)
+{
+   // cmp has to be built here rather than left to empoleEwaldRecipDt below:
+   // induce() gets the reciprocal part of its direct field from it.
+   mpoleInitStateDt(vers, mask, group, first_state);
+   polarState(mask, group);
+
+   induce(uind, uinp);
+
+   // permanent multipole real space and self, plus polarization real space
+   emplarDt(vers, wa, wb, wc);
+   if (useEwald()) {
+      empoleEwaldRecipDt(vers, mask, wa, wb, wc);
+      const AccumRef out = em_buf.ref();
+      epolarEwaldRecipSelfDt(vers, out.e, out.v, out.gx, out.gy, out.gz, emplarRecipDt(vers, wa, wb));
+   }
+   // the polarization energy, and with it both of its lambda derivatives
+   if (vers & calc::energy)
+      TINKER_FCALL2(acc0, cu1, epolar0DotProdDt, vers, uind, udirp, em_buf.ref().e, wa, wb, wc);
+   if (extfld::use_exfld)
+      TINKER_FCALL2(acc0, cu1, exfieldDipoleDt, vers, dtCoefUniform(wa, wb, wc));
+}
+
+void emplar_dt(int vers)
 {
    if (not doubleEq(elam, plam))
       TINKER_THROW("The electrostatic and polarization lambda values have drifted apart; "
                    "the fused multipole/polarization dual topology needs them to be equal.");
-   empoleMixEndpoints(vers);
-}
 
-void emplar_adt(int vers)
-{
+   const int dvers = lmdaDerivVers(vers, use_edlmda);
+   const bool relative = use_emrdt;
+   const int* group = relative ? rdt_group : mut;
+   auto do_g = vers & calc::grad;
+
    double w, dw, d2w;
    bool need0, need1;
    dtWeightNeed(elam, emdtexp, deldlmda, d2eldlmda2, w, dw, d2w, need0, need1);
 
    emplarBegin(vers);
 
-   // emplar is never reached under analyz, so it carries no count run.
+   DtCoef c;
+   dtWeightsToCoef(c, w, dw, d2w, deldlmda, d2eldlmda2, use_edlmda);
+
+   DtPass pass[nRelSlot];
+   const int npass = dtPassList(relative, emrelst0, emrelst1, pass);
+
+   // emplar is never reached under analyz, so no pass has an interaction count
+   // to keep and each one is evaluated purely for its weight.
    bool first = true;
-   if (need0) {
-      emplarState(vers, RdtMask::ENV, mut, first);
+   for (int k = 0; k < npass; ++k) {
+      real wa, wb, wc;
+      dtPassWeights(c, pass[k], wa, wb, wc);
+      // A subsystem contributes nothing when it has no weight in any channel
+      // this version actually computes; wb and wc only matter when the version
+      // asks for a lambda derivative.
+      const bool dl = dvers & (calc::energy_dlmda1 | calc::energy_dlmda2 | calc::grad_dlmda | calc::virial_dlmda);
+      if (wa == 0 and (not dl or (wb == 0 and wc == 0)))
+         continue;
+      emplarState(dvers, pass[k].mask, group, first, wa, wb, wc);
       first = false;
-      empoleSaveEndpoint0(vers);
-   }
-   if (need1) {
-      if (need0)
-         empoleZeroWork(vers);
-      emplarState(vers, RdtMask::ALL, mut, first);
-      if (not need0)
-         empoleSaveEndpoint0(vers);
    }
 
-   emplarMixEndpoints(vers);
-   empoleFinish(vers);
-}
-
-void emplar_rdt(int vers)
-{
-   double w, dw, d2w;
-   bool need0, need1;
-   dtWeightNeed(elam, emdtexp, deldlmda, d2eldlmda2, w, dw, d2w, need0, need1);
-
-   emplarBegin(vers);
-
-   const RelDualOps ops = {
-      [](int v, RdtMask mask, bool first) { emplarState(v, mask, rdt_group, first); },
-      [](int v) { empoleZeroWork(v); },
-      [](int v) { empoleSaveEndpoint0(v); },
-      [](int v) { emplarMixEndpoints(v); },
-   };
-   relDualDrive(vers, emrelst0, emrelst1, need0, need1, ops);
+   // Every pass added its torque unconverted, so one conversion covers them all.
+   if (do_g) {
+      torque(vers, demx, demy, demz, trqx, trqy, trqz, vir_em);
+      if (dvers & (calc::grad_dlmda | calc::virial_dlmda))
+         torque(vers, dfdlx, dfdly, dfdlz, dltrqx, dltrqy, dltrqz, dvirdl_buf);
+   }
 
    empoleFinish(vers);
 
-   // Restore the full system for whatever runs next.
-   mpoleInitState(calc::v0, RdtMask::ALL, rdt_group, false);
-   polarState(RdtMask::ALL, rdt_group);
+   // The last pass leaves rpole and polarity masked down to a subsystem;
+   // restore the full system for whatever runs next.
+   mpoleInitState(calc::v0, RdtMask::ALL, group, false);
+   polarState(RdtMask::ALL, group);
 }
 }

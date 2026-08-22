@@ -20,10 +20,7 @@ void emplarData(RcOp);
 void emplar(int vers);
 
 /// \ingroup mplar
-void emplar_adt(int vers);
-
-/// \ingroup mplar
-void emplar_rdt(int vers);
+void emplar_dt(int vers);
 
 /// \ingroup mplar
 }

@@ -89,9 +89,9 @@ K_VARIABLES:
   - register real pdk from:pdamp
   - register int  jpk from:jpolar
 I_FORCE:
-  - register real frcxi   addto:gx
-  - register real frcyi   addto:gy
-  - register real frczi   addto:gz
+  - register real frcxi   addto:gx scale:wa dlsink:dgx,wb,do_gdl
+  - register real frcyi   addto:gy scale:wa dlsink:dgy,wb,do_gdl
+  - register real frczi   addto:gz scale:wa dlsink:dgz,wb,do_gdl
   - register real ufld0i  addto:ufld,0
   - register real ufld1i  addto:ufld,1
   - register real ufld2i  addto:ufld,2
@@ -102,9 +102,9 @@ I_FORCE:
   - register real dufld4i addto:dufld,4
   - register real dufld5i addto:dufld,5
 K_FORCE:
-  - register real frcxk   addto:gx
-  - register real frcyk   addto:gy
-  - register real frczk   addto:gz
+  - register real frcxk   addto:gx scale:wa dlsink:dgx,wb,do_gdl
+  - register real frcyk   addto:gy scale:wa dlsink:dgy,wb,do_gdl
+  - register real frczk   addto:gz scale:wa dlsink:dgz,wb,do_gdl
   - register real ufld0k  addto:ufld,0
   - register real ufld1k  addto:ufld,1
   - register real ufld2k  addto:ufld,2
@@ -114,15 +114,6 @@ K_FORCE:
   - register real dufld3k addto:dufld,3
   - register real dufld4k addto:dufld,4
   - register real dufld5k addto:dufld,5
-I_FORCE_DLMDA:
-  - register real dfrcxi addto:dgx
-  - register real dfrcyi addto:dgy
-  - register real dfrczi addto:dgz
-K_FORCE_DLMDA:
-  - register real dfrcxk addto:dgx
-  - register real dfrcyk addto:dgy
-  - register real dfrczk addto:dgz
-
 SCALED_PAIRWISE_INTERACTION: |
   real xr = @xk@ - @xi@;
   real yr = @yk@ - @yi@;
@@ -132,8 +123,6 @@ SCALED_PAIRWISE_INTERACTION: |
     real pga = thlval[njpolar * jpi[klane] + jpk];
     real e, vxx, vyx, vzx, vyy, vzy, vzz;
     real e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1;
-    real pfrcxi = 0, pfrcyi = 0, pfrczi = 0;
-    real pfrcxk = 0, pfrcyk = 0, pfrczk = 0;
     pair_polar_v2<Ver, ETYP>(
       r2, xr, yr, zr, 1, 1, 1, //
       @ci@, @dix@, @diy@, @diz@, @qixx@, @qixy@, @qixz@, @qiyy@, @qiyz@, @qizz@,
@@ -141,7 +130,7 @@ SCALED_PAIRWISE_INTERACTION: |
       @ck@, @dkx@, @dky@, @dkz@, @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@,
       @ukdx@, @ukdy@, @ukdz@, @ukpx@, @ukpy@, @ukpz@, @pdk@, pga, //
       f, aewald, //
-      pfrcxi, pfrcyi, pfrczi, pfrcxk, pfrcyk, pfrczk,
+      @frcxi@, @frcyi@, @frczi@, @frcxk@, @frcyk@, @frczk@,
       @ufld0i@, @ufld1i@, @ufld2i@, @ufld0k@, @ufld1k@, @ufld2k@,
       @dufld0i@, @dufld1i@, @dufld2i@, @dufld3i@, @dufld4i@, @dufld5i@,
       @dufld0k@, @dufld1k@, @dufld2k@, @dufld3k@, @dufld4k@, @dufld5k@, //
@@ -153,7 +142,7 @@ SCALED_PAIRWISE_INTERACTION: |
       @ck@, @dkx@, @dky@, @dkz@, @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@,
       @ukdx@, @ukdy@, @ukdz@, @ukpx@, @ukpy@, @ukpz@, @pdk@, pga, //
       f, aewald, //
-      pfrcxi, pfrcyi, pfrczi, pfrcxk, pfrcyk, pfrczk,
+      @frcxi@, @frcyi@, @frczi@, @frcxk@, @frcyk@, @frczk@,
       @ufld0i@, @ufld1i@, @ufld2i@, @ufld0k@, @ufld1k@, @ufld2k@,
       @dufld0i@, @dufld1i@, @dufld2i@, @dufld3i@, @dufld4i@, @dufld5i@,
       @dufld0k@, @dufld1k@, @dufld2k@, @dufld3k@, @dufld4k@, @dufld5k@, //
@@ -164,22 +153,6 @@ SCALED_PAIRWISE_INTERACTION: |
       if CONSTEXPR (do_a) {
         if (scalec != 0 and e != 0) // pscale != 0
           neptl += 1;
-      }
-    }
-    if CONSTEXPR (do_g) {
-      @frcxi@ += wa * pfrcxi;
-      @frcyi@ += wa * pfrcyi;
-      @frczi@ += wa * pfrczi;
-      @frcxk@ += wa * pfrcxk;
-      @frcyk@ += wa * pfrcyk;
-      @frczk@ += wa * pfrczk;
-      if CONSTEXPR (do_gdl) {
-        @dfrcxi@ += wb * pfrcxi;
-        @dfrcyi@ += wb * pfrcyi;
-        @dfrczi@ += wb * pfrczi;
-        @dfrcxk@ += wb * pfrcxk;
-        @dfrcyk@ += wb * pfrcyk;
-        @dfrczk@ += wb * pfrczk;
       }
     }
     if CONSTEXPR (do_v) {
@@ -213,8 +186,6 @@ FULL_PAIRWISE_INTERACTION: |
   if (r2 <= off * off and incl) {
     real pga = thlval[njpolar * jpi[klane] + jpk];
     real e, vxx, vyx, vzx, vyy, vzy, vzz;
-    real pfrcxi = 0, pfrcyi = 0, pfrczi = 0;
-    real pfrcxk = 0, pfrcyk = 0, pfrczk = 0;
     pair_polar_v2<Ver, ETYP>(
       r2, xr, yr, zr, 1, 1, 1, //
       @ci@, @dix@, @diy@, @diz@, @qixx@, @qixy@, @qixz@, @qiyy@, @qiyz@, @qizz@,
@@ -222,7 +193,7 @@ FULL_PAIRWISE_INTERACTION: |
       @ck@, @dkx@, @dky@, @dkz@, @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@,
       @ukdx@, @ukdy@, @ukdz@, @ukpx@, @ukpy@, @ukpz@, @pdk@, pga, //
       f, aewald, //
-      pfrcxi, pfrcyi, pfrczi, pfrcxk, pfrcyk, pfrczk,
+      @frcxi@, @frcyi@, @frczi@, @frcxk@, @frcyk@, @frczk@,
       @ufld0i@, @ufld1i@, @ufld2i@, @ufld0k@, @ufld1k@, @ufld2k@,
       @dufld0i@, @dufld1i@, @dufld2i@, @dufld3i@, @dufld4i@, @dufld5i@,
       @dufld0k@, @dufld1k@, @dufld2k@, @dufld3k@, @dufld4k@, @dufld5k@, //
@@ -232,22 +203,6 @@ FULL_PAIRWISE_INTERACTION: |
       if CONSTEXPR (do_a) {
         if (e != 0)
           neptl += 1;
-      }
-    }
-    if CONSTEXPR (do_g) {
-      @frcxi@ += wa * pfrcxi;
-      @frcyi@ += wa * pfrcyi;
-      @frczi@ += wa * pfrczi;
-      @frcxk@ += wa * pfrcxk;
-      @frcyk@ += wa * pfrcyk;
-      @frczk@ += wa * pfrczk;
-      if CONSTEXPR (do_gdl) {
-        @dfrcxi@ += wb * pfrcxi;
-        @dfrcyi@ += wb * pfrcyi;
-        @dfrczi@ += wb * pfrczi;
-        @dfrcxk@ += wb * pfrcxk;
-        @dfrcyk@ += wb * pfrcyk;
-        @dfrczk@ += wb * pfrczk;
       }
     }
     if CONSTEXPR (do_v) {

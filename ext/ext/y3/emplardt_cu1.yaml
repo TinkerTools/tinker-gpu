@@ -1,0 +1,219 @@
+KERNEL_VERSION_NUMBER: 23
+
+OUTPUT_DIR: src/cu/amoeba
+KERNEL_NAME: emplardt_cu1
+TEMPLATE_PARAMS: template<class Ver, class ETYP>
+CONSTEXPR_FLAGS: |
+  // One dual topology subsystem of the fused multipole/polarization kernel.
+  // The pass masks rpole and polarity first, so every interaction it evaluates
+  // shares one set of weights and the accumulators can be scaled where they are
+  // flushed rather than pair by pair. emplarDecide() rules out calc::analyz, so
+  // there is no interaction count to keep.
+  //
+  //     energy, virial, gradient, torque  <- wa times the subsystem result
+  //     their lambda derivatives          <- wb, and wc for the second one
+  //
+  // The energy here is the permanent multipole part only; the polarization
+  // energy and its derivatives come from the induced dipole dot product.
+  constexpr bool do_e = Ver::e;
+  constexpr bool do_g = Ver::g;
+  constexpr bool do_v = Ver::v;
+  constexpr bool do_dl1 = Ver::e_dlmda1;
+  constexpr bool do_dl2 = Ver::e_dlmda2;
+  constexpr bool do_gdl = Ver::g_dlmda;
+  constexpr bool do_vdl = Ver::v_dlmda;
+  // The lambda torque is the one shared input: the lambda gradient resolves
+  // from it, and so does the torque part of the lambda virial.
+  constexpr bool do_tdl = Ver::g_dlmda or Ver::v_dlmda;
+  static_assert(!Ver::a, "");
+
+# COUNT:
+ENERGY:
+  - ebuf
+ENERGY_DLMDA1:
+  - edlbuf
+ENERGY_DLMDA2:
+  - d2edl2buf
+VIRIAL:
+  - vbuf
+VIRIAL_DLMDA:
+  - dvbuf
+GRADIENT:
+  - gx
+  - gy
+  - gz
+GRADIENT_DLMDA:
+  - dgx
+  - dgy
+  - dgz
+
+# CUT_DISTANCE:
+OFF_DISTANCE: 'off'
+
+# EXCLUDE_INFO: mdpuinfo
+SCALE_1X_TYPE: real4_const_array,0,1,2,3
+
+EXTRA_PARAMS: |
+  , real* restrict trqx, real* restrict trqy, real* restrict trqz
+  , real* restrict dltrqx, real* restrict dltrqy, real* restrict dltrqz
+  , const real (*restrict rpole)[10]
+  , const real (*restrict uind)[3], const real (*restrict uinp)[3]
+  , real f, real aewald
+  , real wa, real wb, real wc
+IMPLICIT_PARAMS:
+  - d::jpolar
+  - d::njpolar
+  - d::pdamp
+  - d::thlval
+
+I_VARIABLES:
+  - shared real xi   from:x
+  - shared real yi   from:y
+  - shared real zi   from:z
+  - shared real ci   from:rpole,MPL_PME_0
+  - shared real dix  from:rpole,MPL_PME_X
+  - shared real diy  from:rpole,MPL_PME_Y
+  - shared real diz  from:rpole,MPL_PME_Z
+  - shared real qixx from:rpole,MPL_PME_XX
+  - shared real qixy from:rpole,MPL_PME_XY
+  - shared real qixz from:rpole,MPL_PME_XZ
+  - shared real qiyy from:rpole,MPL_PME_YY
+  - shared real qiyz from:rpole,MPL_PME_YZ
+  - shared real qizz from:rpole,MPL_PME_ZZ
+  - shared real uidx from:uind,0
+  - shared real uidy from:uind,1
+  - shared real uidz from:uind,2
+  - shared real uipx from:uinp,0
+  - shared real uipy from:uinp,1
+  - shared real uipz from:uinp,2
+  - shared real pdi  from:pdamp
+  - shared int  jpi  from:jpolar
+K_VARIABLES:
+  - shared   real xk   from:x
+  - shared   real yk   from:y
+  - shared   real zk   from:z
+  - register real ck   from:rpole,MPL_PME_0
+  - shared   real dkx  from:rpole,MPL_PME_X
+  - shared   real dky  from:rpole,MPL_PME_Y
+  - shared   real dkz  from:rpole,MPL_PME_Z
+  - register real qkxx from:rpole,MPL_PME_XX
+  - register real qkxy from:rpole,MPL_PME_XY
+  - register real qkxz from:rpole,MPL_PME_XZ
+  - register real qkyy from:rpole,MPL_PME_YY
+  - register real qkyz from:rpole,MPL_PME_YZ
+  - register real qkzz from:rpole,MPL_PME_ZZ
+  - register real ukdx from:uind,0
+  - register real ukdy from:uind,1
+  - register real ukdz from:uind,2
+  - register real ukpx from:uinp,0
+  - register real ukpy from:uinp,1
+  - register real ukpz from:uinp,2
+  - register real pdk  from:pdamp
+  - register int  jpk  from:jpolar
+I_FORCE:
+  - register real frcxi addto:gx scale:wa dlsink:dgx,wb,do_gdl
+  - register real frcyi addto:gy scale:wa dlsink:dgy,wb,do_gdl
+  - register real frczi addto:gz scale:wa dlsink:dgz,wb,do_gdl
+  - register real trqxi addto:trqx scale:wa dlsink:dltrqx,wb,do_tdl
+  - register real trqyi addto:trqy scale:wa dlsink:dltrqy,wb,do_tdl
+  - register real trqzi addto:trqz scale:wa dlsink:dltrqz,wb,do_tdl
+K_FORCE:
+  - register real frcxk addto:gx scale:wa dlsink:dgx,wb,do_gdl
+  - register real frcyk addto:gy scale:wa dlsink:dgy,wb,do_gdl
+  - register real frczk addto:gz scale:wa dlsink:dgz,wb,do_gdl
+  - register real trqxk addto:trqx scale:wa dlsink:dltrqx,wb,do_tdl
+  - register real trqyk addto:trqy scale:wa dlsink:dltrqy,wb,do_tdl
+  - register real trqzk addto:trqz scale:wa dlsink:dltrqz,wb,do_tdl
+
+SCALED_PAIRWISE_INTERACTION: |
+  real xr = @xk@ - @xi@;
+  real yr = @yk@ - @yi@;
+  real zr = @zk@ - @zi@;
+  real r2 = image2(xr, yr, zr);
+  if (r2 <= off * off and incl) {
+    real pga = thlval[njpolar * jpi[klane] + jpk];
+    real e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1;
+    pairMplar<Ver, NON_EWALD>(
+      r2, make_real3(xr, yr, zr), scalea-1, scaleb-1, scalec-1, scaled-1,
+      @ci@, make_real3(@dix@, @diy@, @diz@),
+      @qixx@, @qixy@, @qixz@, @qiyy@, @qiyz@, @qizz@,
+      make_real3(@uidx@, @uidy@, @uidz@),
+      make_real3(@uipx@, @uipy@, @uipz@), @pdi@, pga,
+      @ck@, make_real3(@dkx@, @dky@, @dkz@),
+      @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@,
+      make_real3(@ukdx@, @ukdy@, @ukdz@),
+      make_real3(@ukpx@, @ukpy@, @ukpz@), @pdk@, pga,
+      f, aewald,
+      @frcxi@, @frcyi@, @frczi@, @frcxk@, @frcyk@, @frczk@,
+      @trqxi@, @trqyi@, @trqzi@, @trqxk@, @trqyk@, @trqzk@,
+      e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1);
+    if CONSTEXPR (do_e) {
+      ebuftl += floatTo<ebuf_prec>(wa * e1);
+      if CONSTEXPR (do_dl1)
+        edlbuftl += floatTo<ebuf_prec>(wb * e1);
+      if CONSTEXPR (do_dl2)
+        d2edl2buftl += floatTo<ebuf_prec>(wc * e1);
+    }
+    if CONSTEXPR (do_v) {
+      vbuftlxx += floatTo<vbuf_prec>(wa * vxx1);
+      vbuftlyx += floatTo<vbuf_prec>(wa * vyx1);
+      vbuftlzx += floatTo<vbuf_prec>(wa * vzx1);
+      vbuftlyy += floatTo<vbuf_prec>(wa * vyy1);
+      vbuftlzy += floatTo<vbuf_prec>(wa * vzy1);
+      vbuftlzz += floatTo<vbuf_prec>(wa * vzz1);
+      if CONSTEXPR (do_vdl) {
+        dvbuftlxx += floatTo<vbuf_prec>(wb * vxx1);
+        dvbuftlyx += floatTo<vbuf_prec>(wb * vyx1);
+        dvbuftlzx += floatTo<vbuf_prec>(wb * vzx1);
+        dvbuftlyy += floatTo<vbuf_prec>(wb * vyy1);
+        dvbuftlzy += floatTo<vbuf_prec>(wb * vzy1);
+        dvbuftlzz += floatTo<vbuf_prec>(wb * vzz1);
+      }
+    }
+  } // end if (include)
+FULL_PAIRWISE_INTERACTION: |
+  real xr = @xk@ - @xi@;
+  real yr = @yk@ - @yi@;
+  real zr = @zk@ - @zi@;
+  real r2 = image2(xr, yr, zr);
+  if (r2 <= off * off and incl) {
+    real pga = thlval[njpolar * jpi[klane] + jpk];
+    real e, vxx, vyx, vzx, vyy, vzy, vzz;
+    pairMplar<Ver, ETYP>(
+      r2, make_real3(xr, yr, zr), 1, 1, 1, 1,
+      @ci@, make_real3(@dix@, @diy@, @diz@),
+      @qixx@, @qixy@, @qixz@, @qiyy@, @qiyz@, @qizz@,
+      make_real3(@uidx@, @uidy@, @uidz@),
+      make_real3(@uipx@, @uipy@, @uipz@), @pdi@, pga,
+      @ck@, make_real3(@dkx@, @dky@, @dkz@),
+      @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@,
+      make_real3(@ukdx@, @ukdy@, @ukdz@),
+      make_real3(@ukpx@, @ukpy@, @ukpz@), @pdk@, pga,
+      f, aewald,
+      @frcxi@, @frcyi@, @frczi@, @frcxk@, @frcyk@, @frczk@,
+      @trqxi@, @trqyi@, @trqzi@, @trqxk@, @trqyk@, @trqzk@,
+      e, vxx, vyx, vzx, vyy, vzy, vzz);
+    if CONSTEXPR (do_e) {
+      ebuftl += floatTo<ebuf_prec>(wa * e);
+      if CONSTEXPR (do_dl1)
+        edlbuftl += floatTo<ebuf_prec>(wb * e);
+      if CONSTEXPR (do_dl2)
+        d2edl2buftl += floatTo<ebuf_prec>(wc * e);
+    }
+    if CONSTEXPR (do_v) {
+      vbuftlxx += floatTo<vbuf_prec>(wa * vxx);
+      vbuftlyx += floatTo<vbuf_prec>(wa * vyx);
+      vbuftlzx += floatTo<vbuf_prec>(wa * vzx);
+      vbuftlyy += floatTo<vbuf_prec>(wa * vyy);
+      vbuftlzy += floatTo<vbuf_prec>(wa * vzy);
+      vbuftlzz += floatTo<vbuf_prec>(wa * vzz);
+      if CONSTEXPR (do_vdl) {
+        dvbuftlxx += floatTo<vbuf_prec>(wb * vxx);
+        dvbuftlyx += floatTo<vbuf_prec>(wb * vyx);
+        dvbuftlzx += floatTo<vbuf_prec>(wb * vzx);
+        dvbuftlyy += floatTo<vbuf_prec>(wb * vyy);
+        dvbuftlzy += floatTo<vbuf_prec>(wb * vzy);
+        dvbuftlzz += floatTo<vbuf_prec>(wb * vzz);
+      }
+    }
+  } // end if (include)

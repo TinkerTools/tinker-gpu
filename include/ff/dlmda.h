@@ -146,24 +146,17 @@ int dtPassList(bool relative, RelState ist0, RelState ist1, DtPass out[nRelSlot]
 /// may skip.
 void dtPassWeights(const DtCoef& c, const DtPass& p, real& wa, real& wb, real& wc);
 
-/// The accumulator protocol of one dual topology term.
-struct RelDualOps
+inline DtCoef dtCoefUniform(real wa, real wb, real wc)
 {
-   /// Evaluates one subsystem into the work buffer.
-   void (*state)(int vers, RdtMask mask, bool first_state);
-   /// Clears the work buffer, and the interaction count under calc::analyz.
-   void (*zeroWork)(int vers);
-   /// Copies the work buffer aside as endpoint 0.
-   void (*save)(int vers);
-   /// work <- w*work + (1-w)*saved, plus the dE/dL channels.
-   void (*mix)(int vers);
-};
+   DtCoef c;
+   c.in0bits = 0;
+   c.in1bits = 0x1ffu; // all nine group-pair cells
+   c.cntbits = 0;
+   c.a0 = 0, c.b0 = 0, c.c0 = 0;
+   c.a1 = wa, c.b1 = wb, c.c1 = wc;
+   return c;
+}
 
-/// Runs one relative dual topology term: builds the two coupling state
-/// endpoints out of parameter-zeroed subsystems and interpolates between them,
-///
-///     E = weight1*E(ist1) + (1-weight1)*E(ist0)
-void relDualDrive(int vers, RelState ist0, RelState ist1, bool need0, bool need1, const RelDualOps& ops);
 
 /// Quintic switching polynomial
 void quinticTaper(double x, double cut, double off, double& taper, double& dtaper, double& d2taper);
@@ -181,10 +174,6 @@ void dlmdaData2(RcOp op);
 /// Mean and population standard deviation of v[begin, begin+count).
 void avgstd(const std::vector<double>& v, int begin, int count, double& avg, double& sd);
 
-void adtMix(int vers, bool do_dlmda, int n, size_t buffer_size, double weight1, double dweight1, double d2weight1,
-   const EnergyBufferTraits::type* e0, EnergyBuffer e1, EnergyBuffer dedl, EnergyBuffer d2edl2, VirialBuffer v0,
-   VirialBuffer v1, VirialBuffer dvdl, const grad_prec* gx0, const grad_prec* gy0, const grad_prec* gz0,
-   grad_prec* gx1, grad_prec* gy1, grad_prec* gz1, grad_prec* dgxdl, grad_prec* dgydl, grad_prec* dgzdl);
 TINKER_EXTERN bool use_dlmda;
 TINKER_EXTERN bool use_emdt;
 TINKER_EXTERN bool use_epdt;
@@ -317,8 +306,6 @@ TINKER_EXTERN int* rdt_group;
 TINKER_EXTERN real (*poleorig)[MPL_TOTAL];
 TINKER_EXTERN real* polarityorig;
 
-// lambda derivative accumulators.
-TINKER_EXTERN DualEndpoint em_snap;
 
 TINKER_EXTERN EnergyBuffer dedl_buf;
 TINKER_EXTERN EnergyBuffer demdl_buf;

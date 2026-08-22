@@ -13,8 +13,6 @@ struct AccumRef
    grad_prec* gx = nullptr;
    grad_prec* gy = nullptr;
    grad_prec* gz = nullptr;
-   /// Optional second energy channel
-   EnergyBuffer e2 = nullptr;
 };
 
 /// \ingroup ff
@@ -26,7 +24,6 @@ struct TermSlots
    grad_prec** gx = nullptr;
    grad_prec** gy = nullptr;
    grad_prec** gz = nullptr;
-   EnergyBuffer* e2 = nullptr; ///< \see AccumRef::e2
 };
 
 /// \ingroup ff
@@ -35,7 +32,6 @@ struct HostAccum
 {
    energy_prec* e = nullptr;
    virial_prec (*v)[9] = nullptr;
-   energy_prec* e2 = nullptr; ///< \see AccumRef::e2
 };
 
 /// \ingroup ff
@@ -74,22 +70,4 @@ private:
    bool mAllocated = false;
 };
 
-/// \ingroup ff
-/// The state-0 snapshot and the lambda mix for one dual topology term.
-class DualEndpoint
-{
-public:
-   void manage(RcOp op, int flag, bool need_private);
-
-   /// Copies the current accumulators aside as endpoint 0.
-   void save(int vers, const TermBuffer& cur);
-
-   void mix(int vers, double weight1, double dweight1, double d2weight1, bool do_dlmda,
-      const TermBuffer& cur, AccumRef dl);
-
-private:
-   AccumRef mBuf;
-   int mFlag = 0;
-   bool mAllocated = false;
-};
 }

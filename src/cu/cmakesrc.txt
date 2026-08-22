@@ -1,6 +1,7 @@
 set (__T9_CU_SRC
 amoeba/binding.cu
 amoeba/emplar.cu
+amoeba/emplardt.cu
 amoeba/empole.cu
 amoeba/empoledlmda.cu
 amoeba/empoledt.cu
@@ -42,7 +43,6 @@ mdpq.cu
 mdpt.cu
 minimize.cu
 nn.cu
-ost.cu
 pme.cu
 rattle.cu
 spatial.cu

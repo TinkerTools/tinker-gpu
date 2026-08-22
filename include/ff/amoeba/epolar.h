@@ -53,7 +53,8 @@ void epolar_dt(int vers);
 void polarState(RdtMask mask, const int* group);
 void epolarEwaldRecipSelf(int vers, EnergyBuffer out_e, VirialBuffer out_v,
    grad_prec* out_gx, grad_prec* out_gy, grad_prec* out_gz);
-void epolarEwaldRecipSelfDt(int vers, const RecipDt& dt);
+void epolarEwaldRecipSelfDt(int vers, EnergyBuffer out_e, VirialBuffer out_v, grad_prec* out_gx,
+   grad_prec* out_gy, grad_prec* out_gz, const RecipDt& dt);
 // see also subroutine epolar0e in epolar.f
 void epolar0DotProd(const real (*uind)[3], const real (*udirp)[3], EnergyBuffer eout);
 void epolarPairwiseExtfield(int vers, const real (*uind)[3]);

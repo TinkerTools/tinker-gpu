@@ -311,6 +311,7 @@ class Variable:
         self.type = vs[1]
         self.name = vs[2]
         self.readfrom, self.addto, self.onlyif = None, None, None
+        self.scale, self.dlsink = None, None
         for i in range(3, len(vs)):
             s2 = vs[i]
             if s2.startswith('from:'):
@@ -322,6 +323,12 @@ class Variable:
             elif s2.startswith('onlyif:'):
                 s3 = s2.replace('onlyif:', '')
                 self.onlyif = s3
+            elif s2.startswith('scale:'):
+                self.scale = s2.replace('scale:', '')
+            elif s2.startswith('dlsink:'):
+                self.dlsink = s2.replace('dlsink:', '').split(',')
+                if len(self.dlsink) != 3:
+                    raise ValueError('dlsink: needs destination,scale,gate')
 
     @staticmethod
     def _get_src(src, index) -> str:
@@ -341,18 +348,26 @@ class Variable:
             v1 = 'if CONSTEXPR ({}) {}'.format(self.onlyif, v1)
         return v1
 
-    def save(self) -> str:
-        dst = self.addto
-        v1, suffix = '', ''
-        if self.location == 'shared':
-            suffix = '[threadIdx.x]'
+    def _add_to(self, dst, scale) -> str:
+        suffix = '[threadIdx.x]' if self.location == 'shared' else ''
+        value = '{}{}'.format(self.name, suffix)
+        if scale is not None:
+            value = '{} * {}'.format(scale, value)
         if ',' not in dst:
-            v1 = 'atomic_add({}{}, {}, {});'.format(self.name, suffix, dst, self.iork)
-        else:
-            vs = dst.split(',')
-            v1 = 'atomic_add({}{}, &{}[{}][{}]);'.format(self.name, suffix, vs[0], self.iork, vs[1])
+            return 'atomic_add({}, {}, {});'.format(value, dst, self.iork)
+        vs = dst.split(',')
+        return 'atomic_add({}, &{}[{}][{}]);'.format(value, vs[0], self.iork, vs[1])
+
+    def save(self) -> str:
+        v1 = self._add_to(self.addto, self.scale)
+        braces = False
+        if self.dlsink is not None:
+            dst, scale, gate = self.dlsink
+            v1 = v1 + 'if CONSTEXPR ({}) {}'.format(gate, self._add_to(dst, scale))
+            braces = True # two statements now
         if self.onlyif is not None:
-            v1 = 'if CONSTEXPR ({}) {}'.format(self.onlyif, v1)
+            fmt = 'if CONSTEXPR ({}) {{{}}}' if braces else 'if CONSTEXPR ({}) {}'
+            v1 = fmt.format(self.onlyif, v1)
         return v1
 
     def init_exclude(self) -> str:

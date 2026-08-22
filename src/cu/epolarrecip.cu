@@ -581,14 +581,16 @@ void epolarEwaldRecipSelf_cu(int vers, const real (*uind)[3], const real (*uinp)
 // v7-v10 do the same work as v1 and v4, with their lambda derivative channels
 // arriving through the RecipDt sinks instead. The energy channel comes off
 // wherever the dot product already supplied it, which is everything but v3.
-void epolarEwaldRecipSelfDt_cu(int vers, const real (*uind)[3], const real (*uinp)[3], const RecipDt& dt)
+void epolarEwaldRecipSelfDt_cu(int vers, const real (*uind)[3], const real (*uinp)[3], EnergyBuffer out_e,
+   VirialBuffer out_v, grad_prec* out_gx, grad_prec* out_gy, grad_prec* out_gz, const RecipDt& dt)
 {
-   // calc::v0 never reaches here: with only an energy wanted the dot product is
-   // the whole answer and the caller skips the kernels.
    int base = vers;
-   if (epolarEnergyFromDotProd(vers))
+   if (epolarEnergyFromDotProd(vers)) {
+      if (not(vers & calc::grad))
+         return;
       base = (vers & calc::virial) ? calc::v6 : calc::v5;
-   epolarEwaldRecipSelfVers_cu(base, uind, uinp, ep, vir_ep, depx, depy, depz, dt);
+   }
+   epolarEwaldRecipSelfVers_cu(base, uind, uinp, out_e, out_v, out_gx, out_gy, out_gz, dt);
 }
 }
 
