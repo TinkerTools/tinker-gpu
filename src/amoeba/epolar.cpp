@@ -32,6 +32,7 @@
 
 namespace tinker {
 static unsigned polar_active_mask;
+static LmdaBuffer ep_dl;
 
 TINKER_FVOID2(cpp0, cu1, epolarDataBinding, RcOp);
 void epolarData(RcOp op)
@@ -61,10 +62,7 @@ void epolarData(RcOp op)
       if (rc_a)
          bufferDeallocate(rc_flag, nep);
       ep_buf.manage(op, rc_flag, {}, {}, false);
-      if (rc_a)
-         darray::deallocate(depdl_buf, d2epdl2_buf);
-      depdl_buf = nullptr;
-      d2epdl2_buf = nullptr;
+      ep_dl.manage(op, rc_flag, use_pdlmda, &depdl_buf, &d2epdl2_buf, &depdl, &d2epdl2);
       nep = nullptr;
       polar_active_mask = 0;
 
@@ -420,21 +418,7 @@ void epolarData(RcOp op)
       ep_buf.manage(op, rc_flag, {&ep, &vir_ep, &depx, &depy, &depz},
          {eng_buf_elec, vir_buf_elec, gx_elec, gy_elec, gz_elec}, rc_a, //
          {&energy_ep, &virial_ep}, {&energy_elec, &virial_elec});
-      const int dlmask = lmdaDerivMask(rc_flag, use_pdlmda);
-      depdl_buf = nullptr;
-      d2epdl2_buf = nullptr;
-      if (dlmask & calc::energy_dlmda1) {
-         if (rc_a)
-            darray::allocate(bufferSize(), &depdl_buf);
-         else
-            depdl_buf = dedl_buf;
-      }
-      if (dlmask & calc::energy_dlmda2) {
-         if (rc_a)
-            darray::allocate(bufferSize(), &d2epdl2_buf);
-         else
-            d2epdl2_buf = d2edl2_buf;
-      }
+      ep_dl.manage(op, rc_flag, use_pdlmda, &depdl_buf, &d2epdl2_buf, &depdl, &d2epdl2);
       if (rc_a)
          bufferAllocate(rc_flag, &nep);
 
@@ -708,33 +692,15 @@ static void epolarZeroWork(int vers)
 
 static void epolarBegin(int vers)
 {
-   const int dlmask = lmdaDerivMask(vers, use_pdlmda);
    zeroOnHost(energy_ep, virial_ep);
    epolarZeroWork(vers);
-   if (rc_flag & calc::analyz) {
-      if (dlmask & calc::energy_dlmda1)
-         darray::zero(g::q0, bufferSize(), depdl_buf);
-      if (dlmask & calc::energy_dlmda2)
-         darray::zero(g::q0, bufferSize(), d2epdl2_buf);
-   }
+   ep_dl.zero(vers);
 }
 
 static void epolarFinish(int vers)
 {
-   const int dlmask = lmdaDerivMask(vers, use_pdlmda);
    ep_buf.flush(vers);
-   if (rc_flag & calc::analyz) {
-      if (dlmask & calc::energy_dlmda1) {
-         energy_prec e = energyReduce(depdl_buf);
-         depdl += e;
-         dedl += e;
-      }
-      if (dlmask & calc::energy_dlmda2) {
-         energy_prec e = energyReduce(d2epdl2_buf);
-         d2epdl2 += e;
-         d2edl2 += e;
-      }
-   }
+   ep_dl.flush(vers);
 }
 
 static bool epolarStateHasActiveSite(RdtMask mask)
@@ -770,9 +736,13 @@ void epolarEwaldRecipSelfDt(int vers, EnergyBuffer out_e, VirialBuffer out_v, gr
    TINKER_FCALL2(acc0, cu1, epolarEwaldRecipSelfDt, vers, uind, uinp, out_e, out_v, out_gx, out_gy, out_gz, dt);
 }
 
-// The lambda-derivative sinks a pass writes into, gated by what the version
-// asks for. A null sink tells the kernels the channel was not requested.
-static RecipDt epolarRecipDt(int vers, real wa, real wb)
+void dtRestoreFullState(const int* group)
+{
+   mpoleRestoreFullState(group);
+   polarState(RdtMask::ALL, group);
+}
+
+RecipDt dtRecipSinks(int vers, real wa, real wb)
 {
    RecipDt dt;
    dt.wa = wa;
@@ -818,7 +788,7 @@ static void epolarState(int vers, RdtMask mask, const int* group, bool first_sta
    if (vers != calc::v0) {
       if (useEwald()) {
          TINKER_FCALL2(acc0, cu1, epolarEwaldRealDt, vers, uind, uinp, wa, wb);
-         epolarEwaldRecipSelfDt(vers, ep, vir_ep, depx, depy, depz, epolarRecipDt(vers, wa, wb));
+         epolarEwaldRecipSelfDt(vers, ep, vir_ep, depx, depy, depz, dtRecipSinks(vers, wa, wb));
       } else {
          TINKER_FCALL2(acc0, cu1, epolarNonEwaldDt, vers, uind, uinp, wa, wb);
       }
@@ -885,10 +855,9 @@ void epolar_dt(int vers)
    for (int k = 0; k < npass; ++k) {
       real wa, wb, wc;
       dtPassWeights(c, pass[k], wa, wb, wc);
-      // A subsystem of a dead endpoint carries no weight and no derivative.
-      if (wa == 0 and wb == 0 and wc == 0)
-         continue;
       const bool counts = do_a and epolarCounts(pass[k], relative, coupled, need1);
+      if (dtPassIsIdle(dvers, wa, wb, wc, counts))
+         continue;
       epolarState(counts ? dvers : dvers & ~calc::analyz, pass[k].mask, group, first, wa, wb, wc);
       first = false;
    }
@@ -902,10 +871,8 @@ void epolar_dt(int vers)
 
    epolarFinish(vers);
 
-   // The last pass leaves rpole and polarity masked down to a subsystem;
-   // restore the full system for whatever runs next.
-   mpoleInitState(calc::v0, RdtMask::ALL, group, false);
-   polarState(RdtMask::ALL, group);
+   // The last pass leaves rpole and polarity masked down to a subsystem.
+   dtRestoreFullState(group);
 }
 
 TINKER_FVOID2(acc1, cu1, epolar0DotProd, const real (*)[3], const real (*)[3], EnergyBuffer);

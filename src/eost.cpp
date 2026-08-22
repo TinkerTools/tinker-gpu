@@ -733,7 +733,7 @@ void resizeMeta()
 }
 
 // Device scaffold (disabled). A future GPU port of the bicubic-Hermite bias
-// evaluator would be dispatched here, following the adtMix pattern in ost.cpp.
+// evaluator would be dispatched here, following the pattern in ost.cpp.
 // See src/acc/eost.cpp and src/cu/eost.cu. Enable together with those files.
 //   TINKER_FVOID2(acc0, cu1, eostBiasGrid, /* grid ptrs, sample, outputs */);
 

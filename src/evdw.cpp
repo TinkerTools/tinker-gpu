@@ -26,6 +26,8 @@
 #include <cassert>
 
 namespace tinker {
+static LmdaBuffer ev_dl;
+
 inline namespace v1 {
 using new_type = int; // new vdw class/type
 using old_type = int; // old vdw class/type
@@ -107,10 +109,7 @@ void evdwData(RcOp op)
       if (rc_a)
          bufferDeallocate(rc_flag, nev);
       ev_buf.manage(op, rc_flag, {}, {}, false);
-      if (rc_a)
-         darray::deallocate(devdl_buf, d2evdl2_buf);
-      devdl_buf = nullptr;
-      d2evdl2_buf = nullptr;
+      ev_dl.manage(op, rc_flag, use_vdlmda, &devdl_buf, &d2evdl2_buf, &devdl, &d2evdl2);
       nev = nullptr;
       gxred_dlmda = nullptr;
       gyred_dlmda = nullptr;
@@ -405,20 +404,7 @@ void evdwData(RcOp op)
       ev_buf.manage(op, rc_flag, {&ev, &vir_ev, &devx, &devy, &devz},
          {eng_buf_vdw, vir_buf_vdw, gx_vdw, gy_vdw, gz_vdw}, rc_a, //
          {&energy_ev, &virial_ev}, {&energy_vdw, &virial_vdw});
-      devdl_buf = nullptr;
-      d2evdl2_buf = nullptr;
-      if (dlmask & calc::energy_dlmda1) {
-         if (rc_a)
-            darray::allocate(bufferSize(), &devdl_buf);
-         else
-            devdl_buf = dedl_buf;
-      }
-      if (dlmask & calc::energy_dlmda2) {
-         if (rc_a)
-            darray::allocate(bufferSize(), &d2evdl2_buf);
-         else
-            d2evdl2_buf = d2edl2_buf;
-      }
+      ev_dl.manage(op, rc_flag, use_vdlmda, &devdl_buf, &d2evdl2_buf, &devdl, &d2evdl2);
       if (rc_a)
          bufferAllocate(rc_flag, &nev);
    }
@@ -545,13 +531,7 @@ static void evdwZeroBuffers(int vers)
    if (rc_a and do_a)
       darray::zero(g::q0, bufferSize(), nev);
    ev_buf.zero(vers);
-   if (rc_a) {
-      const int vdl = lmdaDerivVers(vers, use_vdlmda);
-      if (vdl & calc::energy_dlmda1)
-         darray::zero(g::q0, bufferSize(), devdl_buf);
-      if (vdl & calc::energy_dlmda2)
-         darray::zero(g::q0, bufferSize(), d2evdl2_buf);
-   }
+   ev_dl.zero(vers);
 }
 
 static void evdwBegin(int vers)
@@ -619,18 +599,7 @@ static void evdwFinish(int vers, energy_prec elrcv, virial_prec vlrcv, energy_pr
       }
    }
    ev_buf.flush(vers);
-   if (rc_a) {
-      if (vdl & calc::energy_dlmda1) {
-         energy_prec e = energyReduce(devdl_buf);
-         devdl += e;
-         dedl += e;
-      }
-      if (vdl & calc::energy_dlmda2) {
-         energy_prec e = energyReduce(d2evdl2_buf);
-         d2evdl2 += e;
-         d2edl2 += e;
-      }
-   }
+   ev_dl.flush(vers);
 }
 
 void evdw(int vers)

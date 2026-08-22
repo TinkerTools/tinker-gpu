@@ -51,6 +51,8 @@ void epolarData(RcOp);
 void epolar(int vers);
 void epolar_dt(int vers);
 void polarState(RdtMask mask, const int* group);
+void dtRestoreFullState(const int* group);
+RecipDt dtRecipSinks(int vers, real wa, real wb);
 void epolarEwaldRecipSelf(int vers, EnergyBuffer out_e, VirialBuffer out_v,
    grad_prec* out_gx, grad_prec* out_gy, grad_prec* out_gz);
 void epolarEwaldRecipSelfDt(int vers, EnergyBuffer out_e, VirialBuffer out_v, grad_prec* out_gx,

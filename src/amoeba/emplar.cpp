@@ -125,30 +125,6 @@ static void emplarBegin(int vers)
    zeroOnHost(energy_ep, virial_ep);
 }
 
-// Where a pass sends its polarization reciprocal-space lambda derivatives. The
-// energy channels are absent by construction: the dot product owns those.
-static RecipDt emplarRecipDt(int vers, real wa, real wb)
-{
-   RecipDt dt;
-   dt.wa = wa;
-   dt.wb = wb;
-   if (vers & calc::virial_dlmda)
-      dt.vdl = dvirdl_buf;
-   if (vers & calc::grad_dlmda) {
-      dt.dgx = dfdlx;
-      dt.dgy = dfdly;
-      dt.dgz = dfdlz;
-   }
-   // The lambda torque feeds both the lambda gradient and the torque part of
-   // the lambda virial, so either one is reason enough to accumulate it.
-   if (vers & (calc::grad_dlmda | calc::virial_dlmda)) {
-      dt.dltrqx = dltrqx;
-      dt.dltrqy = dltrqy;
-      dt.dltrqz = dltrqz;
-   }
-   return dt;
-}
-
 /// Evaluates one dual topology subsystem straight into the fused accumulators.
 /// The pass masks rpole and polarity first, so one set of weights covers
 /// everything it touches, and nothing is reduced or copied aside between passes.
@@ -167,7 +143,7 @@ static void emplarState(int vers, RdtMask mask, const int* group, bool first_sta
    if (useEwald()) {
       empoleEwaldRecipDt(vers, mask, wa, wb, wc);
       const AccumRef out = em_buf.ref();
-      epolarEwaldRecipSelfDt(vers, out.e, out.v, out.gx, out.gy, out.gz, emplarRecipDt(vers, wa, wb));
+      epolarEwaldRecipSelfDt(vers, out.e, out.v, out.gx, out.gy, out.gz, dtRecipSinks(vers, wa, wb));
    }
    // the polarization energy, and with it both of its lambda derivatives
    if (vers & calc::energy)
@@ -205,11 +181,8 @@ void emplar_dt(int vers)
    for (int k = 0; k < npass; ++k) {
       real wa, wb, wc;
       dtPassWeights(c, pass[k], wa, wb, wc);
-      // A subsystem contributes nothing when it has no weight in any channel
-      // this version actually computes; wb and wc only matter when the version
-      // asks for a lambda derivative.
-      const bool dl = dvers & (calc::energy_dlmda1 | calc::energy_dlmda2 | calc::grad_dlmda | calc::virial_dlmda);
-      if (wa == 0 and (not dl or (wb == 0 and wc == 0)))
+      // emplar never counts, so nothing obliges a weightless pass to run.
+      if (dtPassIsIdle(dvers, wa, wb, wc, false))
          continue;
       emplarState(dvers, pass[k].mask, group, first, wa, wb, wc);
       first = false;
@@ -224,9 +197,7 @@ void emplar_dt(int vers)
 
    empoleFinish(vers);
 
-   // The last pass leaves rpole and polarity masked down to a subsystem;
-   // restore the full system for whatever runs next.
-   mpoleInitState(calc::v0, RdtMask::ALL, group, false);
-   polarState(RdtMask::ALL, group);
+   // The last pass leaves rpole and polarity masked down to a subsystem.
+   dtRestoreFullState(group);
 }
 }

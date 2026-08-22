@@ -108,10 +108,8 @@ void mpoleInitDt(int vers)
       mpoleInitEwald(false, true, false, false);
 }
 
-// The dual topology driver accumulates torque over every subsystem and converts
-// it once at the end, so the torque buffers are cleared on the first pass only.
-// mpoleInitState() keeps clearing them per pass for emplar, which converts as it
-// goes.
+// A dual topology driver accumulates torque over every subsystem and converts it
+// once at the end, so the torque buffers are cleared on the first pass only.
 void mpoleInitStateDt(int vers, RdtMask mask, const int* group, bool first_state)
 {
    if (first_state) {
@@ -123,13 +121,13 @@ void mpoleInitStateDt(int vers, RdtMask mask, const int* group, bool first_state
       mpoleInitEwald(false, first_state, first_state);
 }
 
-void mpoleInitState(int vers, RdtMask mask, const int* group, bool first_state, bool polar)
+// Undoes the masking a dual topology run leaves behind, so whatever runs next
+// sees the whole system again. rpole is rebuilt from the full set of atoms, and
+// with it cmp, which the next term's reciprocal space work reads.
+void mpoleRestoreFullState(const int* group)
 {
-   mpoleInitBuffers(vers, false);
-   if (first_state)
-      chkpole();
-   rotpoleState(mask, group);
+   rotpoleState(RdtMask::ALL, group);
    if (useEwald())
-      mpoleInitEwald(false, first_state, first_state && polar);
+      mpoleInitEwald(false, false, false);
 }
 }

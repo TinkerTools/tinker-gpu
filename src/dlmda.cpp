@@ -130,7 +130,7 @@ unsigned dtStateBits(RelState ist)
    return bits;
 }
 
-// Mirrors the count gating of relDualDrive below. Within the reported endpoint
+// Mirrors the count gating the dual topology drivers apply. Within the reported endpoint
 // a single ligand-plus-environment subsystem carries the whole count if there
 // is one; a decoupled endpoint has none, so its subsystems sum.
 unsigned dtCountBits(RelState reported)
@@ -185,7 +185,7 @@ int dtCountSlots(RelState reported)
 }
 
 // E = w*E1 + (1-w)*E0, so dE/dl = dw*(E1-E0) and d2E/dl2 = d2w*(E1-E0), which
-// is what adtMix used to form from the two finished endpoints. Both terms of
+// is what the endpoint mixing used to form from two finished endpoints. Both terms of
 // the second-derivative chain rule are proportional to E1-E0, so the whole of
 // it collapses onto one scalar per endpoint. need0/need1 are not consulted: a
 // dead endpoint already falls out with every weight at zero.
@@ -229,6 +229,80 @@ void dtWeightNeed(double sublmda, int dtexp, double chain, double d2chain, //
 {
    dtWeight(sublmda, dtexp, w, dw, d2w);
    dtNeed(w, dw, d2w, chain, d2chain, need0, need1);
+}
+
+void LmdaBuffer::manage(RcOp op, int flag, bool driven, EnergyBuffer* dl1, EnergyBuffer* dl2,
+   energy_prec* term1, energy_prec* term2)
+{
+   const bool rc_a = flag & calc::analyz;
+
+   if (op & RcOp::DEALLOC) {
+      if (rc_a and mDl1)
+         darray::deallocate(*mDl1, *mDl2);
+      if (mDl1) {
+         *mDl1 = nullptr;
+         *mDl2 = nullptr;
+      }
+      mDl1 = nullptr;
+      mDl2 = nullptr;
+      mTerm1 = nullptr;
+      mTerm2 = nullptr;
+      mFlag = 0;
+      mDriven = false;
+   }
+
+   if (op & RcOp::ALLOC) {
+      mDl1 = dl1;
+      mDl2 = dl2;
+      mTerm1 = term1;
+      mTerm2 = term2;
+      mFlag = flag;
+      mDriven = driven;
+
+      const int mask = lmdaDerivMask(flag, driven);
+      *dl1 = nullptr;
+      *dl2 = nullptr;
+      if (mask & calc::energy_dlmda1) {
+         if (rc_a)
+            darray::allocate(bufferSize(), dl1);
+         else
+            *dl1 = dedl_buf;
+      }
+      if (mask & calc::energy_dlmda2) {
+         if (rc_a)
+            darray::allocate(bufferSize(), dl2);
+         else
+            *dl2 = d2edl2_buf;
+      }
+   }
+}
+
+void LmdaBuffer::zero(int vers) const
+{
+   if (not(mFlag & calc::analyz) or not mDl1)
+      return;
+   const int mask = lmdaDerivMask(vers, mDriven);
+   if (mask & calc::energy_dlmda1)
+      darray::zero(g::q0, bufferSize(), *mDl1);
+   if (mask & calc::energy_dlmda2)
+      darray::zero(g::q0, bufferSize(), *mDl2);
+}
+
+void LmdaBuffer::flush(int vers) const
+{
+   if (not(mFlag & calc::analyz) or not mDl1)
+      return;
+   const int mask = lmdaDerivMask(vers, mDriven);
+   if (mask & calc::energy_dlmda1) {
+      energy_prec e = energyReduce(*mDl1);
+      *mTerm1 += e;
+      dedl += e;
+   }
+   if (mask & calc::energy_dlmda2) {
+      energy_prec e = energyReduce(*mDl2);
+      *mTerm2 += e;
+      d2edl2 += e;
+   }
 }
 
 int dtPassList(bool relative, RelState ist0, RelState ist1, DtPass out[nRelSlot])

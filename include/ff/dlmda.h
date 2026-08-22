@@ -146,6 +146,24 @@ int dtPassList(bool relative, RelState ist0, RelState ist1, DtPass out[nRelSlot]
 /// may skip.
 void dtPassWeights(const DtCoef& c, const DtPass& p, real& wa, real& wb, real& wc);
 
+/// Whether a pass can be skipped outright because it contributes to nothing
+/// this version computes. The derivative weights only matter when a derivative
+/// channel is switched on, so an endpoint that carries no interpolation weight
+/// is dead work at, say, calc::v0 even while its wb is nonzero.
+///
+/// \c counts must be true for a pass whose interactions are the ones analysis
+/// reports: dtNeed() picks the reported endpoint from the chain rule rather
+/// than from the weight, so that endpoint can have wa == 0 and still owe a
+/// count.
+inline bool dtPassIsIdle(int vers, real wa, real wb, real wc, bool counts)
+{
+   if (wa != 0 or counts)
+      return false;
+   const int dl = vers
+      & (calc::energy_dlmda1 | calc::energy_dlmda2 | calc::grad_dlmda | calc::virial_dlmda);
+   return not dl or (wb == 0 and wc == 0);
+}
+
 inline DtCoef dtCoefUniform(real wa, real wb, real wc)
 {
    DtCoef c;
@@ -326,6 +344,36 @@ TINKER_EXTERN energy_prec d2edl2;
 TINKER_EXTERN energy_prec d2emdl2;
 TINKER_EXTERN energy_prec d2epdl2;
 TINKER_EXTERN energy_prec d2evdl2;
+
+/// \ingroup ff
+/// The two lambda-derivative energy channels of one term, dE/dL and d2E/dL2.
+/// They follow the same storage policy as TermBuffer: private under analysis,
+/// where the term reports a breakdown of its own, and aliased onto the shared
+/// dedl_buf/d2edl2_buf otherwise, where the kernels add into the total directly
+/// and there is nothing to zero or reduce.
+class LmdaBuffer
+{
+public:
+   /// Binds the term's buffers and host scalars, and allocates or frees as the
+   /// policy requires. \c driven is false when the main lambda does not drive
+   /// this term, which leaves both channels unused.
+   void manage(RcOp op, int flag, bool driven, EnergyBuffer* dl1, EnergyBuffer* dl2,
+      energy_prec* term1, energy_prec* term2);
+
+   /// Clears whichever channels this version asks for.
+   void zero(int vers) const;
+
+   /// Reduces them into the term's scalars and the totals.
+   void flush(int vers) const;
+
+private:
+   EnergyBuffer* mDl1 = nullptr;
+   EnergyBuffer* mDl2 = nullptr;
+   energy_prec* mTerm1 = nullptr;
+   energy_prec* mTerm2 = nullptr;
+   int mFlag = 0;
+   bool mDriven = false;
+};
 
 TINKER_EXTERN VirialBuffer dvirdl_buf;
 

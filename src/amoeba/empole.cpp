@@ -19,6 +19,8 @@
 #include <tinker/detail/mutant.hh>
 
 namespace tinker {
+static LmdaBuffer em_dl;
+
 void empoleData(RcOp op)
 {
    if (not use(Potent::MPOLE))
@@ -32,10 +34,7 @@ void empoleData(RcOp op)
       if (rc_a)
          bufferDeallocate(rc_flag, nem);
       em_buf.manage(op, rc_flag, {}, {}, false);
-      if (rc_a)
-         darray::deallocate(demdl_buf, d2emdl2_buf);
-      demdl_buf = nullptr;
-      d2emdl2_buf = nullptr;
+      em_dl.manage(op, rc_flag, use_edlmda, &demdl_buf, &d2emdl2_buf, &demdl, &d2emdl2);
       nem = nullptr;
    }
 
@@ -45,21 +44,7 @@ void empoleData(RcOp op)
          {eng_buf_elec, vir_buf_elec, gx_elec, gy_elec, gz_elec}, rc_a, //
          {&energy_em, &virial_em}, {&energy_elec, &virial_elec});
 
-      const int dlmask = lmdaDerivMask(rc_flag, use_edlmda);
-      demdl_buf = nullptr;
-      d2emdl2_buf = nullptr;
-      if (dlmask & calc::energy_dlmda1) {
-         if (rc_a)
-            darray::allocate(bufferSize(), &demdl_buf);
-         else
-            demdl_buf = dedl_buf;
-      }
-      if (dlmask & calc::energy_dlmda2) {
-         if (rc_a)
-            darray::allocate(bufferSize(), &d2emdl2_buf);
-         else
-            d2emdl2_buf = d2edl2_buf;
-      }
+      em_dl.manage(op, rc_flag, use_edlmda, &demdl_buf, &d2emdl2_buf, &demdl, &d2emdl2);
 
       if (rc_a)
          bufferAllocate(rc_flag, &nem);
@@ -114,15 +99,9 @@ void empoleZeroWork(int vers)
 
 void empoleBegin(int vers)
 {
-   const int dlmask = lmdaDerivMask(vers, use_edlmda);
    zeroOnHost(energy_em, virial_em);
    empoleZeroWork(vers);
-   if (rc_flag & calc::analyz) {
-      if (dlmask & calc::energy_dlmda1)
-         darray::zero(g::q0, bufferSize(), demdl_buf);
-      if (dlmask & calc::energy_dlmda2)
-         darray::zero(g::q0, bufferSize(), d2emdl2_buf);
-   }
+   em_dl.zero(vers);
 }
 
 static void empoleKernel(int vers)
@@ -135,20 +114,8 @@ static void empoleKernel(int vers)
 
 void empoleFinish(int vers)
 {
-   const int dlmask = lmdaDerivMask(vers, use_edlmda);
    em_buf.flush(vers);
-   if (rc_flag & calc::analyz) {
-      if (dlmask & calc::energy_dlmda1) {
-         energy_prec e = energyReduce(demdl_buf);
-         demdl += e;
-         dedl += e;
-      }
-      if (dlmask & calc::energy_dlmda2) {
-         energy_prec e = energyReduce(d2emdl2_buf);
-         d2emdl2 += e;
-         d2edl2 += e;
-      }
-   }
+   em_dl.flush(vers);
 }
 
 void empole(int vers)
@@ -230,7 +197,9 @@ static void empoleRecipDt(int vers, const DtCoef& c)
    for (int k = 0; k < npass; ++k) {
       real wa, wb, wc;
       dtPassWeights(c, pass[k], wa, wb, wc);
-      if (wa == 0 and wb == 0 and wc == 0)
+      // The reciprocal kernels keep no interaction count, so a pass with no
+      // live weight is a whole PME evaluation with nothing to show for it.
+      if (dtPassIsIdle(vers, wa, wb, wc, false))
          continue;
       empoleEwaldRecipDt(vers, pass[k].mask, wa, wb, wc);
    }

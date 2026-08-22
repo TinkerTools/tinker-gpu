@@ -213,6 +213,9 @@ const Fixture kFixtures[] = {
    {"181_water_rels_ye_lig2_ix2_l015", "water2", true, true, true, true, "rels"},
    {"182_water_ast_v05_annihilate", "water2", true, true, true, true, "ast"},
    {"183_water_adt_v05_annihilate", "water2", true, true, true, true, "adt"},
+   {"184_water_exf_adt_l10", "water2", true, true, false, true, "emplar"},
+   {"185_water_exf_adt_l05", "water2", true, true, false, true, "emplar"},
+   {"186_water_exf_adt_l00", "water2", true, true, false, true, "emplar"},
 };
 
 // How a run should treat the fused multipole/polarization kernel. emplar cannot
@@ -308,7 +311,7 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
    // reduced straight into the total. So the breakdown is checked under analysis
    // and the total is checked always. Polarization is the exception either way:
    // its derivative arrives in sub-lambda units, so it stays private whenever it
-   // is driven and lmdachain folds it into the total after scaling.
+   // is driven, and it is folded into the total already scaled.
    const bool splitTerms = rc_flag & calc::analyz;
    auto checkLmdaFirstScalars = [&]() {
       COMPARE_REALS(dedl, lr.dedl[0], eps_l);
@@ -337,7 +340,7 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
    };
 
    // Per-atom lambda gradient (dfdl*) vs reference. Valid whenever calc::grad
-   // is requested, since lmdachain builds dfdl* under its do_g branch.
+   // is requested, since the terms accumulate dfdl* whenever they build a gradient.
    auto checkLmdaGrad = [&]() {
       std::vector<double> lx(n), ly(n), lz(n);
       copyGradient(calc::grad, lx.data(), ly.data(), lz.data(), dfdlx, dfdly, dfdlz);
@@ -662,6 +665,9 @@ TEST_CASE("MUTATE-180_water_rels_ye_lig1_ex3_l085", "[ff][mutate][rels]") { runE
 TEST_CASE("MUTATE-181_water_rels_ye_lig2_ix2_l015", "[ff][mutate][rels]") { runFixture(kFixtures[180]); }
 TEST_CASE("MUTATE-182_water_ast_v05_annihilate", "[ff][mutate][ast]") { runFixture(kFixtures[181]); }
 TEST_CASE("MUTATE-183_water_adt_v05_annihilate", "[ff][mutate][adt]") { runFixture(kFixtures[182]); }
+TEST_CASE("MUTATE-184_water_exf_adt_l10", "[ff][mutate][exf][emplar]") { runEmplarFixture(kFixtures[183]); }
+TEST_CASE("MUTATE-185_water_exf_adt_l05", "[ff][mutate][exf][emplar]") { runEmplarFixture(kFixtures[184]); }
+TEST_CASE("MUTATE-186_water_exf_adt_l00", "[ff][mutate][exf][emplar]") { runEmplarFixture(kFixtures[185]); }
 
 TEST_CASE("MUTATE-TI-076_water_qnt_ast_l05", "[ff][mutate][ti][ast]") { runThermIntgFixture(kFixtures[75]); }
 TEST_CASE("MUTATE-TI-079_water_qnt_adt_l05", "[ff][mutate][ti][adt]") { runThermIntgFixture(kFixtures[78]); }

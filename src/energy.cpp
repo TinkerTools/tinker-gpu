@@ -561,7 +561,8 @@ void energyData(RcOp op)
    // Must follow evdw_data() and echarge_data().
    RcMan echglj42{echgljData, op};
 
-   // Must precede empoleData(), which sizes its buffers by useEmplar().
+   // Must precede empoleData() and epolarData(), which decide whether their
+   // terms run at all from useEmplar().
    RcMan emplar42{emplarData, op};
    RcMan empole42{empoleData, op};
    RcMan epolar42{epolarData, op};
