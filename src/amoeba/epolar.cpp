@@ -61,7 +61,6 @@ void epolarData(RcOp op)
       if (rc_a)
          bufferDeallocate(rc_flag, nep);
       ep_buf.manage(op, rc_flag, {}, {}, false);
-      ep_snap.manage(op, rc_flag, false);
       if (rc_a)
          darray::deallocate(depdl_buf, d2epdl2_buf);
       depdl_buf = nullptr;
@@ -419,7 +418,7 @@ void epolarData(RcOp op)
 
       nep = nullptr;
       ep_buf.manage(op, rc_flag, {&ep, &vir_ep, &depx, &depy, &depz},
-         {eng_buf_elec, vir_buf_elec, gx_elec, gy_elec, gz_elec}, rc_a or use_epdt, //
+         {eng_buf_elec, vir_buf_elec, gx_elec, gy_elec, gz_elec}, rc_a, //
          {&energy_ep, &virial_ep}, {&energy_elec, &virial_elec});
       const int dlmask = lmdaDerivMask(rc_flag, use_pdlmda);
       depdl_buf = nullptr;
@@ -436,7 +435,6 @@ void epolarData(RcOp op)
          else
             d2epdl2_buf = d2edl2_buf;
       }
-      ep_snap.manage(op, rc_flag, use_epdt);
       if (rc_a)
          bufferAllocate(rc_flag, &nep);
 
@@ -721,6 +719,24 @@ static void epolarBegin(int vers)
    }
 }
 
+static void epolarFinish(int vers)
+{
+   const int dlmask = lmdaDerivMask(vers, use_pdlmda);
+   ep_buf.flush(vers);
+   if (rc_flag & calc::analyz) {
+      if (dlmask & calc::energy_dlmda1) {
+         energy_prec e = energyReduce(depdl_buf);
+         depdl += e;
+         dedl += e;
+      }
+      if (dlmask & calc::energy_dlmda2) {
+         energy_prec e = energyReduce(d2epdl2_buf);
+         d2epdl2 += e;
+         d2edl2 += e;
+      }
+   }
+}
+
 static bool epolarStateHasActiveSite(RdtMask mask)
 {
    return static_cast<unsigned>(mask) & polar_active_mask;
@@ -741,104 +757,153 @@ static void epolarKernel(int vers, bool use_cfgrad)
    }
 }
 
-static void epolarState(int vers, RdtMask mask, const int* group, bool first_state)
+TINKER_FVOID2(acc0, cu1, epolarNonEwaldDt, int, const real (*)[3], const real (*)[3], real, real);
+TINKER_FVOID2(acc0, cu1, epolarEwaldRealDt, int, const real (*)[3], const real (*)[3], real, real);
+TINKER_FVOID2(acc0, cu1, epolar0DotProdDt, int, const real (*)[3], const real (*)[3], real, real, real);
+TINKER_FVOID2(acc0, cu1, epolarPairwiseExtfieldDt, const real (*)[3], real);
+TINKER_FVOID2(acc0, cu1, epolarEwaldRecipSelfDt, int, const real (*)[3], const real (*)[3], const RecipDt&);
+
+void epolarEwaldRecipSelfDt(int vers, const RecipDt& dt)
 {
-   mpoleInitState(vers, mask, group, first_state, true);
+   TINKER_FCALL2(acc0, cu1, epolarEwaldRecipSelfDt, vers, uind, uinp, dt);
+}
+
+// The lambda-derivative sinks a pass writes into, gated by what the version
+// asks for. A null sink tells the kernels the channel was not requested.
+static RecipDt epolarRecipDt(int vers, real wa, real wb)
+{
+   RecipDt dt;
+   dt.wa = wa;
+   dt.wb = wb;
+   if (vers & calc::virial_dlmda)
+      dt.vdl = dvirdl_buf;
+   if (vers & calc::grad_dlmda) {
+      dt.dgx = dfdlx;
+      dt.dgy = dfdly;
+      dt.dgz = dfdlz;
+   }
+   // The lambda torque feeds both the lambda gradient and the torque part of
+   // the lambda virial, so either one is reason enough to accumulate it.
+   if (vers & (calc::grad_dlmda | calc::virial_dlmda)) {
+      dt.dltrqx = dltrqx;
+      dt.dltrqy = dltrqy;
+      dt.dltrqz = dltrqz;
+   }
+   return dt;
+}
+
+// One dual topology subsystem, weighted straight into the global accumulators.
+// The pass masks rpole and polarity first, so every interaction it evaluates
+// carries the same three weights and the kernels need no per-atom bookkeeping.
+static void epolarState(int vers, RdtMask mask, const int* group, bool first_state, //
+   real wa, real wb, real wc)
+{
+   mpoleInitStateDt(vers, mask, group, first_state);
    polarState(mask, group);
 
-   if (epolarStateHasActiveSite(mask)) {
-      epolarKernel(vers, false);
-      epolarPairwiseExtfield(vers, uind);
-      torque(vers, depx, depy, depz, trqx, trqy, trqz, vir_ep);
-   } else {
+   if (not epolarStateHasActiveSite(mask)) {
       darray::zero(g::q0, n, uind, uinp);
+      return;
    }
-}
 
-static void epolarSaveEndpoint0(int vers)
-{
-   ep_snap.save(vers, ep_buf);
-}
+   // The dot product owns the energy and both of its lambda derivatives; the
+   // kernels below switch their own energy channel off for the same versions.
+   const bool edot = epolarEnergyFromDotProd(vers);
 
-static void epolarMixEndpoints(int vers)
-{
-   double w, dw, d2w;
-   dtWeight(plam, epdtexp, w, dw, d2w);
-   const double dweight = dw * dpldlmda;
-   const double d2weight = d2w * dpldlmda * dpldlmda + dw * d2pldlmda2;
-   const AccumRef dl = {depdl_buf, dvirdl_buf, dfdlx, dfdly, dfdlz, d2epdl2_buf};
-   ep_snap.mix(vers, w, dweight, d2weight, use_pdlmda, ep_buf, dl);
-}
-
-static void epolarFinish(int vers)
-{
-   const int dlmask = lmdaDerivMask(vers, use_pdlmda);
-   ep_buf.flush(vers);
-   if (rc_flag & calc::analyz) {
-      if (dlmask & calc::energy_dlmda1) {
-         energy_prec e = energyReduce(depdl_buf);
-         depdl += e;
-         dedl += e;
-      }
-      if (dlmask & calc::energy_dlmda2) {
-         energy_prec e = energyReduce(d2epdl2_buf);
-         d2epdl2 += e;
-         d2edl2 += e;
+   induce(uind, uinp);
+   if (edot)
+      TINKER_FCALL2(acc0, cu1, epolar0DotProdDt, vers, uind, udirp, wa, wb, wc);
+   if (vers != calc::v0) {
+      if (useEwald()) {
+         TINKER_FCALL2(acc0, cu1, epolarEwaldRealDt, vers, uind, uinp, wa, wb);
+         epolarEwaldRecipSelfDt(vers, epolarRecipDt(vers, wa, wb));
+      } else {
+         TINKER_FCALL2(acc0, cu1, epolarNonEwaldDt, vers, uind, uinp, wa, wb);
       }
    }
+   if (extfld::use_exfld and (vers & calc::analyz))
+      TINKER_FCALL2(acc0, cu1, epolarPairwiseExtfieldDt, uind, wa);
 }
 
-void epolar_adt(int vers)
+// Whether one subsystem's interactions are the ones analysis reports.
+// Polarization reports whichever endpoint ran rather than always the coupled
+// one (epolar3.f:2559), so unlike the multipole and van der Waals terms there is
+// never a count-only pass -- but only that endpoint's subsystems may count, or
+// the two endpoints would be summed together.
+static bool epolarCounts(const DtPass& p, bool relative, bool coupled, bool need1)
 {
+   if (not(need1 ? p.in1 : p.in0))
+      return false;
+   if (not relative)
+      return true;
+   // Within the reported endpoint, one ligand-plus-environment subsystem carries
+   // the whole count if there is one; a decoupled endpoint has none, so its
+   // subsystems sum instead.
+   return not coupled or relSlotIsCoupled(p.slot);
+}
+
+void epolar_dt(int vers)
+{
+   const int dvers = lmdaDerivVers(vers, use_pdlmda);
+   // use_eprdt is use_epdt and use_rel, and this is only reached under use_epdt.
+   const bool relative = use_eprdt;
+   // The relative schedule labels atoms by ligand; the absolute one only knows
+   // mutated from not.
+   const int* group = relative ? rdt_group : mut;
+   auto do_g = vers & calc::grad;
+   auto do_a = vers & calc::analyz;
+
    double w, dw, d2w;
    bool need0, need1;
    dtWeightNeed(plam, epdtexp, dpldlmda, d2pldlmda2, w, dw, d2w, need0, need1);
 
    epolarBegin(vers);
 
-   // Unlike the multipole and van der Waals terms, polarization analysis does
-   // not retain a coupled-endpoint count when that endpoint is dead; it simply
-   // reports whichever endpoint ran (epolar3.f:2559).
+   DtCoef c;
+   dtWeightsToCoef(c, w, dw, d2w, dpldlmda, d2pldlmda2, use_pdlmda);
+
+   DtPass pass[nRelSlot];
+   const int npass = dtPassList(relative, eprelst0, eprelst1, pass);
+
+   // Whether the reported endpoint has a ligand-plus-environment subsystem to
+   // carry its whole interaction count. Only the relative schedule builds an
+   // endpoint out of several subsystems.
+   bool coupled = false;
+   if (relative) {
+      const RelState reported = need1 ? eprelst1 : eprelst0;
+      for (int k = 0; k < nRelSlot and not coupled; ++k) {
+         RdtMask mask;
+         bool in0, in1;
+         relSlot(k, reported, reported, mask, in0, in1);
+         coupled = in0 and relSlotIsCoupled(k);
+      }
+   }
+
    bool first = true;
-   if (need0) {
-      epolarState(vers, RdtMask::ENV, mut, first);
+   for (int k = 0; k < npass; ++k) {
+      real wa, wb, wc;
+      dtPassWeights(c, pass[k], wa, wb, wc);
+      // A subsystem of a dead endpoint carries no weight and no derivative.
+      if (wa == 0 and wb == 0 and wc == 0)
+         continue;
+      const bool counts = do_a and epolarCounts(pass[k], relative, coupled, need1);
+      epolarState(counts ? dvers : dvers & ~calc::analyz, pass[k].mask, group, first, wa, wb, wc);
       first = false;
-      epolarSaveEndpoint0(vers);
-   }
-   if (need1) {
-      if (need0)
-         epolarZeroWork(vers);
-      epolarState(vers, RdtMask::ALL, mut, first);
-      if (not need0)
-         epolarSaveEndpoint0(vers);
    }
 
-   epolarMixEndpoints(vers);
-   epolarFinish(vers);
-}
-
-void epolar_rdt(int vers)
-{
-   double w, dw, d2w;
-   bool need0, need1;
-   dtWeightNeed(plam, epdtexp, dpldlmda, d2pldlmda2, w, dw, d2w, need0, need1);
-
-   epolarBegin(vers);
-
-   const RelDualOps ops = {
-      [](int v, RdtMask mask, bool first) { epolarState(v, mask, rdt_group, first); },
-      [](int v) { epolarZeroWork(v); },
-      [](int v) { epolarSaveEndpoint0(v); },
-      [](int v) { epolarMixEndpoints(v); },
-   };
-   relDualDrive(vers, eprelst0, eprelst1, need0, need1, ops);
+   // Every pass added its torque unconverted, so one conversion covers them all.
+   if (do_g) {
+      torque(vers, depx, depy, depz, trqx, trqy, trqz, vir_ep);
+      if (dvers & (calc::grad_dlmda | calc::virial_dlmda))
+         torque(vers, dfdlx, dfdly, dfdlz, dltrqx, dltrqy, dltrqz, dvirdl_buf);
+   }
 
    epolarFinish(vers);
 
-   // The last state evaluated above leaves rpole and polarity masked down to a
-   // subsystem; restore the full system for whatever runs next.
-   mpoleInitState(calc::v0, RdtMask::ALL, rdt_group, false);
-   polarState(RdtMask::ALL, rdt_group);
+   // The last pass leaves rpole and polarity masked down to a subsystem;
+   // restore the full system for whatever runs next.
+   mpoleInitState(calc::v0, RdtMask::ALL, group, false);
+   polarState(RdtMask::ALL, group);
 }
 
 TINKER_FVOID2(acc1, cu1, epolar0DotProd, const real (*)[3], const real (*)[3], EnergyBuffer);

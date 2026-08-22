@@ -274,10 +274,8 @@ void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
       }
    if (amoeba_epolar(vers))
       if (tscfg("epolar", ecore_ele)) {
-         if (use_epadt)
-            epolar_adt(vers);
-         else if (use_eprdt)
-            epolar_rdt(vers);
+         if (use_epdt)
+            epolar_dt(vers);
          else
             epolar(vers);
       }

@@ -20,6 +20,7 @@ void torque(int vers, grad_prec* dx, grad_prec* dy, grad_prec* dz, const real* t
 void mpoleInit(int vers, bool do_dlmda);
 void mpoleInitDt(int vers);
 void mpoleInitState(int vers, RdtMask mask, const int* group, bool first_state, bool polar = false);
+void mpoleInitStateDt(int vers, RdtMask mask, const int* group, bool first_state);
 void mpoleScale(real factor);
 /// \}
 

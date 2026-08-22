@@ -85,7 +85,7 @@ static void mpoleData(RcOp op)
 
       if (rc_flag & calc::grad) {
          darray::allocate(n, &trqx, &trqy, &trqz);
-         if (lmdaDerivMask(rc_flag, use_edlmda) & (calc::grad_dlmda | calc::virial_dlmda)) {
+         if (lmdaDerivMask(rc_flag, use_edlmda or use_pdlmda) & (calc::grad_dlmda | calc::virial_dlmda)) {
             darray::allocate(n, &dltrqx, &dltrqy, &dltrqz);
          } else {
             dltrqx = nullptr;

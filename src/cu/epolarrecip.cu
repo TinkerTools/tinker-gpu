@@ -1,3 +1,4 @@
+#include "ff/amoeba/epolar.h"
 #include "ff/elec.h"
 #include "ff/termbuf.h"
 #include "ff/modamoeba.h"
@@ -9,12 +10,12 @@
 namespace tinker {
 __global__
 void epolarEwaldRecipSelfEp_cu(int n, EnergyBuffer restrict ep, real f, //
-   const real (*restrict fuind)[3], const real (*fphi)[20])
+   const real (*restrict fuind)[3], const real (*fphi)[20], RecipDt dt)
 {
    int ithread = ITHREAD;
    for (int i = ithread; i < n; i += STRIDE) {
       real e = 0.5f * f * (fuind[i][0] * fphi[i][1] + fuind[i][1] * fphi[i][2] + fuind[i][2] * fphi[i][3]);
-      atomic_add(e, ep, ithread);
+      atomic_add(dt.wa * e, ep, ithread);
    }
 }
 
@@ -24,7 +25,7 @@ void epolarEwaldRecipSelfDep_cu(int n, real f,                                  
    const real (*restrict fmp)[10], const real (*restrict fphi)[20], const real (*restrict fuind)[3],
    const real (*restrict fuinp)[3], const real (*restrict fphid)[10], const real (*restrict fphip)[10],
    const real (*restrict fphidp)[20], //
-   int nfft1, int nfft2, int nfft3, TINKER_IMAGE_PARAMS)
+   int nfft1, int nfft2, int nfft3, TINKER_IMAGE_PARAMS, RecipDt dt)
 {
    // data deriv1  / 2, 5,  8,  9, 11, 16, 18, 14, 15, 20 /
    // data deriv2  / 3, 8,  6, 10, 14, 12, 19, 16, 20, 17 /
@@ -60,9 +61,14 @@ void epolarEwaldRecipSelfDep_cu(int n, real f,                                  
          real h1 = recipa.x * f1 + recipb.x * f2 + recipc.x * f3;
          real h2 = recipa.y * f1 + recipb.y * f2 + recipc.y * f3;
          real h3 = recipa.z * f1 + recipb.z * f2 + recipc.z * f3;
-         atomic_add(h1 * f, depx, i);
-         atomic_add(h2 * f, depy, i);
-         atomic_add(h3 * f, depz, i);
+         atomic_add(dt.wa * h1 * f, depx, i);
+         atomic_add(dt.wa * h2 * f, depy, i);
+         atomic_add(dt.wa * h3 * f, depz, i);
+         if (dt.dgx) {
+            atomic_add(dt.wb * h1 * f, dt.dgx, i);
+            atomic_add(dt.wb * h2 * f, dt.dgy, i);
+            atomic_add(dt.wb * h3 * f, dt.dgz, i);
+         }
       }
    } else {
       for (int i = ITHREAD; i < n; i += STRIDE) {
@@ -91,9 +97,14 @@ void epolarEwaldRecipSelfDep_cu(int n, real f,                                  
          real h1 = recipa.x * f1 + recipb.x * f2 + recipc.x * f3;
          real h2 = recipa.y * f1 + recipb.y * f2 + recipc.y * f3;
          real h3 = recipa.z * f1 + recipb.z * f2 + recipc.z * f3;
-         atomic_add(h1 * f, depx, i);
-         atomic_add(h2 * f, depy, i);
-         atomic_add(h3 * f, depz, i);
+         atomic_add(dt.wa * h1 * f, depx, i);
+         atomic_add(dt.wa * h2 * f, depy, i);
+         atomic_add(dt.wa * h3 * f, depz, i);
+         if (dt.dgx) {
+            atomic_add(dt.wb * h1 * f, dt.dgx, i);
+            atomic_add(dt.wb * h2 * f, dt.dgy, i);
+            atomic_add(dt.wb * h3 * f, dt.dgz, i);
+         }
       }
    }
 }
@@ -105,7 +116,7 @@ void epolarEwaldRecipSelfEptrq_cu(int n, real term, real fterm,   //
    real* restrict trqx, real* restrict trqy, real* restrict trqz, //
    real* restrict pot,                                            //
    const real (*restrict rpole)[MPL_TOTAL], const real (*restrict cmp)[10], const real (*restrict gpu_uind)[3],
-   const real (*restrict gpu_uinp)[3], const real (*restrict cphidp)[10])
+   const real (*restrict gpu_uinp)[3], const real (*restrict cphidp)[10], RecipDt dt)
 {
    int ithread = ITHREAD;
    if (gpu_uinp) {
@@ -134,9 +145,14 @@ void epolarEwaldRecipSelfEptrq_cu(int n, real term, real fterm,   //
             tep2 += term * (diz * uix - dix * uiz);
             tep3 += term * (dix * uiy - diy * uix);
 
-            atomic_add(tep1, trqx, i);
-            atomic_add(tep2, trqy, i);
-            atomic_add(tep3, trqz, i);
+            atomic_add(dt.wa * tep1, trqx, i);
+            atomic_add(dt.wa * tep2, trqy, i);
+            atomic_add(dt.wa * tep3, trqz, i);
+            if (dt.dltrqx) {
+               atomic_add(dt.wb * tep1, dt.dltrqx, i);
+               atomic_add(dt.wb * tep2, dt.dltrqy, i);
+               atomic_add(dt.wb * tep3, dt.dltrqz, i);
+            }
 
             // if (pot)
             //    atomic_add(cphidp[i][0], pot, i);
@@ -147,7 +163,7 @@ void epolarEwaldRecipSelfEptrq_cu(int n, real term, real fterm,   //
             uiy = gpu_uind[i][1];
             uiz = gpu_uind[i][2];
             real uii = dix * uix + diy * uiy + diz * uiz;
-            atomic_add(fterm * uii, ep, ithread);
+            atomic_add(dt.wa * fterm * uii, ep, ithread);
          }
          if CONSTEXPR (do_a)
             atomic_add(1, nep, ithread);
@@ -178,9 +194,14 @@ void epolarEwaldRecipSelfEptrq_cu(int n, real term, real fterm,   //
             tep2 += term * (diz * uix - dix * uiz);
             tep3 += term * (dix * uiy - diy * uix);
 
-            atomic_add(tep1, trqx, i);
-            atomic_add(tep2, trqy, i);
-            atomic_add(tep3, trqz, i);
+            atomic_add(dt.wa * tep1, trqx, i);
+            atomic_add(dt.wa * tep2, trqy, i);
+            atomic_add(dt.wa * tep3, trqz, i);
+            if (dt.dltrqx) {
+               atomic_add(dt.wb * tep1, dt.dltrqx, i);
+               atomic_add(dt.wb * tep2, dt.dltrqy, i);
+               atomic_add(dt.wb * tep3, dt.dltrqz, i);
+            }
 
             if (pot)
                atomic_add(cphidp[i][0], pot, i);
@@ -191,7 +212,7 @@ void epolarEwaldRecipSelfEptrq_cu(int n, real term, real fterm,   //
             uiy = gpu_uind[i][1];
             uiz = gpu_uind[i][2];
             real uii = dix * uix + diy * uiy + diz * uiz;
-            atomic_add(fterm * uii, ep, ithread);
+            atomic_add(dt.wa * fterm * uii, ep, ithread);
          }
          if CONSTEXPR (do_a)
             atomic_add(1, nep, ithread);
@@ -200,10 +221,15 @@ void epolarEwaldRecipSelfEptrq_cu(int n, real term, real fterm,   //
 }
 
 __global__
-void epolarEwaldRecipSelfVirial_cu1(size_t size, VirialBuffer restrict vir_ep, const VirialBuffer restrict vir_m)
+void epolarEwaldRecipSelfVirial_cu1(size_t size, VirialBuffer restrict vir_ep, const VirialBuffer restrict vir_m,
+   RecipDt dt)
 {
-   for (size_t i = ITHREAD; i < size; i += STRIDE)
-      vir_ep[0][i] -= vir_m[0][i];
+   for (size_t i = ITHREAD; i < size; i += STRIDE) {
+      auto v = toFloatGrad<virial_prec>(vir_m[0][i]);
+      vir_ep[0][i] -= floatTo<VirialBufferTraits::type>(dt.wa * v);
+      if (dt.vdl)
+         dt.vdl[0][i] -= floatTo<VirialBufferTraits::type>(dt.wb * v);
+   }
 }
 
 __global__
@@ -211,7 +237,7 @@ void epolarEwaldRecipSelfVirial_cu2(int n, VirialBuffer restrict vir_ep, //
    const real (*restrict cmp)[10], const real (*restrict gpu_uind)[3], const real (*restrict gpu_uinp)[3],
    const real (*restrict fphid)[10], const real (*restrict fphip)[10], const real (*restrict cphi)[10],
    const real (*restrict cphidp)[10], //
-   int nfft1, int nfft2, int nfft3, TINKER_IMAGE_PARAMS)
+   int nfft1, int nfft2, int nfft3, TINKER_IMAGE_PARAMS, RecipDt dt)
 {
    // frac_to_cart
 
@@ -284,7 +310,11 @@ void epolarEwaldRecipSelfVirial_cu2(int n, VirialBuffer restrict vir_ep, //
          vzz = vzz - 0.5f * (cphid[3] * gpu_uinp[i][2] + cphip[3] * gpu_uind[i][2]);
          // end if
 
-         atomic_add(vxx, vxy, vxz, vyy, vyz, vzz, vir_ep, ithread);
+         atomic_add(dt.wa * vxx, dt.wa * vxy, dt.wa * vxz, dt.wa * vyy, dt.wa * vyz, dt.wa * vzz, vir_ep,
+            ithread);
+         if (dt.vdl)
+            atomic_add(dt.wb * vxx, dt.wb * vxy, dt.wb * vxz, dt.wb * vyy, dt.wb * vyz, dt.wb * vzz, dt.vdl,
+               ithread);
       }
    } else {
       for (int i = ithread; i < n; i += STRIDE) {
@@ -331,7 +361,11 @@ void epolarEwaldRecipSelfVirial_cu2(int n, VirialBuffer restrict vir_ep, //
          vzz = vzz - cphid[3] * gpu_uind[i][2];
          // end if
 
-         atomic_add(vxx, vxy, vxz, vyy, vyz, vzz, vir_ep, ithread);
+         atomic_add(dt.wa * vxx, dt.wa * vxy, dt.wa * vxz, dt.wa * vyy, dt.wa * vyz, dt.wa * vzz, vir_ep,
+            ithread);
+         if (dt.vdl)
+            atomic_add(dt.wb * vxx, dt.wb * vxy, dt.wb * vxz, dt.wb * vyy, dt.wb * vyz, dt.wb * vzz, dt.vdl,
+               ithread);
       }
    }
 }
@@ -360,7 +394,7 @@ void epolarEwaldRecipSelfVirial_cu4(int n, real (*restrict cmp)[10], const real 
 __global__
 void epolarEwaldRecipSelfVirial_cu5(int ntot, int nff, VirialBuffer restrict vir_ep, //
    real f, real volterm, real pterm, const PME* restrict d, const PME* restrict p,   //
-   int nfft1, int nfft2, int nfft3, TINKER_IMAGE_PARAMS)
+   int nfft1, int nfft2, int nfft3, TINKER_IMAGE_PARAMS, RecipDt dt)
 {
    int ithread = ITHREAD;
    for (int i = ithread; i < ntot; i += STRIDE) {
@@ -405,7 +439,11 @@ void epolarEwaldRecipSelfVirial_cu5(int ntot, int nff, VirialBuffer restrict vir
          real vyz = h2 * h3 * vterm;
          real vzz = (h3 * h3 * vterm - eterm);
 
-         atomic_add(vxx, vxy, vxz, vyy, vyz, vzz, vir_ep, ithread);
+         atomic_add(dt.wa * vxx, dt.wa * vxy, dt.wa * vxz, dt.wa * vyy, dt.wa * vyz, dt.wa * vzz, vir_ep,
+            ithread);
+         if (dt.vdl)
+            atomic_add(dt.wb * vxx, dt.wb * vxy, dt.wb * vxz, dt.wb * vyy, dt.wb * vyz, dt.wb * vzz, dt.vdl,
+               ithread);
       }
    }
 }
@@ -414,7 +452,8 @@ void epolarEwaldRecipSelfVirial_cu5(int ntot, int nff, VirialBuffer restrict vir
 namespace tinker {
 template <class Ver>
 static void epolarEwaldRecipSelf_cu1(const real (*gpu_uind)[3], const real (*gpu_uinp)[3],
-   EnergyBuffer out_e, VirialBuffer out_v, grad_prec* out_gx, grad_prec* out_gy, grad_prec* out_gz)
+   EnergyBuffer out_e, VirialBuffer out_v, grad_prec* out_gx, grad_prec* out_gy, grad_prec* out_gz,
+   RecipDt dt)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;
@@ -435,7 +474,7 @@ static void epolarEwaldRecipSelf_cu1(const real (*gpu_uind)[3], const real (*gpu
 
    cuindToFuind(pu, gpu_uind, gpu_uinp, fuind, fuinp);
    if CONSTEXPR (do_e) {
-      launch_k1b(g::s0, n, epolarEwaldRecipSelfEp_cu, n, out_e, f, fuind, fphi);
+      launch_k1b(g::s0, n, epolarEwaldRecipSelfEp_cu, n, out_e, f, fuind, fphi, dt);
    }
    gridUind(pu, fuind, fuinp);
    fftfront(pu);
@@ -450,7 +489,7 @@ static void epolarEwaldRecipSelf_cu1(const real (*gpu_uind)[3], const real (*gpu
       launch_k1s(g::s0, n, epolarEwaldRecipSelfDep_cu,  //
          n, f, out_gx, out_gy, out_gz,                  //
          fmp, fphi, fuind, fuinp, fphid, fphip, fphidp, //
-         nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS);
+         nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS, dt);
    }
 
    // set the potential to be the induced dipole average
@@ -471,20 +510,20 @@ static void epolarEwaldRecipSelf_cu1(const real (*gpu_uind)[3], const real (*gpu
    real fterm = -2 * f * aewald * aewald * aewald / 3 / sqrtpi;
    launch_k1b(g::s0, n, epolarEwaldRecipSelfEptrq_cu<do_e, do_g, do_a>, //
       n, term, fterm, nep, out_e, trqx, trqy, trqz, nullptr,            //
-      rpole, cmp, gpu_uind, gpu_uinp, cphidp);
+      rpole, cmp, gpu_uind, gpu_uinp, cphidp, dt);
 
    // recip virial
 
    if CONSTEXPR (do_v) {
       auto size = bufferSize() * VirialBufferTraits::value;
-      launch_k1s(g::s0, size, epolarEwaldRecipSelfVirial_cu1, size, out_v, vir_m);
+      launch_k1s(g::s0, size, epolarEwaldRecipSelfVirial_cu1, size, out_v, vir_m, dt);
 
       darray::scale(g::q0, n, f, cphi, fphid, fphip);
 
       launch_k1b(g::s0, n, epolarEwaldRecipSelfVirial_cu2,    //
          n, out_v,                                            //
          cmp, gpu_uind, gpu_uinp, fphid, fphip, cphi, cphidp, //
-         nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS);
+         nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS, dt);
 
       // qgrip: pvu_qgrid
       const PMEUnit pvu = pvpme_unit;
@@ -508,26 +547,48 @@ static void epolarEwaldRecipSelf_cu1(const real (*gpu_uind)[3], const real (*gpu
       real volterm = pi * box_volume;
       launch_k1b(g::s0, ntot, epolarEwaldRecipSelfVirial_cu5, //
          ntot, nff, out_v, f, volterm, pterm, d, p,           //
-         nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS);
+         nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS, dt);
+   }
+}
+
+static void epolarEwaldRecipSelfVers_cu(int vers, const real (*uind)[3], const real (*uinp)[3],
+   EnergyBuffer out_e, VirialBuffer out_v, grad_prec* out_gx, grad_prec* out_gy, grad_prec* out_gz,
+   const RecipDt& dt)
+{
+   if (vers == calc::v0) {
+      epolarEwaldRecipSelf_cu1<calc::V0>(uind, uinp, out_e, out_v, out_gx, out_gy, out_gz, dt);
+   } else if (vers == calc::v1) {
+      epolarEwaldRecipSelf_cu1<calc::V1>(uind, uinp, out_e, out_v, out_gx, out_gy, out_gz, dt);
+   } else if (vers == calc::v3) {
+      epolarEwaldRecipSelf_cu1<calc::V3>(uind, uinp, out_e, out_v, out_gx, out_gy, out_gz, dt);
+   } else if (vers == calc::v4) {
+      epolarEwaldRecipSelf_cu1<calc::V4>(uind, uinp, out_e, out_v, out_gx, out_gy, out_gz, dt);
+   } else if (vers == calc::v5) {
+      epolarEwaldRecipSelf_cu1<calc::V5>(uind, uinp, out_e, out_v, out_gx, out_gy, out_gz, dt);
+   } else if (vers == calc::v6) {
+      epolarEwaldRecipSelf_cu1<calc::V6>(uind, uinp, out_e, out_v, out_gx, out_gy, out_gz, dt);
    }
 }
 
 void epolarEwaldRecipSelf_cu(int vers, const real (*uind)[3], const real (*uinp)[3],
    EnergyBuffer out_e, VirialBuffer out_v, grad_prec* out_gx, grad_prec* out_gy, grad_prec* out_gz)
 {
-   if (vers == calc::v0) {
-      epolarEwaldRecipSelf_cu1<calc::V0>(uind, uinp, out_e, out_v, out_gx, out_gy, out_gz);
-   } else if (vers == calc::v1) {
-      epolarEwaldRecipSelf_cu1<calc::V1>(uind, uinp, out_e, out_v, out_gx, out_gy, out_gz);
-   } else if (vers == calc::v3) {
-      epolarEwaldRecipSelf_cu1<calc::V3>(uind, uinp, out_e, out_v, out_gx, out_gy, out_gz);
-   } else if (vers == calc::v4) {
-      epolarEwaldRecipSelf_cu1<calc::V4>(uind, uinp, out_e, out_v, out_gx, out_gy, out_gz);
-   } else if (vers == calc::v5) {
-      epolarEwaldRecipSelf_cu1<calc::V5>(uind, uinp, out_e, out_v, out_gx, out_gy, out_gz);
-   } else if (vers == calc::v6) {
-      epolarEwaldRecipSelf_cu1<calc::V6>(uind, uinp, out_e, out_v, out_gx, out_gy, out_gz);
-   }
+   epolarEwaldRecipSelfVers_cu(vers, uind, uinp, out_e, out_v, out_gx, out_gy, out_gz, RecipDt{});
+}
+
+// The template only reads the energy, analysis, gradient, and virial channels,
+// so a dual topology pass maps onto the plain version with the same ones --
+// v7-v10 do the same work as v1 and v4, with their lambda derivative channels
+// arriving through the RecipDt sinks instead. The energy channel comes off
+// wherever the dot product already supplied it, which is everything but v3.
+void epolarEwaldRecipSelfDt_cu(int vers, const real (*uind)[3], const real (*uinp)[3], const RecipDt& dt)
+{
+   // calc::v0 never reaches here: with only an energy wanted the dot product is
+   // the whole answer and the caller skips the kernels.
+   int base = vers;
+   if (epolarEnergyFromDotProd(vers))
+      base = (vers & calc::virial) ? calc::v6 : calc::v5;
+   epolarEwaldRecipSelfVers_cu(base, uind, uinp, ep, vir_ep, depx, depy, depz, dt);
 }
 }
 
@@ -553,7 +614,7 @@ static void epolarChgpenEwaldRecipSelf_cu1(const real (*gpu_uind)[3], bool use_c
 
    cuindToFuind(pu, gpu_uind, gpu_uind, fuind, fuind);
    if CONSTEXPR (do_e) {
-      launch_k1b(g::s0, n, epolarEwaldRecipSelfEp_cu, n, ep, f, fuind, fphi);
+      launch_k1b(g::s0, n, epolarEwaldRecipSelfEp_cu, n, ep, f, fuind, fphi, RecipDt{});
    }
    gridUind(pu, fuind, fuind);
    fftfront(pu);
@@ -568,7 +629,7 @@ static void epolarChgpenEwaldRecipSelf_cu1(const real (*gpu_uind)[3], bool use_c
       launch_k1s(g::s0, n, epolarEwaldRecipSelfDep_cu,      //
          n, f, depx, depy, depz,                            //
          fmp, fphi, fuind, nullptr, fphid, nullptr, fphidp, //
-         nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS);
+         nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS, RecipDt{});
    }
 
    // set the potential to be the induced dipole average
@@ -589,20 +650,20 @@ static void epolarChgpenEwaldRecipSelf_cu1(const real (*gpu_uind)[3], bool use_c
    real fterm = -2 * f * aewald * aewald * aewald / 3 / sqrtpi;
    launch_k1b(g::s0, n, epolarEwaldRecipSelfEptrq_cu<do_e, do_g, do_a>,    //
       n, term, fterm, nep, ep, trqx, trqy, trqz, (use_cf ? pot : nullptr), //
-      rpole, cmp, gpu_uind, nullptr, cphidp);
+      rpole, cmp, gpu_uind, nullptr, cphidp, RecipDt{});
 
    // recip virial
 
    if CONSTEXPR (do_v) {
       auto size = bufferSize() * VirialBufferTraits::value;
-      launch_k1s(g::s0, size, epolarEwaldRecipSelfVirial_cu1, size, vir_ep, vir_m);
+      launch_k1s(g::s0, size, epolarEwaldRecipSelfVirial_cu1, size, vir_ep, vir_m, RecipDt{});
 
       darray::scale(g::q0, n, f, cphi, fphid);
 
       launch_k1b(g::s0, n, epolarEwaldRecipSelfVirial_cu2,     //
          n, vir_ep,                                            //
          cmp, gpu_uind, nullptr, fphid, nullptr, cphi, cphidp, //
-         nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS);
+         nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS, RecipDt{});
 
       // qgrip: pvu_qgrid
       const PMEUnit pvu = pvpme_unit;
@@ -625,7 +686,7 @@ static void epolarChgpenEwaldRecipSelf_cu1(const real (*gpu_uind)[3], bool use_c
       real volterm = pi * box_volume;
       launch_k1b(g::s0, ntot, epolarEwaldRecipSelfVirial_cu5, //
          ntot, nff, vir_ep, f, volterm, pterm, d, p,          //
-         nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS);
+         nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS, RecipDt{});
    }
 }
 

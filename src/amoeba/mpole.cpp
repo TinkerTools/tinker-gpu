@@ -50,7 +50,7 @@ static void mpoleInitBuffers(int vers, bool use_vir_trq)
 {
    if (vers & calc::grad) {
       darray::zero(g::q0, n, trqx, trqy, trqz);
-      if (lmdaDerivMask(vers, use_edlmda) & (calc::grad_dlmda | calc::virial_dlmda)) {
+      if (lmdaDerivMask(vers, use_edlmda or use_pdlmda) & (calc::grad_dlmda | calc::virial_dlmda)) {
          darray::zero(g::q0, n, dltrqx, dltrqy, dltrqz);
       }
    }
@@ -106,6 +106,23 @@ void mpoleInitDt(int vers)
    rotpole(true);
    if (useEwald())
       mpoleInitEwald(false, true, false, false);
+}
+
+// The dual topology driver accumulates torque over every subsystem and converts
+// it once at the end, so the torque buffers are cleared on the first pass only.
+// mpoleInitState() keeps clearing them per pass for emplar, which converts as it
+// goes.
+void mpoleInitStateDt(int vers, RdtMask mask, const int* group, bool first_state)
+{
+   if (first_state) {
+      mpoleInitBuffers(vers, false);
+      chkpole();
+   }
+   rotpoleState(mask, group);
+   // cmp and vir_m are rebuilt every pass: rpole is masked down to this
+   // subsystem, so the reciprocal space input differs from one pass to the next.
+   if (useEwald())
+      mpoleInitEwald(false, first_state, first_state);
 }
 
 void mpoleInitState(int vers, RdtMask mask, const int* group, bool first_state, bool polar)

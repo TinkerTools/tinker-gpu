@@ -118,6 +118,34 @@ int dtCountSlots(RelState reported);
 /// term, which leaves every derivative weight at zero.
 void dtWeightsToCoef(DtCoef& c, double w, double dw, double d2w, double chain, double d2chain, bool driven);
 
+/// \ingroup ff
+/// One subsystem a dual topology term has to evaluate, and which of the two
+/// coupling state endpoints claim it.
+struct DtPass
+{
+   RdtMask mask;
+   bool in0, in1;
+   int slot; ///< relSlot() index, or -1 when the schedule is absolute.
+};
+
+/// The subsystems one dual topology term must evaluate, in order. A relative
+/// schedule walks the \c nRelSlot subsystems of relSlot(); an absolute one has
+/// only the environment (endpoint 0) and the whole system (endpoint 1).
+/// Returns how many entries were written.
+int dtPassList(bool relative, RelState ist0, RelState ist1, DtPass out[nRelSlot]);
+
+/// The interpolation weights one pass carries, as the endpoint weights of
+/// \c DtCoef summed over the endpoints that claim it.
+///
+///     E     <- wa times the subsystem energy
+///     dE/dL <- wb times the same
+///     d2E   <- wc times the same
+///
+/// A subsystem shared by both endpoints comes out at wa = 1 and wb = wc = 0,
+/// and one belonging to a dead endpoint comes out all zero, which the caller
+/// may skip.
+void dtPassWeights(const DtCoef& c, const DtPass& p, real& wa, real& wb, real& wc);
+
 /// The accumulator protocol of one dual topology term.
 struct RelDualOps
 {
@@ -291,7 +319,6 @@ TINKER_EXTERN real* polarityorig;
 
 // lambda derivative accumulators.
 TINKER_EXTERN DualEndpoint em_snap;
-TINKER_EXTERN DualEndpoint ep_snap;
 
 TINKER_EXTERN EnergyBuffer dedl_buf;
 TINKER_EXTERN EnergyBuffer demdl_buf;

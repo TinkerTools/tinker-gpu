@@ -242,31 +242,12 @@ static DtCoef empoleDtCoefRdt(double w, double dw, double d2w, bool need1)
 
 static void empoleRecipDt(int vers, const DtCoef& c)
 {
-   struct Pass
-   {
-      RdtMask mask;
-      bool in0, in1;
-   };
-   Pass pass[nRelSlot];
-   int npass = 0;
-
-   if (use_emrdt) {
-      for (int k = 0; k < nRelSlot; ++k) {
-         RdtMask mask;
-         bool in0, in1;
-         relSlot(k, emrelst0, emrelst1, mask, in0, in1);
-         if (in0 or in1)
-            pass[npass++] = {mask, in0, in1};
-      }
-   } else {
-      pass[npass++] = {RdtMask::ENV, true, false};
-      pass[npass++] = {RdtMask::ALL, false, true};
-   }
+   DtPass pass[nRelSlot];
+   const int npass = dtPassList(use_emrdt, emrelst0, emrelst1, pass);
 
    for (int k = 0; k < npass; ++k) {
-      real wa = (pass[k].in0 ? c.a0 : 0) + (pass[k].in1 ? c.a1 : 0);
-      real wb = (pass[k].in0 ? c.b0 : 0) + (pass[k].in1 ? c.b1 : 0);
-      real wc = (pass[k].in0 ? c.c0 : 0) + (pass[k].in1 ? c.c1 : 0);
+      real wa, wb, wc;
+      dtPassWeights(c, pass[k], wa, wb, wc);
       if (wa == 0 and wb == 0 and wc == 0)
          continue;
       empoleEwaldRecipDt(vers, pass[k].mask, wa, wb, wc);

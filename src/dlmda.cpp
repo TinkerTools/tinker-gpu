@@ -231,6 +231,34 @@ void dtWeightNeed(double sublmda, int dtexp, double chain, double d2chain, //
    dtNeed(w, dw, d2w, chain, d2chain, need0, need1);
 }
 
+int dtPassList(bool relative, RelState ist0, RelState ist1, DtPass out[nRelSlot])
+{
+   if (not relative) {
+      // The absolute schedule zeroes the mutated atoms for endpoint 0 and keeps
+      // the whole system for endpoint 1; there is nothing the two share.
+      out[0] = {RdtMask::ENV, true, false, -1};
+      out[1] = {RdtMask::ALL, false, true, -1};
+      return 2;
+   }
+
+   int npass = 0;
+   for (int k = 0; k < nRelSlot; ++k) {
+      RdtMask mask;
+      bool in0, in1;
+      relSlot(k, ist0, ist1, mask, in0, in1);
+      if (in0 or in1)
+         out[npass++] = {mask, in0, in1, k};
+   }
+   return npass;
+}
+
+void dtPassWeights(const DtCoef& c, const DtPass& p, real& wa, real& wb, real& wc)
+{
+   wa = (p.in0 ? c.a0 : 0) + (p.in1 ? c.a1 : 0);
+   wb = (p.in0 ? c.b0 : 0) + (p.in1 ? c.b1 : 0);
+   wc = (p.in0 ? c.c0 : 0) + (p.in1 ? c.c1 : 0);
+}
+
 void relDualDrive(int vers, RelState ist0, RelState ist1, bool need0, bool need1, const RelDualOps& ops)
 {
    // dtNeed() never clears both endpoints: w is either 1, making need1 true,
