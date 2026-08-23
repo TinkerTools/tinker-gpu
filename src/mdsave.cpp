@@ -1,3 +1,4 @@
+#include "ff/dlmda.h"
 #include "ff/energy.h"
 #include "ff/eost.h"
 #include "ff/modamoeba.h"
@@ -84,8 +85,10 @@ static Box dup_buf_box;
 static pos_prec *dup_buf_x, *dup_buf_y, *dup_buf_z;
 static vel_prec *dup_buf_vx, *dup_buf_vy, *dup_buf_vz;
 static grad_prec *dup_buf_gx, *dup_buf_gy, *dup_buf_gz;
+static int lmda_snap_mask;
+static double s_lambda, s_dedl;
 static bool ost_snap_active;
-static double s_lambda, s_dedl, s_ostdgdl, s_ostddgdl, s_eosttot;
+static double s_ostdgdl, s_ostddgdl, s_eosttot;
 static double s_osttheta, s_ostvtheta;
 static int s_iost, s_nflmda, s_fli0;
 static int s_nosthist, s_sizeosthist, s_ost_first;
@@ -98,6 +101,27 @@ static bool ti_snap_active;
 static int s_tinbcount, s_ti_first;
 static std::vector<double> s_tihist, s_tidedl, s_tisd;
 
+static void mdsaveDupLmda()
+{
+   lmda_snap_mask = lmdaDerivMask(rc_flag, use_dlmda);
+   if (not lmda_snap_mask)
+      return;
+
+   s_lambda = lambda;
+   if (lmda_snap_mask & calc::energy_dlmda1)
+      s_dedl = dedl;
+}
+
+static void mdsaveWriteLmda()
+{
+   if (not lmda_snap_mask)
+      return;
+
+   mutant::lambda = s_lambda;
+   if (lmda_snap_mask & calc::energy_dlmda1)
+      dlmda::dedl = s_dedl;
+}
+
 static void mdsaveDupOst(int istep)
 {
    ost_snap_active = use_ost or use_meta;
@@ -107,8 +131,6 @@ static void mdsaveDupOst(int istep)
    s_iost = istep;
    s_nflmda = nflmda;
    s_fli0 = fli0;
-   s_lambda = lambda;
-   s_dedl = dedl;
    s_ostdgdl = ostdgdl;
    s_ostddgdl = ostddgdl;
    s_eosttot = eosttot;
@@ -154,8 +176,6 @@ static void mdsaveWriteOst()
    ost::iost = s_iost;
    ost::nflmda = s_nflmda;
    ost::fli0 = s_fli0;
-   mutant::lambda = s_lambda;
-   dlmda::dedl = s_dedl;
    ost::ostdgdl = s_ostdgdl;
    ost::ostddgdl = s_ostddgdl;
    ost::eosttot = s_eosttot;
@@ -266,6 +286,7 @@ static void mdsaveDupThenWrite(int istep, time_prec dt)
    if (mdsaveUseExpolTef())
       darray::copy(g::q0, 9 * n, &dup_buf_polscale[0][0][0], &polscale[0][0][0]);
 
+   mdsaveDupLmda();
    mdsaveDupOst(istep);
    mdsaveDupTi();
 
@@ -379,6 +400,7 @@ static void mdsaveDupThenWrite(int istep, time_prec dt)
    check_rt(cudaStreamWaitEvent(g::s0, mdsave_end_event, 0));
 #endif
 
+   mdsaveWriteLmda();
    mdsaveWriteOst();
    mdsaveWriteTi();
 
@@ -416,6 +438,8 @@ void mdsaveSynchronize()
 
 void mdsaveLmdaFinal(int istep)
 {
+   mdsaveDupLmda();
+   mdsaveWriteLmda();
    mdsaveDupOst(istep);
    mdsaveWriteOst();
    mdsaveDupTi();
@@ -457,6 +481,7 @@ void mdsaveData(RcOp op)
       darray::deallocate(dup_buf_gx, dup_buf_gy, dup_buf_gz);
 
       ost_snap_active = false;
+      lmda_snap_mask = 0;
       s_khist.clear(), s_ihist.clear(), s_lhist.clear(), s_fhist.clear();
       s_hhist.clear(), s_wlhist.clear(), s_wfhist.clear();
       s_mlhist.clear(), s_mhhist.clear(), s_mwhist.clear(), s_mihist.clear();
@@ -508,6 +533,7 @@ void mdsaveData(RcOp op)
    if (op & RcOp::INIT) {
       idle_dup = false;
       idle_write = true;
+      lmda_snap_mask = 0;
       ost_snap_active = false;
       ti_snap_active = false;
    }
