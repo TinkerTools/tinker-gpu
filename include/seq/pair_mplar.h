@@ -68,7 +68,7 @@ inline void rotG2QIMat_v2(const real (&restrict r)[3][3],                   //
 
 #define rotG2QIMatrix rotG2QIMat_v2
 
-template <class Ver, class ETYP>
+template <class Ver, class ETYP, bool DO_AST = false>
 __device__
 void pairMplar(real r2, real3 dR, real mscale, real dscale, real pscale, real uscale,   //
    real ci, real3 Id, real Iqxx, real Iqxy, real Iqxz, real Iqyy, real Iqyz, real Iqzz, //
@@ -78,7 +78,9 @@ void pairMplar(real r2, real3 dR, real mscale, real dscale, real pscale, real us
    real& restrict frcxi, real& restrict frcyi, real& restrict frczi, real& restrict frcxk, real& restrict frcyk,
    real& restrict frczk, real& restrict trqxi, real& restrict trqyi, real& restrict trqzi, real& restrict trqxk,
    real& restrict trqyk, real& restrict trqzk, real& restrict eo, real& restrict voxx, real& restrict voxy,
-   real& restrict voxz, real& restrict voyy, real& restrict voyz, real& restrict vozz)
+   real& restrict voxz, real& restrict voyy, real& restrict voyz, real& restrict vozz,      //
+   real si = 1, real sk = 1, real dsi = 0, real dsk = 0, real deldl = 0,
+   real* restrict eo_dl = nullptr)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_g = Ver::g;
@@ -322,7 +324,27 @@ void pairMplar(real r2, real3 dR, real mscale, real dscale, real pscale, real us
    if CONSTEXPR (do_e) {
       real e = phi1[0] * ci + phi1[1] * di.x + phi1[2] * di.y + phi1[3] * di.z + phi1[4] * qixx + phi1[5] * qiyy
          + phi1[6] * qizz + phi1[7] * qixy + phi1[8] * qixz + phi1[9] * qiyz;
-      eo = f * e;
+      if CONSTEXPR (DO_AST) {
+         eo = f * si * sk * e;
+         *eo_dl = f * (dsi * sk + si * dsk) * e * deldl;
+      } else {
+         eo = f * e;
+      }
+   }
+
+   if CONSTEXPR (DO_AST) {
+      #pragma unroll
+      for (int i = 0; i < 10; ++i) {
+         phi1[i] *= sk;
+         phi1z[i] *= sk;
+         phi2[i] *= si;
+      }
+      ci *= si;
+      di *= si;
+      qixx *= si, qixy *= si, qixz *= si, qiyy *= si, qiyz *= si, qizz *= si;
+      ck *= sk;
+      dk *= sk;
+      qkxx *= sk, qkxy *= sk, qkxz *= sk, qkyy *= sk, qkyz *= sk, qkzz *= sk;
    }
 
    real phi1d[3] = {0};

@@ -673,7 +673,7 @@ static void epolarFinish(int vers);
 TINKER_FVOID2(acc0, cu1, epolarAstDeriv, EnergyBuffer, const real (*)[3], const real (*)[3],
    const real (*)[3], const real (*)[3], const real (*)[3], const real (*)[3]);
 
-static void epolarAstDeriv(int vers)
+void epolarAstDeriv(int vers)
 {
    // Scratch comes from the solver work arrays, idle now that induce() is done.
    real(*dfd)[3] = work01_;

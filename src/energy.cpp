@@ -283,6 +283,8 @@ void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
       if (tscfg("emplar", ecore_ele)) {
          if (use_emdt)
             emplar_dt(vers);
+         else if (use_emast)
+            emplarAst(vers);
          else
             emplar(vers);
       }

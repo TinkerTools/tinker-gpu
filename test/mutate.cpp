@@ -458,24 +458,30 @@ void runThermIntgFixture(const Fixture& fx)
    runFixture(fx, Fuse::Off, LmdaMode::ThermIntg);
 }
 
-// The single topology lambda-derivative path has no fused equivalent -- it
-// needs the empoledlmda kernel -- so emplarDecide() turns emplar down on
-// use_emast before it considers anything else. Dropping the counts is what
-// makes this check meaningful: with them, emplar is refused for every fixture
-// and the assertion would pass for the wrong reason.
+// Single topology electrostatics that the fused kernel still has to decline:
+// without single topology polarization alongside it, the dispatch is not the
+// reduced one emplarast is built for. Dropping the counts is what makes this
+// check meaningful: with them, emplar is refused for every fixture and the
+// assertion would pass for the wrong reason.
 void runNoEmplarFixture(const Fixture& fx)
 {
    runFixture(fx);
    runFixture(fx, Fuse::Forbid);
    REQUIRE(use_emast);
+   REQUIRE_FALSE(use_epast);
 }
 
-// Single topology with polarization driven as well. On top of what
-// runNoEmplarFixture already pins, use_epast reduces the derivative dispatch to
-// dE/dL alone, so the references carry zeros for d2E/dL2, dF/dL and dV/dL.
-void runAstPolarFixture(const Fixture& fx)
+// Single topology on both terms, run twice: once asking for interaction counts,
+// which routes around emplar to the separate empole and epolar kernels, and once
+// without them, where emplarast fuses the two. Both are checked against the same
+// reference, so the fused path has to agree with the split one and with Tinker.
+// use_epast also reduces the derivative dispatch to dE/dL alone, so the
+// references carry zeros for d2E/dL2, dF/dL and dV/dL.
+void runEmplarAstFixture(const Fixture& fx)
 {
-   runNoEmplarFixture(fx);
+   runFixture(fx);
+   runFixture(fx, Fuse::Require);
+   REQUIRE(use_emast);
    REQUIRE(use_epast);
 }
 
@@ -689,15 +695,15 @@ TEST_CASE("MUTATE-183_water_adt_v05_annihilate", "[ff][mutate][adt]") { runFixtu
 TEST_CASE("MUTATE-184_water_exf_adt_l10", "[ff][mutate][exf][emplar]") { runEmplarFixture(kFixtures[183]); }
 TEST_CASE("MUTATE-185_water_exf_adt_l05", "[ff][mutate][exf][emplar]") { runEmplarFixture(kFixtures[184]); }
 TEST_CASE("MUTATE-186_water_exf_adt_l00", "[ff][mutate][exf][emplar]") { runEmplarFixture(kFixtures[185]); }
-TEST_CASE("MUTATE-187_water_ast_ye_l10", "[ff][mutate][ast][astpol]") { runAstPolarFixture(kFixtures[186]); }
-TEST_CASE("MUTATE-188_water_ast_ne_l10", "[ff][mutate][ast][astpol]") { runAstPolarFixture(kFixtures[187]); }
-TEST_CASE("MUTATE-189_water_ast_ye_l05", "[ff][mutate][ast][astpol]") { runAstPolarFixture(kFixtures[188]); }
-TEST_CASE("MUTATE-190_water_ast_ne_l05", "[ff][mutate][ast][astpol]") { runAstPolarFixture(kFixtures[189]); }
-TEST_CASE("MUTATE-191_water_ast_ye_l00", "[ff][mutate][ast][astpol]") { runAstPolarFixture(kFixtures[190]); }
-TEST_CASE("MUTATE-192_water_ast_ne_l00", "[ff][mutate][ast][astpol]") { runAstPolarFixture(kFixtures[191]); }
-TEST_CASE("MUTATE-193_water_exf_ast_l10", "[ff][mutate][exf][ast][astpol]") { runAstPolarFixture(kFixtures[192]); }
-TEST_CASE("MUTATE-194_water_exf_ast_l05", "[ff][mutate][exf][ast][astpol]") { runAstPolarFixture(kFixtures[193]); }
-TEST_CASE("MUTATE-195_water_exf_ast_l00", "[ff][mutate][exf][ast][astpol]") { runAstPolarFixture(kFixtures[194]); }
+TEST_CASE("MUTATE-187_water_ast_ye_l10", "[ff][mutate][ast][astpol][emplar]") { runEmplarAstFixture(kFixtures[186]); }
+TEST_CASE("MUTATE-188_water_ast_ne_l10", "[ff][mutate][ast][astpol][emplar]") { runEmplarAstFixture(kFixtures[187]); }
+TEST_CASE("MUTATE-189_water_ast_ye_l05", "[ff][mutate][ast][astpol][emplar]") { runEmplarAstFixture(kFixtures[188]); }
+TEST_CASE("MUTATE-190_water_ast_ne_l05", "[ff][mutate][ast][astpol][emplar]") { runEmplarAstFixture(kFixtures[189]); }
+TEST_CASE("MUTATE-191_water_ast_ye_l00", "[ff][mutate][ast][astpol][emplar]") { runEmplarAstFixture(kFixtures[190]); }
+TEST_CASE("MUTATE-192_water_ast_ne_l00", "[ff][mutate][ast][astpol][emplar]") { runEmplarAstFixture(kFixtures[191]); }
+TEST_CASE("MUTATE-193_water_exf_ast_l10", "[ff][mutate][exf][ast][astpol][emplar]") { runEmplarAstFixture(kFixtures[192]); }
+TEST_CASE("MUTATE-194_water_exf_ast_l05", "[ff][mutate][exf][ast][astpol][emplar]") { runEmplarAstFixture(kFixtures[193]); }
+TEST_CASE("MUTATE-195_water_exf_ast_l00", "[ff][mutate][exf][ast][astpol][emplar]") { runEmplarAstFixture(kFixtures[194]); }
 
 TEST_CASE("MUTATE-TI-076_water_qnt_ast_l05", "[ff][mutate][ti][ast]") { runThermIntgFixture(kFixtures[75]); }
 TEST_CASE("MUTATE-TI-079_water_qnt_adt_l05", "[ff][mutate][ti][adt]") { runThermIntgFixture(kFixtures[78]); }

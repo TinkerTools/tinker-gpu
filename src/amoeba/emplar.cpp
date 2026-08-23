@@ -50,7 +50,7 @@ static bool emplarDecide()
       return false;
    if (use_plmda and not polTracksEle())
       return false;
-   if (use_emast)
+   if (use_emast and not use_epast)
       return false;
    if (rc_flag & calc::analyz)
       return false;
@@ -106,6 +106,72 @@ void emplar(int vers)
       for (int iv = 0; iv < 9; ++iv)
          virial_elec[iv] += v2[iv];
    }
+}
+
+
+TINKER_FVOID2(acc0, cu1, emplarAst, int);
+static void emplarAstKernel(int vers)
+{
+   TINKER_FCALL2(acc0, cu1, emplarAst, vers);
+}
+
+void emplarAst(int vers)
+{
+   if (not doubleEq(elam, plam))
+      TINKER_THROW("The electrostatic and polarization lambda values have drifted apart; "
+                   "the fused multipole/polarization single topology needs them to be equal.");
+
+   const int dvers = lmdaDerivVers(vers, use_edlmda);
+   auto do_v = vers & calc::virial;
+
+   zeroOnHost(energy_em, virial_em);
+   zeroOnHost(energy_ep, virial_ep);
+
+   // Lambda scaled state, and the solve.
+   mpoleScale(plam);
+   polarState(RdtMask::ALL, mut, plam);
+   mpoleInit(vers, false);
+   induce(uind, uinp);
+
+   // Unscaled state: the permanent multipole terms and their lambda derivative.
+   // empoleEwaldRecip and exfield both decorate the version themselves once
+   // use_emast is set, so they take the undecorated one.
+   mpoleInitAst();
+   emplarAstKernel(dvers);
+   if (useEwald())
+      empoleEwaldRecip(vers);
+   exfield(vers, 1);
+
+   // Back to the lambda scaled state for the polarization reciprocal term, which
+   // reads the permanent dipole straight out of rpole. Its version stays
+   // undecorated too, but for the opposite reason: it has no lambda derivative
+   // channel, and a version it does not recognize leaves it doing nothing at all.
+   mpoleRefresh();
+   if (useEwald()) {
+      const AccumRef out = em_buf.ref();
+      epolarEwaldRecipSelf(vers & ~calc::energy, out.e, out.v, out.gx, out.gy, out.gz);
+   }
+   if (vers & calc::energy)
+      epolar0DotProd(uind, udirp, em_buf.ref().e);
+
+   const bool do_astdl = lmdaDerivMask(vers, use_pdlmda) & calc::energy_dlmda1;
+   if (do_astdl)
+      epolarAstDeriv(vers);
+
+   torque(vers, demx, demy, demz);
+   if (do_v) {
+      VirialBuffer u2 = vir_trq;
+      virial_prec v2[9];
+      virialReduce(v2, u2);
+      for (int iv = 0; iv < 9; ++iv)
+         virial_elec[iv] += v2[iv];
+   }
+
+   // Leave pole where epolar() leaves it, and undo the masking epolarAstDeriv
+   // left behind so that whatever runs next sees the whole system again.
+   mpoleScale(elam);
+   if (do_astdl)
+      mpoleRefresh();
 }
 
 

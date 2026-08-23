@@ -19,6 +19,7 @@ void torque(int vers, grad_prec* dx, grad_prec* dy, grad_prec* dz, const real* t
    const real* tqz, VirialBuffer vbuf);
 void mpoleInit(int vers, bool do_dlmda);
 void mpoleInitDt(int vers);
+void mpoleInitAst();
 void mpoleRefresh();
 void mpoleRestoreFullState(const int* group);
 void mpoleInitStateDt(int vers, RdtMask mask, const int* group, bool first_state);

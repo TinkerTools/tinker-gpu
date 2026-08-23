@@ -58,6 +58,12 @@ static void mpoleInitBuffers(int vers, bool use_vir_trq)
       darray::zero(g::q0, bufferSize(), vir_trq);
 }
 
+static void mpoleZeroRecipVirial()
+{
+   if (vir_m)
+      darray::zero(g::q0, bufferSize(), vir_m);
+}
+
 static void mpoleInitEwald(bool do_dlmda, bool prepare_splines, bool prepare_polar_splines, bool build_cmp = true)
 {
    if (build_cmp) {
@@ -66,8 +72,6 @@ static void mpoleInitEwald(bool do_dlmda, bool prepare_splines, bool prepare_pol
       else
          rpoleToCmp();
    }
-   if (vir_m)
-      darray::zero(g::q0, bufferSize(), vir_m);
    if (prepare_splines && (pltfm_config & Platform::CUDA)) {
       bool precompute_theta = (!TINKER_CU_THETA_ON_THE_FLY_GRID_MPOLE) || (!TINKER_CU_THETA_ON_THE_FLY_GRID_UIND);
       if (epme_unit.valid()) {
@@ -95,8 +99,10 @@ void mpoleInit(int vers, bool do_dlmda)
    chkpole();
    rotpole(do_dlmda);
 
-   if (useEwald())
+   if (useEwald()) {
+      mpoleZeroRecipVirial();
       mpoleInitEwald(do_dlmda, true, true);
+   }
 }
 
 void mpoleInitDt(int vers)
@@ -104,8 +110,17 @@ void mpoleInitDt(int vers)
    mpoleInitBuffers(vers, false);
    chkpole();
    rotpole(true);
-   if (useEwald())
+   if (useEwald()) {
+      mpoleZeroRecipVirial();
       mpoleInitEwald(false, true, false, false);
+   }
+}
+
+void mpoleInitAst()
+{
+   rotpole(true);
+   if (useEwald())
+      mpoleInitEwald(true, true, false);
 }
 
 // A dual topology driver accumulates torque over every subsystem and converts it
@@ -117,8 +132,10 @@ void mpoleInitStateDt(int vers, RdtMask mask, const int* group, bool first_state
       chkpole();
    }
    rotpoleState(mask, group);
-   if (useEwald())
+   if (useEwald()) {
+      mpoleZeroRecipVirial();
       mpoleInitEwald(false, first_state, first_state);
+   }
 }
 
 void mpoleRefresh()
