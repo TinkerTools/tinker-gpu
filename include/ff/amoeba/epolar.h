@@ -50,7 +50,7 @@ struct RecipDt
 void epolarData(RcOp);
 void epolar(int vers);
 void epolar_dt(int vers);
-void polarState(RdtMask mask, const int* group);
+void polarState(RdtMask mask, const int* group, real factor = 1);
 void dtRestoreFullState(const int* group);
 RecipDt dtRecipSinks(int vers, real wa, real wb);
 void epolarEwaldRecipSelf(int vers, EnergyBuffer out_e, VirialBuffer out_v,

@@ -142,7 +142,7 @@ struct calc
    /// Gradient and virial.
    static constexpr int v6 = grad + virial;
    // thermodynamic integration and metadynamics
-   static constexpr int v7 = v1 + energy_dlmda1 + virial_dlmda;
+   static constexpr int v7 = v1 + energy_dlmda1;
    static constexpr int v8 = v4 + energy_dlmda1;
    // orthogonal space sampling
    static constexpr int v9 = v1 + energy_dlmda1 + energy_dlmda2 + grad_dlmda + virial_dlmda;

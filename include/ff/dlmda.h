@@ -203,6 +203,8 @@ TINKER_EXTERN bool use_edlmda;
 TINKER_EXTERN bool use_pdlmda;
 TINKER_EXTERN bool use_vdlmda;
 
+TINKER_EXTERN bool use_epast;
+
 // Which lambda-dynamics method owns the main lambda.
 TINKER_EXTERN bool use_ost;
 TINKER_EXTERN bool use_meta;
@@ -213,7 +215,7 @@ inline int lmdaDerivMask(int flag, bool term_driven)
 {
    if (not term_driven)
       return 0;
-   bool reduced = (use_ti or use_meta) and not use_ost;
+   bool reduced = ((use_ti or use_meta) and not use_ost) or use_epast;
    int b = 0;
    if (flag & calc::energy) {
       b += calc::energy_dlmda1;
@@ -222,7 +224,7 @@ inline int lmdaDerivMask(int flag, bool term_driven)
    }
    if ((flag & calc::grad) and not reduced)
       b += calc::grad_dlmda;
-   if (flag & calc::virial)
+   if ((flag & calc::virial) and not reduced)
       b += calc::virial_dlmda;
    return b;
 }
@@ -231,7 +233,7 @@ inline int lmdaDerivVers(int vers, bool term_driven)
 {
    if (not term_driven)
       return vers;
-   bool reduced = (use_ti or use_meta) and not use_ost;
+   bool reduced = ((use_ti or use_meta) and not use_ost) or use_epast;
    if (vers == calc::v1)
       return reduced ? calc::v7 : calc::v9;
    if (vers == calc::v4)
@@ -372,6 +374,7 @@ private:
    energy_prec* mTerm1 = nullptr;
    energy_prec* mTerm2 = nullptr;
    int mFlag = 0;
+   int mMask = 0;
    bool mDriven = false;
 };
 

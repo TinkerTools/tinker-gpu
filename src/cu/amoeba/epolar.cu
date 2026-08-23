@@ -1,5 +1,6 @@
 #include "ff/cumodamoeba.h"
 #include "ff/dlmda.h"
+#include "ff/evdw.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/pme.h"
@@ -14,26 +15,30 @@
 namespace tinker {
 __global__
 static void polarState_cu1(int n, real* restrict polarity, real* restrict polarity_inv,
-   const real* restrict polarityorig, RdtMask mask, const int* restrict group)
+   const real* restrict polarityorig, RdtMask mask, const int* restrict group, real factor)
 {
    constexpr real polmin = 1.0e-16;
    unsigned active_mask = static_cast<unsigned>(mask);
+   unsigned env = static_cast<unsigned>(RdtMask::ENV);
    for (int i = ITHREAD; i < n; i += STRIDE) {
-      unsigned atom_mask = static_cast<unsigned>(RdtMask::ENV);
+      unsigned atom_mask = env;
       if (group[i] == 1)
          atom_mask = static_cast<unsigned>(RdtMask::LIGA);
       else if (group[i] == 2)
          atom_mask = static_cast<unsigned>(RdtMask::LIGB);
 
       auto pol = (active_mask & atom_mask) ? polarityorig[i] : real(0);
+
+      if (atom_mask != env)
+         pol *= factor;
       polarity[i] = pol;
       polarity_inv[i] = real(1) / (pol > polmin ? pol : polmin);
    }
 }
 
-void polarState_cu(RdtMask mask, const int* group)
+void polarState_cu(RdtMask mask, const int* group, real factor)
 {
-   launch_k1s(g::s0, n, polarState_cu1, n, polarity, polarity_inv, polarityorig, mask, group);
+   launch_k1s(g::s0, n, polarState_cu1, n, polarity, polarity_inv, polarityorig, mask, group, factor);
 }
 
 __global__
@@ -52,6 +57,44 @@ void epolar0DotProd_cu(const real (*gpu_uind)[3], const real (*gpu_udirp)[3], En
 {
    const real f = -0.5 * electric / dielec;
    launch_k1b(g::s0, n, epolar0DotProd_cu1, n, f, eout, gpu_uind, gpu_udirp, polarity_inv);
+}
+
+__global__
+static void epolarAstDeriv_cu1(int n, real f, EnergyBuffer restrict depdl,
+   const real (*restrict uind)[3], const real (*restrict uinp)[3], //
+   const real (*restrict dfd)[3], const real (*restrict dfp)[3],   //
+   const real (*restrict f0d)[3], const real (*restrict f0p)[3],   //
+   const real (*restrict ufd)[3], const real (*restrict ufp)[3],   //
+   const real* restrict polarity_inv, const real* restrict polarityorig, const int* restrict mut)
+{
+   int ithread = ITHREAD;
+   for (int i = ithread; i < n; i += STRIDE) {
+      real term = uinp[i][0] * dfd[i][0] + uinp[i][1] * dfd[i][1] + uinp[i][2] * dfd[i][2]
+         + uind[i][0] * dfp[i][0] + uind[i][1] * dfp[i][1] + uind[i][2] * dfp[i][2];
+
+      if (mut[i] and polarityorig[i] != 0) {
+         real fdx, fdy, fdz, fpx, fpy, fpz;
+         if (f0d) {
+            fdx = f0d[i][0] + ufd[i][0], fdy = f0d[i][1] + ufd[i][1], fdz = f0d[i][2] + ufd[i][2];
+            fpx = f0p[i][0] + ufp[i][0], fpy = f0p[i][1] + ufp[i][1], fpz = f0p[i][2] + ufp[i][2];
+         } else {
+            real pinv = polarity_inv[i];
+            fdx = uind[i][0] * pinv, fdy = uind[i][1] * pinv, fdz = uind[i][2] * pinv;
+            fpx = uinp[i][0] * pinv, fpy = uinp[i][1] * pinv, fpz = uinp[i][2] * pinv;
+         }
+         term += polarityorig[i] * (fdx * fpx + fdy * fpy + fdz * fpz);
+      }
+
+      atomic_add(f * term, depdl, ithread);
+   }
+}
+
+void epolarAstDeriv_cu(EnergyBuffer depdl, const real (*dfd)[3], const real (*dfp)[3], //
+   const real (*f0d)[3], const real (*f0p)[3], const real (*ufd)[3], const real (*ufp)[3])
+{
+   const real f = -0.5 * (electric / dielec) * dpldlmda;
+   launch_k1b(g::s0, n, epolarAstDeriv_cu1, n, f, depdl, uind, uinp, dfd, dfp, f0d, f0p, ufd, ufp,
+      polarity_inv, polarityorig, mut);
 }
 
 __global__

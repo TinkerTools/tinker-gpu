@@ -273,9 +273,8 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
    initialize();
 
    // The ordinary lambda-derivative fixtures request every derivative channel,
-   // while TI requests only the first energy derivative (and the derivative
-   // virial when the base version has a virial). Verify the dispatch contract
-   // here as well as checking the resulting quantities below.
+   // while TI requests the first energy derivative alone. Verify the dispatch
+   // contract here as well as checking the resulting quantities below.
    const bool reducedLmda = lmdaMode == LmdaMode::ThermIntg;
    if (use_dlmda) {
       REQUIRE(lmdaDerivVers(calc::v1, use_dlmda) == (reducedLmda ? calc::v7 : calc::v9));
@@ -370,10 +369,10 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
          if (not reducedLmda) {
             checkLmdaSecondScalars();
             checkLmdaGrad();
+            for (int i = 0; i < 3; ++i)
+               for (int j = 0; j < 3; ++j)
+                  COMPARE_REALS(dvirdl[i * 3 + j], lr.dvdl[i][j], eps_dv);
          }
-         for (int i = 0; i < 3; ++i)
-            for (int j = 0; j < 3; ++j)
-               COMPARE_REALS(dvirdl[i * 3 + j], lr.dvdl[i][j], eps_dv);
       }
 
       // v3 -- the count buffers are allocated only under calc::analyz.

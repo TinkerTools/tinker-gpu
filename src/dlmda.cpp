@@ -248,6 +248,7 @@ void LmdaBuffer::manage(RcOp op, int flag, bool driven, EnergyBuffer* dl1, Energ
       mTerm1 = nullptr;
       mTerm2 = nullptr;
       mFlag = 0;
+      mMask = 0;
       mDriven = false;
    }
 
@@ -260,6 +261,7 @@ void LmdaBuffer::manage(RcOp op, int flag, bool driven, EnergyBuffer* dl1, Energ
       mDriven = driven;
 
       const int mask = lmdaDerivMask(flag, driven);
+      mMask = mask;
       *dl1 = nullptr;
       *dl2 = nullptr;
       if (mask & calc::energy_dlmda1) {
@@ -281,7 +283,7 @@ void LmdaBuffer::zero(int vers) const
 {
    if (not(mFlag & calc::analyz) or not mDl1)
       return;
-   const int mask = lmdaDerivMask(vers, mDriven);
+   const int mask = lmdaDerivMask(vers, mDriven) & mMask;
    if (mask & calc::energy_dlmda1)
       darray::zero(g::q0, bufferSize(), *mDl1);
    if (mask & calc::energy_dlmda2)
@@ -292,7 +294,7 @@ void LmdaBuffer::flush(int vers) const
 {
    if (not(mFlag & calc::analyz) or not mDl1)
       return;
-   const int mask = lmdaDerivMask(vers, mDriven);
+   const int mask = lmdaDerivMask(vers, mDriven) & mMask;
    if (mask & calc::energy_dlmda1) {
       energy_prec e = energyReduce(*mDl1);
       *mTerm1 += e;
@@ -349,6 +351,8 @@ void dlmda_mech()
    use_edlmda = (dlmda::use_edlmda != 0);
    use_pdlmda = (dlmda::use_pdlmda != 0);
    use_vdlmda = (dlmda::use_vdlmda != 0);
+
+   use_epast = (mutant::use_past != 0) and use_pdlmda and not use_osrw;
 
    use_emadt = use_emdt && !use_rel;
    use_emast = use_edlmda && !use_emdt && !use_rel;

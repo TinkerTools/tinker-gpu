@@ -512,6 +512,36 @@ void epolarData(RcOp op)
             TINKER_THROW("A decoupled polarization lambda does not support charge flux.");
       }
 
+      // The same ground mutate_check covers: the derivative differentiates the
+      // stationary mutual Thole functional, so anything that is not that model,
+      // or that adds a lambda dependence altpolr does not scale linearly, is out.
+      if (use_epast) {
+         FstrView poltypstr = polpot::poltyp;
+         if (not(poltypstr == "MUTUAL"))
+            TINKER_THROW("Absolute single topology polarization dU/dLambda supports "
+                         "MUTUAL polarization only.");
+         if (not polpot::use_thole or polpot::use_tholed)
+            TINKER_THROW("Absolute single topology polarization dU/dLambda supports "
+                         "Thole damping only.");
+         if (mplpot::use_chgpen)
+            TINKER_THROW("Absolute single topology polarization dU/dLambda does not "
+                         "support charge penetration.");
+         if (polpot::use_expol)
+            TINKER_THROW("Absolute single topology polarization dU/dLambda does not "
+                         "support exchange polarization.");
+         if (use(Potent::CHGFLX))
+            TINKER_THROW("Absolute single topology polarization dU/dLambda does not "
+                         "support charge flux.");
+         if (use(Potent::SOLV))
+            TINKER_THROW("Absolute single topology polarization dU/dLambda does not "
+                         "support implicit solvent.");
+         // OST wants the second lambda derivative and the lambda force, neither
+         // of which this derivative yields.
+         if (use_ost)
+            TINKER_THROW("OST cannot be used with absolute single topology polarization; "
+                         "add POL-DUALTOPO or remove OST.");
+      }
+
       std::vector<int> jpolarvec(n);
       for (int i = 0; i < n; ++i)
          jpolarvec[i] = polar::jpolar[i] - 1;
@@ -565,10 +595,10 @@ void epolarData(RcOp op)
    TINKER_FCALL2(cpp0, cu1, epolarDataBinding, op);
 }
 
-TINKER_FVOID2(acc0, cu1, polarState, RdtMask, const int*);
-void polarState(RdtMask mask, const int* group)
+TINKER_FVOID2(acc0, cu1, polarState, RdtMask, const int*, real);
+void polarState(RdtMask mask, const int* group, real factor)
 {
-   TINKER_FCALL2(acc0, cu1, polarState, mask, group);
+   TINKER_FCALL2(acc0, cu1, polarState, mask, group, factor);
 }
 }
 
@@ -640,6 +670,35 @@ static void epolarBegin(int vers);
 static void epolarKernel(int vers, bool use_cfgrad);
 static void epolarFinish(int vers);
 
+TINKER_FVOID2(acc0, cu1, epolarAstDeriv, EnergyBuffer, const real (*)[3], const real (*)[3],
+   const real (*)[3], const real (*)[3], const real (*)[3], const real (*)[3]);
+
+static void epolarAstDeriv(int vers)
+{
+   // Scratch comes from the solver work arrays, idle now that induce() is done.
+   real(*dfd)[3] = work01_;
+   real(*dfp)[3] = work02_;
+   real(*f0d)[3] = nullptr;
+   real(*f0p)[3] = nullptr;
+   real(*ufd)[3] = nullptr;
+   real(*ufp)[3] = nullptr;
+
+   if (plam == 0) {
+      f0d = work03_, f0p = work04_, ufd = work05_, ufp = work06_;
+      mpoleRefresh();
+      dfield(f0d, f0p);
+      ufield(uind, uinp, ufd, ufp);
+   }
+
+   mpoleInitStateDt(vers, RdtMask::LIGA, mut, false);
+   if (useEwald())
+      dfieldEwald(dfd, dfp);
+   else
+      dfieldNonEwald(dfd, dfp);
+
+   TINKER_FCALL2(acc0, cu1, epolarAstDeriv, depdl_buf, dfd, dfp, f0d, f0p, ufd, ufp);
+}
+
 void epolar(int vers)
 {
    assert(!use_epdt);
@@ -651,8 +710,10 @@ void epolar(int vers)
 
    epolarBegin(vers);
 
-   if (use_plmda)
+   if (use_plmda) {
       mpoleScale(plam);
+      polarState(RdtMask::ALL, mut, plam);
+   }
 
    if (use_cf)
       alterchg();
@@ -675,8 +736,15 @@ void epolar(int vers)
       }
    }
 
+   const bool do_astdl = use_epast and (lmdaDerivMask(vers, use_pdlmda) & calc::energy_dlmda1);
+   if (do_astdl)
+      epolarAstDeriv(vers);
+
    if (use_plmda)
       mpoleScale(elam);
+
+   if (do_astdl)
+      mpoleRefresh();
 
    epolarFinish(vers);
 }

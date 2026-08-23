@@ -1112,10 +1112,15 @@ void pmeConv_cu(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
 
 void pmeConvDlmda_cu(PMEUnit pme_u, PMEUnit dlpme_u, VirialBuffer gpu_vir, VirialBuffer dl_vir, real wdv)
 {
-   if (gpu_vir == nullptr or dl_vir == nullptr)
+   if (gpu_vir == nullptr) {
       pmeConv_cu2<false, false, true>(pme_u, dlpme_u, nullptr, nullptr, nullptr);
-   else
-      pmeConv_cu2<false, true, true>(pme_u, dlpme_u, nullptr, gpu_vir, dl_vir, 1, wdv);
+      return;
+   }
+   if (dl_vir == nullptr) {
+      dl_vir = gpu_vir;
+      wdv = 0;
+   }
+   pmeConv_cu2<false, true, true>(pme_u, dlpme_u, nullptr, gpu_vir, dl_vir, 1, wdv);
 }
 
 void pmeConvDt_cu(PMEUnit pme_u, VirialBuffer gpu_vir, real wv, VirialBuffer dl_vir, real wdv)

@@ -18,15 +18,12 @@ void zeroEGV(int vers)
          zeroOnDeviceAsync(bsize, eng_buf_nnintermol);
       }
 
-      if (dlmask & calc::energy_dlmda1) {
-         zeroOnHost(dedl, demdl, depdl, devdl);
+      zeroOnHost(dedl, demdl, depdl, devdl);
+      zeroOnHost(d2edl2, d2emdl2, d2epdl2, d2evdl2);
+      if (dlmask & calc::energy_dlmda1)
          zeroOnDeviceAsync(bsize, dedl_buf);
-      }
-
-      if (dlmask & calc::energy_dlmda2) {
-         zeroOnHost(d2edl2, d2emdl2, d2epdl2, d2evdl2);
+      if (dlmask & calc::energy_dlmda2)
          zeroOnDeviceAsync(bsize, d2edl2_buf);
-      }
    }
 
    if (vers & calc::virial) {
@@ -38,10 +35,9 @@ void zeroEGV(int vers)
          zeroOnDeviceAsync(bsize, vir_buf_nnintermol);
       }
 
-      if (dlmask & calc::virial_dlmda) {
-         zeroOnHost(dvirdl);
+      zeroOnHost(dvirdl);
+      if (dlmask & calc::virial_dlmda)
          zeroOnDeviceAsync(bsize, dvirdl_buf);
-      }
    }
 
    if (vers & calc::grad) {

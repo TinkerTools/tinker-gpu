@@ -15,6 +15,7 @@
 #include "tool/ioprint.h"
 #include "tool/ioread.h"
 #include "tool/xtesthelper.h"
+#include <algorithm>
 #include <cmath>
 #include <string>
 #include <tinker/detail/files.hh>
@@ -186,6 +187,7 @@ TestlmdaResult testlmdaEvaluate(const FdTestOptions& opts)
 {
    TestlmdaResult r;
    const bool keylmda = use_dlmda;
+   const bool astpolar = use_epast;
    r.dfdl.assign(3 * n, 0.0);
    r.ndfdl.assign(3 * n, 0.0);
 
@@ -253,6 +255,14 @@ TestlmdaResult testlmdaEvaluate(const FdTestOptions& opts)
             r.ndedl[0] += r.ndedl[k];
             r.nd2edl2[0] += r.nd2edl2[k];
          }
+      }
+
+      if (astpolar) {
+         for (int k = 0; k < 4; ++k)
+            r.nd2edl2[k] = 0.0;
+         std::fill(r.ndfdl.begin(), r.ndfdl.end(), 0.0);
+         for (int k = 0; k < 9; ++k)
+            r.ndvirdl[k] = 0.0;
       }
 
       restoreFdLambdaState(state);

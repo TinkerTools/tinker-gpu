@@ -121,6 +121,13 @@ void mpoleInitStateDt(int vers, RdtMask mask, const int* group, bool first_state
       mpoleInitEwald(false, first_state, first_state);
 }
 
+void mpoleRefresh()
+{
+   rotpole(false);
+   if (useEwald())
+      mpoleInitEwald(false, false, false);
+}
+
 // Undoes the masking a dual topology run leaves behind, so whatever runs next
 // sees the whole system again. rpole is rebuilt from the full set of atoms, and
 // with it cmp, which the next term's reciprocal space work reads.
