@@ -216,6 +216,15 @@ const Fixture kFixtures[] = {
    {"184_water_exf_adt_l10", "water2", true, true, false, true, "emplar"},
    {"185_water_exf_adt_l05", "water2", true, true, false, true, "emplar"},
    {"186_water_exf_adt_l00", "water2", true, true, false, true, "emplar"},
+   {"187_water_ast_ye_l10", "water2", true, true, true, true, "astpol"},
+   {"188_water_ast_ne_l10", "water2", true, true, true, true, "astpol"},
+   {"189_water_ast_ye_l05", "water2", true, true, true, true, "astpol"},
+   {"190_water_ast_ne_l05", "water2", true, true, true, true, "astpol"},
+   {"191_water_ast_ye_l00", "water2", true, true, true, true, "astpol"},
+   {"192_water_ast_ne_l00", "water2", true, true, true, true, "astpol"},
+   {"193_water_exf_ast_l10", "water2", true, true, true, true, "astpol"},
+   {"194_water_exf_ast_l05", "water2", true, true, true, true, "astpol"},
+   {"195_water_exf_ast_l00", "water2", true, true, true, true, "astpol"},
 };
 
 // How a run should treat the fused multipole/polarization kernel. emplar cannot
@@ -273,14 +282,18 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
    initialize();
 
    // The ordinary lambda-derivative fixtures request every derivative channel,
-   // while TI requests the first energy derivative alone. Verify the dispatch
-   // contract here as well as checking the resulting quantities below.
-   const bool reducedLmda = lmdaMode == LmdaMode::ThermIntg;
+   // while TI requests the first energy derivative alone. Single topology
+   // polarization collapses the dispatch the same way: past dE/dL the chain rule
+   // has no single-topology form, so d2E/dL2, dF/dL and dV/dL stay at zero and
+   // the kernels are never asked for them. Verify the dispatch contract here as
+   // well as checking the resulting quantities below.
+   const bool tiMode = lmdaMode == LmdaMode::ThermIntg;
+   const bool reducedLmda = tiMode or use_epast;
    if (use_dlmda) {
       REQUIRE(lmdaDerivVers(calc::v1, use_dlmda) == (reducedLmda ? calc::v7 : calc::v9));
       REQUIRE(lmdaDerivVers(calc::v4, use_dlmda) == (reducedLmda ? calc::v8 : calc::v10));
    }
-   if (reducedLmda) {
+   if (tiMode) {
       REQUIRE(use_dlmda);
       REQUIRE(use_ti);
       REQUIRE(use_mainlmda);
@@ -455,6 +468,15 @@ void runNoEmplarFixture(const Fixture& fx)
    runFixture(fx);
    runFixture(fx, Fuse::Forbid);
    REQUIRE(use_emast);
+}
+
+// Single topology with polarization driven as well. On top of what
+// runNoEmplarFixture already pins, use_epast reduces the derivative dispatch to
+// dE/dL alone, so the references carry zeros for d2E/dL2, dF/dL and dV/dL.
+void runAstPolarFixture(const Fixture& fx)
+{
+   runNoEmplarFixture(fx);
+   REQUIRE(use_epast);
 }
 
 // Checks which dual topology endpoints the run had to build. dtNeed() decides
@@ -667,6 +689,15 @@ TEST_CASE("MUTATE-183_water_adt_v05_annihilate", "[ff][mutate][adt]") { runFixtu
 TEST_CASE("MUTATE-184_water_exf_adt_l10", "[ff][mutate][exf][emplar]") { runEmplarFixture(kFixtures[183]); }
 TEST_CASE("MUTATE-185_water_exf_adt_l05", "[ff][mutate][exf][emplar]") { runEmplarFixture(kFixtures[184]); }
 TEST_CASE("MUTATE-186_water_exf_adt_l00", "[ff][mutate][exf][emplar]") { runEmplarFixture(kFixtures[185]); }
+TEST_CASE("MUTATE-187_water_ast_ye_l10", "[ff][mutate][ast][astpol]") { runAstPolarFixture(kFixtures[186]); }
+TEST_CASE("MUTATE-188_water_ast_ne_l10", "[ff][mutate][ast][astpol]") { runAstPolarFixture(kFixtures[187]); }
+TEST_CASE("MUTATE-189_water_ast_ye_l05", "[ff][mutate][ast][astpol]") { runAstPolarFixture(kFixtures[188]); }
+TEST_CASE("MUTATE-190_water_ast_ne_l05", "[ff][mutate][ast][astpol]") { runAstPolarFixture(kFixtures[189]); }
+TEST_CASE("MUTATE-191_water_ast_ye_l00", "[ff][mutate][ast][astpol]") { runAstPolarFixture(kFixtures[190]); }
+TEST_CASE("MUTATE-192_water_ast_ne_l00", "[ff][mutate][ast][astpol]") { runAstPolarFixture(kFixtures[191]); }
+TEST_CASE("MUTATE-193_water_exf_ast_l10", "[ff][mutate][exf][ast][astpol]") { runAstPolarFixture(kFixtures[192]); }
+TEST_CASE("MUTATE-194_water_exf_ast_l05", "[ff][mutate][exf][ast][astpol]") { runAstPolarFixture(kFixtures[193]); }
+TEST_CASE("MUTATE-195_water_exf_ast_l00", "[ff][mutate][exf][ast][astpol]") { runAstPolarFixture(kFixtures[194]); }
 
 TEST_CASE("MUTATE-TI-076_water_qnt_ast_l05", "[ff][mutate][ti][ast]") { runThermIntgFixture(kFixtures[75]); }
 TEST_CASE("MUTATE-TI-079_water_qnt_adt_l05", "[ff][mutate][ti][adt]") { runThermIntgFixture(kFixtures[78]); }

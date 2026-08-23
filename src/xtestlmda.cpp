@@ -218,21 +218,41 @@ TestlmdaResult testlmdaEvaluate(const FdTestOptions& opts)
       LambdaEvaluation center = evaluateAtOffset(state, LambdaVariable::MAIN, 0.0);
 
       if (state.useMain) {
+         const bool atLower = state.main - eps < 0;
+
          LambdaEvaluation plus = evaluateAtOffset(state, LambdaVariable::MAIN, eps);
-         LambdaEvaluation minus = evaluateAtOffset(state, LambdaVariable::MAIN, -eps);
+         LambdaEvaluation minus, plus2;
+         if (atLower)
+            plus2 = evaluateAtOffset(state, LambdaVariable::MAIN, 2.0 * eps);
+         else
+            minus = evaluateAtOffset(state, LambdaVariable::MAIN, -eps);
+
          const LambdaVariable variables[] = {
             LambdaVariable::MAIN, LambdaVariable::VDW, LambdaVariable::ELE, LambdaVariable::POL};
          for (int k = 0; k < 4; ++k) {
             double ep = lambdaEnergy(plus, variables[k]);
             double ec = lambdaEnergy(center, variables[k]);
-            double em = lambdaEnergy(minus, variables[k]);
-            r.ndedl[k] = (ep - em) / (2.0 * eps);
-            r.nd2edl2[k] = (ep - 2.0 * ec + em) / eps2;
+            if (atLower) {
+               double ep2 = lambdaEnergy(plus2, variables[k]);
+               r.ndedl[k] = (-3.0 * ec + 4.0 * ep - ep2) / (2.0 * eps);
+               r.nd2edl2[k] = (ec - 2.0 * ep + ep2) / eps2;
+            } else {
+               double em = lambdaEnergy(minus, variables[k]);
+               r.ndedl[k] = (ep - em) / (2.0 * eps);
+               r.nd2edl2[k] = (ep - 2.0 * ec + em) / eps2;
+            }
          }
-         for (int k = 0; k < 3 * n; ++k)
-            r.ndfdl[k] = (plus.gradient[k] - minus.gradient[k]) / (2.0 * eps);
-         for (int k = 0; k < 9; ++k)
-            r.ndvirdl[k] = (plus.virial[k] - minus.virial[k]) / (2.0 * eps);
+         if (atLower) {
+            for (int k = 0; k < 3 * n; ++k)
+               r.ndfdl[k] = (-3.0 * center.gradient[k] + 4.0 * plus.gradient[k] - plus2.gradient[k]) / (2.0 * eps);
+            for (int k = 0; k < 9; ++k)
+               r.ndvirdl[k] = (-3.0 * center.virial[k] + 4.0 * plus.virial[k] - plus2.virial[k]) / (2.0 * eps);
+         } else {
+            for (int k = 0; k < 3 * n; ++k)
+               r.ndfdl[k] = (plus.gradient[k] - minus.gradient[k]) / (2.0 * eps);
+            for (int k = 0; k < 9; ++k)
+               r.ndvirdl[k] = (plus.virial[k] - minus.virial[k]) / (2.0 * eps);
+         }
       } else {
          // Fixed sub-lambdas are independent coordinates. Test each derivative
          // at its own configured value, then sum them for the total derivative.

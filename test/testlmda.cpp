@@ -20,20 +20,26 @@ struct Fixture
 {
    const char* key;
    const char* ref;
+   double eps;   ///< Finite difference stepsize, in lambda.
 };
 
+// The default stepsize is 1e-2: smaller steps sharpen the first derivatives but
+// wreck the second ones, which divide by eps squared. The single topology
+// fixtures have no second derivatives to protect -- use_epast zeroes them -- and
+// 1e-2 leaves too much truncation in the first ones at lambda 1, so they step by
+// 1e-3. Going smaller is worse, not better: the forward stencil at lambda 0 does
+// not cancel its center term, so mixed-precision round-off grows as 1/eps.
 const Fixture kFixtures[] = {
-   {"01_water_adt_l05.key", "testlmda.1.txt"},
-   {"02_water_ast_l05.key", "testlmda.2.txt"},
-   {"03_water_adt_l06exp.key", "testlmda.3.txt"},
-   {"04_water_ast_l06exp.key", "testlmda.4.txt"},
-   {"05_water_ast_nodl_l05.key", "testlmda.5.txt"},
-   {"06_water_ast_vonly_l05.key", "testlmda.6.txt"},
+   {"01_water_adt_l05.key", "testlmda.1.txt", 1.0e-2},
+   {"02_water_ast_l05.key", "testlmda.2.txt", 1.0e-2},
+   {"03_water_adt_l06exp.key", "testlmda.3.txt", 1.0e-2},
+   {"04_water_ast_l06exp.key", "testlmda.4.txt", 1.0e-2},
+   {"05_water_ast_nodl_l05.key", "testlmda.5.txt", 1.0e-2},
+   {"06_water_ast_vonly_l05.key", "testlmda.6.txt", 1.0e-2},
+   {"07_water_ast_ye_l10.key", "testlmda.7.txt", 1.0e-3},
+   {"08_water_ast_ye_l05.key", "testlmda.8.txt", 1.0e-3},
+   {"09_water_ast_ye_l00.key", "testlmda.9.txt", 1.0e-3},
 };
-
-// Finite difference stepsize, in lambda. Smaller steps sharpen the first
-// derivatives but wreck the second ones, which divide by eps squared.
-constexpr double kEps = 1.0e-2;
 
 void runFixture(const Fixture& fx)
 {
@@ -52,7 +58,7 @@ void runFixture(const Fixture& fx)
    FdTestOptions opts;
    opts.analyt = true;
    opts.numer = true;
-   opts.eps = kEps;
+   opts.eps = fx.eps;
 
    rc_flag = testlmdaFlags(opts);
    initialize();
@@ -112,4 +118,7 @@ TEST_CASE("TESTLMDA-03_water_adt_l06exp", "[ff][testlmda]") { runFixture(kFixtur
 TEST_CASE("TESTLMDA-04_water_ast_l06exp", "[ff][testlmda]") { runFixture(kFixtures[3]); }
 TEST_CASE("TESTLMDA-05_water_ast_nodl_l05", "[ff][testlmda]") { runFixture(kFixtures[4]); }
 TEST_CASE("TESTLMDA-06_water_ast_vonly_l05", "[ff][testlmda]") { runFixture(kFixtures[5]); }
+TEST_CASE("TESTLMDA-07_water_ast_ye_l10", "[ff][testlmda][ast]") { runFixture(kFixtures[6]); }
+TEST_CASE("TESTLMDA-08_water_ast_ye_l05", "[ff][testlmda][ast]") { runFixture(kFixtures[7]); }
+TEST_CASE("TESTLMDA-09_water_ast_ye_l00", "[ff][testlmda][ast]") { runFixture(kFixtures[8]); }
 #endif
