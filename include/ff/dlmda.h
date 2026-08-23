@@ -183,6 +183,8 @@ void quinticTaper(double x, double cut, double off, double& taper, double& dtape
 /// Waals sub-lambdas and their derivatives (dlambda.f:refreshsublmda).
 void mapSubLambda();
 
+bool lmdaSameValue(double a, double b);
+
 bool polTracksEle();
 
 /// Reads the shared lambda-dynamics state from the Fortran modules.

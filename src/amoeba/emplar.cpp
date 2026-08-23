@@ -18,17 +18,9 @@
 #include <tinker/detail/mplpot.hh>
 
 #include <cassert>
-#include <cmath>
 
 namespace tinker {
 static int emplar_flag = -1;
-
-/// compare double
-static bool doubleEq(double a, double b)
-{
-   constexpr double eps = 1.0e-6;
-   return std::fabs(a - b) <= eps;
-}
 
 /// Determines whether emplar can be used for dual topology.
 static bool emplarDualMatched()
@@ -117,7 +109,7 @@ static void emplarAstKernel(int vers)
 
 void emplarAst(int vers)
 {
-   if (not doubleEq(elam, plam))
+   if (not lmdaSameValue(elam, plam))
       TINKER_THROW("The electrostatic and polarization lambda values have drifted apart; "
                    "the fused multipole/polarization single topology needs them to be equal.");
 
@@ -220,7 +212,7 @@ static void emplarState(int vers, RdtMask mask, const int* group, bool first_sta
 
 void emplar_dt(int vers)
 {
-   if (not doubleEq(elam, plam))
+   if (not lmdaSameValue(elam, plam))
       TINKER_THROW("The electrostatic and polarization lambda values have drifted apart; "
                    "the fused multipole/polarization dual topology needs them to be equal.");
 

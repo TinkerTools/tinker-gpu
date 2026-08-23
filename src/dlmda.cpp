@@ -283,7 +283,7 @@ void LmdaBuffer::zero(int vers) const
 {
    if (not(mFlag & calc::analyz) or not mDl1)
       return;
-   const int mask = lmdaDerivMask(vers, mDriven) & mMask;
+   const int mask = lmdaDerivVers(vers, mDriven) & mMask;
    if (mask & calc::energy_dlmda1)
       darray::zero(g::q0, bufferSize(), *mDl1);
    if (mask & calc::energy_dlmda2)
@@ -294,7 +294,7 @@ void LmdaBuffer::flush(int vers) const
 {
    if (not(mFlag & calc::analyz) or not mDl1)
       return;
-   const int mask = lmdaDerivMask(vers, mDriven) & mMask;
+   const int mask = lmdaDerivVers(vers, mDriven) & mMask;
    if (mask & calc::energy_dlmda1) {
       energy_prec e = energyReduce(*mDl1);
       *mTerm1 += e;
@@ -587,11 +587,14 @@ static void mapRelStage(double lmda)
    d2pldlmda2 = d2eldlmda2;
 }
 
-bool polTracksEle()
+bool lmdaSameValue(double a, double b)
 {
    constexpr double eps = 1.0e-6;
-   auto sameValue = [](double a, double b) { return std::fabs(a - b) <= eps; };
+   return std::fabs(a - b) <= eps;
+}
 
+bool polTracksEle()
+{
    // The staged schedule drives polarization off the multipole weight by
    // construction, so the per-map comparisons below do not apply to it.
    if (use_relstage)
@@ -602,7 +605,7 @@ bool polTracksEle()
       return false;
    // Neither is driven, so today's values are the only values.
    if (not(use_mainlmda and use_elmdamap))
-      return sameValue(elam, plam);
+      return lmdaSameValue(elam, plam);
 
    if (plmdamap != elmdamap)
       return false;
@@ -610,9 +613,9 @@ bool polTracksEle()
    if (elmdamap == Lmdamap::EXP) {
       return plmdaexp == elmdaexp;
    } else if (elmdamap == Lmdamap::INV) {
-      return plmdainvn == elmdainvn and sameValue(plmdainveps, elmdainveps);
+      return plmdainvn == elmdainvn and lmdaSameValue(plmdainveps, elmdainveps);
    } else {
-      return sameValue(qntplmda0, qntelmda0) and sameValue(qntplmda1, qntelmda1);
+      return lmdaSameValue(qntplmda0, qntelmda0) and lmdaSameValue(qntplmda1, qntelmda1);
    }
 }
 
