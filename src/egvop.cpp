@@ -7,7 +7,8 @@ namespace tinker {
 void zeroEGV(int vers)
 {
    size_t bsize = bufferSize();
-   const int dlmask = lmdaDerivMask(vers, use_dlmda);
+   const int dvers = lmdaDerivVers(vers, use_dlmda);
+   const int dlkeep = lmdaDerivMask(rc_flag, use_dlmda) & ~dvers;
 
    if (vers & calc::energy) {
       zeroOnHost(esum, energy_valence, energy_vdw, energy_elec);
@@ -18,11 +19,13 @@ void zeroEGV(int vers)
          zeroOnDeviceAsync(bsize, eng_buf_nnintermol);
       }
 
-      zeroOnHost(dedl, demdl, depdl, devdl);
-      zeroOnHost(d2edl2, d2emdl2, d2epdl2, d2evdl2);
-      if (dlmask & calc::energy_dlmda1)
+      if (not(dlkeep & calc::energy_dlmda1))
+         zeroOnHost(dedl, demdl, depdl, devdl);
+      if (not(dlkeep & calc::energy_dlmda2))
+         zeroOnHost(d2edl2, d2emdl2, d2epdl2, d2evdl2);
+      if (dvers & calc::energy_dlmda1)
          zeroOnDeviceAsync(bsize, dedl_buf);
-      if (dlmask & calc::energy_dlmda2)
+      if (dvers & calc::energy_dlmda2)
          zeroOnDeviceAsync(bsize, d2edl2_buf);
    }
 
@@ -35,8 +38,9 @@ void zeroEGV(int vers)
          zeroOnDeviceAsync(bsize, vir_buf_nnintermol);
       }
 
-      zeroOnHost(dvirdl);
-      if (dlmask & calc::virial_dlmda)
+      if (not(dlkeep & calc::virial_dlmda))
+         zeroOnHost(dvirdl);
+      if (dvers & calc::virial_dlmda)
          zeroOnDeviceAsync(bsize, dvirdl_buf);
    }
 
@@ -47,7 +51,7 @@ void zeroEGV(int vers)
          zeroOnDevice3Async(n, gx_nnintermol, gy_nnintermol, gz_nnintermol);
       }
 
-      if (dlmask & (calc::grad_dlmda | calc::virial_dlmda)) {
+      if (dvers & (calc::grad_dlmda | calc::virial_dlmda)) {
          zeroOnDevice3Async(n, dfdlx, dfdly, dfdlz);
       }
    }

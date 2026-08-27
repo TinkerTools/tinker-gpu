@@ -128,7 +128,7 @@ void empole(int vers)
    empoleKernel(vers);
    exfield(vers, 1);
    torque(vers, demx, demy, demz);
-   if (lmdaDerivMask(vers, use_emast) & (calc::grad_dlmda | calc::virial_dlmda))
+   if (lmdaDerivVers(vers, use_emast) & (calc::grad_dlmda | calc::virial_dlmda))
       torque(vers, dfdlx, dfdly, dfdlz, dltrqx, dltrqy, dltrqz, dvirdl_buf);
    if (do_v) {
       VirialBuffer u2 = vir_trq;

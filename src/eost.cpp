@@ -910,9 +910,10 @@ void eostBias(int vers)
    // The g bias depends on dU/dlambda, whose gradient/virial are dfdl* and
    // dvirdl, so these are the OSRW second-order Cartesian terms. The force term
    // runs on device via sumGradient.
-   if (lmdaDerivMask(vers, use_dlmda) & calc::grad_dlmda)
+   const int dvers = lmdaDerivVers(vers, use_dlmda);
+   if (dvers & calc::grad_dlmda)
       sumGradient(bdgdfl, gx, gy, gz, dfdlx, dfdly, dfdlz);
-   if (vers & calc::virial)
+   if ((dvers & calc::virial_dlmda) and (vers & calc::virial))
       for (int k = 0; k < 9; ++k)
          vir[k] += bdgdfl * dvirdl[k];
 }

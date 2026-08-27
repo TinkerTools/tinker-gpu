@@ -736,7 +736,7 @@ void epolar(int vers)
       }
    }
 
-   const bool do_astdl = use_epast and (lmdaDerivMask(vers, use_pdlmda) & calc::energy_dlmda1);
+   const bool do_astdl = use_epast and (lmdaDerivVers(vers, use_pdlmda) & calc::energy_dlmda1);
    if (do_astdl)
       epolarAstDeriv(vers);
 

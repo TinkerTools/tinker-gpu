@@ -352,7 +352,7 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
    auto do_e = vers & calc::energy;
    auto do_v = vers & calc::virial;
    auto do_g = vers & calc::grad;
-   const int dlmask = lmdaDerivMask(vers, use_dlmda);
+   const int dvers = lmdaDerivVers(vers, use_dlmda);
 
    bool must_wait = false;
    ev_hobj.e_val = 0;
@@ -381,11 +381,11 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             reduceSumOnDevice(&ev_dptr->e_nnintermol, eng_buf_nnintermol, bufsize, g::q0);
          }
       }
-      if ((dlmask & calc::energy_dlmda1) and dedl_buf) {
+      if ((dvers & calc::energy_dlmda1) and dedl_buf) {
          must_wait = true;
          reduceSumOnDevice(&ev_dptr->dedl, dedl_buf, bufferSize(), g::q0);
       }
-      if ((dlmask & calc::energy_dlmda2) and d2edl2_buf) {
+      if ((dvers & calc::energy_dlmda2) and d2edl2_buf) {
          must_wait = true;
          reduceSumOnDevice(&ev_dptr->d2edl2, d2edl2_buf, bufferSize(), g::q0);
       }
@@ -416,7 +416,7 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             reduceSum2OnDevice(ev_dptr->v_nnintermol, vir_buf_nnintermol, bufsize, g::q0);
          }
       }
-      if ((dlmask & calc::virial_dlmda) and dvirdl_buf) {
+      if ((dvers & calc::virial_dlmda) and dvirdl_buf) {
          must_wait = true;
          reduceSum2OnDevice(ev_dptr->dvirdl, dvirdl_buf, bufferSize(), g::q0);
       }
@@ -440,10 +440,10 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             energy_nnintermol += toFloatingPoint<energy_prec>(ev_hobj.e_nnintermol);
          }
       }
-      if ((dlmask & calc::energy_dlmda1) and dedl_buf) {
+      if ((dvers & calc::energy_dlmda1) and dedl_buf) {
          dedl += toFloatingPoint<energy_prec>(ev_hobj.dedl);
       }
-      if ((dlmask & calc::energy_dlmda2) and d2edl2_buf) {
+      if ((dvers & calc::energy_dlmda2) and d2edl2_buf) {
          d2edl2 += toFloatingPoint<energy_prec>(ev_hobj.d2edl2);
       }
       esum = energy_valence + energy_vdw + energy_elec + energy_nnintermol;
@@ -483,7 +483,7 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
                virial_nnintermol[iv] += v2nn[iv];
          }
       }
-      if ((dlmask & calc::virial_dlmda) and dvirdl_buf) {
+      if ((dvers & calc::virial_dlmda) and dvirdl_buf) {
          virial_prec vdl[VirialBufferTraits::N], v2dl[9];
          for (int iv = 0; iv < (int)VirialBufferTraits::N; ++iv)
             vdl[iv] = toFloatingPoint<virial_prec>(ev_hobj.dvirdl[iv]);

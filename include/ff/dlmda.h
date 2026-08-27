@@ -212,7 +212,6 @@ TINKER_EXTERN bool use_ost;
 TINKER_EXTERN bool use_meta;
 TINKER_EXTERN bool use_ti;
 
-/// The lambda-derivative channels a term can be asked for, as calc bits.
 inline int lmdaDerivMask(int flag, bool term_driven)
 {
    if (not term_driven)

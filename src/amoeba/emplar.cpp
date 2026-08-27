@@ -146,7 +146,7 @@ void emplarAst(int vers)
    if (vers & calc::energy)
       epolar0DotProd(uind, udirp, em_buf.ref().e);
 
-   const bool do_astdl = lmdaDerivMask(vers, use_pdlmda) & calc::energy_dlmda1;
+   const bool do_astdl = lmdaDerivVers(vers, use_pdlmda) & calc::energy_dlmda1;
    if (do_astdl)
       epolarAstDeriv(vers);
 

@@ -45,7 +45,7 @@ void dlmdaData(RcOp op)
 void dlmdaData2(RcOp op)
 {
    if (op & RcOp::INIT) {
-      bool lambda_dynamics = use_dlmda or use_ost or use_meta or use_emdt //
+      bool lambda_dynamics = use_dlmda or use_ost or use_meta or use_ti or use_emdt //
          or use_epdt or use_evdt or use_rel;
       if (lambda_dynamics and not(pltfm_config & Platform::CUDA))
          TINKER_THROW("OST  --  Lambda dynamics requires the CUDA platform");

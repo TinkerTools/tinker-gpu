@@ -142,26 +142,47 @@ void clearti()
    use_vlmdamap = false;
 }
 
-// Number of data records, i.e. lines that prttihead did not write.
+// True for a line that holds nothing but blanks.
+bool tiBlankLine(const std::string& line)
+{
+   return line.find_first_not_of(" \t\r") == std::string::npos;
+}
+
+// Number of data records. prttihead writes the standard Tinker banner and
+// plain text, so there is no comment character to key on: the header runs
+// through the line labeling the columns, and every nonblank line after it is
+// a block average appended by saveti.
 int tiCountRows(const std::string& fname)
 {
    std::ifstream fs(fname);
    std::string line;
+   bool header = false;
    int n = 0;
-   while (std::getline(fs, line))
-      if (not line.empty() and line[0] != '#')
+   while (std::getline(fs, line)) {
+      if (not header) {
+         if (line.find("Index") != std::string::npos)
+            header = true;
+      } else if (not tiBlankLine(line)) {
          ++n;
+      }
+   }
    return n;
 }
 
-// Lambda column of the nth (1-based) data record.
+// Lambda column of the nth (1-based) data record, counted the same way.
 double tiRowLambda(const std::string& fname, int nth)
 {
    std::ifstream fs(fname);
    std::string line;
+   bool header = false;
    int n = 0;
    while (std::getline(fs, line)) {
-      if (line.empty() or line[0] == '#')
+      if (not header) {
+         if (line.find("Index") != std::string::npos)
+            header = true;
+         continue;
+      }
+      if (tiBlankLine(line))
          continue;
       if (++n == nth) {
          std::istringstream ss(line);

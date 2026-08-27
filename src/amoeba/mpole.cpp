@@ -50,7 +50,7 @@ static void mpoleInitBuffers(int vers, bool use_vir_trq)
 {
    if (vers & calc::grad) {
       darray::zero(g::q0, n, trqx, trqy, trqz);
-      if (lmdaDerivMask(vers, use_edlmda or use_pdlmda) & (calc::grad_dlmda | calc::virial_dlmda)) {
+      if (lmdaDerivVers(vers, use_edlmda or use_pdlmda) & (calc::grad_dlmda | calc::virial_dlmda)) {
          darray::zero(g::q0, n, dltrqx, dltrqy, dltrqz);
       }
    }
