@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <tinker/detail/mutant.hh>
+#include <utility>
 
 // Host-only checks of the lambda-mapping math in src/dlmda.cpp: the quintic
 // taper and the staged relative free energy schedule that mapSubLambda()
@@ -471,4 +472,161 @@ TEST_CASE("DLMDA-relstage-continuity", "[ff][dlmda]")
       legMatchesTaper(RelStage::LIG2, lambda, 0.0, 0.3, -1.0);
 
    use_relstage = false;
+}
+
+namespace {
+// The asymmetric power map is host math like the taper above, but mapOne() is
+// static, so drive it through mapSubLambda() and read the shape back off the
+// globals. This puts back everything that walks on.
+struct ApmScope
+{
+   bool rel, mainl, useE, useP, useV;
+   Lmdamap em, pm, vm;
+   int en, pn, vn;
+   double erho, prho, vrho, mainlmda;
+
+   ApmScope()
+      : rel(use_relstage)
+      , mainl(use_mainlmda)
+      , useE(use_elmdamap)
+      , useP(use_plmdamap)
+      , useV(use_vlmdamap)
+      , em(elmdamap)
+      , pm(plmdamap)
+      , vm(vlmdamap)
+      , en(elmdaapmn)
+      , pn(plmdaapmn)
+      , vn(vlmdaapmn)
+      , erho(elmdaapmrho)
+      , prho(plmdaapmrho)
+      , vrho(vlmdaapmrho)
+      , mainlmda(lambda)
+   {
+      // One main lambda claiming all three sub-lambdas, each on the apm map.
+      use_relstage = false;
+      use_mainlmda = true;
+      use_elmdamap = true;
+      use_plmdamap = true;
+      use_vlmdamap = true;
+      elmdamap = Lmdamap::APM;
+      plmdamap = Lmdamap::APM;
+      vlmdamap = Lmdamap::APM;
+   }
+
+   ~ApmScope()
+   {
+      use_relstage = rel;
+      use_mainlmda = mainl;
+      use_elmdamap = useE;
+      use_plmdamap = useP;
+      use_vlmdamap = useV;
+      elmdamap = em;
+      plmdamap = pm;
+      vlmdamap = vm;
+      elmdaapmn = en;
+      plmdaapmn = pn;
+      vlmdaapmn = vn;
+      elmdaapmrho = erho;
+      plmdaapmrho = prho;
+      vlmdaapmrho = vrho;
+      lambda = mainlmda;
+   }
+};
+
+// The same power and slope ratio on all three sub-lambdas.
+void setApm(int nn, double rho)
+{
+   elmdaapmn = nn;
+   plmdaapmn = nn;
+   vlmdaapmn = nn;
+   elmdaapmrho = rho;
+   plmdaapmrho = rho;
+   vlmdaapmrho = rho;
+}
+}
+
+TEST_CASE("DLMDA-apm-endpoints", "[ff][dlmda]")
+{
+   // The map pins both endpoint values and carries the slope ratio at the
+   // decoupled end against a unit slope at the coupled end, which is what the
+   // normalization exists to enforce. The sub-lambdas are real, so they hold
+   // their value only to float round-off; the derivatives are double.
+   ApmScope scope;
+   setApm(12, 4.0);
+
+   mapAt(0.0);
+   COMPARE_REALS(vlam, 0.0, 1.0e-6);
+   COMPARE_REALS(dvldlmda, 4.0, 1.0e-12);
+   COMPARE_REALS(d2vldlmda2, -39.272727272727273, 1.0e-12);
+
+   mapAt(1.0);
+   COMPARE_REALS(vlam, 1.0, 1.0e-6);
+   COMPARE_REALS(dvldlmda, 1.0, 1.0e-12);
+   COMPARE_REALS(d2vldlmda2, 3.272727272727273, 1.0e-12);
+
+   // The interior runs ahead of the linear schedule, its slope having already
+   // fallen below one by the midpoint.
+   mapAt(0.5);
+   COMPARE_REALS(vlam, 0.6153564453125, 1.0e-6);
+   COMPARE_REALS(dvldlmda, 0.728138316761364, 1.0e-12);
+   COMPARE_REALS(d2vldlmda2, -0.017578125, 1.0e-12);
+}
+
+TEST_CASE("DLMDA-apm-degenerate", "[ff][dlmda]")
+{
+   // A power below two or a slope ratio of one or less leaves no asymmetry to
+   // impose, and a slope ratio at or above the power sits on the pole of the
+   // normalization. All three fall back to the identity map.
+   ApmScope scope;
+
+   for (auto shape : {std::make_pair(1, 4.0), std::make_pair(12, 1.0), std::make_pair(4, 4.0)}) {
+      CAPTURE(shape.first);
+      CAPTURE(shape.second);
+      setApm(shape.first, shape.second);
+      mapAt(0.4);
+      COMPARE_REALS(vlam, 0.4, 1.0e-6);
+      COMPARE_REALS(dvldlmda, 1.0, 1.0e-12);
+      COMPARE_REALS(d2vldlmda2, 0.0, 1.0e-12);
+   }
+}
+
+TEST_CASE("DLMDA-apm-per-term-shape", "[ff][dlmda]")
+{
+   // Three terms on three different powers and slope ratios, so a crossed
+   // argument at a mapOne() call site would land the wrong shape on the wrong
+   // sub-lambda instead of going unnoticed.
+   ApmScope scope;
+   plmdaapmn = 2;
+   elmdaapmn = 3;
+   vlmdaapmn = 4;
+   plmdaapmrho = 1.5;
+   elmdaapmrho = 2.0;
+   vlmdaapmrho = 2.5;
+
+   mapAt(0.25);
+   COMPARE_REALS(plam, 0.3203125, 1.0e-6);
+   COMPARE_REALS(dpldlmda, 1.09375, 1.0e-12);
+   COMPARE_REALS(d2pldlmda2, -1.25, 1.0e-12);
+   COMPARE_REALS(elam, 0.3818359375, 1.0e-6);
+   COMPARE_REALS(deldlmda, 1.140625, 1.0e-12);
+   COMPARE_REALS(d2eldlmda2, -2.4375, 1.0e-12);
+   COMPARE_REALS(vlam, 0.43017578125, 1.0e-6);
+   COMPARE_REALS(dvldlmda, 1.134765625, 1.0e-12);
+   COMPARE_REALS(d2vldlmda2, -3.34375, 1.0e-12);
+}
+
+TEST_CASE("DLMDA-apm-pol-tracks-ele", "[ff][dlmda]")
+{
+   // Polarization rides the multipole weight only while both maps carry the
+   // same shape; either half of the shape parting company parts the weights.
+   ApmScope scope;
+   setApm(12, 4.0);
+   REQUIRE(polTracksEle());
+
+   plmdaapmn = 8;
+   REQUIRE_FALSE(polTracksEle());
+
+   plmdaapmn = 12;
+   plmdaapmrho = 2.0;
+   REQUIRE_FALSE(polTracksEle());
 }

@@ -59,6 +59,8 @@ Lmdamap lmdamapFrom(const char* s)
       return Lmdamap::EXP;
    if (std::strncmp(s, "INV", 3) == 0)
       return Lmdamap::INV;
+   if (std::strncmp(s, "APM", 3) == 0)
+      return Lmdamap::APM;
    if (std::strncmp(s, "QNT", 3) == 0)
       return Lmdamap::QNT;
    return Lmdamap::QNT;
@@ -383,6 +385,12 @@ void dlmda_mech()
    elmdainveps = dlmda::elmdainveps;
    plmdainveps = dlmda::plmdainveps;
    vlmdainveps = dlmda::vlmdainveps;
+   elmdaapmn = dlmda::elmdaapmn;
+   plmdaapmn = dlmda::plmdaapmn;
+   vlmdaapmn = dlmda::vlmdaapmn;
+   elmdaapmrho = dlmda::elmdaapmrho;
+   plmdaapmrho = dlmda::plmdaapmrho;
+   vlmdaapmrho = dlmda::vlmdaapmrho;
 
    elmdamap = lmdamapFrom(dlmda::elmdamap);
    plmdamap = lmdamapFrom(dlmda::plmdamap);
@@ -482,6 +490,35 @@ static void sublmdaInvPower(double x, int nn, double eps, double& lmda, double& 
    d2lmda = power * (power - 1.0) * std::pow(base, power - 2.0) / denom;
 }
 
+// Normalized asymmetric power sub-lambda map onto [0,1] (dlambda.f:sublmdaapm).
+// The map runs from zero to one with slope "rho" at the decoupled end and slope
+// one at the coupled end, so "rho" sets how much faster the sub-lambda leaves
+// the decoupled end than it arrives at the coupled end, and "n" sets how quickly
+// that head start decays.
+static void sublmdaApm(double x, int nn, double rho, double& lmda, double& dlmda, double& d2lmda)
+{
+   double xval = x;
+   // A flat slope ratio or a degenerate power gives the identity map, the upper
+   // bound holding the normalization off of its pole.
+   if (nn < 2 or rho <= 1.0 or rho >= (double)nn) {
+      lmda = xval;
+      dlmda = 1.0;
+      d2lmda = 0.0;
+      return;
+   }
+
+   double rn = (double)nn;
+   double left = rn * (rho - 1.0) / (rn - rho);
+   double right = left / rn;
+   double denom = 1.0 + right;
+   double omx = 1.0 - xval;
+   double head = left * (1.0 - std::pow(omx, nn + 1)) / (rn + 1.0);
+   double tail = right * std::pow(xval, nn + 1) / (rn + 1.0);
+   lmda = (xval + head + tail) / denom;
+   dlmda = (1.0 + left * std::pow(omx, nn) + right * std::pow(xval, nn)) / denom;
+   d2lmda = rn * (right * std::pow(xval, nn - 1) - left * std::pow(omx, nn - 1)) / denom;
+}
+
 // Quintic switching polynomial
 void quinticTaper(double x, double cut, double off, double& taper, double& dtaper, double& d2taper)
 {
@@ -506,13 +543,15 @@ void quinticTaper(double x, double cut, double off, double& taper, double& dtape
 }
 
 // Maps one sub-lambda from main lambda to its mapping type.
-static void mapOne(double lmda, Lmdamap map, double qnt0, double qnt1, int expExp, int invN, double invEps,
-   double& value, double& dvalue, double& d2value)
+static void mapOne(double lmda, Lmdamap map, double qnt0, double qnt1, int expExp, int invN, double invEps, int apmN,
+   double apmRho, double& value, double& dvalue, double& d2value)
 {
    if (map == Lmdamap::EXP) {
       sublmdaExp(lmda, expExp, value, dvalue, d2value);
    } else if (map == Lmdamap::INV) {
       sublmdaInvPower(lmda, invN, invEps, value, dvalue, d2value);
+   } else if (map == Lmdamap::APM) {
+      sublmdaApm(lmda, apmN, apmRho, value, dvalue, d2value);
    } else { // Lmdamap::QNT
       // quantized map: sublambda = 1 - taper.
       double taper, dtaper, d2taper;
@@ -551,14 +590,16 @@ static void mapRelStage(double lmda)
       eval = 0.0;
       deldlmda = 0.0;
       d2eldlmda2 = 0.0;
-      mapOne(lmda, vlmdamap, qntvlmda0, qntvlmda1, vlmdaexp, vlmdainvn, vlmdainveps, vval, dvldlmda, d2vldlmda2);
+      mapOne(lmda, vlmdamap, qntvlmda0, qntvlmda1, vlmdaexp, vlmdainvn, vlmdainveps, //
+         vlmdaapmn, vlmdaapmrho, vval, dvldlmda, d2vldlmda2);
       vlam = vval;
    } else if (relstage == RelStage::LIG1) {
       // The ligand 1 leg charges ligand 1 against the decoupled reference
       // with van der Waals already morphed onto it.
       emrelst0 = RelState::NONE;
       emrelst1 = RelState::LIG1;
-      mapOne(lmda, elmdamap, qntelmda0, qntelmda1, elmdaexp, elmdainvn, elmdainveps, eval, deldlmda, d2eldlmda2);
+      mapOne(lmda, elmdamap, qntelmda0, qntelmda1, elmdaexp, elmdainvn, elmdainveps, //
+         elmdaapmn, elmdaapmrho, eval, deldlmda, d2eldlmda2);
       vlam = 1.0;
       dvldlmda = 0.0;
       d2vldlmda2 = 0.0;
@@ -567,7 +608,8 @@ static void mapRelStage(double lmda)
       // weight is the complement of the map, with van der Waals still on it.
       emrelst0 = RelState::NONE;
       emrelst1 = RelState::LIG2;
-      mapOne(lmda, elmdamap, qntelmda0, qntelmda1, elmdaexp, elmdainvn, elmdainveps, eval, deldlmda, d2eldlmda2);
+      mapOne(lmda, elmdamap, qntelmda0, qntelmda1, elmdaexp, elmdainvn, elmdainveps, //
+         elmdaapmn, elmdaapmrho, eval, deldlmda, d2eldlmda2);
       eval = 1.0 - eval;
       deldlmda = -deldlmda;
       d2eldlmda2 = -d2eldlmda2;
@@ -614,6 +656,8 @@ bool polTracksEle()
       return plmdaexp == elmdaexp;
    } else if (elmdamap == Lmdamap::INV) {
       return plmdainvn == elmdainvn and lmdaSameValue(plmdainveps, elmdainveps);
+   } else if (elmdamap == Lmdamap::APM) {
+      return plmdaapmn == elmdaapmn and lmdaSameValue(plmdaapmrho, elmdaapmrho);
    } else {
       return lmdaSameValue(qntplmda0, qntelmda0) and lmdaSameValue(qntplmda1, qntelmda1);
    }
@@ -629,17 +673,20 @@ void mapSubLambda()
    // Map the main lambda onto each sub-lambda that follows it.
    if (use_plmdamap) {
       double pval;
-      mapOne(lambda, plmdamap, qntplmda0, qntplmda1, plmdaexp, plmdainvn, plmdainveps, pval, dpldlmda, d2pldlmda2);
+      mapOne(lambda, plmdamap, qntplmda0, qntplmda1, plmdaexp, plmdainvn, plmdainveps, //
+         plmdaapmn, plmdaapmrho, pval, dpldlmda, d2pldlmda2);
       plam = pval;
    }
    if (use_elmdamap) {
       double eval;
-      mapOne(lambda, elmdamap, qntelmda0, qntelmda1, elmdaexp, elmdainvn, elmdainveps, eval, deldlmda, d2eldlmda2);
+      mapOne(lambda, elmdamap, qntelmda0, qntelmda1, elmdaexp, elmdainvn, elmdainveps, //
+         elmdaapmn, elmdaapmrho, eval, deldlmda, d2eldlmda2);
       elam = eval;
    }
    if (use_vlmdamap) {
       double vval;
-      mapOne(lambda, vlmdamap, qntvlmda0, qntvlmda1, vlmdaexp, vlmdainvn, vlmdainveps, vval, dvldlmda, d2vldlmda2);
+      mapOne(lambda, vlmdamap, qntvlmda0, qntvlmda1, vlmdaexp, vlmdainvn, vlmdainveps, //
+         vlmdaapmn, vlmdaapmrho, vval, dvldlmda, d2vldlmda2);
       vlam = vval;
    }
 

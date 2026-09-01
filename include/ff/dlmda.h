@@ -24,6 +24,7 @@ enum class Lmdamap
 {
    EXP, ///< power law
    INV, ///< shifted inverse power
+   APM, ///< normalized asymmetric power
    QNT  ///< quintic taper plus endpoint derivative flags
 };
 
@@ -263,6 +264,14 @@ TINKER_EXTERN int vlmdainvn;
 TINKER_EXTERN double elmdainveps;
 TINKER_EXTERN double plmdainveps;
 TINKER_EXTERN double vlmdainveps;
+
+// asymmetric-power mapping exponents and endpoint slope ratios.
+TINKER_EXTERN int elmdaapmn;
+TINKER_EXTERN int plmdaapmn;
+TINKER_EXTERN int vlmdaapmn;
+TINKER_EXTERN double elmdaapmrho;
+TINKER_EXTERN double plmdaapmrho;
+TINKER_EXTERN double vlmdaapmrho;
 
 // mapping-type selectors.
 TINKER_EXTERN Lmdamap elmdamap;

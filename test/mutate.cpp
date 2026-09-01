@@ -225,6 +225,10 @@ const Fixture kFixtures[] = {
    {"193_water_exf_ast_l10", "water2", true, true, true, true, "astpol"},
    {"194_water_exf_ast_l05", "water2", true, true, true, true, "astpol"},
    {"195_water_exf_ast_l00", "water2", true, true, true, true, "astpol"},
+   {"196_water_apm_ast_vpin_l05", "water2", true, true, true, true, "apm"},
+   {"197_water_apm_ast_epin_l00", "water2", true, true, true, true, "apm"},
+   {"198_water_apm_ast_epin_l05", "water2", true, true, true, true, "apm"},
+   {"199_water_apm_ast_epin_l10", "water2", true, true, true, true, "apm"},
 };
 
 // How a run should treat the fused multipole/polarization kernel. emplar cannot
@@ -704,6 +708,10 @@ TEST_CASE("MUTATE-192_water_ast_ne_l00", "[ff][mutate][ast][astpol][emplar]") { 
 TEST_CASE("MUTATE-193_water_exf_ast_l10", "[ff][mutate][exf][ast][astpol][emplar]") { runEmplarAstFixture(kFixtures[192]); }
 TEST_CASE("MUTATE-194_water_exf_ast_l05", "[ff][mutate][exf][ast][astpol][emplar]") { runEmplarAstFixture(kFixtures[193]); }
 TEST_CASE("MUTATE-195_water_exf_ast_l00", "[ff][mutate][exf][ast][astpol][emplar]") { runEmplarAstFixture(kFixtures[194]); }
+TEST_CASE("MUTATE-196_water_apm_ast_vpin_l05", "[ff][mutate][apm][pin]") { runFixture(kFixtures[195]); }
+TEST_CASE("MUTATE-197_water_apm_ast_epin_l00", "[ff][mutate][apm][pin][emplar]") { runEmplarFixture(kFixtures[196]); }
+TEST_CASE("MUTATE-198_water_apm_ast_epin_l05", "[ff][mutate][apm][pin][emplar]") { runEmplarFixture(kFixtures[197]); }
+TEST_CASE("MUTATE-199_water_apm_ast_epin_l10", "[ff][mutate][apm][pin][emplar]") { runEmplarFixture(kFixtures[198]); }
 
 TEST_CASE("MUTATE-TI-076_water_qnt_ast_l05", "[ff][mutate][ti][ast]") { runThermIntgFixture(kFixtures[75]); }
 TEST_CASE("MUTATE-TI-079_water_qnt_adt_l05", "[ff][mutate][ti][adt]") { runThermIntgFixture(kFixtures[78]); }
