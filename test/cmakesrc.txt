@@ -43,6 +43,7 @@ rattle.cpp
 reduce.cpp
 rephippo.cpp
 respa.cpp
+stochastic.cpp
 strbnd.cpp
 strtor.cpp
 testgrad.cpp

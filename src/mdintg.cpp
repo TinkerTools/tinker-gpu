@@ -96,6 +96,10 @@ void mdIntegrateData(RcOp op)
          integrator = IntegratorEnum::NHC1996;
          thermostat = ThermostatEnum::m_NHC1996;
          barostat = BarostatEnum::m_NHC1996;
+      } else if (itg == "STOCHASTIC") {
+         integrator = IntegratorEnum::STOCHASTIC;
+         thermostat = ThermostatEnum::NONE;
+         barostat = BarostatEnum::NONE;
       }
 
       int nrspa = 1;
@@ -132,8 +136,10 @@ void mdIntegrateData(RcOp op)
          intg = new Nhc96Integrator;
       else if (integrator == IntegratorEnum::NHC2006)
          intg = new Nhc06Integrator(nrspa);
+      else if (integrator == IntegratorEnum::STOCHASTIC)
+         intg = new StochasticIntegrator;
       else if (integrator == IntegratorEnum::BEEMAN)
-         TINKER_THROW("Beeman integrator is not available.");
+         TINKER_THROW(format("Integrator \"%s\" is not available.", itg.trim().c_str()));
       intg->printDetail(stdout);
    }
 }

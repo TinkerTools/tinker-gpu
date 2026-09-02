@@ -55,4 +55,5 @@ nblist.cpp
 osrw.cpp
 pme.cpp
 rattle.cpp
+stochastic.cpp
 )

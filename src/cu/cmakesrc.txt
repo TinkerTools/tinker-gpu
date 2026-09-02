@@ -47,5 +47,6 @@ nn.cu
 pme.cu
 rattle.cu
 spatial.cu
+stochastic.cu
 upredict.cu
 )
