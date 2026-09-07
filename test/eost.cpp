@@ -48,8 +48,9 @@ void resetost(int nl, int nf, int nhist)
    nosthist = 0;
    sizeosthist = nhist;
    iosthist = 10;
-   ostnequil = 5;
-   ostnavg = 5;
+   ostnpa = 3;
+   ostnpb = 3;
+   ostnpc = 4;
    lambda = 0.0;
    ostlambdaavg = 0.0;
    ostlambdastd = 0.0;
@@ -71,7 +72,9 @@ void resetost(int nl, int nf, int nhist)
    plmdainveps = 0.0;
    elmdainveps = 0.0;
    vlmdainveps = 0.0;
-   osteqratio = 0.5;
+   ostparatio = 0.3;
+   ostpbratio = 0.3;
+   ostpcratio = 0.4;
    hbias = 0.0;
    eosttot = 0.0;
    oststdev = 1.0;
@@ -101,6 +104,18 @@ void resetost(int nl, int nf, int nhist)
    fsumkernel.assign(nlmda + 1, 0.0);
    pfkernel.assign(nlmda + 1, 0.0);
    vkernelmax.assign(nlmda + 1, 0.0);
+
+   ostcvbin = 0;
+   ostcvdif = 0.0;
+   ostcvrat = 0.0;
+   ostcvslp = 0.0;
+   ostcvstd = 0.0;
+   ostlambdaavgbin.clear();
+   ostlambdastdbin.clear();
+   ostlambdaslpbin.clear();
+   ostdedlavgbin.clear();
+   ostdedlstdbin.clear();
+   ostdedlslpbin.clear();
 }
 
 // resetmeta -- allocate metadynamics history arrays (test_eost.f:1170).
@@ -647,8 +662,9 @@ TEST_CASE("EOST-histstat", "[ff][eost]")
 {
    resetost(5, 5, 1);
    iosthist = 6;
-   ostnequil = 2;
-   ostnavg = 4;
+   ostnpa = 1;
+   ostnpb = 1;
+   ostnpc = 4;
    // samples 1..6 laid out 0-based, so the slice still holds the values 3..6
    for (int i = 0; i < iosthist; ++i) {
       ostllist[i] = (double)(i + 1);
@@ -702,8 +718,9 @@ TEST_CASE("EOST-histstat-drift", "[ff][eost]")
 {
    resetost(5, 5, 1);
    iosthist = 8;
-   ostnequil = 0;
-   ostnavg = 8;
+   ostnpa = 0;
+   ostnpb = 0;
+   ostnpc = 8;
    ostcvbin = 2;
 
    // a flat series has zero slope
@@ -926,16 +943,17 @@ TEST_CASE("EOST-metadyn", "[ff][eost]")
    resetost(5, 5, 1);
    resetmeta(2);
    iosthist = 4;
-   ostnequil = 2;
-   ostnavg = 2;
+   ostnpa = 1;
+   ostnpb = 1;
+   ostnpc = 2;
    hbias = 2.0;
    wlmda = 0.25;
    dedl = 0.0;
    ostdt = 0.0; // no-op ostLangevin, so the sampled lambda values stay controlled
 
    // sampled lambda per step (lam is indexed by istep, not by buffer slot);
-   // histstat averages the post-equilibration slice, indices
-   // ostnequil..iosthist-1 = 2..3, holding the last two samples.
+   // histstat averages the fixed-lambda slice, indices
+   // ostnpa+ostnpb..iosthist-1 = 2..3, holding the last two samples.
    double lam[5] = {0.0, 0.1, 0.2, 0.4, 0.6};
    for (int istep = 1; istep <= iosthist; ++istep) {
       lambda = lam[istep];
@@ -944,7 +962,7 @@ TEST_CASE("EOST-metadyn", "[ff][eost]")
          COMPARE_INTS(nmetahist, 0); // no deposit before the interval boundary
    }
 
-   double avgref = (lam[3] + lam[4]) / (double)ostnavg; // 0.5
+   double avgref = (lam[3] + lam[4]) / (double)ostnpc; // 0.5
    COMPARE_INTS(nmetahist, 1);
    COMPARE_REALS(metalhist[1], avgref, 1.0e-12);
    COMPARE_REALS(metahhist[1], hbias, 1.0e-12);
@@ -1045,6 +1063,107 @@ TEST_CASE("EOST-tempering", "[ff][eost]")
    COMPARE_REALS(temperedHeight(50.0), hbias, 1.0e-18);
 }
 
+TEST_CASE("EOST-ostphase", "[ff][eost]")
+{
+   // setOstPhase divides the deposit interval into propagation, equilibration
+   // and averaging phases; the clamps keep a propagation step and enough
+   // samples to average without ever losing a sample from the interval.
+
+   // the requested ratios divide the interval by truncation
+   iosthist = 10;
+   ostparatio = 0.3;
+   ostpbratio = 0.3;
+   setOstPhase();
+   COMPARE_INTS(ostnpa, 3);
+   COMPARE_INTS(ostnpb, 3);
+   COMPARE_INTS(ostnpc, 4);
+   COMPARE_REALS(ostpcratio, 0.4, 1.0e-12);
+   COMPARE_INTS(ostnpa + ostnpb + ostnpc, iosthist);
+
+   // a zero propagation ratio still keeps one propagation step
+   iosthist = 10;
+   ostparatio = 0.0;
+   ostpbratio = 0.3;
+   setOstPhase();
+   COMPARE_INTS(ostnpa, 1);
+   COMPARE_INTS(ostnpa + ostnpb + ostnpc, iosthist);
+
+   // a crowded interval gives back samples to the averaging phase, taking
+   // them from the equilibration phase first
+   iosthist = 10;
+   ostparatio = 0.4;
+   ostpbratio = 0.5;
+   setOstPhase();
+   COMPARE_INTS(ostnpc, 2);
+   COMPARE_INTS(ostnpa, 4);
+   COMPARE_INTS(ostnpb, 4);
+   COMPARE_INTS(ostnpa + ostnpb + ostnpc, iosthist);
+
+   // the shortest usable interval still holds all three phases
+   iosthist = 3;
+   ostparatio = 0.4;
+   ostpbratio = 0.4;
+   setOstPhase();
+   COMPARE_INTS(ostnpa, 1);
+   COMPARE_INTS(ostnpc, 2);
+   COMPARE_INTS(ostnpa + ostnpb + ostnpc, iosthist);
+}
+
+TEST_CASE("EOST-ostgate", "[ff][eost]")
+{
+   // drive eostDyn over one deposit interval and check that the lambda
+   // particle moves only during the leading propagation phase, that lambda is
+   // then held exactly fixed, and that the deposited gaussian sits on it.
+   bath::kelvin = 300.0;
+   resetost(5, 5, 4);
+   iosthist = 6;
+   ostnpa = 2;
+   ostnpb = 2;
+   ostnpc = 2;
+   ostcvbin = 0;
+   ostcvstd = 1.0;
+   ostcvrat = 0.0;
+   hbias = 1.0;
+
+   // a deterministic frictionless lambda particle, so that any lambda motion
+   // comes from the gate alone
+   ostdt = 0.1;
+   ostmass = 1.0;
+   ostfriction = 0.0;
+   osttheta = 0.25 * pi;
+   ostvtheta = 0.0;
+   lambda = 0.5;
+   fastkernel = true;
+   d2edl2 = 0.0;
+   bdgdl = 0.0;
+   bdgdfl = 0.0;
+   bdfdl = 0.0;
+
+   double lam[7] = {0.0};
+   for (int istep = 1; istep <= iosthist; ++istep) {
+      dedl = 1.0;
+      eostDyn(istep);
+      lam[istep] = lambda;
+   }
+
+   // the particle moves while the interval is in its first phase
+   REQUIRE(lam[1] != lam[2]);
+
+   // lambda is then bit identical for the rest of the interval
+   double frozen = lam[2];
+   for (int istep = 3; istep <= iosthist; ++istep) {
+      CAPTURE(istep);
+      REQUIRE(lam[istep] == frozen);
+   }
+
+   // the averaged lambda is the frozen value, not a smear, so the gaussian is
+   // deposited exactly on it
+   COMPARE_INTS(nosthist, 1);
+   REQUIRE(ostlambdaavg == frozen);
+   REQUIRE(ostlhist[1] == frozen);
+   COMPARE_REALS(ostfhist[1], 1.0, 1.0e-12);
+}
+
 TEST_CASE("EOST-metaimage", "[ff][eost]")
 {
    // eMetaBias sums the same three reflecting lambda images as the g kernel.
@@ -1089,8 +1208,9 @@ TEST_CASE("EOST-metatemper", "[ff][eost]")
    resetost(5, 5, 1);
    resetmeta(8);
    iosthist = 4;
-   ostnequil = 2;
-   ostnavg = 2;
+   ostnpa = 1;
+   ostnpb = 1;
+   ostnpc = 2;
    hbias = 2.0;
    dedl = 0.0;
    ostdt = 0.0; // no-op ostLangevin, so the sampled lambda values stay controlled

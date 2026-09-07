@@ -76,6 +76,7 @@ void histstat(const std::vector<double>& list, double& avg, double& std, double&
    std::vector<double>& avgbin, std::vector<double>& stdbin, std::vector<double>& slpbin);
 bool depcriteria(double avg, double std, double slp, const std::vector<double>& avgbin);
 bool depcriteria2(double avg, double std);
+void setOstPhase();
 void buildOstIndex();
 void resizeOstHist();
 void ensureFlambda(double dudl);

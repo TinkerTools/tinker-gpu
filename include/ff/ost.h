@@ -39,8 +39,9 @@ TINKER_EXTERN bool fastkernel;
 // step counters and histogram bookkeeping sizes.
 TINKER_EXTERN int iost;         ///< persisted step base (0 unless restarting).
 TINKER_EXTERN int iosthist;     ///< steps between histogram deposits.
-TINKER_EXTERN int ostnequil;    ///< samples skipped before averaging.
-TINKER_EXTERN int ostnavg;      ///< samples averaged per deposit.
+TINKER_EXTERN int ostnpa;       ///< samples propagating the lambda particle.
+TINKER_EXTERN int ostnpb;       ///< samples equilibrating at the frozen lambda.
+TINKER_EXTERN int ostnpc;       ///< samples averaged at the frozen lambda.
 TINKER_EXTERN int nlmda;        ///< number of lambda bins.
 TINKER_EXTERN int nflmda;       ///< number of dU/dlambda bins.
 TINKER_EXTERN int fli0;         ///< bin index where dU/dlambda = 0.
@@ -60,7 +61,9 @@ TINKER_EXTERN double maxwlhist; ///< max lambda gaussian width seen.
 TINKER_EXTERN double maxwfhist; ///< max dU/dlambda gaussian width seen.
 TINKER_EXTERN double hbias;     ///< height of biasing gaussian.
 TINKER_EXTERN double oststdev;  ///< gaussian cutoff in standard deviations.
-TINKER_EXTERN double osteqratio;///< fraction of interval to equilibrate.
+TINKER_EXTERN double ostparatio; ///< fraction of interval propagating lambda.
+TINKER_EXTERN double ostpbratio; ///< fraction equilibrating dedl at fixed lambda.
+TINKER_EXTERN double ostpcratio; ///< fraction averaging dedl at fixed lambda.
 
 // theta lambda-particle (lambda = sin(theta)^2).
 TINKER_EXTERN double osttheta;

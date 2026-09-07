@@ -52,8 +52,9 @@ void ost_mech()
 
    iost = ost::iost;
    iosthist = ost::iosthist;
-   ostnequil = ost::ostnequil;
-   ostnavg = ost::ostnavg;
+   ostnpa = ost::ostnpa;
+   ostnpb = ost::ostnpb;
+   ostnpc = ost::ostnpc;
    nlmda = ost::nlmda;
    nflmda = ost::nflmda;
    fli0 = ost::fli0;
@@ -72,7 +73,9 @@ void ost_mech()
    maxwfhist = ost::maxwfhist;
    hbias = ost::hbias;
    oststdev = ost::oststdev;
-   osteqratio = ost::osteqratio;
+   ostparatio = ost::ostparatio;
+   ostpbratio = ost::ostpbratio;
+   ostpcratio = ost::ostpcratio;
    ostcvbin = ost::ostcvbin;
    ostcvdif = ost::ostcvdif;
    ostcvrat = ost::ostcvrat;
@@ -112,25 +115,53 @@ static double fitSlope(double tdot, double sum, int n)
    return sxy / sxx;
 }
 
+// setostphase -- divide the gaussian deposit interval into the phase that
+// propagates the lambda particle, the phase that equilibrates at the frozen
+// lambda and the phase that averages dU/dlambda at that same fixed lambda; the
+// phase counts are the authoritative split, while ostpcratio is only the
+// nominal fraction left over before truncation to whole samples (eost.f:838).
+void setOstPhase()
+{
+   // divide the interval, keeping at least one propagation step and at least
+   // two samples to average
+   if (iosthist < 1)
+      iosthist = 1;
+   ostpcratio = 1.0 - (ostparatio + ostpbratio);
+   ostnpa = (int)(ostparatio * (double)iosthist);
+   ostnpb = (int)(ostpbratio * (double)iosthist);
+   ostnpa = std::max(1, std::min(ostnpa, iosthist - 1));
+   ostnpb = std::max(0, std::min(ostnpb, iosthist - ostnpa));
+   ostnpc = iosthist - ostnpa - ostnpb;
+   while (ostnpc < 2 and ostnpb > 0) {
+      ostnpb -= 1;
+      ostnpc += 1;
+   }
+   while (ostnpc < 2 and ostnpa > 1) {
+      ostnpa -= 1;
+      ostnpc += 1;
+   }
+}
+
 void histstat(const std::vector<double>& list, double& avg, double& std, double& slp,
    std::vector<double>& avgbin, std::vector<double>& stdbin, std::vector<double>& slpbin)
 {
-   int nper = (ostcvbin > 0) ? ostnavg / ostcvbin : 0;
+   int nskip = ostnpa + ostnpb;
+   int nper = (ostcvbin > 0) ? ostnpc / ostcvbin : 0;
    int nbin = (nper > 0) ? ostcvbin : 0;
 
-   int ibegin = ostnequil + ostnavg - nper * nbin;
+   int ibegin = nskip + ostnpc - nper * nbin;
    if (ostcvbin > 0) {
       avgbin.assign(ostcvbin, 0.0);
       stdbin.assign(ostcvbin, 0.0);
       slpbin.assign(ostcvbin, 0.0);
    }
 
-   const double K = list[ostnequil];
+   const double K = list[nskip];
    double total = 0.0, tdot = 0.0;
-   for (int i = ostnequil; i < ibegin; ++i) {
+   for (int i = nskip; i < ibegin; ++i) {
       double d = list[i] - K;
       total += d;
-      tdot += (double)(i - ostnequil) * d;
+      tdot += (double)(i - nskip) * d;
    }
    for (int b = 0; b < nbin; ++b) {
       int i0 = ibegin + b * nper;
@@ -142,12 +173,12 @@ void histstat(const std::vector<double>& list, double& avg, double& std, double&
       }
       total += a;
       // tloc counts from the bin start; shift it onto the whole-slice ramp
-      tdot += tloc + (double)(i0 - ostnequil) * a;
+      tdot += tloc + (double)(i0 - nskip) * a;
       avgstd(list, i0, nper, avgbin[b], stdbin[b]);
       slpbin[b] = fitSlope(tloc, a, nper);
    }
-   avgstd(list, ostnequil, ostnavg, avg, std);
-   slp = fitSlope(tdot, total, ostnavg);
+   avgstd(list, nskip, ostnpc, avg, std);
+   slp = fitSlope(tdot, total, ostnpc);
 }
 
 bool depcriteria(double avg, double std, double slp, const std::vector<double>& avgbin)
@@ -985,8 +1016,10 @@ void eostDyn(int istep)
       }
    }
 
-   // propagate the lambda particle for the next step.
-   ostLangevin();
+   // propagate the lambda particle only during the leading phase; lambda is
+   // then held fixed for the equilibration and averaging phases.
+   if (isamp < ostnpa)
+      ostLangevin();
 }
 
 void eMetaDyn(int istep)
