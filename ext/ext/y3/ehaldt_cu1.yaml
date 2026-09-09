@@ -42,6 +42,7 @@ EXTRA_PARAMS: |
   , int njvdw
   , const real* restrict radmin, const real* restrict epsilon
   , const int* restrict jvdw, const int* restrict mut
+  , real scexp, real scalphav
   , unsigned in0bits, unsigned in1bits, unsigned cntbits
   , real a0, real a1, real b0, real b1, real c0, real c1
 # IMPLICIT_PARAMS:

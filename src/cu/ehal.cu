@@ -97,16 +97,14 @@ void ehalResolveGradient_cu(const grad_prec* gxred, const grad_prec* gyred, cons
  */
 
 namespace tinker {
+#define SCEXP   scexp
+#define SCALPHA scalphav
 #if 1
 #define GHAL    (real)0.12
 #define DHAL    (real)0.07
-#define SCEXP   5
-#define SCALPHA (real)0.7
 #elif 0
 #define GHAL    ghal
 #define DHAL    dhal
-#define SCEXP   scexp
-#define SCALPHA scalphav
 #endif
 #include "ehal_cu1.cc"
 #include "ehaldlmda_cu1.cc"
@@ -128,7 +126,7 @@ static void ehal_cu3()
    auto ker1 = ehal_cu1<Ver>;
    ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, vir_ev, gxred, gyred, gzred, cut, off,
       st.si1.bit0, nvexclude, vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak,
-      st.iak, st.lst, njvdw, vlam, vcouple, radmin, epsilon, jvdw, mut);
+      st.iak, st.lst, njvdw, vlam, vcouple, radmin, epsilon, jvdw, mut, scexp, scalphav);
 
    if CONSTEXPR (do_g)
       ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);
@@ -155,7 +153,7 @@ static void ehaldlmda_cu3()
    ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, devdl_buf, d2evdl2_buf, vir_ev,
       dvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0, nvexclude,
       vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, njvdw,
-      vlam, vcouple, radmin, epsilon, jvdw, mut, dvldlmda, d2vldlmda2);
+      vlam, vcouple, radmin, epsilon, jvdw, mut, scexp, scalphav, dvldlmda, d2vldlmda2);
 
    if CONSTEXPR (do_g) {
       ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);
@@ -229,8 +227,8 @@ static void ehaldt_cu3(const DtCoef& coef)
    ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, devdl_buf, d2evdl2_buf, vir_ev,
       dvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0, nvexclude,
       vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, njvdw,
-      radmin, epsilon, jvdw, grp, coef.in0bits, coef.in1bits, coef.cntbits, coef.a0, coef.a1, coef.b0, coef.b1,
-      coef.c0, coef.c1);
+      radmin, epsilon, jvdw, grp, scexp, scalphav, coef.in0bits, coef.in1bits, coef.cntbits, coef.a0, coef.a1,
+      coef.b0, coef.b1, coef.c0, coef.c1);
 
    if CONSTEXPR (do_g) {
       ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);

@@ -9,7 +9,8 @@ void ehaldt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuff
    const real* restrict x, const real* restrict y, const real* restrict z, const Spatial::SortedAtom* restrict sorted,
    int nakpl, const int* restrict iakpl, int niak, const int* restrict iak, const int* restrict lst, int njvdw,
    const real* restrict radmin, const real* restrict epsilon, const int* restrict jvdw, const int* restrict mut,
-   unsigned in0bits, unsigned in1bits, unsigned cntbits, real a0, real a1, real b0, real b1, real c0, real c1)
+   real scexp, real scalphav, unsigned in0bits, unsigned in1bits, unsigned cntbits, real a0, real a1, real b0, real b1,
+   real c0, real c1)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;

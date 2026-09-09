@@ -7,7 +7,7 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
    const real* restrict x, const real* restrict y, const real* restrict z, const Spatial::SortedAtom* restrict sorted,
    int nakpl, const int* restrict iakpl, int niak, const int* restrict iak, const int* restrict lst, int njvdw,
    real vlam, Vdw vcouple, const real* restrict radmin, const real* restrict epsilon, const int* restrict jvdw,
-   const int* restrict mut)
+   const int* restrict mut, real scexp, real scalphav)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;

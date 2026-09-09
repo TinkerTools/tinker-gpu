@@ -42,6 +42,7 @@ EXTRA_PARAMS: |
   , int njvdw, real vlam, Vdw vcouple
   , const real* restrict radmin, const real* restrict epsilon
   , const int* restrict jvdw, const int* restrict mut
+  , real scexp, real scalphav
   , real dvldl, real d2vldl2
 # IMPLICIT_PARAMS:
 
