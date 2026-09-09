@@ -75,7 +75,7 @@ void ehalResolveGradient_cu(const grad_prec* gxred, const grad_prec* gyred, cons
  *    - Different vcouple methods.
  *    - PBC type in image().
  *    - Random access to the "i" parameters and gradients.
- *    - (If not hard-coded) ghal, dhal, scexp, scalpha.
+ *    - (If not hard-coded) ghal, dhal, scexp, scalphav.
  */
 
 /**
@@ -106,7 +106,7 @@ namespace tinker {
 #define GHAL    ghal
 #define DHAL    dhal
 #define SCEXP   scexp
-#define SCALPHA scalpha
+#define SCALPHA scalphav
 #endif
 #include "ehal_cu1.cc"
 #include "ehaldlmda_cu1.cc"

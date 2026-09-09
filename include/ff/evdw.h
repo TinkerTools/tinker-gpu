@@ -215,7 +215,7 @@ TINKER_EXTERN real scexp;
 
 /// \ingroup vdw
 /// \brief Scale factor \f$ \alpha \f$ for soft core buffered 14-7 potential.
-TINKER_EXTERN real scalpha;
+TINKER_EXTERN real scalphav;
 
 TINKER_EXTERN real vlam;
 

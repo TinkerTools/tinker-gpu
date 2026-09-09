@@ -110,7 +110,7 @@ static void ehal_acc1()
 
             MAYBE_UNUSED real e, de;
             pair_hal<do_g>(rik, rv, eps, 1, vlambda, //
-               ghal, dhal, scexp, scalpha,           //
+               ghal, dhal, scexp, scalphav,           //
                e, de);
 
             if (rik2 > cut2) {
@@ -200,7 +200,7 @@ static void ehal_acc1()
 
          MAYBE_UNUSED real e, de;
          pair_hal<do_g>(rik, rv, eps, vscale, vlambda, //
-            ghal, dhal, scexp, scalpha,                //
+            ghal, dhal, scexp, scalphav,                //
             e, de);
 
          if (rik2 > cut2) {

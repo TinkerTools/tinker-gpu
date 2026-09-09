@@ -49,6 +49,7 @@ void vdwSoftcoreData(RcOp op)
 {
    if ((not use(Potent::VDW)) and (not use(Potent::REPULS)) and (not use(Potent::DISP)) and (not use(Potent::CHGTRN))
       and (not(use(Potent::MPOLE) and (use_emast || use_emdt)))
+      and (not(use(Potent::MPOLE) and mutant::use_esoft))
       and (not(use(Potent::POLAR) and (use_epdt || use_plmda))))
       return;
 
@@ -415,7 +416,7 @@ void evdwData(RcOp op)
          ghal = vdwpot::ghal;
          dhal = vdwpot::dhal;
          scexp = mutant::scexp;
-         scalpha = mutant::scalpha;
+         scalphav = mutant::scalphav;
 
          std::vector<int> iredbuf(n);
          std::vector<double> kredbuf(n);
