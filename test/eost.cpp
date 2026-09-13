@@ -508,6 +508,7 @@ TEST_CASE("EOST-fkernel", "[ff][eost]")
    rt = units::gasconst * bath::kelvin;
    GK(3, 2) = std::log(2.0) * rt;
    GK(3, 4) = std::log(4.0) * rt;
+   vkernelmax[3] = std::log(4.0) * rt;
    buildFkernel();
    expected = 1.0 / 3.0;
    COMPARE_REALS(fkernel[3], expected, 1.0e-12);
@@ -541,6 +542,18 @@ TEST_CASE("EOST-fkernel", "[ff][eost]")
    double w4 = std::exp(GK(3, 4) / rt);
    double w5 = std::exp(GK(3, 5) / rt);
    expected = (-2.0 * w1 - w2 + w4 + 2.0 * w5) / (w1 + w2 + w3 + w4 + w5);
+   COMPARE_REALS(fkernel[3], expected, 1.0e-12);
+
+   // a deeply filled bin overflows exp(g/kT) unless the largest bias in the
+   // row is factored out; unshifted this returns a NaN
+   resetost(5, 5, 1);
+   rt = units::gasconst * bath::kelvin;
+   GK(3, 2) = 500.0;
+   GK(3, 4) = 499.0;
+   vkernelmax[3] = 500.0;
+   buildFkernel();
+   double wratio = std::exp((499.0 - 500.0) / rt);
+   expected = (-1.0 + wratio) / (1.0 + wratio);
    COMPARE_REALS(fkernel[3], expected, 1.0e-12);
 }
 
@@ -584,10 +597,13 @@ TEST_CASE("EOST-kernelbuilds", "[ff][eost]")
    std::vector<double> pfref(nlmda + 1, 0.0);
    for (int i = 1; i <= nlmda; ++i) {
       double partfunc = 0.0, fsum = 0.0;
+      // the accumulators factor out the largest bias in the row, so the
+      // reference has to be built with the same shift
+      double vmaxref = brutevkmax(i);
       for (int j = 1; j <= nflmda; ++j) {
          if (gref[gidx(i, j)] != 0.0) {
             double flmda = (double)(j - fli0) * wflmda;
-            double weight = std::exp(gref[gidx(i, j)] / rt);
+            double weight = std::exp((gref[gidx(i, j)] - vmaxref) / rt);
             fsum += flmda * weight;
             partfunc += weight;
          }

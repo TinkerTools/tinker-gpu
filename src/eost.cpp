@@ -325,9 +325,19 @@ void addKernelPoint(int ilmda, int iflmda, double e, double ldelta, double fldel
    const double rt = units::gasconst * bath::kelvin;
    int g = gidx(ilmda, iflmda);
    double oldg = gkernel[g];
-   double oldweight = (oldg == 0.0) ? 0.0 : std::exp(oldg / rt);
    double newg = oldg + e;
-   double newweight = std::exp(newg / rt);
+
+   // the accumulators carry the largest bias in the row as a common factor,
+   // so they are rescaled whenever this point raises it
+   double vmax = vkernelmax[ilmda];
+   if (newg > vmax) {
+      double scale = std::exp((vmax - newg) / rt);
+      fsumkernel[ilmda] *= scale;
+      pfkernel[ilmda] *= scale;
+      vmax = newg;
+   }
+   double oldweight = (oldg == 0.0) ? 0.0 : std::exp((oldg - vmax) / rt);
+   double newweight = std::exp((newg - vmax) / rt);
    double delweight = newweight - oldweight;
    double flmda = (double)(iflmda - fli0) * wflmda;
    double dgdl = -ldelta * e / sigl2;
@@ -422,11 +432,14 @@ void buildFkernel()
    for (int il = 1; il <= nlmda; ++il) {
       double avg = 0;
       double pf = 0;
+      // the largest bias in the row is factored out of both sums, where it
+      // cancels exactly, to keep the exponential from overflowing
+      double vmax = vkernelmax[il];
       for (int jf = 1; jf <= nflmda; ++jf) {
          double g = gkernel[gidx(il, jf)];
          if (g != 0.0) {
             double flmda = (double)(jf - fli0) * wflmda;
-            double w = std::exp(g / rt);
+            double w = std::exp((g - vmax) / rt);
             avg += flmda * w;
             pf += w;
          }
