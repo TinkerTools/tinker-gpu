@@ -4,6 +4,7 @@
 #include "test.h"
 #include "testrt.h"
 #include <tinker/detail/bath.hh>
+#include <tinker/detail/ost.hh>
 #include <tinker/detail/units.hh>
 
 #include <algorithm>
@@ -81,9 +82,12 @@ void resetost(int nl, int nf, int nhist)
    ostinterpol = false;
    // tempering off by default, so every pre-existing case keeps the untempered
    // behavior regardless of the (randomized) case order.
-   ostemper = false;
-   temperthresh = 1.0;
-   tempergamma = 1.0;
+   use_ostgtemp = false;
+   use_ostltemp = false;
+   ostgthresh = 1.0;
+   ostgtempgamma = 1.0;
+   ostlthresh = 1.0;
+   ostltempgamma = 1.0;
 
    osthist.assign(sizeosthist + 1, 0);
    ostihist.assign(sizeosthist + 1, 0);
@@ -1039,44 +1043,114 @@ TEST_CASE("EOST-tempering", "[ff][eost]")
    hbias = 1.0e-5;
    double rt = units::gasconst * bath::kelvin;
 
-   // disabled: the height is hbias no matter how filled the path is
-   ostemper = false;
-   temperthresh = 1.0;
-   tempergamma = 1.0;
-   COMPARE_REALS(temperedHeight(0.0), hbias, 1.0e-18);
-   COMPARE_REALS(temperedHeight(5.0), hbias, 1.0e-18);
-   COMPARE_REALS(temperedHeight(50.0), hbias, 1.0e-18);
+   // disabled: the height is hbias no matter how filled or uneven the path is
+   use_ostgtemp = false;
+   use_ostltemp = false;
+   ostgthresh = 1.0;
+   ostgtempgamma = 1.0;
+   ostlthresh = 1.0;
+   ostltempgamma = 1.0;
+   COMPARE_REALS(temperedHeight(0.0, 0.0), hbias, 1.0e-18);
+   COMPARE_REALS(temperedHeight(50.0, 50.0), hbias, 1.0e-18);
+   COMPARE_REALS(temperedHeight(50.0, 500.0), hbias, 1.0e-18);
 
-   // enabled, at or below the threshold: still exactly hbias
-   ostemper = true;
-   COMPARE_REALS(temperedHeight(0.0), hbias, 1.0e-18);
-   COMPARE_REALS(temperedHeight(0.5), hbias, 1.0e-18);
-   COMPARE_REALS(temperedHeight(1.0), hbias, 1.0e-18);
+   // both enabled, at or below both thresholds: still exactly hbias
+   use_ostgtemp = true;
+   use_ostltemp = true;
+   COMPARE_REALS(temperedHeight(0.0, 0.0), hbias, 1.0e-18);
+   COMPARE_REALS(temperedHeight(1.0, 1.0), hbias, 1.0e-18);
+   COMPARE_REALS(temperedHeight(1.0, 2.0), hbias, 1.0e-18);
+   COMPARE_REALS(temperedHeight(0.5, 1.5), hbias, 1.0e-18);
 
-   // above the threshold: exponential decay, strictly monotonic in V*
+   // the global factor alone decays with the path bias level and ignores how
+   // far the deposit bin is ahead of that level
+   use_ostltemp = false;
    double vstar[4] = {1.5, 2.0, 3.0, 5.0};
    double prev = hbias;
    for (int k = 0; k < 4; ++k) {
       CAPTURE(vstar[k]);
-      double h = temperedHeight(vstar[k]);
+      double h = temperedHeight(vstar[k], vstar[k]);
       COMPARE_REALS(h, hbias * std::exp(-(vstar[k] - 1.0) / rt), 1.0e-18);
+      COMPARE_REALS(temperedHeight(vstar[k], vstar[k] + 50.0), h, 1.0e-18);
       REQUIRE(h < prev);
       prev = h;
    }
 
-   // a larger gamma decays more slowly at the same V*
-   tempergamma = 1.0;
-   double h1 = temperedHeight(3.0);
-   tempergamma = 2.0;
-   double h2 = temperedHeight(3.0);
+   // a larger global gamma decays more slowly at the same level
+   ostgtempgamma = 1.0;
+   double h1 = temperedHeight(3.0, 3.0);
+   ostgtempgamma = 2.0;
+   double h2 = temperedHeight(3.0, 3.0);
    REQUIRE(h2 > h1);
    COMPARE_REALS(h2, hbias * std::exp(-2.0 / (2.0 * rt)), 1.0e-18);
 
-   // a non-positive gamma disables the decay rather than dividing by zero
-   tempergamma = 0.0;
-   COMPARE_REALS(temperedHeight(50.0), hbias, 1.0e-18);
-   tempergamma = -1.0;
-   COMPARE_REALS(temperedHeight(50.0), hbias, 1.0e-18);
+   // the local factor alone depends only on the excess of the deposit bin over
+   // the path bias level
+   use_ostgtemp = false;
+   use_ostltemp = true;
+   ostgtempgamma = 1.0;
+   double delta[5] = {0.0, 1.0, 1.5, 3.0, 5.0};
+   prev = hbias;
+   for (int k = 0; k < 5; ++k) {
+      CAPTURE(delta[k]);
+      double h = temperedHeight(50.0, 50.0 + delta[k]);
+      COMPARE_REALS(h, hbias * std::exp(-std::max(0.0, delta[k] - 1.0) / rt), 1.0e-18);
+      COMPARE_REALS(temperedHeight(0.0, delta[k]), h, 1.0e-18);
+      REQUIRE(h <= prev);
+      prev = h;
+   }
+   COMPARE_REALS(temperedHeight(50.0, 50.0), hbias, 1.0e-18);
+
+   // both factors multiply, so with equal settings the path bias level cancels
+   // and only the deposit bin bias level remains
+   use_ostgtemp = true;
+   use_ostltemp = true;
+   ostgthresh = 1.0;
+   ostlthresh = 1.0;
+   ostgtempgamma = 2.0;
+   ostltempgamma = 2.0;
+   double h = temperedHeight(3.0, 6.0);
+   double hg = std::exp(-2.0 / (2.0 * rt));
+   double hl = std::exp(-2.0 / (2.0 * rt));
+   COMPARE_REALS(h, hbias * hg * hl, 1.0e-18);
+   COMPARE_REALS(h, hbias * std::exp((2.0 - 6.0) / (2.0 * rt)), 1.0e-18);
+   ostltempgamma = 0.5;
+   hl = std::exp(-2.0 / (0.5 * rt));
+   COMPARE_REALS(temperedHeight(3.0, 6.0), hbias * hg * hl, 1.0e-18);
+
+   // over a sweep of levels the height stays positive, never exceeds the full
+   // height, and never grows with either level
+   double vgrid[6] = {0.0, 0.5, 1.0, 2.0, 5.0, 20.0};
+   double dgrid[6] = {0.0, 0.5, 1.0, 2.0, 5.0, 20.0};
+   double gpair[3][2] = {{1.0, 1.0}, {2.0, 0.5}, {0.5, 2.0}};
+   double hgrid[6][6];
+   for (int p = 0; p < 3; ++p) {
+      ostgtempgamma = gpair[p][0];
+      ostltempgamma = gpair[p][1];
+      for (int i = 0; i < 6; ++i) {
+         for (int j = 0; j < 6; ++j) {
+            CAPTURE(p, i, j);
+            double hij = temperedHeight(vgrid[i], vgrid[i] + dgrid[j]);
+            hgrid[i][j] = hij;
+            REQUIRE(hij > 0.0);
+            REQUIRE(hij <= hbias);
+            if (i > 0) {
+               REQUIRE(hij <= hgrid[i - 1][j]);
+            }
+            if (j > 0) {
+               REQUIRE(hij <= hgrid[i][j - 1]);
+            }
+         }
+      }
+   }
+
+   // a non-positive gamma disables its factor rather than dividing by zero
+   ostgtempgamma = 0.0;
+   ostltempgamma = 0.0;
+   COMPARE_REALS(temperedHeight(50.0, 500.0), hbias, 1.0e-18);
+   ostgtempgamma = -1.0;
+   ostltempgamma = -1.0;
+   COMPARE_REALS(temperedHeight(50.0, 500.0), hbias, 1.0e-18);
 }
 
 TEST_CASE("EOST-ostphase", "[ff][eost]")
@@ -1180,6 +1254,139 @@ TEST_CASE("EOST-ostgate", "[ff][eost]")
    COMPARE_REALS(ostfhist[1], 1.0, 1.0e-12);
 }
 
+TEST_CASE("EOST-ostlocal", "[ff][eost]")
+{
+   // deposit into an unevenly filled kernel with both tempering factors on:
+   // eostDyn takes the height from the pre-deposit bias levels, the least
+   // filled lambda bin deposits at the global height alone, and growing the
+   // flambda grid keeps the bin bias levels.
+   bath::kelvin = 300.0;
+   double rt = units::gasconst * bath::kelvin;
+
+   // fill the kernel much higher near lambda of zero
+   resetost(5, 5, 8);
+   oststdev = 4.0;
+   nosthist = 2;
+   sethist(1, 0.0, 0.0, 5.0, 0.25, 1.0);
+   sethist(2, 0.75, 0.0, 1.0, 0.25, 1.0);
+   buildOstIndex();
+   buildKernels();
+
+   // settle each deposit interval with both tempering factors on
+   iosthist = 4;
+   ostnpa = 0;
+   ostnpb = 0;
+   ostnpc = 4;
+   ostcvbin = 0;
+   ostcvstd = 1.0;
+   ostcvrat = 0.0;
+   hbias = 1.0;
+   ostdt = 0.0;
+   fastkernel = true;
+   d2edl2 = 0.0;
+   bdgdl = 0.0;
+   bdgdfl = 0.0;
+   bdfdl = 0.0;
+   use_ostgtemp = true;
+   use_ostltemp = true;
+   ostgthresh = 0.1;
+   ostlthresh = 0.1;
+   ostgtempgamma = 1.0;
+   ostltempgamma = 1.0;
+
+   // a deposit in the most filled bin is tempered by both factors
+   int imax = 1;
+   for (int i = 2; i <= nlmda; ++i) {
+      if (brutevkmax(i) > brutevkmax(imax))
+         imax = i;
+   }
+   double gmin = ostVminimax();
+   double gl = vkernelmax[imax];
+   REQUIRE(gmin > ostgthresh);      // the global factor is active
+   REQUIRE(gl - gmin > ostlthresh); // the local factor is active
+   for (int istep = 1; istep <= iosthist; ++istep) {
+      lambda = (double)(imax - 1) * wlmda;
+      dedl = 0.0;
+      eostDyn(istep);
+   }
+   double hglobal = hbias * std::exp(-(gmin - ostgthresh) / rt);
+   COMPARE_INTS(nosthist, 3);
+   COMPARE_REALS(osthhist[3], temperedHeight(gmin, gl), 1.0e-12);
+   REQUIRE(osthhist[3] < hglobal);
+
+   // a deposit in the least filled bin sees no local excess
+   int imin = 1;
+   for (int i = 2; i <= nlmda; ++i) {
+      if (vkernelmax[i] < vkernelmax[imin])
+         imin = i;
+   }
+   gmin = ostVminimax();
+   for (int istep = iosthist + 1; istep <= 2 * iosthist; ++istep) {
+      lambda = (double)(imin - 1) * wlmda;
+      dedl = 0.0;
+      eostDyn(istep);
+   }
+   hglobal = hbias * std::exp(-std::max(0.0, gmin - ostgthresh) / rt);
+   COMPARE_INTS(nosthist, 4);
+   COMPARE_REALS(osthhist[4], hglobal, 1.0e-12);
+
+   // growing the flambda grid keeps the running bin maxima
+   ensureFlambda(500.0);
+   for (int i = 1; i <= nlmda; ++i) {
+      CAPTURE(i);
+      COMPARE_REALS(vkernelmax[i], brutevkmax(i), 1.0e-12);
+   }
+}
+
+TEST_CASE("EOST-temperkeys", "[ff][eost]")
+{
+   // ost_mech must mirror the tempering settings parsed by the Fortran
+   // mutate_ost; the keyword parsing itself is covered by test_eost.f.
+   int fg0 = ost::use_ostgtemp, fl0 = ost::use_ostltemp;
+   double fgt0 = ost::ostgthresh, fgg0 = ost::ostgtempgamma;
+   double flt0 = ost::ostlthresh, flg0 = ost::ostltempgamma;
+
+   // ost_mech also copies state that resetost does not restore
+   double theta0 = osttheta, vtheta0 = ostvtheta;
+   double mass0 = ostmass, friction0 = ostfriction, dt0 = ostdt;
+   bool fast0 = fastkernel;
+
+   ost::use_ostgtemp = 1;
+   ost::use_ostltemp = 0;
+   ost::ostgthresh = 2.0;
+   ost::ostgtempgamma = 3.0;
+   ost::ostlthresh = 0.5;
+   ost::ostltempgamma = 0.25;
+   ost_mech();
+   REQUIRE(use_ostgtemp);
+   REQUIRE_FALSE(use_ostltemp);
+   COMPARE_REALS(ostgthresh, 2.0, 1.0e-12);
+   COMPARE_REALS(ostgtempgamma, 3.0, 1.0e-12);
+   COMPARE_REALS(ostlthresh, 0.5, 1.0e-12);
+   COMPARE_REALS(ostltempgamma, 0.25, 1.0e-12);
+
+   ost::use_ostgtemp = 0;
+   ost::use_ostltemp = 1;
+   ost_mech();
+   REQUIRE_FALSE(use_ostgtemp);
+   REQUIRE(use_ostltemp);
+
+   // restore the Fortran settings and a clean OST state
+   ost::use_ostgtemp = fg0;
+   ost::use_ostltemp = fl0;
+   ost::ostgthresh = fgt0;
+   ost::ostgtempgamma = fgg0;
+   ost::ostlthresh = flt0;
+   ost::ostltempgamma = flg0;
+   resetost(5, 5, 1);
+   osttheta = theta0;
+   ostvtheta = vtheta0;
+   ostmass = mass0;
+   ostfriction = friction0;
+   ostdt = dt0;
+   fastkernel = fast0;
+}
+
 TEST_CASE("EOST-metaimage", "[ff][eost]")
 {
    // eMetaBias sums the same three reflecting lambda images as the g kernel.
@@ -1230,9 +1437,9 @@ TEST_CASE("EOST-metatemper", "[ff][eost]")
    hbias = 2.0;
    dedl = 0.0;
    ostdt = 0.0; // no-op ostLangevin, so the sampled lambda values stay controlled
-   ostemper = true;
-   temperthresh = 0.5;
-   tempergamma = 1.0;
+   use_ostgtemp = true;
+   ostgthresh = 0.5;
+   ostgtempgamma = 1.0;
 
    // V* over the deposits already stored, summed independently of vmetagrid
    auto refVstar = [&](int upto) {
@@ -1264,13 +1471,13 @@ TEST_CASE("EOST-metatemper", "[ff][eost]")
 
    // the first deposit sees an empty bias, so it is untempered
    COMPARE_REALS(metahhist[1], hbias, 1.0e-12);
-   REQUIRE(refVstar(1) > temperthresh); // the threshold really is crossed
+   REQUIRE(refVstar(1) > ostgthresh); // the threshold really is crossed
 
    // every later height follows the rule applied to the pre-deposit V*, and the
    // sequence decays monotonically
    for (int k = 2; k <= ndep; ++k) {
       CAPTURE(k);
-      COMPARE_REALS(metahhist[k], temperedHeight(refVstar(k - 1)), 1.0e-12);
+      COMPARE_REALS(metahhist[k], temperedHeight(refVstar(k - 1), refVstar(k - 1)), 1.0e-12);
       REQUIRE(metahhist[k] < metahhist[k - 1]);
    }
 

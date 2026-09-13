@@ -82,9 +82,12 @@ void ost_mech()
    ostcvslp = ost::ostcvslp;
    ostcvstd = ost::ostcvstd;
 
-   ostemper = (ost::ostemper != 0);
-   temperthresh = ost::temperthresh;
-   tempergamma = ost::tempergamma;
+   use_ostgtemp = (ost::use_ostgtemp != 0);
+   use_ostltemp = (ost::use_ostltemp != 0);
+   ostgthresh = ost::ostgthresh;
+   ostgtempgamma = ost::ostgtempgamma;
+   ostlthresh = ost::ostlthresh;
+   ostltempgamma = ost::ostltempgamma;
 
    osttheta = ost::osttheta;
    ostvtheta = ost::ostvtheta;
@@ -215,17 +218,21 @@ double metaVminimax()
    return *std::min_element(vmetagrid.begin() + 1, vmetagrid.begin() + nlmda + 1);
 }
 
-// h = hbias * exp(-max(0, vminimax - temperthresh) / (kT * tempergamma))
-double temperedHeight(double vminimax)
+// h = hbias * exp(-max(0, vglobal - ostgthresh) / (kT * ostgtempgamma)
+//                 -max(0, vlocal - vglobal - ostlthresh) / (kT * ostltempgamma))
+double temperedHeight(double vglobal, double vlocal)
 {
-   if (not ostemper)
-      return hbias;
    const double rt = units::gasconst * bath::kelvin;
-   double denom = rt * tempergamma;
-   if (denom <= 0.0)
+   if (rt <= 0.0)
       return hbias;
-   double excess = std::max(0.0, vminimax - temperthresh);
-   return hbias * std::exp(-excess / denom);
+   double expo = 0.0;
+   // the global factor follows the path bias level
+   if (use_ostgtemp and ostgtempgamma > 0.0)
+      expo -= std::max(0.0, vglobal - ostgthresh) / (rt * ostgtempgamma);
+   // the local factor follows the excess of the deposit bin
+   if (use_ostltemp and ostltempgamma > 0.0)
+      expo -= std::max(0.0, vlocal - vglobal - ostlthresh) / (rt * ostltempgamma);
+   return hbias * std::exp(expo);
 }
 
 // buildostindex -- rebuild the packed bins and linked-list lookup from the saved
@@ -999,7 +1006,7 @@ void eostDyn(int istep)
          ostihist[nosthist] = istep;
          ostlhist[nosthist] = ostlambdaavg;
          ostfhist[nosthist] = ostdedlavg;
-         osthhist[nosthist] = temperedHeight(ostVminimax());
+         osthhist[nosthist] = temperedHeight(ostVminimax(), vkernelmax[ilmda]);
          ostwlhist[nosthist] = wlhist;
          ostwfhist[nosthist] = wfhist;
          ostnext[nosthist] = osthead[gidx(ilmda, iflmda)];
@@ -1007,7 +1014,7 @@ void eostDyn(int istep)
 
          if (true) {
             double vmm = ostVminimax();
-            double th = temperedHeight(vmm);
+            double th = temperedHeight(vmm, vkernelmax[ilmda]);
             printf("istep: %i\n", istep);
             printf("ostlmda  avg, std, slp: %8.4f %8.4e %8.4e\n", ostlambdaavg, ostlambdastd, ostlambdaslp);
             printf("lmda[0]  avg, std, slp: %8.4f %8.4e %8.4e\n", ostlambdaavgbin.front(), ostlambdastdbin.front(), ostlambdaslpbin.front());
@@ -1055,7 +1062,8 @@ void eMetaDyn(int istep)
       if (nmetahist > sizemetahist)
          resizeMeta();
       metalhist[nmetahist] = ostlambdaavg;
-      metahhist[nmetahist] = temperedHeight(metaVminimax());
+      double vmm = metaVminimax();
+      metahhist[nmetahist] = temperedHeight(vmm, vmm);
       metawhist[nmetahist] = wlmda;
       metaihist[nmetahist] = istep;
       addMetaGrid(nmetahist);

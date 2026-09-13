@@ -98,8 +98,8 @@ void addMetaGrid(int ihist);
 double metaDeltaG();
 void resizeMeta();
 
-// global path-based tempering
+// hybrid global + local tempering
 double ostVminimax();
 double metaVminimax();
-double temperedHeight(double vminimax);
+double temperedHeight(double vglobal, double vlocal);
 }
