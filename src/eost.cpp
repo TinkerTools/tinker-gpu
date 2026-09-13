@@ -1017,11 +1017,15 @@ void eostDyn(int istep)
             double th = temperedHeight(vmm, vkernelmax[ilmda]);
             printf("istep: %i\n", istep);
             printf("ostlmda  avg, std, slp: %8.4f %8.4e %8.4e\n", ostlambdaavg, ostlambdastd, ostlambdaslp);
-            printf("lmda[0]  avg, std, slp: %8.4f %8.4e %8.4e\n", ostlambdaavgbin.front(), ostlambdastdbin.front(), ostlambdaslpbin.front());
-            printf("lmda[-1] avg, std, slp: %8.4f %8.4e %8.4e\n", ostlambdaavgbin.back(), ostlambdastdbin.back(), ostlambdaslpbin.back());
+            if (ostcvbin > 0) {
+               printf("lmda[0]  avg, std, slp: %8.4f %8.4e %8.4e\n", ostlambdaavgbin.front(), ostlambdastdbin.front(), ostlambdaslpbin.front());
+               printf("lmda[-1] avg, std, slp: %8.4f %8.4e %8.4e\n", ostlambdaavgbin.back(), ostlambdastdbin.back(), ostlambdaslpbin.back());
+            }
             printf("ostdedl  avg, std, slp: %8.4f %8.4e %8.4e\n", ostdedlavg, ostdedlstd, ostdedlslp);
-            printf("dedl[0]  avg, std, slp: %8.4f %8.4e %8.4e\n", ostdedlavgbin.front(), ostdedlstdbin.front(), ostdedlslpbin.front());
-            printf("dedl[-1] avg, std, slp: %8.4f %8.4e %8.4e\n", ostdedlavgbin.back(), ostdedlstdbin.back(), ostdedlslpbin.back());
+            if (ostcvbin > 0) {
+               printf("dedl[0]  avg, std, slp: %8.4f %8.4e %8.4e\n", ostdedlavgbin.front(), ostdedlstdbin.front(), ostdedlslpbin.front());
+               printf("dedl[-1] avg, std, slp: %8.4f %8.4e %8.4e\n", ostdedlavgbin.back(), ostdedlstdbin.back(), ostdedlslpbin.back());
+            }
             printf("vminmax temperedHeight: %8.4e %8.4e\n", vmm, th);
             printf("\n");
          }
