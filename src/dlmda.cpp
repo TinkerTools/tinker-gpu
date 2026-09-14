@@ -49,10 +49,10 @@ void dlmdaData(RcOp op)
 void dlmdaData2(RcOp op)
 {
    if (op & RcOp::INIT) {
-      bool lambda_dynamics = use_dlmda or use_ost or use_meta or use_ti or use_emdt //
+      bool lambda_dynamics = use_dlmda or use_ost or use_meta or use_ti or use_abf or use_emdt //
          or use_epdt or use_evdt or use_rel;
       if (lambda_dynamics and not(pltfm_config & Platform::CUDA))
-         TINKER_THROW("OST  --  Lambda dynamics requires the CUDA platform");
+         TINKER_THROW("LAMBDA  --  Lambda dynamics requires the CUDA platform");
    }
 }
 
@@ -377,8 +377,10 @@ void dlmda_mech()
    use_ost = dlmda::use_ost;
    use_meta = dlmda::use_meta;
    use_ti = dlmda::use_ti;
+   use_abf = dlmda::use_abf;
    dlmda::use_ostdyn = use_ost;
    dlmda::use_metadyn = use_meta;
+   dlmda::use_abfdyn = use_abf;
 
    // adaptive lambda bias state shared by OST and ABF.
    lmdastep = dlmda::lmdastep;

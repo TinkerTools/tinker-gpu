@@ -87,11 +87,11 @@ static vel_prec *dup_buf_vx, *dup_buf_vy, *dup_buf_vz;
 static grad_prec *dup_buf_gx, *dup_buf_gy, *dup_buf_gz;
 static int lmda_snap_mask;
 static double s_lambda, s_dedl;
-static bool ost_snap_active;
+static bool bias_snap_active;
 static double s_ostdgdl, s_lmdaddgdl, s_lmdadeltag;
 static double s_lmdatheta, s_lmdavtheta;
 static int s_lmdastep, s_nflmda, s_fli0;
-static int s_nlmdahist, s_sizelmdahist, s_ost_first;
+static int s_nlmdahist, s_sizelmdahist, s_hist_first;
 static std::vector<int> s_khist, s_ihist;
 static std::vector<double> s_lhist, s_fhist, s_hhist, s_wlhist, s_wfhist;
 static int s_nmetahist, s_sizemetahist, s_meta_first;
@@ -122,10 +122,10 @@ static void mdsaveWriteLmda()
       dlmda::dedl = s_dedl;
 }
 
-static void mdsaveDupOst(int istep)
+static void mdsaveDupLmdaBias(int istep)
 {
-   ost_snap_active = use_ost or use_meta;
-   if (not ost_snap_active)
+   bias_snap_active = use_ost or use_meta or use_abf;
+   if (not bias_snap_active)
       return;
 
    s_lmdastep = istep;
@@ -141,9 +141,9 @@ static void mdsaveDupOst(int istep)
    s_hhist.clear(), s_wlhist.clear(), s_wfhist.clear();
    s_nlmdahist = nlmdahist;
    s_sizelmdahist = sizelmdahist;
-   s_ost_first = dlmda::nlmdasave + 1; // saves are serialized, so this is stable
+   s_hist_first = dlmda::nlmdasave + 1; // saves are serialized, so this is stable
    if (use_ost) {
-      for (int k = s_ost_first; k <= s_nlmdahist; ++k) {
+      for (int k = s_hist_first; k <= s_nlmdahist; ++k) {
          s_khist.push_back(osthist[k]);
          s_ihist.push_back(lmdaihist[k]);
          s_lhist.push_back(lmdalhist[k]);
@@ -151,6 +151,12 @@ static void mdsaveDupOst(int istep)
          s_hhist.push_back(osthhist[k]);
          s_wlhist.push_back(ostwlhist[k]);
          s_wfhist.push_back(ostwfhist[k]);
+      }
+   } else if (use_abf) {
+      for (int k = s_hist_first; k <= s_nlmdahist; ++k) {
+         s_ihist.push_back(lmdaihist[k]);
+         s_lhist.push_back(lmdalhist[k]);
+         s_fhist.push_back(lmdafhist[k]);
       }
    }
 
@@ -168,9 +174,9 @@ static void mdsaveDupOst(int istep)
    }
 }
 
-static void mdsaveWriteOst()
+static void mdsaveWriteLmdaBias()
 {
-   if (not ost_snap_active)
+   if (not bias_snap_active)
       return;
 
    dlmda::lmdastep = s_lmdastep;
@@ -188,7 +194,7 @@ static void mdsaveWriteOst()
          tinker_f_resizeosthist();
       dlmda::nlmdahist = s_nlmdahist;
       for (int i = 0; i < (int)s_khist.size(); ++i) {
-         int j = s_ost_first - 1 + i;
+         int j = s_hist_first - 1 + i;
          ost::osthist[j] = s_khist[i];
          dlmda::lmdaihist[j] = s_ihist[i];
          dlmda::lmdalhist[j] = s_lhist[i];
@@ -198,6 +204,18 @@ static void mdsaveWriteOst()
          ost::ostwfhist[j] = s_wfhist[i];
       }
       // Fortran saveost advances nlmdasave after appending this slice.
+   } else if (use_abf) {
+      // grow the Fortran arrays to match the engine, preserving existing entries
+      while (dlmda::sizelmdahist < s_sizelmdahist)
+         tinker_f_resizeabfhist();
+      dlmda::nlmdahist = s_nlmdahist;
+      for (int i = 0; i < (int)s_ihist.size(); ++i) {
+         int j = s_hist_first - 1 + i;
+         dlmda::lmdaihist[j] = s_ihist[i];
+         dlmda::lmdalhist[j] = s_lhist[i];
+         dlmda::lmdafhist[j] = s_fhist[i];
+      }
+      // Fortran saveabf advances nlmdasave after appending this slice.
    }
 
    if (use_meta) {
@@ -287,7 +305,7 @@ static void mdsaveDupThenWrite(int istep, time_prec dt)
       darray::copy(g::q0, 9 * n, &dup_buf_polscale[0][0][0], &polscale[0][0][0]);
 
    mdsaveDupLmda();
-   mdsaveDupOst(istep);
+   mdsaveDupLmdaBias(istep);
    mdsaveDupTi();
 
       // Record mdsave_begin_event when g::s0 is available.
@@ -401,7 +419,7 @@ static void mdsaveDupThenWrite(int istep, time_prec dt)
 #endif
 
    mdsaveWriteLmda();
-   mdsaveWriteOst();
+   mdsaveWriteLmdaBias();
    mdsaveWriteTi();
 
    double dt1 = dt;
@@ -440,8 +458,8 @@ void mdsaveLmdaFinal(int istep)
 {
    mdsaveDupLmda();
    mdsaveWriteLmda();
-   mdsaveDupOst(istep);
-   mdsaveWriteOst();
+   mdsaveDupLmdaBias(istep);
+   mdsaveWriteLmdaBias();
    mdsaveDupTi();
    mdsaveWriteTi();
 
@@ -449,6 +467,8 @@ void mdsaveLmdaFinal(int istep)
       tinker_f_saveost();
    if (dlmda::use_metadyn)
       tinker_f_savemeta();
+   if (dlmda::use_abfdyn)
+      tinker_f_saveabf();
    if (dlmda::use_ti)
       tinker_f_saveti();
 }
@@ -480,7 +500,7 @@ void mdsaveData(RcOp op)
       darray::deallocate(dup_buf_vx, dup_buf_vy, dup_buf_vz);
       darray::deallocate(dup_buf_gx, dup_buf_gy, dup_buf_gz);
 
-      ost_snap_active = false;
+      bias_snap_active = false;
       lmda_snap_mask = 0;
       s_khist.clear(), s_ihist.clear(), s_lhist.clear(), s_fhist.clear();
       s_hhist.clear(), s_wlhist.clear(), s_wfhist.clear();
@@ -534,7 +554,7 @@ void mdsaveData(RcOp op)
       idle_dup = false;
       idle_write = true;
       lmda_snap_mask = 0;
-      ost_snap_active = false;
+      bias_snap_active = false;
       ti_snap_active = false;
    }
 }

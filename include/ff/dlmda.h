@@ -223,12 +223,13 @@ TINKER_EXTERN bool use_epast;
 TINKER_EXTERN bool use_ost;
 TINKER_EXTERN bool use_meta;
 TINKER_EXTERN bool use_ti;
+TINKER_EXTERN bool use_abf;
 
 inline int lmdaDerivMask(int flag, bool term_driven)
 {
    if (not term_driven)
       return 0;
-   bool reduced = ((use_ti or use_meta) and not use_ost) or use_epast;
+   bool reduced = ((use_ti or use_meta or use_abf) and not use_ost) or use_epast;
    int b = 0;
    if (flag & calc::energy) {
       b += calc::energy_dlmda1;
@@ -246,7 +247,7 @@ inline int lmdaDerivVers(int vers, bool term_driven)
 {
    if (not term_driven)
       return vers;
-   bool reduced = ((use_ti or use_meta) and not use_ost) or use_epast;
+   bool reduced = ((use_ti or use_meta or use_abf) and not use_ost) or use_epast;
    if (vers == calc::v1)
       return reduced ? calc::v7 : calc::v9;
    if (vers == calc::v4)

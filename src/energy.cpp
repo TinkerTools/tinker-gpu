@@ -1,6 +1,7 @@
 #include "ff/energy.h"
 #include "ff/ost.h"
 #include "ff/ethrmint.h"
+#include "ff/eabf.h"
 #include "tool/error.h"
 
 namespace tinker {
@@ -43,6 +44,7 @@ const TimeScaleConfig& defaultTSConfig()
       {"ehippo", 0},
 
       {"eost", 0},
+      {"eabf", 0},
    };
    return tsconfig;
 }
@@ -507,6 +509,10 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
       bool ecore_ost = false;
       if (fts("eost", ecore_ost, tsflag, tsconfig))
          eostBias(vers);
+   } else if (use_abf) {
+      bool ecore_abf = false;
+      if (fts("eabf", ecore_abf, tsflag, tsconfig))
+         eabfBias(vers);
    }
 }
 
@@ -550,6 +556,7 @@ void energyData(RcOp op)
 
    RcMan dlmda42{dlmdaData, op};
    RcMan eost42{eostData, op};
+   RcMan eabf42{eabfData, op};
    RcMan ti42{thermintData, op};
    RcMan vdwsSoftcore42{vdwSoftcoreData, op};
    RcMan evdw42{evdwData, op};

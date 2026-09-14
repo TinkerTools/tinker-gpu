@@ -1,5 +1,6 @@
 #include "ff/atom.h"
 #include "ff/ethrmint.h"
+#include "ff/eabf.h"
 #include "md/misc.h"
 #include "tool/argkey.h"
 #include "tool/iofortstr.h"
@@ -179,6 +180,10 @@ void xDynamic(int, char**)
       tinker_f_initostfile();
    if (dlmda::use_metadyn)
       tinker_f_initmetafile();
+   if (dlmda::use_abfdyn) {
+      tinker_f_initabffile();
+      abfFromFortran();
+   }
 
    // lay out the thermodynamic integration lambda windows
    if (use_ti)

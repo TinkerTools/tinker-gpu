@@ -2,6 +2,7 @@
 #include "ff/energy.h"
 #include "ff/ost.h"
 #include "ff/ethrmint.h"
+#include "ff/eabf.h"
 #include "math/random.h"
 #include "md/misc.h"
 #include "md/pq.h"
@@ -370,6 +371,8 @@ void lf_lpiston_npt(int istep, time_prec dt_ps)
       eostDyn(istep);
    else if (use_meta)
       eMetaDyn(istep);
+   else if (use_abf)
+      eabfDyn(istep);
    else if (use_ti)
       etidyn(istep);
 

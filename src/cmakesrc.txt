@@ -25,6 +25,7 @@ box.cpp
 compilers.cpp
 cudalib.cpp
 dlmda.cpp
+eabf.cpp
 echarge.cpp
 echglj.cpp
 egvop.cpp

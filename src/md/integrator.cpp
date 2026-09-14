@@ -2,6 +2,7 @@
 #include "ff/energy.h"
 #include "ff/ost.h"
 #include "ff/ethrmint.h"
+#include "ff/eabf.h"
 #include "md/lflpiston.h"
 #include "md/misc.h"
 #include "md/pq.h"
@@ -95,6 +96,8 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
          eostDyn(istep);
       else if (use_meta)
          eMetaDyn(istep);
+      else if (use_abf)
+         eabfDyn(istep);
       else if (use_ti)
          etidyn(istep);
       if (vers1 & calc::virial)
@@ -149,6 +152,8 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
          eostDyn(istep);
       else if (use_meta)
          eMetaDyn(istep);
+      else if (use_abf)
+         eabfDyn(istep);
       else if (use_ti)
          etidyn(istep);
       darray::copy(g::q0, n, gx2, gx);
@@ -336,7 +341,7 @@ static void nhc_npt(int istep, time_prec dt)
 {
    int vers1 = rc_flag & calc::vmask;
    bool save = 0 == (istep % inform::iwrite);
-   if (!save and !use_ost)
+   if (!save and !use_dlmda)
       vers1 &= ~calc::energy;
 
    // set some time values for the dynamics integration
@@ -384,6 +389,8 @@ static void nhc_npt(int istep, time_prec dt)
       eostDyn(istep);
    else if (use_meta)
       eMetaDyn(istep);
+   else if (use_abf)
+      eabfDyn(istep);
    else if (use_ti)
       etidyn(istep);
 

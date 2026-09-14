@@ -341,6 +341,7 @@ void sdVel2()
 #include "ff/energy.h"
 #include "ff/ost.h"
 #include "ff/ethrmint.h"
+#include "ff/eabf.h"
 #include "md/integrator.h"
 #include "md/misc.h"
 #include "tool/ioprint.h"
@@ -399,6 +400,8 @@ void StochasticIntegrator::dynamic(int istep, time_prec dt)
       eostDyn(istep);
    else if (use_meta)
       eMetaDyn(istep);
+   else if (use_abf)
+      eabfDyn(istep);
    else if (use_ti)
       etidyn(istep);
 

@@ -13,6 +13,7 @@ chglj.cpp
 chgtrn.cpp
 disp.cpp
 dlmda.cpp
+eabf.cpp
 emhippo.cpp
 eost.cpp
 ephippo.cpp
