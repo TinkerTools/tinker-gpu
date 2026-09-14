@@ -1,20 +1,24 @@
 #include "ff/dlmda.h"
 #include "ff/ost.h"
-#include "ff/thermint.h"
+#include "ff/ethrmint.h"
 #include "ff/atom.h"
 #include "ff/egvop.h"
 #include "ff/elec.h"
 #include "ff/evdw.h"
 #include "ff/potent.h"
+#include "math/const.h"
+#include "math/random.h"
 #include "md/osrw.h"
 #include "seq/ost.h"
 #include "tool/darray.h"
 #include "tool/error.h"
 #include "tool/externfunc.h"
 #include "tool/ioprint.h"
+#include <tinker/detail/bath.hh>
 #include <tinker/detail/dlmda.hh>
 #include <tinker/detail/mplpot.hh>
 #include <tinker/detail/mutant.hh>
+#include <tinker/detail/units.hh>
 
 #include <algorithm>
 #include <cmath>
@@ -376,6 +380,35 @@ void dlmda_mech()
    dlmda::use_ostdyn = use_ost;
    dlmda::use_metadyn = use_meta;
 
+   // adaptive lambda bias state shared by OST and ABF.
+   lmdastep = dlmda::lmdastep;
+   lmdaintv = dlmda::lmdaintv;
+   lmdanpa = dlmda::lmdanpa;
+   lmdanpb = dlmda::lmdanpb;
+   lmdanpc = dlmda::lmdanpc;
+   nlmda = dlmda::nlmda;
+   nlmdahist = 0;
+   sizelmdahist = 0;
+   wlmda = dlmda::wlmda;
+   wlmda2 = dlmda::wlmda2;
+   lmdaparatio = dlmda::lmdaparatio;
+   lmdapbratio = dlmda::lmdapbratio;
+   lmdapcratio = dlmda::lmdapcratio;
+   lmdatheta = dlmda::lmdatheta;
+   lmdavtheta = dlmda::lmdavtheta;
+   lmdamass = dlmda::lmdamass;
+   lmdafric = dlmda::lmdafric;
+   lmdadt = dlmda::lmdadt;
+
+   // dedl is owned by the energy routines and zeroed by zeroEGV each step.
+   deffdl = 0;
+   lmdaddgdl = 0;
+   lmdaavg = 0;
+   lmdastd = 0;
+   dedlavg = 0;
+   dedlstd = 0;
+   lmdadeltag = 0;
+
    elmdaexp = dlmda::elmdaexp;
    plmdaexp = dlmda::plmdaexp;
    vlmdaexp = dlmda::vlmdaexp;
@@ -446,6 +479,112 @@ void avgstd(const std::vector<double>& v, int begin, int count, double& avg, dou
    avg = k + total / (double)count;
    double var = (totalsq - total * total / (double)count) / (double)count;
    sd = std::sqrt(var > 0.0 ? var : 0.0);
+}
+
+// Lambda bin index of a lambda value, clamped to the grid (dlambda.f:lmdabin).
+int lmdaBin(double lambda)
+{
+   int b = (int)std::lround(lambda / wlmda) + 1;
+   if (b < 1)
+      b = 1;
+   if (b > nlmda)
+      b = nlmda;
+   return b;
+}
+
+// Divides the lambda sample interval into the phase that propagates the lambda
+// particle, the phase that equilibrates at the frozen lambda and the phase that
+// averages dU/dlambda at that same fixed lambda; the phase counts are the
+// authoritative split, while lmdapcratio is only the nominal fraction left over
+// before truncation to whole samples (dlambda.f:setlmdaphase).
+void setLmdaPhase()
+{
+   // divide the interval, keeping at least one propagation step and at least
+   // two samples to average
+   if (lmdaintv < 1)
+      lmdaintv = 1;
+   lmdapcratio = 1.0 - (lmdaparatio + lmdapbratio);
+   lmdanpa = (int)(lmdaparatio * (double)lmdaintv);
+   lmdanpb = (int)(lmdapbratio * (double)lmdaintv);
+   lmdanpa = std::max(1, std::min(lmdanpa, lmdaintv - 1));
+   lmdanpb = std::max(0, std::min(lmdanpb, lmdaintv - lmdanpa));
+   lmdanpc = lmdaintv - lmdanpa - lmdanpb;
+   while (lmdanpc < 2 and lmdanpb > 0) {
+      lmdanpb -= 1;
+      lmdanpc += 1;
+   }
+   while (lmdanpc < 2 and lmdanpa > 1) {
+      lmdanpa -= 1;
+      lmdanpc += 1;
+   }
+}
+
+// BAOAB Langevin propagation of the auxiliary lambda particle in theta space,
+// where lambda = sin(theta)^2 (dlambda.f:lmdalangevin).
+void lmdaLangevin()
+{
+   if (lmdadt <= 0.0)
+      return;
+   if (lmdamass <= 0.0)
+      return;
+
+   double force = -deffdl * std::sin(2.0 * lmdatheta);
+   double gamma = std::max(0.0, lmdafric);
+   if (gamma > 0.0) {
+      double c = std::exp(-gamma * lmdadt);
+      double ktm = units::boltzmann * bath::kelvin / lmdamass;
+      double sigma = std::sqrt(ktm * (1.0 - c * c));
+      lmdavtheta = c * lmdavtheta + (1.0 - c) * force / (gamma * lmdamass) + sigma * normal<double>();
+   } else {
+      lmdavtheta = lmdavtheta + lmdadt * force / lmdamass;
+   }
+
+   lmdatheta = lmdatheta + lmdadt * lmdavtheta;
+   while (lmdatheta > pi)
+      lmdatheta -= 2.0 * pi;
+   while (lmdatheta <= -pi)
+      lmdatheta += 2.0 * pi;
+
+   double sinth = std::sin(lmdatheta);
+   lambda = sinth * sinth;
+}
+
+// Free energy at the current lambda by piecewise-linear integration of the mean
+// force of the lambda bins, and its lambda derivative (dlambda.f:efreelmda).
+void efreeLmda(double& eflmda, double& dfdl)
+{
+   eflmda = 0;
+   dfdl = 0;
+   if (lambda <= 0.0) {
+      dfdl = lmdafmean[1];
+      return;
+   }
+   for (int il0 = 1; il0 <= nlmda - 1; ++il0) {
+      int il1 = il0 + 1;
+      double lmda0 = (double)(il0 - 1) * wlmda;
+      double lmda1 = (double)(il1 - 1) * wlmda;
+      double fl0 = lmdafmean[il0];
+      double fl1 = lmdafmean[il1];
+      double slope = (fl1 - fl0) / wlmda;
+      if (lambda <= lmda1) {
+         double xx = lambda - lmda0;
+         eflmda += fl0 * xx + 0.5 * slope * xx * xx;
+         dfdl = fl0 + slope * xx;
+         return;
+      }
+      eflmda += 0.5 * (fl0 + fl1) * wlmda;
+   }
+   dfdl = lmdafmean[nlmda];
+}
+
+// Total free energy change by trapezoid integration of the mean force of the
+// lambda bins (dlambda.f:efreetot).
+double efreeTot()
+{
+   double tot = 0;
+   for (int il = 1; il <= nlmda - 1; ++il)
+      tot += 0.5 * (lmdafmean[il] + lmdafmean[il + 1]) * wlmda;
+   return tot;
 }
 
 }

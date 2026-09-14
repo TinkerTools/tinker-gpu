@@ -1,4 +1,4 @@
-#include "ff/thermint.h"
+#include "ff/ethrmint.h"
 #include "ff/dlmda.h"
 #include <algorithm>
 #include <tinker/detail/mutant.hh>
@@ -69,7 +69,7 @@ void init_tidyn(int nstep)
    tinbcount = 0;
 }
 
-// Measures the current window against the preceding boundary (thermint.f:298).
+// Measures the current window against the preceding boundary (ethrmint.f:298).
 static void tiSetWindow()
 {
    tiwindow = tiwinend[tibin - 1];

@@ -1,4 +1,4 @@
-#include "ff/thermint.h"
+#include "ff/ethrmint.h"
 #include "ff/dlmda.h"
 #include "ff/elec.h"
 #include "ff/evdw.h"
@@ -22,7 +22,7 @@
 #include <tinker/detail/thrmint.hh>
 #include <tinker/routines.h>
 
-// Unit tests for thermodynamic integration (src/thermint.cpp), following the
+// Unit tests for thermodynamic integration (src/ethrmint.cpp), following the
 // Fortran suite in tinker/test/test_thermint.f. Most cases are pure host math:
 // no molecular system, no Fortran runtime, no GPU. etidyn samples the plain
 // host global dedl, so the accumulation logic is driven by assigning dedl

@@ -1,6 +1,6 @@
 #include "ff/energy.h"
 #include "ff/ost.h"
-#include "ff/thermint.h"
+#include "ff/ethrmint.h"
 #include "tool/error.h"
 
 namespace tinker {

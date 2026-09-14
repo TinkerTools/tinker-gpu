@@ -7,32 +7,25 @@
 namespace tinker {
 // saved gaussian history (1-based, element 0 unused)
 extern std::vector<int> osthist;
-extern std::vector<int> ostihist; // iost/step stamp per deposited OST gaussian
 extern std::vector<int> ostnext;
 extern std::vector<int> osthead; // (nlmda x nflmda), column-major
-extern std::vector<double> ostlhist, ostfhist, osthhist, ostwlhist, ostwfhist;
-
-// per-step sample ring buffers, size iosthist, indexed 0..iosthist-1
-extern std::vector<double> ostllist, ostflist;
+extern std::vector<double> osthhist, ostwlhist, ostwfhist;
 
 // bias grids (nlmda x nflmda), column-major
 extern std::vector<double> gkernel, glkernel, gfkernel, glfkernel;
-
-// free-energy mean force per lambda bin, size nlmda+1, indexed 1..nlmda
-extern std::vector<double> fkernel, fsumkernel, pfkernel;
 
 // running max of gkernel over the flambda axis for each lambda bin.
 extern std::vector<double> vkernelmax;
 
 // metadynamics gaussian history (1-based)
 extern std::vector<double> metalhist, metahhist, metawhist;
-extern std::vector<int> metaihist; // iost/step stamp per deposited metadynamics gaussian
+extern std::vector<int> metaihist; // lmdastep stamp per deposited metadynamics gaussian
 
 // metadynamics bias and its lambda derivative.
 extern std::vector<double> vmetagrid, dvmetagrid;
 
 // bias evaluated by eostBias.
-extern double bgbias, bdgdl, bdgdfl, bostlmda, bdfdl;
+extern double bgbias, bdgdl, bdgdfl, bostlmda;
 
 // column-major grid index for 1-based (i in 1..nlmda, j in 1..nflmda)
 inline int gidx(int i, int j)
@@ -51,16 +44,6 @@ inline void kToIj(int k, int nrow, int& i, int& j)
    j = (k - 1) / nrow + 1;
 }
 
-inline int lambdaBin(double lambda)
-{
-   int b = (int)std::lround(lambda / wlmda) + 1;
-   if (b < 1)
-      b = 1;
-   if (b > nlmda)
-      b = nlmda;
-   return b;
-}
-
 inline int flambdaBin(double dudl)
 {
    int b = (int)std::lround(dudl / wflmda) + fli0;
@@ -72,11 +55,8 @@ inline int flambdaBin(double dudl)
 }
 
 // engine routines (defined in src/eost.cpp)
-void histstat(const std::vector<double>& list, double& avg, double& std, double& slp,
-   std::vector<double>& avgbin, std::vector<double>& stdbin, std::vector<double>& slpbin);
-bool depcriteria(double avg, double std, double slp, const std::vector<double>& avgbin);
-bool depcriteria2(double avg, double std);
-void setOstPhase();
+void histstat(const std::vector<double>& list, double& avg, double& std, double& slp);
+bool depcriteria(double avg, double std);
 void buildOstIndex();
 void resizeOstHist();
 void ensureFlambda(double dudl);
@@ -90,8 +70,6 @@ void updateKernels();
 void buildFkernel();
 void egkernel(double& egbias, double& dgdl, double& dgdfl);
 void egkernelInterpolate(double& egbias, double& dgdl, double& dgdfl);
-void efkernel(double& eostlmda, double& dfdl);
-double etotFkernel();
 void eMetaBias(double lmda, double& vbias, double& dvdl);
 void eMetaBiasInterpolate(double lmda, double& vbias, double& dvdl);
 void addMetaGrid(int ihist);

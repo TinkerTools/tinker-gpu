@@ -261,7 +261,7 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
    // TI owns the main lambda and starts at the first schedule window. These
    // four fixtures all reference lambda 0.5, so keep that operating point
    // instead of accepting TI's default first window at lambda 1.
-   const char* keyextra = lmdaMode == LmdaMode::ThermIntg ? "\ntherm-intg\nti-window 0.5\n" : "";
+   const char* keyextra = lmdaMode == LmdaMode::ThermIntg ? "\nlambda-mode ti\nti-window 0.5\n" : "";
    TestFile fkey(dir + keyname, keyname, keyextra);
    TestFile fprm(TINKER9_DIRSTR "/test/file/commit_6fe8e913/water03.prm");
 
@@ -457,7 +457,7 @@ void runEmplarFixture(const Fixture& fx)
    runFixture(fx, Fuse::Require);
 }
 
-// Reuses a full lambda-scaled fixture with THERM-INTG appended to its temporary
+// Reuses a full lambda-scaled fixture with LAMBDA-MODE TI appended to its temporary
 // key file. runFixture still exercises v0, v1, v3, v4, v5 and v6, with the
 // lambda-driven kernels receiving v7 for v1 and v8 for v4.
 void runThermIntgFixture(const Fixture& fx)

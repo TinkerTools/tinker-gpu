@@ -340,7 +340,7 @@ void sdVel2()
 #include "ff/dlmda.h"
 #include "ff/energy.h"
 #include "ff/ost.h"
-#include "ff/thermint.h"
+#include "ff/ethrmint.h"
 #include "md/integrator.h"
 #include "md/misc.h"
 #include "tool/ioprint.h"

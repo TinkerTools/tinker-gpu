@@ -8,7 +8,7 @@
 #include "ff/nblist.h"
 #include "ff/ost.h"
 #include "ff/rwcrd.h"
-#include "ff/thermint.h"
+#include "ff/ethrmint.h"
 #include "tool/argkey.h"
 #include "tool/darray.h"
 #include "tool/iofortstr.h"

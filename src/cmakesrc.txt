@@ -35,6 +35,7 @@ ennintermol.cpp
 eost.cpp
 errlinux.cpp
 errprint.cpp
+ethrmint.cpp
 evalence.cpp
 evdw.cpp
 exec.cpp
@@ -79,7 +80,6 @@ rwcrd.cpp
 spatial.cpp
 switch.cpp
 termbuf.cpp
-thermint.cpp
 tinkersuppl.cpp
 xanalyze.cpp
 xbar.cpp

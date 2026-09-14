@@ -5,7 +5,7 @@
 #include "ff/modhippo.h"
 #include "ff/ost.h"
 #include "ff/potent.h"
-#include "ff/thermint.h"
+#include "ff/ethrmint.h"
 #include "md/misc.h"
 #include "md/pq.h"
 #include "tool/cudalib.h"
@@ -88,10 +88,10 @@ static grad_prec *dup_buf_gx, *dup_buf_gy, *dup_buf_gz;
 static int lmda_snap_mask;
 static double s_lambda, s_dedl;
 static bool ost_snap_active;
-static double s_ostdgdl, s_ostddgdl, s_eosttot;
-static double s_osttheta, s_ostvtheta;
-static int s_iost, s_nflmda, s_fli0;
-static int s_nosthist, s_sizeosthist, s_ost_first;
+static double s_ostdgdl, s_lmdaddgdl, s_lmdadeltag;
+static double s_lmdatheta, s_lmdavtheta;
+static int s_lmdastep, s_nflmda, s_fli0;
+static int s_nlmdahist, s_sizelmdahist, s_ost_first;
 static std::vector<int> s_khist, s_ihist;
 static std::vector<double> s_lhist, s_fhist, s_hhist, s_wlhist, s_wfhist;
 static int s_nmetahist, s_sizemetahist, s_meta_first;
@@ -128,26 +128,26 @@ static void mdsaveDupOst(int istep)
    if (not ost_snap_active)
       return;
 
-   s_iost = istep;
+   s_lmdastep = istep;
    s_nflmda = nflmda;
    s_fli0 = fli0;
    s_ostdgdl = ostdgdl;
-   s_ostddgdl = ostddgdl;
-   s_eosttot = eosttot;
-   s_osttheta = osttheta;
-   s_ostvtheta = ostvtheta;
+   s_lmdaddgdl = lmdaddgdl;
+   s_lmdadeltag = lmdadeltag;
+   s_lmdatheta = lmdatheta;
+   s_lmdavtheta = lmdavtheta;
 
    s_khist.clear(), s_ihist.clear(), s_lhist.clear(), s_fhist.clear();
    s_hhist.clear(), s_wlhist.clear(), s_wfhist.clear();
-   s_nosthist = nosthist;
-   s_sizeosthist = sizeosthist;
-   s_ost_first = ost::nosthistsave + 1; // saves are serialized, so this is stable
+   s_nlmdahist = nlmdahist;
+   s_sizelmdahist = sizelmdahist;
+   s_ost_first = dlmda::nlmdasave + 1; // saves are serialized, so this is stable
    if (use_ost) {
-      for (int k = s_ost_first; k <= s_nosthist; ++k) {
+      for (int k = s_ost_first; k <= s_nlmdahist; ++k) {
          s_khist.push_back(osthist[k]);
-         s_ihist.push_back(ostihist[k]);
-         s_lhist.push_back(ostlhist[k]);
-         s_fhist.push_back(ostfhist[k]);
+         s_ihist.push_back(lmdaihist[k]);
+         s_lhist.push_back(lmdalhist[k]);
+         s_fhist.push_back(lmdafhist[k]);
          s_hhist.push_back(osthhist[k]);
          s_wlhist.push_back(ostwlhist[k]);
          s_wfhist.push_back(ostwfhist[k]);
@@ -173,31 +173,31 @@ static void mdsaveWriteOst()
    if (not ost_snap_active)
       return;
 
-   ost::iost = s_iost;
+   dlmda::lmdastep = s_lmdastep;
    ost::nflmda = s_nflmda;
    ost::fli0 = s_fli0;
    ost::ostdgdl = s_ostdgdl;
-   ost::ostddgdl = s_ostddgdl;
-   ost::eosttot = s_eosttot;
-   ost::osttheta = s_osttheta;
-   ost::ostvtheta = s_ostvtheta;
+   dlmda::lmdaddgdl = s_lmdaddgdl;
+   dlmda::lmdadeltag = s_lmdadeltag;
+   dlmda::lmdatheta = s_lmdatheta;
+   dlmda::lmdavtheta = s_lmdavtheta;
 
    if (use_ost) {
       // grow the Fortran arrays to match the engine, preserving existing entries
-      while (ost::sizeosthist < s_sizeosthist)
+      while (dlmda::sizelmdahist < s_sizelmdahist)
          tinker_f_resizeosthist();
-      ost::nosthist = s_nosthist;
+      dlmda::nlmdahist = s_nlmdahist;
       for (int i = 0; i < (int)s_khist.size(); ++i) {
          int j = s_ost_first - 1 + i;
          ost::osthist[j] = s_khist[i];
-         ost::ostihist[j] = s_ihist[i];
-         ost::ostlhist[j] = s_lhist[i];
-         ost::ostfhist[j] = s_fhist[i];
+         dlmda::lmdaihist[j] = s_ihist[i];
+         dlmda::lmdalhist[j] = s_lhist[i];
+         dlmda::lmdafhist[j] = s_fhist[i];
          ost::osthhist[j] = s_hhist[i];
          ost::ostwlhist[j] = s_wlhist[i];
          ost::ostwfhist[j] = s_wfhist[i];
       }
-      // Fortran saveost advances nosthistsave after appending this slice.
+      // Fortran saveost advances nlmdasave after appending this slice.
    }
 
    if (use_meta) {

@@ -194,6 +194,17 @@ void dlmdaData(RcOp op);
 void dlmdaData2(RcOp op);
 /// Mean and population standard deviation of v[begin, begin+count).
 void avgstd(const std::vector<double>& v, int begin, int count, double& avg, double& sd);
+/// Lambda bin index of a lambda value, clamped to [1, nlmda] (dlambda.f:lmdabin).
+int lmdaBin(double lambda);
+/// Splits the sample interval into its propagation, equilibration and averaging
+/// phases (dlambda.f:setlmdaphase).
+void setLmdaPhase();
+/// Propagates the theta lambda particle, lambda = sin(theta)^2 (dlambda.f:lmdalangevin).
+void lmdaLangevin();
+/// Free energy at the current lambda and its lambda derivative (dlambda.f:efreelmda).
+void efreeLmda(double& eflmda, double& dfdl);
+/// Total free energy change from the mean force (dlambda.f:efreetot).
+double efreeTot();
 
 TINKER_EXTERN bool use_dlmda;
 TINKER_EXTERN bool use_emdt;
@@ -247,6 +258,57 @@ inline int lmdaDerivVers(int vers, bool term_driven)
 /// OST, metadynamics, TI, or a fixed value from the LAMBDA keyword -- drives it,
 /// and every sub-lambda is mapped from it by mapSubLambda().
 TINKER_EXTERN double lambda;
+
+//====================================================================//
+//         adaptive lambda bias state shared by OST and ABF           //
+//====================================================================//
+
+// sample interval and history bookkeeping.
+TINKER_EXTERN int lmdastep;       ///< dynamics step count of the adaptive lambda bias.
+TINKER_EXTERN int lmdaintv;       ///< steps in each adaptive bias sample interval.
+TINKER_EXTERN int lmdanpa;        ///< steps propagating the lambda particle.
+TINKER_EXTERN int lmdanpb;        ///< steps equilibrating at the frozen lambda.
+TINKER_EXTERN int lmdanpc;        ///< steps averaged at the frozen lambda.
+TINKER_EXTERN int nlmda;          ///< number of lambda bins.
+TINKER_EXTERN int nlmdahist;      ///< number of saved lambda bias history entries.
+TINKER_EXTERN int sizelmdahist;   ///< allocation size of the lambda bias history.
+TINKER_EXTERN double wlmda;       ///< width of lambda bins.
+TINKER_EXTERN double wlmda2;      ///< half width of lambda bins.
+TINKER_EXTERN double lmdaparatio; ///< interval fraction propagating the lambda particle.
+TINKER_EXTERN double lmdapbratio; ///< interval fraction equilibrating at fixed lambda.
+TINKER_EXTERN double lmdapcratio; ///< interval fraction averaging at fixed lambda.
+
+// theta lambda particle (lambda = sin(theta)^2).
+TINKER_EXTERN double lmdatheta;   ///< theta coordinate used to propagate lambda.
+TINKER_EXTERN double lmdavtheta;  ///< velocity of the theta lambda coordinate.
+TINKER_EXTERN double lmdamass;    ///< fictitious mass of the theta lambda coordinate.
+TINKER_EXTERN double lmdafric;    ///< friction coefficient of the theta lambda coordinate.
+TINKER_EXTERN double lmdadt;      ///< time step of the theta lambda coordinate.
+
+// current-step derived quantities and interval averages. The unbiased
+// dU/dlambda is \ref dedl itself.
+TINKER_EXTERN double deffdl;      ///< effective lambda derivative for propagation.
+TINKER_EXTERN double lmdadfdl;    ///< bias free energy derivative saved for dynamics.
+TINKER_EXTERN double lmdaddgdl;   ///< current dDeltaG/dlambda of the lambda bias.
+TINKER_EXTERN double lmdadeltag;  ///< current free energy estimate of the lambda bias.
+TINKER_EXTERN double lmdaavg;     ///< interval average of the main lambda.
+TINKER_EXTERN double lmdastd;     ///< interval deviation of the main lambda.
+TINKER_EXTERN double dedlavg;     ///< interval average of dU/dlambda.
+TINKER_EXTERN double dedlstd;     ///< interval deviation of dU/dlambda.
+
+// saved history (1-based, element 0 unused).
+TINKER_EXTERN std::vector<int> lmdaihist;    ///< step at which each history entry was saved.
+TINKER_EXTERN std::vector<double> lmdalhist; ///< lambda value of each history entry.
+TINKER_EXTERN std::vector<double> lmdafhist; ///< dU/dlambda value of each history entry.
+
+// per-step sample buffers, size lmdaintv, indexed 0..lmdaintv-1.
+TINKER_EXTERN std::vector<double> lmdallist; ///< lambda values saved within an interval.
+TINKER_EXTERN std::vector<double> lmdaflist; ///< dU/dlambda values saved within an interval.
+
+// free energy mean force per lambda bin, size nlmda+1, indexed 1..nlmda.
+TINKER_EXTERN std::vector<double> lmdafmean; ///< mean force of each lambda bin.
+TINKER_EXTERN std::vector<double> lmdafsum;  ///< weighted dU/dlambda sum of each lambda bin.
+TINKER_EXTERN std::vector<double> lmdafwt;   ///< total weight of each lambda bin.
 
 //====================================================================//
 //        main lambda -> sub-lambda mapping, shared by all methods    //

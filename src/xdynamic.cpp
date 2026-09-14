@@ -1,5 +1,5 @@
 #include "ff/atom.h"
-#include "ff/thermint.h"
+#include "ff/ethrmint.h"
 #include "md/misc.h"
 #include "tool/argkey.h"
 #include "tool/iofortstr.h"

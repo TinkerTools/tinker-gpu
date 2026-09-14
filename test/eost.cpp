@@ -46,19 +46,19 @@ void resetost(int nl, int nf, int nhist)
    wfhist = 1.0;
    maxwlhist = wlhist;
    maxwfhist = wfhist;
-   nosthist = 0;
-   sizeosthist = nhist;
-   iosthist = 10;
-   ostnpa = 3;
-   ostnpb = 3;
-   ostnpc = 4;
+   nlmdahist = 0;
+   sizelmdahist = nhist;
+   lmdaintv = 10;
+   lmdanpa = 3;
+   lmdanpb = 3;
+   lmdanpc = 4;
    lambda = 0.0;
-   ostlambdaavg = 0.0;
-   ostlambdastd = 0.0;
+   lmdaavg = 0.0;
+   lmdastd = 0.0;
    ostlambdaslp = 0.0;
    dedl = 0.0;
-   ostdedlavg = 0.0;
-   ostdedlstd = 0.0;
+   dedlavg = 0.0;
+   dedlstd = 0.0;
    ostdedlslp = 0.0;
    deffdl = 0.0;
    plmdamap = Lmdamap::QNT;
@@ -73,11 +73,11 @@ void resetost(int nl, int nf, int nhist)
    plmdainveps = 0.0;
    elmdainveps = 0.0;
    vlmdainveps = 0.0;
-   ostparatio = 0.3;
-   ostpbratio = 0.3;
-   ostpcratio = 0.4;
+   lmdaparatio = 0.3;
+   lmdapbratio = 0.3;
+   lmdapcratio = 0.4;
    hbias = 0.0;
-   eosttot = 0.0;
+   lmdadeltag = 0.0;
    oststdev = 1.0;
    ostinterpol = false;
    // tempering off by default, so every pre-existing case keeps the untempered
@@ -89,37 +89,30 @@ void resetost(int nl, int nf, int nhist)
    ostlthresh = 1.0;
    ostltempgamma = 1.0;
 
-   osthist.assign(sizeosthist + 1, 0);
-   ostihist.assign(sizeosthist + 1, 0);
-   ostnext.assign(sizeosthist + 1, 0);
-   ostlhist.assign(sizeosthist + 1, 0.0);
-   ostfhist.assign(sizeosthist + 1, 0.0);
-   osthhist.assign(sizeosthist + 1, 0.0);
-   ostwlhist.assign(sizeosthist + 1, 0.0);
-   ostwfhist.assign(sizeosthist + 1, 0.0);
-   ostllist.assign(iosthist, 0.0);
-   ostflist.assign(iosthist, 0.0);
+   osthist.assign(sizelmdahist + 1, 0);
+   lmdaihist.assign(sizelmdahist + 1, 0);
+   ostnext.assign(sizelmdahist + 1, 0);
+   lmdalhist.assign(sizelmdahist + 1, 0.0);
+   lmdafhist.assign(sizelmdahist + 1, 0.0);
+   osthhist.assign(sizelmdahist + 1, 0.0);
+   ostwlhist.assign(sizelmdahist + 1, 0.0);
+   ostwfhist.assign(sizelmdahist + 1, 0.0);
+   lmdallist.assign(lmdaintv, 0.0);
+   lmdaflist.assign(lmdaintv, 0.0);
    osthead.assign((size_t)nlmda * nflmda, 0);
    gkernel.assign((size_t)nlmda * nflmda, 0.0);
    gfkernel.assign((size_t)nlmda * nflmda, 0.0);
    glfkernel.assign((size_t)nlmda * nflmda, 0.0);
    glkernel.assign((size_t)nlmda * nflmda, 0.0);
-   fkernel.assign(nlmda + 1, 0.0);
-   fsumkernel.assign(nlmda + 1, 0.0);
-   pfkernel.assign(nlmda + 1, 0.0);
+   lmdafmean.assign(nlmda + 1, 0.0);
+   lmdafsum.assign(nlmda + 1, 0.0);
+   lmdafwt.assign(nlmda + 1, 0.0);
    vkernelmax.assign(nlmda + 1, 0.0);
 
-   ostcvbin = 0;
    ostcvdif = 0.0;
    ostcvrat = 0.0;
    ostcvslp = 0.0;
    ostcvstd = 0.0;
-   ostlambdaavgbin.clear();
-   ostlambdastdbin.clear();
-   ostlambdaslpbin.clear();
-   ostdedlavgbin.clear();
-   ostdedlstdbin.clear();
-   ostdedlslpbin.clear();
 }
 
 // resetmeta -- allocate metadynamics history arrays (test_eost.f:1170).
@@ -140,13 +133,13 @@ void resetmeta(int nhist)
 // (test_eost.f:1324).
 void sethist(int ihist, double lambda, double flmda, double height, double sigl, double sigf)
 {
-   int ilmda = lambdaBin(lambda);
+   int ilmda = lmdaBin(lambda);
    int iflmda = flambdaBin(flmda);
    int k;
    ijToK(ilmda, iflmda, nlmda, k);
    osthist[ihist] = k;
-   ostlhist[ihist] = lambda;
-   ostfhist[ihist] = flmda;
+   lmdalhist[ihist] = lambda;
+   lmdafhist[ihist] = flmda;
    osthhist[ihist] = height;
    ostwlhist[ihist] = sigl;
    ostwfhist[ihist] = sigf;
@@ -229,36 +222,36 @@ TEST_CASE("EOST-index", "[ff][eost]")
 TEST_CASE("EOST-resize", "[ff][eost]")
 {
    resetost(5, 5, 2);
-   nosthist = 2;
+   nlmdahist = 2;
    for (int i = 1; i <= 2; ++i) {
       osthist[i] = 10 + i;
-      ostihist[i] = 100 + i;
+      lmdaihist[i] = 100 + i;
       ostnext[i] = i - 1;
-      ostlhist[i] = 0.25 * (double)i;
-      ostfhist[i] = -3.0 + 2.0 * (double)i;
+      lmdalhist[i] = 0.25 * (double)i;
+      lmdafhist[i] = -3.0 + 2.0 * (double)i;
       osthhist[i] = 1.0 + (double)i;
       ostwlhist[i] = 0.25;
       ostwfhist[i] = 1.0;
    }
    resizeOstHist();
-   COMPARE_INTS(sizeosthist, 4);
+   COMPARE_INTS(sizelmdahist, 4);
    for (int i = 1; i <= 4; ++i) {
       CAPTURE(i);
       if (i <= 2) {
          COMPARE_INTS(osthist[i], 10 + i);
-         COMPARE_INTS(ostihist[i], 100 + i);
+         COMPARE_INTS(lmdaihist[i], 100 + i);
          COMPARE_INTS(ostnext[i], i - 1);
-         COMPARE_REALS(ostlhist[i], 0.25 * (double)i, 1.0e-12);
-         COMPARE_REALS(ostfhist[i], -3.0 + 2.0 * (double)i, 1.0e-12);
+         COMPARE_REALS(lmdalhist[i], 0.25 * (double)i, 1.0e-12);
+         COMPARE_REALS(lmdafhist[i], -3.0 + 2.0 * (double)i, 1.0e-12);
          COMPARE_REALS(osthhist[i], 1.0 + (double)i, 1.0e-12);
          COMPARE_REALS(ostwlhist[i], 0.25, 1.0e-12);
          COMPARE_REALS(ostwfhist[i], 1.0, 1.0e-12);
       } else {
          COMPARE_INTS(osthist[i], 0);
-         COMPARE_INTS(ostihist[i], 0);
+         COMPARE_INTS(lmdaihist[i], 0);
          COMPARE_INTS(ostnext[i], 0);
-         COMPARE_REALS(ostlhist[i], 0.0, 1.0e-12);
-         COMPARE_REALS(ostfhist[i], 0.0, 1.0e-12);
+         COMPARE_REALS(lmdalhist[i], 0.0, 1.0e-12);
+         COMPARE_REALS(lmdafhist[i], 0.0, 1.0e-12);
          COMPARE_REALS(osthhist[i], 0.0, 1.0e-12);
          COMPARE_REALS(ostwlhist[i], 0.0, 1.0e-12);
          COMPARE_REALS(ostwfhist[i], 0.0, 1.0e-12);
@@ -269,7 +262,7 @@ TEST_CASE("EOST-resize", "[ff][eost]")
 TEST_CASE("EOST-buildindex", "[ff][eost]")
 {
    resetost(5, 5, 3);
-   nosthist = 3;
+   nlmdahist = 3;
    sethist(1, 0.50, 0.0, 1.0, wlmda, wflmda);
    sethist(2, 0.50, 0.0, 2.0, wlmda, wflmda);
    sethist(3, 0.75, 1.0, 3.0, wlmda, wflmda);
@@ -304,7 +297,7 @@ TEST_CASE("EOST-ensure", "[ff][eost]")
 
    // low-side expansion also rebuilds osthead, ostnext and osthist
    resetost(3, 5, 2);
-   nosthist = 2;
+   nlmdahist = 2;
    sethist(1, 0.50, 0.0, 1.0, wlmda, wflmda);
    sethist(2, 0.50, 0.0, 2.0, wlmda, wflmda);
    buildOstIndex();
@@ -341,7 +334,7 @@ TEST_CASE("EOST-gkernels", "[ff][eost]")
    // choose height so the normalized gaussian prefactor is one
    resetost(5, 5, 3);
    height = 2.0 * pi * wlmda * wflmda;
-   nosthist = 1;
+   nlmdahist = 1;
    sethist(1, 0.50, 0.0, height, wlmda, wflmda);
    buildOstIndex();
 
@@ -354,7 +347,7 @@ TEST_CASE("EOST-gkernels", "[ff][eost]")
    // addgkernelhist includes left-boundary mirror image
    resetost(5, 5, 3);
    height = 2.0 * pi * wlmda * wflmda;
-   nosthist = 1;
+   nlmdahist = 1;
    sethist(1, 0.0, 0.0, height, wlmda, wflmda);
    buildOstIndex();
    addGkernelHist(1);
@@ -365,7 +358,7 @@ TEST_CASE("EOST-gkernels", "[ff][eost]")
    // addgkernelhist includes right-boundary mirror image
    resetost(5, 5, 3);
    height = 2.0 * pi * wlmda * wflmda;
-   nosthist = 1;
+   nlmdahist = 1;
    sethist(1, 1.0, 0.0, height, wlmda, wflmda);
    buildOstIndex();
    addGkernelHist(1);
@@ -376,7 +369,7 @@ TEST_CASE("EOST-gkernels", "[ff][eost]")
    // rebuild the original interior gaussian for later checks
    resetost(5, 5, 3);
    height = 2.0 * pi * wlmda * wflmda;
-   nosthist = 1;
+   nlmdahist = 1;
    sethist(1, 0.50, 0.0, height, wlmda, wflmda);
    buildOstIndex();
 
@@ -392,7 +385,7 @@ TEST_CASE("EOST-gkernels", "[ff][eost]")
    COMPARE_REALS(GK(3, 3), 1.0, 1.0e-12);
 
    // adding a taller gaussian updates only from the new history entry
-   nosthist = 2;
+   nlmdahist = 2;
    sethist(2, 0.75, 1.0, 2.0 * height, wlmda, wflmda);
    buildOstIndex();
    updateGkernel();
@@ -413,7 +406,7 @@ TEST_CASE("EOST-gkernels", "[ff][eost]")
    // two gaussians in the same bin are both followed by ostnext
    resetost(5, 5, 3);
    height = 2.0 * pi * wlmda * wflmda;
-   nosthist = 2;
+   nlmdahist = 2;
    sethist(1, 0.50, 0.0, height, wlmda, wflmda);
    sethist(2, 0.50, 0.0, height, wlmda, wflmda);
    buildOstIndex();
@@ -427,7 +420,7 @@ TEST_CASE("EOST-gkernels", "[ff][eost]")
    // multiple bins are found through osthead lookup
    resetost(5, 5, 4);
    height = 2.0 * pi * wlmda * wflmda;
-   nosthist = 3;
+   nlmdahist = 3;
    sethist(1, 0.50, 0.0, 1.0 * height, wlmda, wflmda);
    sethist(2, 0.50, 0.0, 2.0 * height, wlmda, wflmda);
    sethist(3, 0.75, 1.0, 3.0 * height, wlmda, wflmda);
@@ -443,7 +436,7 @@ TEST_CASE("EOST-gkernels", "[ff][eost]")
    // left endpoint includes both real and mirror gaussian images
    resetost(5, 5, 3);
    height = 2.0 * pi * wlmda * wflmda;
-   nosthist = 1;
+   nlmdahist = 1;
    sethist(1, 0.0, 0.0, height, wlmda, wflmda);
    buildOstIndex();
    lambda = 0.0;
@@ -455,7 +448,7 @@ TEST_CASE("EOST-gkernels", "[ff][eost]")
    // right endpoint includes both real and mirror gaussian images
    resetost(5, 5, 3);
    height = 2.0 * pi * wlmda * wflmda;
-   nosthist = 1;
+   nlmdahist = 1;
    sethist(1, 1.0, 0.0, height, wlmda, wflmda);
    buildOstIndex();
    lambda = 1.0;
@@ -474,7 +467,7 @@ TEST_CASE("EOST-gkernels", "[ff][eost]")
    {
       double targetl = 0.525;
       double targetf = 5.0;
-      nosthist = 1;
+      nlmdahist = 1;
       sethist(1, 0.50, 0.0, height, wlhist, wfhist);
       buildOstIndex();
       buildGkernel();
@@ -491,7 +484,7 @@ TEST_CASE("EOST-gkernels", "[ff][eost]")
    // if dU/dlambda is outside the current flambda grid, egkernel returns zero
    resetost(5, 5, 3);
    height = 2.0 * pi * wlmda * wflmda;
-   nosthist = 1;
+   nlmdahist = 1;
    sethist(1, 0.50, 0.0, height, wlmda, wflmda);
    buildOstIndex();
    lambda = 0.50;
@@ -515,25 +508,25 @@ TEST_CASE("EOST-fkernel", "[ff][eost]")
    vkernelmax[3] = std::log(4.0) * rt;
    buildFkernel();
    expected = 1.0 / 3.0;
-   COMPARE_REALS(fkernel[3], expected, 1.0e-12);
-   COMPARE_REALS(fkernel[1], 0.0, 1.0e-12);
+   COMPARE_REALS(lmdafmean[3], expected, 1.0e-12);
+   COMPARE_REALS(lmdafmean[1], 0.0, 1.0e-12);
 
    // build gkernel incrementally from multiple gaussians, then build f kernel
    resetost(5, 5, 4);
    rt = units::gasconst * bath::kelvin;
    height = 2.0 * pi * wlmda * wflmda;
 
-   nosthist = 1;
+   nlmdahist = 1;
    sethist(1, 0.25, -1.0, 1.0 * height, wlmda, wflmda);
    buildOstIndex();
    updateGkernel();
 
-   nosthist = 2;
+   nlmdahist = 2;
    sethist(2, 0.50, 0.0, 2.0 * height, wlmda, wflmda);
    buildOstIndex();
    updateGkernel();
 
-   nosthist = 3;
+   nlmdahist = 3;
    sethist(3, 0.75, 1.0, 3.0 * height, wlmda, wflmda);
    buildOstIndex();
    updateGkernel();
@@ -546,7 +539,7 @@ TEST_CASE("EOST-fkernel", "[ff][eost]")
    double w4 = std::exp(GK(3, 4) / rt);
    double w5 = std::exp(GK(3, 5) / rt);
    expected = (-2.0 * w1 - w2 + w4 + 2.0 * w5) / (w1 + w2 + w3 + w4 + w5);
-   COMPARE_REALS(fkernel[3], expected, 1.0e-12);
+   COMPARE_REALS(lmdafmean[3], expected, 1.0e-12);
 
    // a deeply filled bin overflows exp(g/kT) unless the largest bias in the
    // row is factored out; unshifted this returns a NaN
@@ -558,7 +551,7 @@ TEST_CASE("EOST-fkernel", "[ff][eost]")
    buildFkernel();
    double wratio = std::exp((499.0 - 500.0) / rt);
    expected = (-1.0 + wratio) / (1.0 + wratio);
-   COMPARE_REALS(fkernel[3], expected, 1.0e-12);
+   COMPARE_REALS(lmdafmean[3], expected, 1.0e-12);
 }
 
 TEST_CASE("EOST-kernelbuilds", "[ff][eost]")
@@ -572,7 +565,7 @@ TEST_CASE("EOST-kernelbuilds", "[ff][eost]")
    resetost(9, 9, 8);
    rt = units::gasconst * bath::kelvin;
    nhist = 6;
-   nosthist = nhist;
+   nlmdahist = nhist;
    height = 2.0 * pi * wlmda * wflmda;
    sethist(1, 0.00, 0.0, 0.7 * height, wlmda, wflmda);
    sethist(2, 0.25, -1.0, 1.1 * height, wlmda, wflmda);
@@ -592,7 +585,7 @@ TEST_CASE("EOST-kernelbuilds", "[ff][eost]")
    std::vector<double> gref = gkernel;
    std::vector<double> fref(nlmda + 1, 0.0);
    for (int i = 1; i <= nlmda; ++i)
-      fref[i] = fkernel[i];
+      fref[i] = lmdafmean[i];
    COMPARE_REALS(GK(1, 1), 0.0, 1.0e-12);
 
    // compute the buildfkernel result independently from gkernel
@@ -618,15 +611,15 @@ TEST_CASE("EOST-kernelbuilds", "[ff][eost]")
    }
    for (int i = 1; i <= nlmda; ++i) {
       CAPTURE(i);
-      COMPARE_REALS(fkernel[i], fmanual[i], 1.0e-12);
+      COMPARE_REALS(lmdafmean[i], fmanual[i], 1.0e-12);
    }
 
-   // buildkernels must reproduce gkernel, fkernel and the accumulators
+   // buildkernels must reproduce gkernel, lmdafmean and the accumulators
    std::fill(gkernel.begin(), gkernel.end(), -123.0);
    for (int i = 1; i <= nlmda; ++i) {
-      fkernel[i] = -123.0;
-      fsumkernel[i] = -123.0;
-      pfkernel[i] = -123.0;
+      lmdafmean[i] = -123.0;
+      lmdafsum[i] = -123.0;
+      lmdafwt[i] = -123.0;
    }
    buildKernels();
    for (int j = 1; j <= nflmda; ++j) {
@@ -637,16 +630,16 @@ TEST_CASE("EOST-kernelbuilds", "[ff][eost]")
    }
    for (int i = 1; i <= nlmda; ++i) {
       CAPTURE(i);
-      COMPARE_REALS(fkernel[i], fref[i], 1.0e-12);
-      COMPARE_REALS(fsumkernel[i], fsumref[i], 1.0e-12);
-      COMPARE_REALS(pfkernel[i], pfref[i], 1.0e-12);
+      COMPARE_REALS(lmdafmean[i], fref[i], 1.0e-12);
+      COMPARE_REALS(lmdafsum[i], fsumref[i], 1.0e-12);
+      COMPARE_REALS(lmdafwt[i], pfref[i], 1.0e-12);
    }
 
    // incremental updates one history at a time must match a full rebuild
    resetost(9, 9, 8);
    height = 2.0 * pi * wlmda * wflmda;
    for (int ihist = 1; ihist <= nhist; ++ihist) {
-      nosthist = ihist;
+      nlmdahist = ihist;
       if (ihist == 1)
          sethist(ihist, 0.00, 0.0, 0.7 * height, wlmda, wflmda);
       else if (ihist == 2)
@@ -672,146 +665,85 @@ TEST_CASE("EOST-kernelbuilds", "[ff][eost]")
    }
    for (int i = 1; i <= nlmda; ++i) {
       CAPTURE(i);
-      COMPARE_REALS(fkernel[i], fref[i], 1.0e-12);
-      COMPARE_REALS(fsumkernel[i], fsumref[i], 1.0e-12);
-      COMPARE_REALS(pfkernel[i], pfref[i], 1.0e-12);
+      COMPARE_REALS(lmdafmean[i], fref[i], 1.0e-12);
+      COMPARE_REALS(lmdafsum[i], fsumref[i], 1.0e-12);
+      COMPARE_REALS(lmdafwt[i], pfref[i], 1.0e-12);
    }
 }
 
 TEST_CASE("EOST-histstat", "[ff][eost]")
 {
    resetost(5, 5, 1);
-   iosthist = 6;
-   ostnpa = 1;
-   ostnpb = 1;
-   ostnpc = 4;
+   lmdaintv = 6;
+   lmdanpa = 1;
+   lmdanpb = 1;
+   lmdanpc = 4;
    // samples 1..6 laid out 0-based, so the slice still holds the values 3..6
-   for (int i = 0; i < iosthist; ++i) {
-      ostllist[i] = (double)(i + 1);
-      ostflist[i] = 2.0 * (double)(i + 1);
+   for (int i = 0; i < lmdaintv; ++i) {
+      lmdallist[i] = (double)(i + 1);
+      lmdaflist[i] = 2.0 * (double)(i + 1);
    }
 
-   // the whole-slice statistics cover list[2..5], the values 3..6
-   ostcvbin = 2;
-   histstat(ostllist, ostlambdaavg, ostlambdastd, ostlambdaslp, ostlambdaavgbin, ostlambdastdbin,
-      ostlambdaslpbin);
-   histstat(ostflist, ostdedlavg, ostdedlstd, ostdedlslp, ostdedlavgbin, ostdedlstdbin, ostdedlslpbin);
+   // the averaging-phase statistics cover list[2..5], the values 3..6
+   histstat(lmdallist, lmdaavg, lmdastd, ostlambdaslp);
+   histstat(lmdaflist, dedlavg, dedlstd, ostdedlslp);
    double stdref = std::sqrt(1.25);
-   COMPARE_REALS(ostlambdaavg, 4.5, 1.0e-12);
-   COMPARE_REALS(ostdedlavg, 9.0, 1.0e-12);
-   COMPARE_REALS(ostlambdastd, stdref, 1.0e-12);
-   COMPARE_REALS(ostdedlstd, 2.0 * stdref, 1.0e-12);
+   COMPARE_REALS(lmdaavg, 4.5, 1.0e-12);
+   COMPARE_REALS(dedlavg, 9.0, 1.0e-12);
+   COMPARE_REALS(lmdastd, stdref, 1.0e-12);
+   COMPARE_REALS(dedlstd, 2.0 * stdref, 1.0e-12);
 
    // fitted changes per sample preserve the scale of each ramp
    COMPARE_REALS(ostlambdaslp, 1.0, 1.0e-12);
    COMPARE_REALS(ostdedlslp, 2.0, 1.0e-12);
-   COMPARE_REALS(ostlambdaslpbin[0], 1.0, 1.0e-12);
-   COMPARE_REALS(ostlambdaslpbin[1], 1.0, 1.0e-12);
-   COMPARE_REALS(ostdedlslpbin[0], 2.0, 1.0e-12);
-   COMPARE_REALS(ostdedlslpbin[1], 2.0, 1.0e-12);
-
-   // 4 samples into 2 bins divides evenly: values {3,4} and {5,6}
-   REQUIRE((int)ostlambdaavgbin.size() == 2);
-   COMPARE_REALS(ostlambdaavgbin[0], 3.5, 1.0e-12);
-   COMPARE_REALS(ostlambdaavgbin[1], 5.5, 1.0e-12);
-   COMPARE_REALS(ostlambdastdbin[0], 0.5, 1.0e-12);
-   COMPARE_REALS(ostlambdastdbin[1], 0.5, 1.0e-12);
-   COMPARE_REALS(ostdedlavgbin[0], 7.0, 1.0e-12);
-   COMPARE_REALS(ostdedlavgbin[1], 11.0, 1.0e-12);
-
-   // 4 samples into 3 bins keeps 1 per bin and drops the leading value 3
-   ostcvbin = 3;
-   histstat(ostllist, ostlambdaavg, ostlambdastd, ostlambdaslp, ostlambdaavgbin, ostlambdastdbin,
-      ostlambdaslpbin);
-   REQUIRE((int)ostlambdaavgbin.size() == 3);
-   COMPARE_REALS(ostlambdaavgbin[0], 4.0, 1.0e-12);
-   COMPARE_REALS(ostlambdaavgbin[1], 5.0, 1.0e-12);
-   COMPARE_REALS(ostlambdaavgbin[2], 6.0, 1.0e-12);
-   for (int b = 0; b < 3; ++b) {
-      COMPARE_REALS(ostlambdastdbin[b], 0.0, 1.0e-12);
-      COMPARE_REALS(ostlambdaslpbin[b], 0.0, 1.0e-12); // single-sample bins
-   }
-   COMPARE_REALS(ostlambdaslp, 1.0, 1.0e-12); // the whole slice still ramps
 }
 
 TEST_CASE("EOST-histstat-drift", "[ff][eost]")
 {
    resetost(5, 5, 1);
-   iosthist = 8;
-   ostnpa = 0;
-   ostnpb = 0;
-   ostnpc = 8;
-   ostcvbin = 2;
+   lmdaintv = 8;
+   lmdanpa = 0;
+   lmdanpb = 0;
+   lmdanpc = 8;
 
    // a flat series has zero slope
-   for (int i = 0; i < iosthist; ++i)
-      ostllist[i] = 7.0;
-   histstat(ostllist, ostlambdaavg, ostlambdastd, ostlambdaslp, ostlambdaavgbin, ostlambdastdbin,
-      ostlambdaslpbin);
-   COMPARE_REALS(ostlambdaavg, 7.0, 1.0e-12);
+   for (int i = 0; i < lmdaintv; ++i)
+      lmdallist[i] = 7.0;
+   histstat(lmdallist, lmdaavg, lmdastd, ostlambdaslp);
+   COMPARE_REALS(lmdaavg, 7.0, 1.0e-12);
    COMPARE_REALS(ostlambdaslp, 0.0, 1.0e-12);
-   COMPARE_REALS(ostlambdaslpbin[0], 0.0, 1.0e-12);
 
    // a strictly decreasing ramp retains its fitted change per sample
-   for (int i = 0; i < iosthist; ++i)
-      ostllist[i] = -0.5 * (double)i;
-   histstat(ostllist, ostlambdaavg, ostlambdastd, ostlambdaslp, ostlambdaavgbin, ostlambdastdbin,
-      ostlambdaslpbin);
+   for (int i = 0; i < lmdaintv; ++i)
+      lmdallist[i] = -0.5 * (double)i;
+   histstat(lmdallist, lmdaavg, lmdastd, ostlambdaslp);
    COMPARE_REALS(ostlambdaslp, -0.5, 1.0e-12);
-   COMPARE_REALS(ostlambdaslpbin[0], -0.5, 1.0e-12);
-   COMPARE_REALS(ostlambdaslpbin[1], -0.5, 1.0e-12);
 
-   // a symmetric V has no net drift overall, but each half drifts fully
+   // a folded series has no net drift
    double v[8] = {4.0, 3.0, 2.0, 1.0, 1.0, 2.0, 3.0, 4.0};
-   for (int i = 0; i < iosthist; ++i)
-      ostllist[i] = v[i];
-   histstat(ostllist, ostlambdaavg, ostlambdastd, ostlambdaslp, ostlambdaavgbin, ostlambdastdbin,
-      ostlambdaslpbin);
+   for (int i = 0; i < lmdaintv; ++i)
+      lmdallist[i] = v[i];
+   histstat(lmdallist, lmdaavg, lmdastd, ostlambdaslp);
    COMPARE_REALS(ostlambdaslp, 0.0, 1.0e-12);
-   COMPARE_REALS(ostlambdaslpbin[0], -1.0, 1.0e-12);
-   COMPARE_REALS(ostlambdaslpbin[1], 1.0, 1.0e-12);
 
    // accuracy: a large offset must not swamp a small drift (the K shift)
-   for (int i = 0; i < iosthist; ++i)
-      ostllist[i] = 5000.0 + 1.0e-6 * (double)i;
-   histstat(ostllist, ostlambdaavg, ostlambdastd, ostlambdaslp, ostlambdaavgbin, ostlambdastdbin,
-      ostlambdaslpbin);
+   for (int i = 0; i < lmdaintv; ++i)
+      lmdallist[i] = 5000.0 + 1.0e-6 * (double)i;
+   histstat(lmdallist, lmdaavg, lmdastd, ostlambdaslp);
    COMPARE_REALS(ostlambdaslp, 1.0e-6, 1.0e-9);
 }
 
 TEST_CASE("EOST-depcriteria", "[ff][eost]")
 {
    ostcvstd = 10.0;
-   ostcvslp = 0.5;
-   ostcvdif = 4.0;
    ostcvrat = 0.2;
 
-   std::vector<double> avgbin = {2.0, 4.0, 6.0};
-   REQUIRE(depcriteria(50.0, 10.0, 0.5, avgbin));
-
-   REQUIRE_FALSE(depcriteria(100.0, 10.1, 0.0, avgbin));
-   REQUIRE_FALSE(depcriteria(10.0, 2.1, 0.0, avgbin));
-   REQUIRE_FALSE(depcriteria(-10.0, 2.1, 0.0, avgbin));
-   REQUIRE_FALSE(depcriteria(0.0, 1.0, 0.0, avgbin));
-   REQUIRE(depcriteria(0.0, 0.0, 0.0, avgbin));
-   REQUIRE_FALSE(depcriteria(100.0, 0.0, 0.6, avgbin));
-   REQUIRE_FALSE(depcriteria(100.0, 0.0, -0.6, avgbin));
-
-   avgbin.back() = 6.1;
-   REQUIRE_FALSE(depcriteria(100.0, 0.0, 0.0, avgbin));
-}
-
-TEST_CASE("EOST-depcriteria2", "[ff][eost]")
-{
-   ostcvstd = 10.0;
-   ostcvrat = 0.2;
-
-   REQUIRE(depcriteria2(0.0, 9.9));
-   REQUIRE_FALSE(depcriteria2(0.0, 10.0));
-   REQUIRE(depcriteria2(50.0, 19.9));
-   REQUIRE_FALSE(depcriteria2(50.0, 20.0));
-   REQUIRE(depcriteria2(-50.0, 19.9));
-   REQUIRE_FALSE(depcriteria2(-50.0, 20.0));
+   REQUIRE(depcriteria(0.0, 9.9));
+   REQUIRE_FALSE(depcriteria(0.0, 10.0));
+   REQUIRE(depcriteria(50.0, 19.9));
+   REQUIRE_FALSE(depcriteria(50.0, 20.0));
+   REQUIRE(depcriteria(-50.0, 19.9));
+   REQUIRE_FALSE(depcriteria(-50.0, 20.0));
 }
 
 TEST_CASE("EOST-eginterpolate", "[ff][eost]")
@@ -827,7 +759,7 @@ TEST_CASE("EOST-eginterpolate", "[ff][eost]")
    sigf = 2.0 * wflmda;
    height = 2.0 * pi * sigl * sigf;
    oststdev = 4.0;
-   nosthist = 3;
+   nlmdahist = 3;
    sethist(1, 0.25, -1.0, 1.1 * height, sigl, sigf);
    sethist(2, 0.50, 0.0, 1.6 * height, sigl, sigf);
    sethist(3, 0.75, 1.0, 2.3 * height, sigl, sigf);
@@ -848,7 +780,7 @@ TEST_CASE("EOST-eginterpolate", "[ff][eost]")
    sigf = 4.0 * wflmda;
    height = 2.0 * pi * sigl * sigf;
    oststdev = 4.0;
-   nosthist = 3;
+   nlmdahist = 3;
    sethist(1, 0.25, -2.0, 0.8 * height, sigl, sigf);
    sethist(2, 0.50, 0.0, 1.2 * height, sigl, sigf);
    sethist(3, 0.75, 2.0, 1.6 * height, sigl, sigf);
@@ -868,48 +800,48 @@ TEST_CASE("EOST-efkernel", "[ff][eost]")
 {
    double eostlmda, dfdl, expected;
 
-   // use fkernel(lambda)=lambda and integrate to lambda=0.375
+   // use lmdafmean(lambda)=lambda and integrate to lambda=0.375
    resetost(5, 5, 1);
    for (int i = 1; i <= nlmda; ++i)
-      fkernel[i] = (double)(i - 1) * wlmda;
+      lmdafmean[i] = (double)(i - 1) * wlmda;
    lambda = 0.375;
-   efkernel(eostlmda, dfdl);
+   efreeLmda(eostlmda, dfdl);
    expected = 0.5 * lambda * lambda;
    COMPARE_REALS(eostlmda, expected, 1.0e-12);
    COMPARE_REALS(dfdl, lambda, 1.0e-12);
 
-   // use fkernel(lambda)=1+lambda so endpoint mean forces are nonzero
+   // use lmdafmean(lambda)=1+lambda so endpoint mean forces are nonzero
    resetost(5, 5, 1);
    for (int i = 1; i <= nlmda; ++i)
-      fkernel[i] = 1.0 + (double)(i - 1) * wlmda;
+      lmdafmean[i] = 1.0 + (double)(i - 1) * wlmda;
 
    lambda = 0.0;
-   efkernel(eostlmda, dfdl);
+   efreeLmda(eostlmda, dfdl);
    COMPARE_REALS(eostlmda, 0.0, 1.0e-12);
    COMPARE_REALS(dfdl, 1.0, 1.0e-12);
    lambda = -0.25;
-   efkernel(eostlmda, dfdl);
+   efreeLmda(eostlmda, dfdl);
    COMPARE_REALS(eostlmda, 0.0, 1.0e-12);
    COMPARE_REALS(dfdl, 1.0, 1.0e-12);
 
    lambda = 1.0;
-   efkernel(eostlmda, dfdl);
+   efreeLmda(eostlmda, dfdl);
    COMPARE_REALS(eostlmda, 1.5, 1.0e-12);
    COMPARE_REALS(dfdl, 2.0, 1.0e-12);
    lambda = 1.25;
-   efkernel(eostlmda, dfdl);
+   efreeLmda(eostlmda, dfdl);
    COMPARE_REALS(eostlmda, 1.5, 1.0e-12);
    COMPARE_REALS(dfdl, 2.0, 1.0e-12);
 
-   COMPARE_REALS(etotFkernel(), 1.5, 1.0e-12);
+   COMPARE_REALS(efreeTot(), 1.5, 1.0e-12);
 
    for (int i = 1; i <= nlmda; ++i)
-      fkernel[i] = 2.5;
-   COMPARE_REALS(etotFkernel(), 2.5, 1.0e-12);
+      lmdafmean[i] = 2.5;
+   COMPARE_REALS(efreeTot(), 2.5, 1.0e-12);
 
    for (int i = 1; i <= nlmda; ++i)
-      fkernel[i] = 0.0;
-   COMPARE_REALS(etotFkernel(), 0.0, 1.0e-12);
+      lmdafmean[i] = 0.0;
+   COMPARE_REALS(efreeTot(), 0.0, 1.0e-12);
 }
 
 TEST_CASE("EOST-meta", "[ff][eost]")
@@ -962,32 +894,32 @@ TEST_CASE("EOST-metadyn", "[ff][eost]")
    // drive eMetaDyn across one full interval and check the deposited gaussian.
    resetost(5, 5, 1);
    resetmeta(2);
-   iosthist = 4;
-   ostnpa = 1;
-   ostnpb = 1;
-   ostnpc = 2;
+   lmdaintv = 4;
+   lmdanpa = 1;
+   lmdanpb = 1;
+   lmdanpc = 2;
    hbias = 2.0;
    wlmda = 0.25;
    dedl = 0.0;
-   ostdt = 0.0; // no-op ostLangevin, so the sampled lambda values stay controlled
+   lmdadt = 0.0; // no-op lmdaLangevin, so the sampled lambda values stay controlled
 
    // sampled lambda per step (lam is indexed by istep, not by buffer slot);
    // histstat averages the fixed-lambda slice, indices
-   // ostnpa+ostnpb..iosthist-1 = 2..3, holding the last two samples.
+   // lmdanpa+lmdanpb..lmdaintv-1 = 2..3, holding the last two samples.
    double lam[5] = {0.0, 0.1, 0.2, 0.4, 0.6};
-   for (int istep = 1; istep <= iosthist; ++istep) {
+   for (int istep = 1; istep <= lmdaintv; ++istep) {
       lambda = lam[istep];
       eMetaDyn(istep);
-      if (istep < iosthist)
+      if (istep < lmdaintv)
          COMPARE_INTS(nmetahist, 0); // no deposit before the interval boundary
    }
 
-   double avgref = (lam[3] + lam[4]) / (double)ostnpc; // 0.5
+   double avgref = (lam[3] + lam[4]) / (double)lmdanpc; // 0.5
    COMPARE_INTS(nmetahist, 1);
    COMPARE_REALS(metalhist[1], avgref, 1.0e-12);
    COMPARE_REALS(metahhist[1], hbias, 1.0e-12);
    COMPARE_REALS(metawhist[1], wlmda, 1.0e-12);
-   COMPARE_INTS(metaihist[1], iosthist); // step stamp at the deposit boundary
+   COMPARE_INTS(metaihist[1], lmdaintv); // step stamp at the deposit boundary
 }
 
 TEST_CASE("EOST-vkernelmax", "[ff][eost]")
@@ -997,7 +929,7 @@ TEST_CASE("EOST-vkernelmax", "[ff][eost]")
    bath::kelvin = 300.0;
    resetost(5, 5, 4);
 
-   nosthist = 2;
+   nlmdahist = 2;
    sethist(1, 0.25, 0.0, 1.0, 0.25, 1.0);
    sethist(2, 0.75, 1.0, 2.0, 0.25, 1.0);
    buildOstIndex();
@@ -1013,7 +945,7 @@ TEST_CASE("EOST-vkernelmax", "[ff][eost]")
    REQUIRE(vmin > 0.0); // the two sources reach every lambda bin
 
    // the incremental update through updateKernels must stay exact
-   nosthist = 3;
+   nlmdahist = 3;
    sethist(3, 0.5, -1.0, 1.5, 0.25, 1.0);
    buildOstIndex();
    updateKernels();
@@ -1155,48 +1087,48 @@ TEST_CASE("EOST-tempering", "[ff][eost]")
 
 TEST_CASE("EOST-ostphase", "[ff][eost]")
 {
-   // setOstPhase divides the deposit interval into propagation, equilibration
+   // setLmdaPhase divides the deposit interval into propagation, equilibration
    // and averaging phases; the clamps keep a propagation step and enough
    // samples to average without ever losing a sample from the interval.
 
    // the requested ratios divide the interval by truncation
-   iosthist = 10;
-   ostparatio = 0.3;
-   ostpbratio = 0.3;
-   setOstPhase();
-   COMPARE_INTS(ostnpa, 3);
-   COMPARE_INTS(ostnpb, 3);
-   COMPARE_INTS(ostnpc, 4);
-   COMPARE_REALS(ostpcratio, 0.4, 1.0e-12);
-   COMPARE_INTS(ostnpa + ostnpb + ostnpc, iosthist);
+   lmdaintv = 10;
+   lmdaparatio = 0.3;
+   lmdapbratio = 0.3;
+   setLmdaPhase();
+   COMPARE_INTS(lmdanpa, 3);
+   COMPARE_INTS(lmdanpb, 3);
+   COMPARE_INTS(lmdanpc, 4);
+   COMPARE_REALS(lmdapcratio, 0.4, 1.0e-12);
+   COMPARE_INTS(lmdanpa + lmdanpb + lmdanpc, lmdaintv);
 
    // a zero propagation ratio still keeps one propagation step
-   iosthist = 10;
-   ostparatio = 0.0;
-   ostpbratio = 0.3;
-   setOstPhase();
-   COMPARE_INTS(ostnpa, 1);
-   COMPARE_INTS(ostnpa + ostnpb + ostnpc, iosthist);
+   lmdaintv = 10;
+   lmdaparatio = 0.0;
+   lmdapbratio = 0.3;
+   setLmdaPhase();
+   COMPARE_INTS(lmdanpa, 1);
+   COMPARE_INTS(lmdanpa + lmdanpb + lmdanpc, lmdaintv);
 
    // a crowded interval gives back samples to the averaging phase, taking
    // them from the equilibration phase first
-   iosthist = 10;
-   ostparatio = 0.4;
-   ostpbratio = 0.5;
-   setOstPhase();
-   COMPARE_INTS(ostnpc, 2);
-   COMPARE_INTS(ostnpa, 4);
-   COMPARE_INTS(ostnpb, 4);
-   COMPARE_INTS(ostnpa + ostnpb + ostnpc, iosthist);
+   lmdaintv = 10;
+   lmdaparatio = 0.4;
+   lmdapbratio = 0.5;
+   setLmdaPhase();
+   COMPARE_INTS(lmdanpc, 2);
+   COMPARE_INTS(lmdanpa, 4);
+   COMPARE_INTS(lmdanpb, 4);
+   COMPARE_INTS(lmdanpa + lmdanpb + lmdanpc, lmdaintv);
 
    // the shortest usable interval still holds all three phases
-   iosthist = 3;
-   ostparatio = 0.4;
-   ostpbratio = 0.4;
-   setOstPhase();
-   COMPARE_INTS(ostnpa, 1);
-   COMPARE_INTS(ostnpc, 2);
-   COMPARE_INTS(ostnpa + ostnpb + ostnpc, iosthist);
+   lmdaintv = 3;
+   lmdaparatio = 0.4;
+   lmdapbratio = 0.4;
+   setLmdaPhase();
+   COMPARE_INTS(lmdanpa, 1);
+   COMPARE_INTS(lmdanpc, 2);
+   COMPARE_INTS(lmdanpa + lmdanpb + lmdanpc, lmdaintv);
 }
 
 TEST_CASE("EOST-ostgate", "[ff][eost]")
@@ -1206,31 +1138,30 @@ TEST_CASE("EOST-ostgate", "[ff][eost]")
    // then held exactly fixed, and that the deposited gaussian sits on it.
    bath::kelvin = 300.0;
    resetost(5, 5, 4);
-   iosthist = 6;
-   ostnpa = 2;
-   ostnpb = 2;
-   ostnpc = 2;
-   ostcvbin = 0;
+   lmdaintv = 6;
+   lmdanpa = 2;
+   lmdanpb = 2;
+   lmdanpc = 2;
    ostcvstd = 1.0;
    ostcvrat = 0.0;
    hbias = 1.0;
 
    // a deterministic frictionless lambda particle, so that any lambda motion
    // comes from the gate alone
-   ostdt = 0.1;
-   ostmass = 1.0;
-   ostfriction = 0.0;
-   osttheta = 0.25 * pi;
-   ostvtheta = 0.0;
+   lmdadt = 0.1;
+   lmdamass = 1.0;
+   lmdafric = 0.0;
+   lmdatheta = 0.25 * pi;
+   lmdavtheta = 0.0;
    lambda = 0.5;
    fastkernel = true;
    d2edl2 = 0.0;
    bdgdl = 0.0;
    bdgdfl = 0.0;
-   bdfdl = 0.0;
+   lmdadfdl = 0.0;
 
    double lam[7] = {0.0};
-   for (int istep = 1; istep <= iosthist; ++istep) {
+   for (int istep = 1; istep <= lmdaintv; ++istep) {
       dedl = 1.0;
       eostDyn(istep);
       lam[istep] = lambda;
@@ -1241,17 +1172,17 @@ TEST_CASE("EOST-ostgate", "[ff][eost]")
 
    // lambda is then bit identical for the rest of the interval
    double frozen = lam[2];
-   for (int istep = 3; istep <= iosthist; ++istep) {
+   for (int istep = 3; istep <= lmdaintv; ++istep) {
       CAPTURE(istep);
       REQUIRE(lam[istep] == frozen);
    }
 
    // the averaged lambda is the frozen value, not a smear, so the gaussian is
    // deposited exactly on it
-   COMPARE_INTS(nosthist, 1);
-   REQUIRE(ostlambdaavg == frozen);
-   REQUIRE(ostlhist[1] == frozen);
-   COMPARE_REALS(ostfhist[1], 1.0, 1.0e-12);
+   COMPARE_INTS(nlmdahist, 1);
+   REQUIRE(lmdaavg == frozen);
+   REQUIRE(lmdalhist[1] == frozen);
+   COMPARE_REALS(lmdafhist[1], 1.0, 1.0e-12);
 }
 
 TEST_CASE("EOST-ostlocal", "[ff][eost]")
@@ -1266,27 +1197,26 @@ TEST_CASE("EOST-ostlocal", "[ff][eost]")
    // fill the kernel much higher near lambda of zero
    resetost(5, 5, 8);
    oststdev = 4.0;
-   nosthist = 2;
+   nlmdahist = 2;
    sethist(1, 0.0, 0.0, 5.0, 0.25, 1.0);
    sethist(2, 0.75, 0.0, 1.0, 0.25, 1.0);
    buildOstIndex();
    buildKernels();
 
    // settle each deposit interval with both tempering factors on
-   iosthist = 4;
-   ostnpa = 0;
-   ostnpb = 0;
-   ostnpc = 4;
-   ostcvbin = 0;
+   lmdaintv = 4;
+   lmdanpa = 0;
+   lmdanpb = 0;
+   lmdanpc = 4;
    ostcvstd = 1.0;
    ostcvrat = 0.0;
    hbias = 1.0;
-   ostdt = 0.0;
+   lmdadt = 0.0;
    fastkernel = true;
    d2edl2 = 0.0;
    bdgdl = 0.0;
    bdgdfl = 0.0;
-   bdfdl = 0.0;
+   lmdadfdl = 0.0;
    use_ostgtemp = true;
    use_ostltemp = true;
    ostgthresh = 0.1;
@@ -1304,13 +1234,13 @@ TEST_CASE("EOST-ostlocal", "[ff][eost]")
    double gl = vkernelmax[imax];
    REQUIRE(gmin > ostgthresh);      // the global factor is active
    REQUIRE(gl - gmin > ostlthresh); // the local factor is active
-   for (int istep = 1; istep <= iosthist; ++istep) {
+   for (int istep = 1; istep <= lmdaintv; ++istep) {
       lambda = (double)(imax - 1) * wlmda;
       dedl = 0.0;
       eostDyn(istep);
    }
    double hglobal = hbias * std::exp(-(gmin - ostgthresh) / rt);
-   COMPARE_INTS(nosthist, 3);
+   COMPARE_INTS(nlmdahist, 3);
    COMPARE_REALS(osthhist[3], temperedHeight(gmin, gl), 1.0e-12);
    REQUIRE(osthhist[3] < hglobal);
 
@@ -1321,13 +1251,13 @@ TEST_CASE("EOST-ostlocal", "[ff][eost]")
          imin = i;
    }
    gmin = ostVminimax();
-   for (int istep = iosthist + 1; istep <= 2 * iosthist; ++istep) {
+   for (int istep = lmdaintv + 1; istep <= 2 * lmdaintv; ++istep) {
       lambda = (double)(imin - 1) * wlmda;
       dedl = 0.0;
       eostDyn(istep);
    }
    hglobal = hbias * std::exp(-std::max(0.0, gmin - ostgthresh) / rt);
-   COMPARE_INTS(nosthist, 4);
+   COMPARE_INTS(nlmdahist, 4);
    COMPARE_REALS(osthhist[4], hglobal, 1.0e-12);
 
    // growing the flambda grid keeps the running bin maxima
@@ -1347,8 +1277,8 @@ TEST_CASE("EOST-temperkeys", "[ff][eost]")
    double flt0 = ost::ostlthresh, flg0 = ost::ostltempgamma;
 
    // ost_mech also copies state that resetost does not restore
-   double theta0 = osttheta, vtheta0 = ostvtheta;
-   double mass0 = ostmass, friction0 = ostfriction, dt0 = ostdt;
+   double theta0 = lmdatheta, vtheta0 = lmdavtheta;
+   double mass0 = lmdamass, friction0 = lmdafric, dt0 = lmdadt;
    bool fast0 = fastkernel;
 
    ost::use_ostgtemp = 1;
@@ -1379,11 +1309,11 @@ TEST_CASE("EOST-temperkeys", "[ff][eost]")
    ost::ostlthresh = flt0;
    ost::ostltempgamma = flg0;
    resetost(5, 5, 1);
-   osttheta = theta0;
-   ostvtheta = vtheta0;
-   ostmass = mass0;
-   ostfriction = friction0;
-   ostdt = dt0;
+   lmdatheta = theta0;
+   lmdavtheta = vtheta0;
+   lmdamass = mass0;
+   lmdafric = friction0;
+   lmdadt = dt0;
    fastkernel = fast0;
 }
 
@@ -1430,13 +1360,13 @@ TEST_CASE("EOST-metatemper", "[ff][eost]")
    bath::kelvin = 300.0;
    resetost(5, 5, 1);
    resetmeta(8);
-   iosthist = 4;
-   ostnpa = 1;
-   ostnpb = 1;
-   ostnpc = 2;
+   lmdaintv = 4;
+   lmdanpa = 1;
+   lmdanpb = 1;
+   lmdanpc = 2;
    hbias = 2.0;
    dedl = 0.0;
-   ostdt = 0.0; // no-op ostLangevin, so the sampled lambda values stay controlled
+   lmdadt = 0.0; // no-op lmdaLangevin, so the sampled lambda values stay controlled
    use_ostgtemp = true;
    ostgthresh = 0.5;
    ostgtempgamma = 1.0;
@@ -1463,7 +1393,7 @@ TEST_CASE("EOST-metatemper", "[ff][eost]")
    };
 
    const int ndep = 5;
-   for (int istep = 1; istep <= ndep * iosthist; ++istep) {
+   for (int istep = 1; istep <= ndep * lmdaintv; ++istep) {
       lambda = 0.5;
       eMetaDyn(istep);
    }

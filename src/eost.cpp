@@ -5,7 +5,6 @@
 #include "ff/egvop.h"
 #include "ff/energy.h"
 #include "math/const.h"
-#include "math/random.h"
 #include "tool/darray.h"
 #include <tinker/detail/bath.hh>
 #include <tinker/detail/ost.hh>
@@ -18,53 +17,36 @@
 namespace tinker {
 // saved gaussian history (1-based, element 0 unused)
 std::vector<int> osthist;
-std::vector<int> ostihist; // iost/step stamp per deposited OST gaussian
 std::vector<int> ostnext;
 std::vector<int> osthead; // (nlmda x nflmda), column-major
-std::vector<double> ostlhist, ostfhist, osthhist, ostwlhist, ostwfhist;
-
-// per-step sample ring buffers, size iosthist+1, indexed 1..iosthist
-std::vector<double> ostllist, ostflist;
+std::vector<double> osthhist, ostwlhist, ostwfhist;
 
 // bias grids (nlmda x nflmda), column-major
 std::vector<double> gkernel, glkernel, gfkernel, glfkernel;
-
-// free-energy mean force per lambda bin, size nlmda+1, indexed 1..nlmda
-std::vector<double> fkernel, fsumkernel, pfkernel;
 
 // running max of gkernel over the flambda axis, size nlmda+1, indexed 1..nlmda
 std::vector<double> vkernelmax;
 
 // metadynamics gaussian history (1-based)
 std::vector<double> metalhist, metahhist, metawhist;
-std::vector<int> metaihist; // iost/step stamp per deposited metadynamics gaussian
+std::vector<int> metaihist; // lmdastep stamp per deposited metadynamics gaussian
 
 // metadynamics bias and dV/dlambda at each lambda bin center, size nlmda+1
 std::vector<double> vmetagrid, dvmetagrid;
 
 // bias evaluated by eostBias
-double bgbias, bdgdl, bdgdfl, bostlmda, bdfdl;
+double bgbias, bdgdl, bdgdfl, bostlmda;
 
 void ost_mech()
 {
    ostinterpol = (ost::ostinterpol != 0);
    fastkernel = (ost::fastkernel != 0);
 
-   iost = ost::iost;
-   iosthist = ost::iosthist;
-   ostnpa = ost::ostnpa;
-   ostnpb = ost::ostnpb;
-   ostnpc = ost::ostnpc;
-   nlmda = ost::nlmda;
    nflmda = ost::nflmda;
    fli0 = ost::fli0;
-   nosthist = 0;
-   sizeosthist = 0;
    nmetahist = 0;
    sizemetahist = 0;
 
-   wlmda = ost::wlmda;
-   wlmda2 = ost::wlmda2;
    wflmda = ost::wflmda;
    wflmda2 = ost::wflmda2;
    wlhist = ost::wlhist;
@@ -73,10 +55,6 @@ void ost_mech()
    maxwfhist = ost::maxwfhist;
    hbias = ost::hbias;
    oststdev = ost::oststdev;
-   ostparatio = ost::ostparatio;
-   ostpbratio = ost::ostpbratio;
-   ostpcratio = ost::ostpcratio;
-   ostcvbin = ost::ostcvbin;
    ostcvdif = ost::ostcvdif;
    ostcvrat = ost::ostcvrat;
    ostcvslp = ost::ostcvslp;
@@ -89,24 +67,10 @@ void ost_mech()
    ostlthresh = ost::ostlthresh;
    ostltempgamma = ost::ostltempgamma;
 
-   osttheta = ost::osttheta;
-   ostvtheta = ost::ostvtheta;
-   ostmass = ost::ostmass;
-   ostfriction = ost::ostfriction;
-   ostdt = ost::ostdt;
-
    // dedl is owned by the energy routines and zeroed by zeroEGV each step.
    ostdgdl = 0;
-   ostddgdl = 0;
-   deffdl = 0;
-   ostlambdaavg = 0;
-   ostlambdastd = 0;
    ostlambdaslp = 0;
-   ostdedlavg = 0;
-   ostdedlstd = 0;
    ostdedlslp = 0;
-
-   eosttot = 0;
 }
 
 static double fitSlope(double tdot, double sum, int n)
@@ -118,86 +82,43 @@ static double fitSlope(double tdot, double sum, int n)
    return sxy / sxx;
 }
 
-// setostphase -- divide the gaussian deposit interval into the phase that
-// propagates the lambda particle, the phase that equilibrates at the frozen
-// lambda and the phase that averages dU/dlambda at that same fixed lambda; the
-// phase counts are the authoritative split, while ostpcratio is only the
-// nominal fraction left over before truncation to whole samples (eost.f:838).
-void setOstPhase()
+// histstat -- average, deviation and fitted drift of the samples in the
+// averaging phase of the interval collected since the last deposit
+// (eost.f:histstat).
+void histstat(const std::vector<double>& list, double& avg, double& std, double& slp)
 {
-   // divide the interval, keeping at least one propagation step and at least
-   // two samples to average
-   if (iosthist < 1)
-      iosthist = 1;
-   ostpcratio = 1.0 - (ostparatio + ostpbratio);
-   ostnpa = (int)(ostparatio * (double)iosthist);
-   ostnpb = (int)(ostpbratio * (double)iosthist);
-   ostnpa = std::max(1, std::min(ostnpa, iosthist - 1));
-   ostnpb = std::max(0, std::min(ostnpb, iosthist - ostnpa));
-   ostnpc = iosthist - ostnpa - ostnpb;
-   while (ostnpc < 2 and ostnpb > 0) {
-      ostnpb -= 1;
-      ostnpc += 1;
-   }
-   while (ostnpc < 2 and ostnpa > 1) {
-      ostnpa -= 1;
-      ostnpc += 1;
-   }
-}
+   // skip the propagation and equilibration phases
+   int nskip = lmdanpa + lmdanpb;
 
-void histstat(const std::vector<double>& list, double& avg, double& std, double& slp,
-   std::vector<double>& avgbin, std::vector<double>& stdbin, std::vector<double>& slpbin)
-{
-   int nskip = ostnpa + ostnpb;
-   int nper = (ostcvbin > 0) ? ostnpc / ostcvbin : 0;
-   int nbin = (nper > 0) ? ostcvbin : 0;
-
-   int ibegin = nskip + ostnpc - nper * nbin;
-   if (ostcvbin > 0) {
-      avgbin.assign(ostcvbin, 0.0);
-      stdbin.assign(ostcvbin, 0.0);
-      slpbin.assign(ostcvbin, 0.0);
-   }
-
+   // accumulate the drift sums about a shifted origin, so that a small drift on
+   // top of a large offset is not lost to roundoff
    const double K = list[nskip];
    double total = 0.0, tdot = 0.0;
-   for (int i = nskip; i < ibegin; ++i) {
+   for (int i = nskip; i < nskip + lmdanpc; ++i) {
       double d = list[i] - K;
       total += d;
       tdot += (double)(i - nskip) * d;
    }
-   for (int b = 0; b < nbin; ++b) {
-      int i0 = ibegin + b * nper;
-      double a = 0.0, tloc = 0.0;
-      for (int i = i0; i < i0 + nper; ++i) {
-         double d = list[i] - K;
-         a += d;
-         tloc += (double)(i - i0) * d;
-      }
-      total += a;
-      // tloc counts from the bin start; shift it onto the whole-slice ramp
-      tdot += tloc + (double)(i0 - nskip) * a;
-      avgstd(list, i0, nper, avgbin[b], stdbin[b]);
-      slpbin[b] = fitSlope(tloc, a, nper);
-   }
-   avgstd(list, nskip, ostnpc, avg, std);
-   slp = fitSlope(tdot, total, ostnpc);
+
+   // average, deviation and drift come from the averaging slice
+   avgstd(list, nskip, lmdanpc, avg, std);
+   slp = fitSlope(tdot, total, lmdanpc);
 }
 
-bool depcriteria(double avg, double std, double slp, const std::vector<double>& avgbin)
-{
-   if (std > ostcvstd)
-      return false;
-   if ((avg == 0.0 && std != 0.0) || (avg != 0.0 && std::abs(std / avg) > ostcvrat))
-      return false;
-   if (std::abs(slp) > ostcvslp)
-      return false;
-   if (avgbin.size() >= 2 && std::abs(avgbin.back() - avgbin.front()) > ostcvdif)
-      return false;
-   return true;
-}
+// bool depcriteria(double avg, double std, double slp, const std::vector<double>& avgbin)
+// {
+//    if (std > ostcvstd)
+//       return false;
+//    if ((avg == 0.0 && std != 0.0) || (avg != 0.0 && std::abs(std / avg) > ostcvrat))
+//       return false;
+//    if (std::abs(slp) > ostcvslp)
+//       return false;
+//    if (avgbin.size() >= 2 && std::abs(avgbin.back() - avgbin.front()) > ostcvdif)
+//       return false;
+//    return true;
+// }
 
-bool depcriteria2(double avg, double std)
+bool depcriteria(double avg, double std)
 {
    double tolerance = ostcvstd + ostcvrat * std::abs(avg);
    return tolerance > 0.0 && std / tolerance < 1.0;
@@ -240,11 +161,11 @@ double temperedHeight(double vglobal, double vlocal)
 void buildOstIndex()
 {
    std::fill(osthead.begin(), osthead.end(), 0);
-   for (int i = 1; i <= sizeosthist; ++i)
+   for (int i = 1; i <= sizelmdahist; ++i)
       ostnext[i] = 0;
-   for (int ihist = 1; ihist <= nosthist; ++ihist) {
-      int il = lambdaBin(ostlhist[ihist]);
-      int jf = flambdaBin(ostfhist[ihist]);
+   for (int ihist = 1; ihist <= nlmdahist; ++ihist) {
+      int il = lmdaBin(lmdalhist[ihist]);
+      int jf = flambdaBin(lmdafhist[ihist]);
       int k;
       ijToK(il, jf, nlmda, k);
       osthist[ihist] = k;
@@ -257,13 +178,13 @@ void buildOstIndex()
 // (eost.f:1144). std::vector::resize keeps existing elements.
 void resizeOstHist()
 {
-   int newsize = 2 * sizeosthist;
-   sizeosthist = newsize;
+   int newsize = 2 * sizelmdahist;
+   sizelmdahist = newsize;
    osthist.resize(newsize + 1, 0);
-   ostihist.resize(newsize + 1, 0);
+   lmdaihist.resize(newsize + 1, 0);
    ostnext.resize(newsize + 1, 0);
-   ostlhist.resize(newsize + 1, 0.0);
-   ostfhist.resize(newsize + 1, 0.0);
+   lmdalhist.resize(newsize + 1, 0.0);
+   lmdafhist.resize(newsize + 1, 0.0);
    osthhist.resize(newsize + 1, 0.0);
    ostwlhist.resize(newsize + 1, 0.0);
    ostwfhist.resize(newsize + 1, 0.0);
@@ -339,8 +260,8 @@ void addKernelPoint(int ilmda, int iflmda, double e, double ldelta, double fldel
    double vmax = vkernelmax[ilmda];
    if (newg > vmax) {
       double scale = std::exp((vmax - newg) / rt);
-      fsumkernel[ilmda] *= scale;
-      pfkernel[ilmda] *= scale;
+      lmdafsum[ilmda] *= scale;
+      lmdafwt[ilmda] *= scale;
       vmax = newg;
    }
    double oldweight = (oldg == 0.0) ? 0.0 : std::exp((oldg - vmax) / rt);
@@ -355,12 +276,12 @@ void addKernelPoint(int ilmda, int iflmda, double e, double ldelta, double fldel
    vkernelmax[ilmda] = std::max(vkernelmax[ilmda], newg);
    glfkernel[g] += d2gdlfl;
    glkernel[g] += dgdl;
-   fsumkernel[ilmda] += flmda * delweight;
-   pfkernel[ilmda] += delweight;
-   if (pfkernel[ilmda] == 0.0)
-      fkernel[ilmda] = 0.0;
+   lmdafsum[ilmda] += flmda * delweight;
+   lmdafwt[ilmda] += delweight;
+   if (lmdafwt[ilmda] == 0.0)
+      lmdafmean[ilmda] = 0.0;
    else
-      fkernel[ilmda] = fsumkernel[ilmda] / pfkernel[ilmda];
+      lmdafmean[ilmda] = lmdafsum[ilmda] / lmdafwt[ilmda];
 }
 
 // Spread one saved histogram source over nearby grid bins. When do_f is true the
@@ -376,7 +297,7 @@ void addKernelHistImpl(int ihist, bool do_f)
    double sigl2 = sigl * sigl;
    double sigf2 = sigf * sigf;
    double pref = osthhist[ihist] / (2.0 * pi * sigl * sigf);
-   double sourcefl = ostfhist[ihist];
+   double sourcefl = lmdafhist[ihist];
 
    int nlcut = (int)(oststdev * sigl / wlmda);
    if ((double)nlcut * wlmda < oststdev * sigl + wlmda2)
@@ -392,13 +313,13 @@ void addKernelHistImpl(int ihist, bool do_f)
       double sourcel;
       if (img == 1) {
          llog = lsrc;
-         sourcel = ostlhist[ihist];
+         sourcel = lmdalhist[ihist];
       } else if (img == 2) {
          llog = 2 - lsrc;
-         sourcel = -ostlhist[ihist];
+         sourcel = -lmdalhist[ihist];
       } else {
          llog = 2 * nlmda - lsrc;
-         sourcel = 2.0 - ostlhist[ihist];
+         sourcel = 2.0 - lmdalhist[ihist];
       }
       int ilmda1 = std::max(1, llog - nlcut);
       int ilmda2 = std::min(nlmda, llog + nlcut);
@@ -451,7 +372,7 @@ void buildFkernel()
             pf += w;
          }
       }
-      fkernel[il] = (pf == 0.0) ? 0.0 : avg / pf;
+      lmdafmean[il] = (pf == 0.0) ? 0.0 : avg / pf;
    }
 }
 
@@ -463,7 +384,7 @@ void egkernel(double& egbias, double& dgdl, double& dgdfl)
    dgdl = 0;
    dgdfl = 0;
 
-   int ilmda = lambdaBin(lambda);
+   int ilmda = lmdaBin(lambda);
    int iflmda = (int)std::lround(dedl / wflmda) + fli0;
    if (iflmda < 1 || iflmda > nflmda)
       return;
@@ -494,7 +415,7 @@ void egkernel(double& egbias, double& dgdl, double& dgdfl)
          while (ihist != 0) {
             double sigl = ostwlhist[ihist];
             double sigf = ostwfhist[ihist];
-            double sourcefl = ostfhist[ihist];
+            double sourcefl = lmdafhist[ihist];
             double fldelta = dedl - sourcefl;
             if (std::fabs(fldelta) <= oststdev * sigf) {
                double sigl2 = sigl * sigl;
@@ -510,15 +431,15 @@ void egkernel(double& egbias, double& dgdl, double& dgdfl)
                for (int img = 1; img <= nimg; ++img) {
                   double sourcel;
                   if (lcenter < 1)
-                     sourcel = -ostlhist[ihist];
+                     sourcel = -lmdalhist[ihist];
                   else if (lcenter > nlmda)
-                     sourcel = 2.0 - ostlhist[ihist];
+                     sourcel = 2.0 - lmdalhist[ihist];
                   else if (img == 2 && lcenter == 1)
-                     sourcel = -ostlhist[ihist];
+                     sourcel = -lmdalhist[ihist];
                   else if (img == 2 && lcenter == nlmda)
-                     sourcel = 2.0 - ostlhist[ihist];
+                     sourcel = 2.0 - lmdalhist[ihist];
                   else
-                     sourcel = ostlhist[ihist];
+                     sourcel = lmdalhist[ihist];
                   double ldelta = lambda - sourcel;
                   if (std::fabs(ldelta) <= oststdev * sigl) {
                      double ldelta2 = ldelta * ldelta;
@@ -598,74 +519,6 @@ void egkernelInterpolate(double& egbias, double& dgdl, double& dgdfl)
    }
    dgdl /= wlmda;
    dgdfl /= wflmda;
-}
-
-// efkernel -- DeltaG(lambda) and dDeltaG/dlambda by piecewise-linear
-// integration of the mean force (eost.f:1750).
-void efkernel(double& eostlmda, double& dfdl)
-{
-   eostlmda = 0;
-   dfdl = 0;
-   if (lambda <= 0.0) {
-      dfdl = fkernel[1];
-      return;
-   }
-   for (int il0 = 1; il0 <= nlmda - 1; ++il0) {
-      int il1 = il0 + 1;
-      double lmda0 = (double)(il0 - 1) * wlmda;
-      double lmda1 = (double)(il1 - 1) * wlmda;
-      double fl0 = fkernel[il0];
-      double fl1 = fkernel[il1];
-      double slope = (fl1 - fl0) / wlmda;
-      if (lambda <= lmda1) {
-         double xx = lambda - lmda0;
-         eostlmda += fl0 * xx + 0.5 * slope * xx * xx;
-         dfdl = fl0 + slope * xx;
-         return;
-      }
-      eostlmda += 0.5 * (fl0 + fl1) * wlmda;
-   }
-   dfdl = fkernel[nlmda];
-}
-
-// etotfkernel -- total DeltaG by trapezoid integration of the mean force
-// (eost.f:1717).
-double etotFkernel()
-{
-   double tot = 0;
-   for (int il = 1; il <= nlmda - 1; ++il)
-      tot += 0.5 * (fkernel[il] + fkernel[il + 1]) * wlmda;
-   return tot;
-}
-
-// ostlangevin -- BAOAB Langevin propagation of the theta lambda-particle where
-// lambda = sin(theta)^2 (eost.f:374).
-void ostLangevin()
-{
-   if (ostdt <= 0.0)
-      return;
-   if (ostmass <= 0.0)
-      return;
-
-   double force = -deffdl * std::sin(2.0 * osttheta);
-   double gamma = std::max(0.0, ostfriction);
-   if (gamma > 0.0) {
-      double c = std::exp(-gamma * ostdt);
-      double ktm = units::boltzmann * bath::kelvin / ostmass;
-      double sigma = std::sqrt(ktm * (1.0 - c * c));
-      ostvtheta = c * ostvtheta + (1.0 - c) * force / (gamma * ostmass) + sigma * normal<double>();
-   } else {
-      ostvtheta = ostvtheta + ostdt * force / ostmass;
-   }
-
-   osttheta = osttheta + ostdt * ostvtheta;
-   while (osttheta > pi)
-      osttheta -= 2.0 * pi;
-   while (osttheta <= -pi)
-      osttheta += 2.0 * pi;
-
-   double sinth = std::sin(osttheta);
-   lambda = sinth * sinth;
 }
 
 static void metaImages(double lmda, double src[3])
@@ -806,7 +659,7 @@ void buildGkernel()
 {
    std::fill(gkernel.begin(), gkernel.end(), 0.0);
    std::fill(vkernelmax.begin(), vkernelmax.end(), 0.0);
-   for (int ihist = 1; ihist <= nosthist; ++ihist)
+   for (int ihist = 1; ihist <= nlmdahist; ++ihist)
       addGkernelHist(ihist);
 }
 
@@ -818,11 +671,11 @@ void buildKernels()
    std::fill(gfkernel.begin(), gfkernel.end(), 0.0);
    std::fill(glfkernel.begin(), glfkernel.end(), 0.0);
    std::fill(glkernel.begin(), glkernel.end(), 0.0);
-   std::fill(fkernel.begin(), fkernel.end(), 0.0);
-   std::fill(fsumkernel.begin(), fsumkernel.end(), 0.0);
-   std::fill(pfkernel.begin(), pfkernel.end(), 0.0);
+   std::fill(lmdafmean.begin(), lmdafmean.end(), 0.0);
+   std::fill(lmdafsum.begin(), lmdafsum.end(), 0.0);
+   std::fill(lmdafwt.begin(), lmdafwt.end(), 0.0);
    std::fill(vkernelmax.begin(), vkernelmax.end(), 0.0);
-   for (int ihist = 1; ihist <= nosthist; ++ihist)
+   for (int ihist = 1; ihist <= nlmdahist; ++ihist)
       addKernelHist(ihist);
 }
 
@@ -830,14 +683,14 @@ void buildKernels()
 // into the current grids (eost.f:1363 / 1386).
 void updateGkernel()
 {
-   if (nosthist > 0)
-      addGkernelHist(nosthist);
+   if (nlmdahist > 0)
+      addGkernelHist(nlmdahist);
 }
 
 void updateKernels()
 {
-   if (nosthist > 0)
-      addKernelHist(nosthist);
+   if (nlmdahist > 0)
+      addKernelHist(nlmdahist);
 }
 
 void eostData(RcOp op)
@@ -847,23 +700,23 @@ void eostData(RcOp op)
 
    if (op & RcOp::DEALLOC) {
       osthist.clear();
-      ostihist.clear();
+      lmdaihist.clear();
       ostnext.clear();
       osthead.clear();
-      ostlhist.clear();
-      ostfhist.clear();
+      lmdalhist.clear();
+      lmdafhist.clear();
       osthhist.clear();
       ostwlhist.clear();
       ostwfhist.clear();
-      ostllist.clear();
-      ostflist.clear();
+      lmdallist.clear();
+      lmdaflist.clear();
       gkernel.clear();
       glkernel.clear();
       gfkernel.clear();
       glfkernel.clear();
-      fkernel.clear();
-      fsumkernel.clear();
-      pfkernel.clear();
+      lmdafmean.clear();
+      lmdafsum.clear();
+      lmdafwt.clear();
       vkernelmax.clear();
       metalhist.clear();
       metahhist.clear();
@@ -871,12 +724,6 @@ void eostData(RcOp op)
       metaihist.clear();
       vmetagrid.clear();
       dvmetagrid.clear();
-      ostlambdaavgbin.clear();
-      ostlambdastdbin.clear();
-      ostlambdaslpbin.clear();
-      ostdedlavgbin.clear();
-      ostdedlstdbin.clear();
-      ostdedlslpbin.clear();
    }
 
    if (op & RcOp::INIT) {
@@ -884,34 +731,26 @@ void eostData(RcOp op)
       bdgdl = 0;
       bdgdfl = 0;
       bostlmda = 0;
-      bdfdl = 0;
-
-      int ncvbin = std::max(ostcvbin, 0);
-      ostlambdaavgbin.assign(ncvbin, 0.0);
-      ostlambdastdbin.assign(ncvbin, 0.0);
-      ostlambdaslpbin.assign(ncvbin, 0.0);
-      ostdedlavgbin.assign(ncvbin, 0.0);
-      ostdedlstdbin.assign(ncvbin, 0.0);
-      ostdedlslpbin.assign(ncvbin, 0.0);
+      lmdadfdl = 0;
 
       // Mirror the Fortran mutate allocation/initialization (mutate.f:505).
       if (use_ost) {
-         sizeosthist = 10000;
-         nosthist = 0;
-         osthist.assign(sizeosthist + 1, 0);
-         ostihist.assign(sizeosthist + 1, 0);
-         ostnext.assign(sizeosthist + 1, 0);
+         sizelmdahist = 10000;
+         nlmdahist = 0;
+         osthist.assign(sizelmdahist + 1, 0);
+         lmdaihist.assign(sizelmdahist + 1, 0);
+         ostnext.assign(sizelmdahist + 1, 0);
          osthead.assign((size_t)nlmda * nflmda, 0);
-         ostllist.assign(iosthist, 0.0);
-         ostflist.assign(iosthist, 0.0);
-         ostlhist.assign(sizeosthist + 1, 0.0);
-         ostfhist.assign(sizeosthist + 1, 0.0);
-         osthhist.assign(sizeosthist + 1, 0.0);
-         ostwlhist.assign(sizeosthist + 1, 0.0);
-         ostwfhist.assign(sizeosthist + 1, 0.0);
-         fkernel.assign(nlmda + 1, 0.0);
-         fsumkernel.assign(nlmda + 1, 0.0);
-         pfkernel.assign(nlmda + 1, 0.0);
+         lmdallist.assign(lmdaintv, 0.0);
+         lmdaflist.assign(lmdaintv, 0.0);
+         lmdalhist.assign(sizelmdahist + 1, 0.0);
+         lmdafhist.assign(sizelmdahist + 1, 0.0);
+         osthhist.assign(sizelmdahist + 1, 0.0);
+         ostwlhist.assign(sizelmdahist + 1, 0.0);
+         ostwfhist.assign(sizelmdahist + 1, 0.0);
+         lmdafmean.assign(nlmda + 1, 0.0);
+         lmdafsum.assign(nlmda + 1, 0.0);
+         lmdafwt.assign(nlmda + 1, 0.0);
          vkernelmax.assign(nlmda + 1, 0.0);
          gkernel.assign((size_t)nlmda * nflmda, 0.0);
          gfkernel.assign((size_t)nlmda * nflmda, 0.0);
@@ -925,7 +764,7 @@ void eostData(RcOp op)
          metahhist.assign(sizemetahist + 1, 0.0);
          metawhist.assign(sizemetahist + 1, 0.0);
          metaihist.assign(sizemetahist + 1, 0);
-         ostllist.assign(iosthist, 0.0);
+         lmdallist.assign(lmdaintv, 0.0);
          vmetagrid.assign(nlmda + 1, 0.0);
          dvmetagrid.assign(nlmda + 1, 0.0);
       }
@@ -953,7 +792,7 @@ void eostBias(int vers)
       egkernelInterpolate(bgbias, bdgdl, bdgdfl);
    else
       egkernel(bgbias, bdgdl, bdgdfl);
-   efkernel(bostlmda, bdfdl);
+   efreeLmda(bostlmda, lmdadfdl);
 
    if (vers & calc::energy)
       esum += bgbias - bostlmda;
@@ -971,61 +810,52 @@ void eostBias(int vers)
 
 void eostDyn(int istep)
 {
-   int im = istep % iosthist;
-   int isamp = (istep - 1) % iosthist;
+   int im = istep % lmdaintv;
+   int isamp = (istep - 1) % lmdaintv;
 
    // effective lambda force, from the bias eostBias evaluated this step and the
    // unbiased dedl left behind by the energy call.
    ostdgdl = bdgdl + bdgdfl * d2edl2;
-   ostddgdl = bdfdl;
-   deffdl = dedl + ostdgdl - ostddgdl;
+   lmdaddgdl = lmdadfdl;
+   deffdl = dedl + ostdgdl - lmdaddgdl;
 
    // buffer this step's sample.
-   ostllist[isamp] = lambda;
-   ostflist[isamp] = dedl;
+   lmdallist[isamp] = lambda;
+   lmdaflist[isamp] = dedl;
 
-   // deposit a new histogram gaussian every iosthist steps.
+   // deposit a new histogram gaussian every lmdaintv steps.
    if (im == 0) {
-      histstat(ostllist, ostlambdaavg, ostlambdastd, ostlambdaslp, ostlambdaavgbin, ostlambdastdbin,
-         ostlambdaslpbin);
-      histstat(ostflist, ostdedlavg, ostdedlstd, ostdedlslp, ostdedlavgbin, ostdedlstdbin, ostdedlslpbin);
-      // if (depcriteria(ostdedlavg, ostdedlstd, ostdedlslp, ostdedlavgbin)) {
-      if (depcriteria2(ostdedlavg, ostdedlstd)) {
-         int ilmda = lambdaBin(ostlambdaavg);
+      histstat(lmdallist, lmdaavg, lmdastd, ostlambdaslp);
+      histstat(lmdaflist, dedlavg, dedlstd, ostdedlslp);
+      // if (depcriteria(dedlavg, dedlstd, ostdedlslp, ostdedlavgbin)) {
+      if (depcriteria(dedlavg, dedlstd)) {
+         int ilmda = lmdaBin(lmdaavg);
          maxwlhist = std::max(maxwlhist, wlhist);
          maxwfhist = std::max(maxwfhist, wfhist);
-         ensureFlambda(ostdedlavg);
-         int iflmda = flambdaBin(ostdedlavg);
+         ensureFlambda(dedlavg);
+         int iflmda = flambdaBin(dedlavg);
 
-         nosthist = nosthist + 1;
-         if (nosthist > sizeosthist)
+         nlmdahist = nlmdahist + 1;
+         if (nlmdahist > sizelmdahist)
             resizeOstHist();
          int k;
          ijToK(ilmda, iflmda, nlmda, k);
-         osthist[nosthist] = k;
-         ostihist[nosthist] = istep;
-         ostlhist[nosthist] = ostlambdaavg;
-         ostfhist[nosthist] = ostdedlavg;
-         osthhist[nosthist] = temperedHeight(ostVminimax(), vkernelmax[ilmda]);
-         ostwlhist[nosthist] = wlhist;
-         ostwfhist[nosthist] = wfhist;
-         ostnext[nosthist] = osthead[gidx(ilmda, iflmda)];
-         osthead[gidx(ilmda, iflmda)] = nosthist;
+         osthist[nlmdahist] = k;
+         lmdaihist[nlmdahist] = istep;
+         lmdalhist[nlmdahist] = lmdaavg;
+         lmdafhist[nlmdahist] = dedlavg;
+         osthhist[nlmdahist] = temperedHeight(ostVminimax(), vkernelmax[ilmda]);
+         ostwlhist[nlmdahist] = wlhist;
+         ostwfhist[nlmdahist] = wfhist;
+         ostnext[nlmdahist] = osthead[gidx(ilmda, iflmda)];
+         osthead[gidx(ilmda, iflmda)] = nlmdahist;
 
          if (true) {
             double vmm = ostVminimax();
             double th = temperedHeight(vmm, vkernelmax[ilmda]);
             printf("istep: %i\n", istep);
-            printf("ostlmda  avg, std, slp: %8.4f %8.4e %8.4e\n", ostlambdaavg, ostlambdastd, ostlambdaslp);
-            if (ostcvbin > 0) {
-               printf("lmda[0]  avg, std, slp: %8.4f %8.4e %8.4e\n", ostlambdaavgbin.front(), ostlambdastdbin.front(), ostlambdaslpbin.front());
-               printf("lmda[-1] avg, std, slp: %8.4f %8.4e %8.4e\n", ostlambdaavgbin.back(), ostlambdastdbin.back(), ostlambdaslpbin.back());
-            }
-            printf("ostdedl  avg, std, slp: %8.4f %8.4e %8.4e\n", ostdedlavg, ostdedlstd, ostdedlslp);
-            if (ostcvbin > 0) {
-               printf("dedl[0]  avg, std, slp: %8.4f %8.4e %8.4e\n", ostdedlavgbin.front(), ostdedlstdbin.front(), ostdedlslpbin.front());
-               printf("dedl[-1] avg, std, slp: %8.4f %8.4e %8.4e\n", ostdedlavgbin.back(), ostdedlstdbin.back(), ostdedlslpbin.back());
-            }
+            printf("ostlmda  avg, std, slp: %8.4f %8.4e %8.4e\n", lmdaavg, lmdastd, ostlambdaslp);
+            printf("ostdedl  avg, std, slp: %8.4f %8.4e %8.4e\n", dedlavg, dedlstd, ostdedlslp);
             printf("vminmax temperedHeight: %8.4e %8.4e\n", vmm, th);
             printf("\n");
          }
@@ -1036,44 +866,43 @@ void eostDyn(int istep)
             updateGkernel();
             buildFkernel();
          }
-         eosttot = etotFkernel();
+         lmdadeltag = efreeTot();
       }
    }
 
    // propagate the lambda particle only during the leading phase; lambda is
    // then held fixed for the equilibration and averaging phases.
-   if (isamp < ostnpa)
-      ostLangevin();
+   if (isamp < lmdanpa)
+      lmdaLangevin();
 }
 
 void eMetaDyn(int istep)
 {
-   int im = istep % iosthist;
-   int isamp = (istep - 1) % iosthist;
+   int im = istep % lmdaintv;
+   int isamp = (istep - 1) % lmdaintv;
 
    // effective lambda force, from the bias eostBias evaluated this step and the
    // unbiased dedl left behind by the energy call.
    deffdl = dedl + bdgdl;
 
    // buffer this step's sample.
-   ostllist[isamp] = lambda;
+   lmdallist[isamp] = lambda;
 
-   // deposit a new metadynamics gaussian every iosthist steps.
+   // deposit a new metadynamics gaussian every lmdaintv steps.
    if (im == 0) {
-      histstat(ostllist, ostlambdaavg, ostlambdastd, ostlambdaslp, ostlambdaavgbin, ostlambdastdbin,
-         ostlambdaslpbin);
+      histstat(lmdallist, lmdaavg, lmdastd, ostlambdaslp);
       nmetahist = nmetahist + 1;
       if (nmetahist > sizemetahist)
          resizeMeta();
-      metalhist[nmetahist] = ostlambdaavg;
+      metalhist[nmetahist] = lmdaavg;
       double vmm = metaVminimax();
       metahhist[nmetahist] = temperedHeight(vmm, vmm);
       metawhist[nmetahist] = wlmda;
       metaihist[nmetahist] = istep;
       addMetaGrid(nmetahist);
-      eosttot = metaDeltaG();
+      lmdadeltag = metaDeltaG();
    }
 
-   ostLangevin();
+   lmdaLangevin();
 }
 }
