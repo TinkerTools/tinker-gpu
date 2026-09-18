@@ -48,6 +48,8 @@ void resetost(int nl, int nf, int nhist)
    maxwfhist = wfhist;
    nlmdahist = 0;
    sizelmdahist = nhist;
+   lmdathmap = LmdaThMap::SIN;
+   lmdathalpha = 0.999999999;
    lmdaintv = 10;
    lmdanpa = 3;
    lmdanpb = 3;

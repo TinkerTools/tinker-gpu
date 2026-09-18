@@ -28,6 +28,13 @@ enum class Lmdamap
    QNT  ///< quintic taper plus endpoint derivative flags
 };
 
+/// Mapping type from the lambda particle theta onto the main lambda.
+enum class LmdaThMap
+{
+   SIN, ///< lambda = sin(theta)^2
+   TRI  ///< smoothed triangle, sharpened by lmdathalpha
+};
+
 /// Declared leg of the staged relative schedule.
 enum class RelStage
 {
@@ -49,6 +56,9 @@ constexpr int nRelSlot = 5;
 
 /// Parses a Fortran character*3 map selector into an Lmdamap value.
 Lmdamap lmdamapFrom(const char* s);
+
+/// Parses a Fortran character*3 theta map selector into a LmdaThMap value.
+LmdaThMap lmdaThMapFrom(const char* s);
 
 /// Parses a Fortran character*4 leg selector into a RelStage value.
 RelStage relStageFrom(const char* s);
@@ -199,7 +209,14 @@ int lmdaBin(double lambda);
 /// Splits the sample interval into its propagation, equilibration and averaging
 /// phases (dlambda.f:setlmdaphase).
 void setLmdaPhase();
-/// Propagates the theta lambda particle, lambda = sin(theta)^2 (dlambda.f:lmdalangevin).
+/// Maps the lambda particle coordinate theta onto the main lambda under the
+/// selected map, and returns dlambda/dtheta (dlambda.f:lmdathetamap).
+void lmdaThetaMap(double theta, double& lmda, double& dldth);
+/// Inverts the selected theta map onto the principal branch [0, pi/2]; lambda
+/// is clipped to [0,1] first (dlambda.f:lmdathetainv).
+void lmdaThetaInv(double lmda, double& theta);
+/// Propagates the theta lambda particle under the selected theta map
+/// (dlambda.f:lmdalangevin).
 void lmdaLangevin();
 /// Free energy at the current lambda and its lambda derivative (dlambda.f:efreelmda).
 void efreeLmda(double& eflmda, double& dfdl);
@@ -279,12 +296,14 @@ TINKER_EXTERN double lmdaparatio; ///< interval fraction propagating the lambda 
 TINKER_EXTERN double lmdapbratio; ///< interval fraction equilibrating at fixed lambda.
 TINKER_EXTERN double lmdapcratio; ///< interval fraction averaging at fixed lambda.
 
-// theta lambda particle (lambda = sin(theta)^2).
+// theta lambda particle, lambda = lmdaThetaMap(theta).
 TINKER_EXTERN double lmdatheta;   ///< theta coordinate used to propagate lambda.
 TINKER_EXTERN double lmdavtheta;  ///< velocity of the theta lambda coordinate.
 TINKER_EXTERN double lmdamass;    ///< fictitious mass of the theta lambda coordinate.
 TINKER_EXTERN double lmdafric;    ///< friction coefficient of the theta lambda coordinate.
 TINKER_EXTERN double lmdadt;      ///< time step of the theta lambda coordinate.
+TINKER_EXTERN double lmdathalpha;  ///< sharpness of the smoothed triangle theta map.
+TINKER_EXTERN LmdaThMap lmdathmap; ///< theta -> main lambda mapping type.
 
 // current-step derived quantities and interval averages. The unbiased
 // dU/dlambda is \ref dedl itself.

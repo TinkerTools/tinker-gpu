@@ -70,6 +70,14 @@ Lmdamap lmdamapFrom(const char* s)
    return Lmdamap::QNT;
 }
 
+LmdaThMap lmdaThMapFrom(const char* s)
+{
+   // s is a Fortran character*3 buffer (no null terminator).
+   if (std::strncmp(s, "SIN", 3) == 0)
+      return LmdaThMap::SIN;
+   return LmdaThMap::TRI;
+}
+
 RelStage relStageFrom(const char* s)
 {
    // s is a Fortran character*4 buffer (no null terminator).
@@ -398,6 +406,8 @@ void dlmda_mech()
    lmdapcratio = dlmda::lmdapcratio;
    lmdatheta = dlmda::lmdatheta;
    lmdavtheta = dlmda::lmdavtheta;
+   lmdathmap = lmdaThMapFrom(dlmda::lmdathmap);
+   lmdathalpha = dlmda::lmdathalpha;
    lmdamass = dlmda::lmdamass;
    lmdafric = dlmda::lmdafric;
    lmdadt = dlmda::lmdadt;
@@ -521,8 +531,45 @@ void setLmdaPhase()
    }
 }
 
+// Maps theta onto the main lambda, as sine squared or a smoothed triangle, and
+// returns dlambda/dtheta. The triangle map is
+//    lambda = 1/2 - asin(a*cos(2*theta)) / (2*asin(a))
+// which becomes sin(theta)^2 as the sharpness a goes to zero and a triangle
+// wave, flat in lambda, as a goes to one. Both maps have period pi in theta
+// (dlambda.f:lmdathetamap).
+void lmdaThetaMap(double theta, double& lmda, double& dldth)
+{
+   if (lmdathmap == LmdaThMap::TRI) {
+      double alpha = lmdathalpha;
+      double asina = std::asin(alpha);
+      double costh = std::cos(2.0 * theta);
+      lmda = 0.5 - std::asin(alpha * costh) / (2.0 * asina);
+      dldth = alpha * std::sin(2.0 * theta) / (asina * std::sqrt(1.0 - alpha * alpha * costh * costh));
+   } else {
+      double sinth = std::sin(theta);
+      lmda = sinth * sinth;
+      dldth = std::sin(2.0 * theta);
+   }
+}
+
+// Inverts the theta map onto the principal branch [0, pi/2]
+// (dlambda.f:lmdathetainv).
+void lmdaThetaInv(double lmda, double& theta)
+{
+   double lclip = std::min(1.0, std::max(0.0, lmda));
+   if (lmdathmap == LmdaThMap::TRI) {
+      double alpha = lmdathalpha;
+      double asina = std::asin(alpha);
+      double arg = std::sin((1.0 - 2.0 * lclip) * asina) / alpha;
+      arg = std::min(1.0, std::max(-1.0, arg));
+      theta = 0.5 * std::acos(arg);
+   } else {
+      theta = std::asin(std::sqrt(lclip));
+   }
+}
+
 // BAOAB Langevin propagation of the auxiliary lambda particle in theta space,
-// where lambda = sin(theta)^2 (dlambda.f:lmdalangevin).
+// where lambda follows the theta map lmdathmap (dlambda.f:lmdalangevin).
 void lmdaLangevin()
 {
    if (lmdadt <= 0.0)
@@ -530,7 +577,10 @@ void lmdaLangevin()
    if (lmdamass <= 0.0)
       return;
 
-   double force = -deffdl * std::sin(2.0 * lmdatheta);
+   // force on theta from dU/dlambda and the theta map derivative
+   double lmda, dldth;
+   lmdaThetaMap(lmdatheta, lmda, dldth);
+   double force = -deffdl * dldth;
    double gamma = std::max(0.0, lmdafric);
    if (gamma > 0.0) {
       double c = std::exp(-gamma * lmdadt);
@@ -541,14 +591,18 @@ void lmdaLangevin()
       lmdavtheta = lmdavtheta + lmdadt * force / lmdamass;
    }
 
+   // update theta and wrap it into the periodic interval [0,pi). The period is
+   // M_PI and not tinker::pi, which is only a float in a mixed precision build.
+   constexpr double dpi = M_PI;
    lmdatheta = lmdatheta + lmdadt * lmdavtheta;
-   while (lmdatheta > pi)
-      lmdatheta -= 2.0 * pi;
-   while (lmdatheta <= -pi)
-      lmdatheta += 2.0 * pi;
+   lmdatheta = lmdatheta - dpi * std::floor(lmdatheta / dpi);
+   if (lmdatheta >= dpi)
+      lmdatheta = 0.0;
+   if (lmdatheta < 0.0)
+      lmdatheta = 0.0;
 
-   double sinth = std::sin(lmdatheta);
-   lambda = sinth * sinth;
+   // map theta back to the main lambda
+   lmdaThetaMap(lmdatheta, lambda, dldth);
 }
 
 // Free energy at the current lambda by piecewise-linear integration of the mean

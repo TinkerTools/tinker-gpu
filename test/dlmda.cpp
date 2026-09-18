@@ -5,7 +5,10 @@
 #include "testrt.h"
 
 #include <cmath>
+#include <cstring>
+#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/mutant.hh>
+#include <tinker/routines.h>
 #include <utility>
 
 // Host-only checks of the lambda-mapping math in src/dlmda.cpp: the quintic
@@ -629,4 +632,321 @@ TEST_CASE("DLMDA-apm-pol-tracks-ele", "[ff][dlmda]")
    plmdaapmn = 12;
    plmdaapmrho = 2.0;
    REQUIRE_FALSE(polTracksEle());
+}
+
+namespace {
+// The theta map of the lambda particle is host math on process globals, and
+// Catch2 randomizes case order, so every case that drives the particle puts
+// the whole particle state back (test_eostmap.f:test_eostmap_theta).
+struct ThetaScope
+{
+   LmdaThMap map;
+   double alpha, theta, vtheta, mass, fric, dt, eff, mainlmda;
+
+   ThetaScope()
+      : map(lmdathmap)
+      , alpha(lmdathalpha)
+      , theta(lmdatheta)
+      , vtheta(lmdavtheta)
+      , mass(lmdamass)
+      , fric(lmdafric)
+      , dt(lmdadt)
+      , eff(deffdl)
+      , mainlmda(lambda)
+   {
+      // the defaults mutate.f sets, which every case below overrides as it needs
+      lmdathmap = LmdaThMap::TRI;
+      lmdathalpha = 0.999999999;
+   }
+
+   ~ThetaScope()
+   {
+      lmdathmap = map;
+      lmdathalpha = alpha;
+      lmdatheta = theta;
+      lmdavtheta = vtheta;
+      lmdamass = mass;
+      lmdafric = fric;
+      lmdadt = dt;
+      deffdl = eff;
+      lambda = mainlmda;
+   }
+};
+
+// The same for the Fortran module state, which the differential case below
+// drives directly.
+struct FortranThetaScope
+{
+   char map[3];
+   double alpha, theta, vtheta, mass, fric, dt, eff, mainlmda;
+
+   FortranThetaScope()
+      : alpha(dlmda::lmdathalpha)
+      , theta(dlmda::lmdatheta)
+      , vtheta(dlmda::lmdavtheta)
+      , mass(dlmda::lmdamass)
+      , fric(dlmda::lmdafric)
+      , dt(dlmda::lmdadt)
+      , eff(dlmda::deffdl)
+      , mainlmda(mutant::lambda)
+   {
+      std::memcpy(map, dlmda::lmdathmap, 3);
+   }
+
+   ~FortranThetaScope()
+   {
+      std::memcpy(dlmda::lmdathmap, map, 3);
+      dlmda::lmdathalpha = alpha;
+      dlmda::lmdatheta = theta;
+      dlmda::lmdavtheta = vtheta;
+      dlmda::lmdamass = mass;
+      dlmda::lmdafric = fric;
+      dlmda::lmdadt = dt;
+      dlmda::deffdl = eff;
+      mutant::lambda = mainlmda;
+   }
+};
+
+// tinker::pi is only a float in a mixed precision build, and these cases hold
+// the map to 1e-14, so the period has to come from M_PI.
+constexpr double dpi = M_PI;
+
+double mapLmda(double theta)
+{
+   double l, d;
+   lmdaThetaMap(theta, l, d);
+   return l;
+}
+
+double mapDldth(double theta)
+{
+   double l, d;
+   lmdaThetaMap(theta, l, d);
+   return d;
+}
+
+// The two maps as the Fortran cases drive them, sine squared at a sharpness it
+// ignores and the smoothed triangle at one close to a flat traversal.
+void selectMap(int j)
+{
+   lmdathmap = (j == 0) ? LmdaThMap::SIN : LmdaThMap::TRI;
+   lmdathalpha = (j == 0) ? 0.9 : 0.999999999;
+}
+}
+
+TEST_CASE("DLMDA-theta-map-sin", "[ff][dlmda]")
+{
+   // the sine squared map is lambda = sin(theta)^2
+   ThetaScope scope;
+   lmdathmap = LmdaThMap::SIN;
+
+   COMPARE_REALS(mapLmda(0.3), std::sin(0.3) * std::sin(0.3), 1.0e-15);
+   COMPARE_REALS(mapDldth(0.3), std::sin(0.6), 1.0e-15);
+}
+
+TEST_CASE("DLMDA-theta-map-tri", "[ff][dlmda]")
+{
+   // the smoothed triangle reaches both endpoints and the midpoint, and it
+   // comes into the lambda endpoints flat, which is the point of the map
+   ThetaScope scope;
+   lmdathmap = LmdaThMap::TRI;
+   lmdathalpha = 0.999999999;
+
+   COMPARE_REALS(mapLmda(0.0), 0.0, 1.0e-12);
+   COMPARE_REALS(mapDldth(0.0), 0.0, 1.0e-12);
+   COMPARE_REALS(mapLmda(0.5 * dpi), 1.0, 1.0e-12);
+   COMPARE_REALS(mapLmda(-0.5 * dpi), 1.0, 1.0e-12);
+   COMPARE_REALS(mapLmda(-0.25 * dpi), 0.5, 1.0e-12);
+}
+
+TEST_CASE("DLMDA-theta-map-periodic", "[ff][dlmda]")
+{
+   // both maps close on themselves over a period of pi in theta, which is what
+   // lets lmdaLangevin() wrap theta into [0,pi) without moving lambda
+   ThetaScope scope;
+
+   for (int j = 0; j < 2; ++j) {
+      selectMap(j);
+      for (int i = 0; i <= 12; ++i) {
+         double theta = -dpi + dpi * (double)i / 12.0;
+         CAPTURE(j, theta);
+         COMPARE_REALS(mapLmda(theta + dpi), mapLmda(theta), 1.0e-12);
+         COMPARE_REALS(mapDldth(theta + dpi), mapDldth(theta), 1.0e-9);
+      }
+   }
+}
+
+TEST_CASE("DLMDA-theta-map-small-alpha", "[ff][dlmda]")
+{
+   // a vanishing sharpness recovers the sine squared map
+   ThetaScope scope;
+
+   for (int i = 0; i <= 12; ++i) {
+      double theta = -dpi + 2.0 * dpi * (double)i / 12.0;
+      CAPTURE(theta);
+
+      lmdathmap = LmdaThMap::TRI;
+      lmdathalpha = 1.0e-6;
+      double lmda = mapLmda(theta), dldth = mapDldth(theta);
+
+      lmdathmap = LmdaThMap::SIN;
+      COMPARE_REALS(lmda, mapLmda(theta), 1.0e-8);
+      COMPARE_REALS(dldth, mapDldth(theta), 1.0e-8);
+   }
+}
+
+TEST_CASE("DLMDA-theta-map-derivative", "[ff][dlmda]")
+{
+   // theta derivatives match central differences over a full period
+   ThetaScope scope;
+   const double h = 1.0e-6;
+
+   for (int j = 0; j < 2; ++j) {
+      selectMap(j);
+      for (int i = 0; i <= 40; ++i) {
+         double theta = -dpi + 2.0 * dpi * (double)i / 40.0;
+         double dnum = (mapLmda(theta + h) - mapLmda(theta - h)) / (2.0 * h);
+         CAPTURE(j, theta);
+         COMPARE_REALS(mapDldth(theta), dnum, 1.0e-8);
+      }
+   }
+}
+
+TEST_CASE("DLMDA-theta-inverse", "[ff][dlmda]")
+{
+   // the inverse maps round trip lambda through theta, on the principal branch
+   ThetaScope scope;
+   const double llist[6] = {0.0, 0.001, 0.25, 0.5, 0.9, 1.0};
+
+   for (int j = 0; j < 2; ++j) {
+      selectMap(j);
+      lmdathalpha = 0.999999999;
+      for (int i = 0; i < 6; ++i) {
+         double theta;
+         lmdaThetaInv(llist[i], theta);
+         CAPTURE(j, llist[i], theta);
+         COMPARE_REALS(mapLmda(theta), llist[i], 1.0e-12);
+         REQUIRE(theta >= 0.0);
+         REQUIRE(theta <= 0.5 * dpi);
+      }
+   }
+}
+
+TEST_CASE("DLMDA-theta-langevin-tri", "[ff][dlmda]")
+{
+   // a frictionless step with the smoothed triangle map takes its theta force
+   // from the map derivative, not from sin(2*theta)
+   ThetaScope scope;
+   const double alpha = 0.999999999;
+   lmdathmap = LmdaThMap::TRI;
+   lmdathalpha = alpha;
+   const double asina = std::asin(alpha);
+
+   lmdadt = 0.1;
+   lmdamass = 2.0;
+   lmdafric = 0.0;
+   deffdl = 1.5;
+   const double th0 = 0.7, v0 = 0.3;
+   lmdatheta = th0;
+   lmdavtheta = v0;
+   lmdaLangevin();
+
+   double dldth =
+      alpha * std::sin(2.0 * th0) / (asina * std::sqrt(1.0 - std::pow(alpha * std::cos(2.0 * th0), 2)));
+   double vref = v0 - lmdadt * deffdl * dldth / lmdamass;
+   double thref = th0 + lmdadt * vref;
+   COMPARE_REALS(lmdavtheta, vref, 1.0e-14);
+   COMPARE_REALS(lmdatheta, thref, 1.0e-14);
+   COMPARE_REALS(lambda, 0.5 - std::asin(alpha * std::cos(2.0 * thref)) / (2.0 * asina), 1.0e-14);
+}
+
+TEST_CASE("DLMDA-theta-langevin-wrap", "[ff][dlmda]")
+{
+   // a step past the end of the period wraps theta into [0,pi), and the period
+   // of the map leaves lambda where the unwrapped theta would have put it
+   ThetaScope scope;
+
+   for (int j = 0; j < 2; ++j) {
+      selectMap(j);
+      lmdathalpha = 0.9;
+      deffdl = 0.0;
+      lmdafric = 0.0;
+      lmdadt = 0.1;
+      lmdamass = 2.0;
+      const double th0 = 2.0, v0 = 30.0;
+      lmdatheta = th0;
+      lmdavtheta = v0;
+      lmdaLangevin();
+
+      double thref = th0 + lmdadt * v0;
+      CAPTURE(j);
+      COMPARE_REALS(lmdatheta, thref - dpi, 1.0e-14);
+      COMPARE_REALS(lambda, mapLmda(thref), 1.0e-12);
+
+      // many steps of a fast particle stay inside the period
+      for (int i = 1; i <= 200; ++i) {
+         lmdaLangevin();
+         CAPTURE(i, lmdatheta);
+         REQUIRE(lmdatheta >= 0.0);
+         REQUIRE(lmdatheta < dpi);
+      }
+   }
+}
+
+TEST_CASE("DLMDA-theta-matches-fortran", "[ff][dlmda]")
+{
+   // The whole point of the port is that a tinker9 run and a Tinker run reading
+   // the same key file propagate the same lambda particle. Both engines are
+   // linked into this binary, so hold the C++ routines against dlambda.f
+   // directly rather than against transcribed numbers.
+   ThetaScope scope;
+   FortranThetaScope fscope;
+
+   for (int j = 0; j < 2; ++j) {
+      selectMap(j);
+      std::memcpy(dlmda::lmdathmap, (j == 0) ? "SIN" : "TRI", 3);
+      dlmda::lmdathalpha = lmdathalpha;
+
+      // the forward map and its theta derivative, over a full period
+      for (int i = 0; i <= 24; ++i) {
+         double theta = -dpi + 2.0 * dpi * (double)i / 24.0;
+         double l9, d9, lf, df;
+         lmdaThetaMap(theta, l9, d9);
+         tinker_f_lmdathetamap(&theta, &lf, &df);
+         CAPTURE(j, theta);
+         COMPARE_REALS(l9, lf, 1.0e-14);
+         COMPARE_REALS(d9, df, 1.0e-14);
+      }
+
+      // the inverse, including the clipped endpoints
+      for (double lval : {-0.5, 0.0, 0.001, 0.25, 0.5, 0.9, 1.0, 1.5}) {
+         double t9, tf, lin = lval;
+         lmdaThetaInv(lval, t9);
+         tinker_f_lmdathetainv(&lin, &tf);
+         CAPTURE(j, lval);
+         COMPARE_REALS(t9, tf, 1.0e-14);
+      }
+
+      // and a frictionless trajectory, long enough to wrap the period twice
+      lmdadt = 0.1;
+      lmdamass = 2.0;
+      lmdafric = 0.0;
+      deffdl = 1.5;
+      lmdatheta = 0.7;
+      lmdavtheta = 3.0;
+      dlmda::lmdadt = lmdadt;
+      dlmda::lmdamass = lmdamass;
+      dlmda::lmdafric = lmdafric;
+      dlmda::deffdl = deffdl;
+      dlmda::lmdatheta = lmdatheta;
+      dlmda::lmdavtheta = lmdavtheta;
+      for (int i = 1; i <= 50; ++i) {
+         lmdaLangevin();
+         tinker_f_lmdalangevin();
+         CAPTURE(j, i);
+         COMPARE_REALS(lmdatheta, dlmda::lmdatheta, 1.0e-13);
+         COMPARE_REALS(lmdavtheta, dlmda::lmdavtheta, 1.0e-13);
+         COMPARE_REALS(lambda, mutant::lambda, 1.0e-13);
+      }
+   }
 }
