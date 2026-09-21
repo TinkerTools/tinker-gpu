@@ -55,8 +55,8 @@ inline int flambdaBin(double dudl)
 }
 
 // engine routines (defined in src/eost.cpp)
-void histstat(const std::vector<double>& list, double& avg, double& std, double& slp);
-bool depcriteria(double avg, double std);
+void ostDeposit(int istep);
+void metaDeposit(int istep);
 void buildOstIndex();
 void resizeOstHist();
 void ensureFlambda(double dudl);

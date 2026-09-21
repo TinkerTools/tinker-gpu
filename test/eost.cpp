@@ -57,11 +57,9 @@ void resetost(int nl, int nf, int nhist)
    lambda = 0.0;
    lmdaavg = 0.0;
    lmdastd = 0.0;
-   ostlambdaslp = 0.0;
    dedl = 0.0;
    dedlavg = 0.0;
    dedlstd = 0.0;
-   ostdedlslp = 0.0;
    deffdl = 0.0;
    plmdamap = Lmdamap::QNT;
    elmdamap = Lmdamap::QNT;
@@ -111,10 +109,12 @@ void resetost(int nl, int nf, int nhist)
    lmdafwt.assign(nlmda + 1, 0.0);
    vkernelmax.assign(nlmda + 1, 0.0);
 
-   ostcvdif = 0.0;
-   ostcvrat = 0.0;
-   ostcvslp = 0.0;
-   ostcvstd = 0.0;
+   use_lmdacv = false;
+   lmdacvstd = 0.0;
+   lmdacvrat = 0.0;
+   use_ost = false;
+   use_meta = false;
+   use_abf = false;
 }
 
 // resetmeta -- allocate metadynamics history arrays (test_eost.f:1170).
@@ -673,72 +673,20 @@ TEST_CASE("EOST-kernelbuilds", "[ff][eost]")
    }
 }
 
-TEST_CASE("EOST-histstat", "[ff][eost]")
-{
-   resetost(5, 5, 1);
-   lmdaintv = 6;
-   lmdanpa = 1;
-   lmdanpb = 1;
-   lmdanpc = 4;
-   // samples 1..6 laid out 0-based, so the slice still holds the values 3..6
-   for (int i = 0; i < lmdaintv; ++i) {
-      lmdallist[i] = (double)(i + 1);
-      lmdaflist[i] = 2.0 * (double)(i + 1);
-   }
-
-   // the averaging-phase statistics cover list[2..5], the values 3..6
-   histstat(lmdallist, lmdaavg, lmdastd, ostlambdaslp);
-   histstat(lmdaflist, dedlavg, dedlstd, ostdedlslp);
-   double stdref = std::sqrt(1.25);
-   COMPARE_REALS(lmdaavg, 4.5, 1.0e-12);
-   COMPARE_REALS(dedlavg, 9.0, 1.0e-12);
-   COMPARE_REALS(lmdastd, stdref, 1.0e-12);
-   COMPARE_REALS(dedlstd, 2.0 * stdref, 1.0e-12);
-
-   // fitted changes per sample preserve the scale of each ramp
-   COMPARE_REALS(ostlambdaslp, 1.0, 1.0e-12);
-   COMPARE_REALS(ostdedlslp, 2.0, 1.0e-12);
-}
-
-TEST_CASE("EOST-histstat-drift", "[ff][eost]")
-{
-   resetost(5, 5, 1);
-   lmdaintv = 8;
-   lmdanpa = 0;
-   lmdanpb = 0;
-   lmdanpc = 8;
-
-   // a flat series has zero slope
-   for (int i = 0; i < lmdaintv; ++i)
-      lmdallist[i] = 7.0;
-   histstat(lmdallist, lmdaavg, lmdastd, ostlambdaslp);
-   COMPARE_REALS(lmdaavg, 7.0, 1.0e-12);
-   COMPARE_REALS(ostlambdaslp, 0.0, 1.0e-12);
-
-   // a strictly decreasing ramp retains its fitted change per sample
-   for (int i = 0; i < lmdaintv; ++i)
-      lmdallist[i] = -0.5 * (double)i;
-   histstat(lmdallist, lmdaavg, lmdastd, ostlambdaslp);
-   COMPARE_REALS(ostlambdaslp, -0.5, 1.0e-12);
-
-   // a folded series has no net drift
-   double v[8] = {4.0, 3.0, 2.0, 1.0, 1.0, 2.0, 3.0, 4.0};
-   for (int i = 0; i < lmdaintv; ++i)
-      lmdallist[i] = v[i];
-   histstat(lmdallist, lmdaavg, lmdastd, ostlambdaslp);
-   COMPARE_REALS(ostlambdaslp, 0.0, 1.0e-12);
-
-   // accuracy: a large offset must not swamp a small drift (the K shift)
-   for (int i = 0; i < lmdaintv; ++i)
-      lmdallist[i] = 5000.0 + 1.0e-6 * (double)i;
-   histstat(lmdallist, lmdaavg, lmdastd, ostlambdaslp);
-   COMPARE_REALS(ostlambdaslp, 1.0e-6, 1.0e-9);
-}
-
 TEST_CASE("EOST-depcriteria", "[ff][eost]")
 {
-   ostcvstd = 10.0;
-   ostcvrat = 0.2;
+   TestLmdaFlagGuard guard;
+
+   // with the gate off every interval is accepted
+   use_lmdacv = false;
+   lmdacvstd = 0.0;
+   lmdacvrat = 0.0;
+   REQUIRE(depcriteria(0.0, 1.0e6));
+
+   // the tolerance is lmdacvstd plus lmdacvrat times the average
+   use_lmdacv = true;
+   lmdacvstd = 10.0;
+   lmdacvrat = 0.2;
 
    REQUIRE(depcriteria(0.0, 9.9));
    REQUIRE_FALSE(depcriteria(0.0, 10.0));
@@ -746,6 +694,11 @@ TEST_CASE("EOST-depcriteria", "[ff][eost]")
    REQUIRE_FALSE(depcriteria(50.0, 20.0));
    REQUIRE(depcriteria(-50.0, 19.9));
    REQUIRE_FALSE(depcriteria(-50.0, 20.0));
+
+   // a vanishing tolerance rejects every interval
+   lmdacvstd = 0.0;
+   lmdacvrat = 0.0;
+   REQUIRE_FALSE(depcriteria(1.0, 0.0));
 }
 
 TEST_CASE("EOST-eginterpolate", "[ff][eost]")
@@ -893,8 +846,12 @@ TEST_CASE("EOST-meta", "[ff][eost]")
 
 TEST_CASE("EOST-metadyn", "[ff][eost]")
 {
-   // drive eMetaDyn across one full interval and check the deposited gaussian.
+   // drive elmdaDyn across two intervals and check the deposited gaussian,
+   // and that metadynamics ignores the convergence gate and moves lambda on
+   // every step.
+   TestLmdaFlagGuard guard;
    resetost(5, 5, 1);
+   use_meta = true;
    resetmeta(2);
    lmdaintv = 4;
    lmdanpa = 1;
@@ -906,12 +863,12 @@ TEST_CASE("EOST-metadyn", "[ff][eost]")
    lmdadt = 0.0; // no-op lmdaLangevin, so the sampled lambda values stay controlled
 
    // sampled lambda per step (lam is indexed by istep, not by buffer slot);
-   // histstat averages the fixed-lambda slice, indices
+   // elmdaDyn averages the fixed-lambda slice, indices
    // lmdanpa+lmdanpb..lmdaintv-1 = 2..3, holding the last two samples.
    double lam[5] = {0.0, 0.1, 0.2, 0.4, 0.6};
    for (int istep = 1; istep <= lmdaintv; ++istep) {
       lambda = lam[istep];
-      eMetaDyn(istep);
+      elmdaDyn(istep);
       if (istep < lmdaintv)
          COMPARE_INTS(nmetahist, 0); // no deposit before the interval boundary
    }
@@ -922,6 +879,31 @@ TEST_CASE("EOST-metadyn", "[ff][eost]")
    COMPARE_REALS(metahhist[1], hbias, 1.0e-12);
    COMPARE_REALS(metawhist[1], wlmda, 1.0e-12);
    COMPARE_INTS(metaihist[1], lmdaintv); // step stamp at the deposit boundary
+
+   // meta ignores the convergence gate and moves a deterministic frictionless
+   // lambda particle on every step of the interval
+   use_lmdacv = true;
+   lmdacvstd = 1.0;
+   lmdacvrat = 0.0;
+   lmdadt = 0.1;
+   lmdamass = 1.0;
+   lmdafric = 0.0;
+   lmdatheta = 0.25 * pi;
+   lmdavtheta = 0.0;
+   bdgdl = 0.0;
+   double lmv[5] = {0.0};
+   for (int istep = lmdaintv + 1; istep <= 2 * lmdaintv; ++istep) {
+      dedl = 1.0;
+      if (istep % 2 == 0)
+         dedl = 11.0;
+      elmdaDyn(istep);
+      lmv[istep - lmdaintv] = lambda;
+   }
+   COMPARE_INTS(nmetahist, 2); // a noisy interval still deposits
+   for (int k = 2; k <= lmdaintv; ++k) {
+      CAPTURE(k);
+      REQUIRE(lmv[k] != lmv[k - 1]);
+   }
 }
 
 TEST_CASE("EOST-vkernelmax", "[ff][eost]")
@@ -1133,19 +1115,94 @@ TEST_CASE("EOST-ostphase", "[ff][eost]")
    COMPARE_INTS(lmdanpa + lmdanpb + lmdanpc, lmdaintv);
 }
 
-TEST_CASE("EOST-ostgate", "[ff][eost]")
+TEST_CASE("EOST-ostdyn", "[ff][eost]")
 {
-   // drive eostDyn over one deposit interval and check that the lambda
-   // particle moves only during the leading propagation phase, that lambda is
-   // then held exactly fixed, and that the deposited gaussian sits on it.
+   // drive elmdaDyn over three deposit intervals and check that a settled
+   // interval deposits, an unsettled one is rejected, and only the averaging
+   // phase samples are averaged.
+   TestLmdaFlagGuard guard;
+
+   // a settled interval deposits one gaussian at the interval end
    bath::kelvin = 300.0;
    resetost(5, 5, 4);
+   use_ost = true;
+   lmdaintv = 4;
+   lmdanpa = 0;
+   lmdanpb = 0;
+   lmdanpc = 4;
+   use_lmdacv = true;
+   lmdacvstd = 1.0;
+   lmdacvrat = 0.0;
+   hbias = 1.0;
+   lmdadt = 0.0;
+   fastkernel = true;
+   d2edl2 = 0.0;
+   bdgdl = 0.0;
+   bdgdfl = 0.0;
+   lmdadfdl = 0.0;
+   for (int istep = 1; istep <= lmdaintv; ++istep) {
+      lambda = 0.5;
+      dedl = 1.0;
+      elmdaDyn(istep);
+      if (istep < lmdaintv)
+         COMPARE_INTS(nlmdahist, 0); // waits for the interval end
+   }
+   COMPARE_INTS(nlmdahist, 1);
+   COMPARE_INTS(lmdaihist[1], lmdaintv);
+   COMPARE_REALS(lmdalhist[1], 0.5, 1.0e-12);
+   COMPARE_REALS(lmdafhist[1], 1.0, 1.0e-12);
+   COMPARE_REALS(osthhist[1], hbias, 1.0e-12);
+   COMPARE_REALS(ostwlhist[1], wlhist, 1.0e-12);
+
+   // an unsettled interval is rejected and changes nothing
+   double eostsave = lmdadeltag;
+   for (int istep = lmdaintv + 1; istep <= 2 * lmdaintv; ++istep) {
+      lambda = 0.5;
+      dedl = 1.0;
+      if (istep % 2 == 0)
+         dedl = 11.0;
+      elmdaDyn(istep);
+   }
+   COMPARE_REALS(dedlavg, 6.0, 1.0e-12);
+   COMPARE_REALS(dedlstd, 5.0, 1.0e-12);
+   COMPARE_INTS(nlmdahist, 1);
+   COMPARE_REALS(lmdadeltag, eostsave, 1.0e-12);
+
+   // only the samples after the equilibration prefix are averaged
+   lmdanpa = 1;
+   lmdanpb = 1;
+   lmdanpc = 2;
+   for (int istep = 2 * lmdaintv + 1; istep <= 3 * lmdaintv; ++istep) {
+      int isamp = (istep - 1) % lmdaintv + 1;
+      lambda = 0.1;
+      dedl = 50.0;
+      if (isamp > lmdanpa + lmdanpb) {
+         lambda = 0.5;
+         dedl = 2.0;
+      }
+      elmdaDyn(istep);
+   }
+   COMPARE_INTS(nlmdahist, 2);
+   COMPARE_REALS(lmdalhist[2], 0.5, 1.0e-12);
+   COMPARE_REALS(lmdafhist[2], 2.0, 1.0e-12);
+}
+
+TEST_CASE("EOST-ostgate", "[ff][eost]")
+{
+   // drive elmdaDyn over one deposit interval and check that the lambda
+   // particle moves only during the leading propagation phase, that lambda is
+   // then held exactly fixed, and that the deposited gaussian sits on it.
+   TestLmdaFlagGuard guard;
+   bath::kelvin = 300.0;
+   resetost(5, 5, 4);
+   use_ost = true;
    lmdaintv = 6;
    lmdanpa = 2;
    lmdanpb = 2;
    lmdanpc = 2;
-   ostcvstd = 1.0;
-   ostcvrat = 0.0;
+   use_lmdacv = true;
+   lmdacvstd = 1.0;
+   lmdacvrat = 0.0;
    hbias = 1.0;
 
    // a deterministic frictionless lambda particle, so that any lambda motion
@@ -1165,7 +1222,7 @@ TEST_CASE("EOST-ostgate", "[ff][eost]")
    double lam[7] = {0.0};
    for (int istep = 1; istep <= lmdaintv; ++istep) {
       dedl = 1.0;
-      eostDyn(istep);
+      elmdaDyn(istep);
       lam[istep] = lambda;
    }
 
@@ -1190,14 +1247,16 @@ TEST_CASE("EOST-ostgate", "[ff][eost]")
 TEST_CASE("EOST-ostlocal", "[ff][eost]")
 {
    // deposit into an unevenly filled kernel with both tempering factors on:
-   // eostDyn takes the height from the pre-deposit bias levels, the least
+   // elmdaDyn takes the height from the pre-deposit bias levels, the least
    // filled lambda bin deposits at the global height alone, and growing the
    // flambda grid keeps the bin bias levels.
+   TestLmdaFlagGuard guard;
    bath::kelvin = 300.0;
    double rt = units::gasconst * bath::kelvin;
 
    // fill the kernel much higher near lambda of zero
    resetost(5, 5, 8);
+   use_ost = true;
    oststdev = 4.0;
    nlmdahist = 2;
    sethist(1, 0.0, 0.0, 5.0, 0.25, 1.0);
@@ -1210,8 +1269,9 @@ TEST_CASE("EOST-ostlocal", "[ff][eost]")
    lmdanpa = 0;
    lmdanpb = 0;
    lmdanpc = 4;
-   ostcvstd = 1.0;
-   ostcvrat = 0.0;
+   use_lmdacv = true;
+   lmdacvstd = 1.0;
+   lmdacvrat = 0.0;
    hbias = 1.0;
    lmdadt = 0.0;
    fastkernel = true;
@@ -1239,7 +1299,7 @@ TEST_CASE("EOST-ostlocal", "[ff][eost]")
    for (int istep = 1; istep <= lmdaintv; ++istep) {
       lambda = (double)(imax - 1) * wlmda;
       dedl = 0.0;
-      eostDyn(istep);
+      elmdaDyn(istep);
    }
    double hglobal = hbias * std::exp(-(gmin - ostgthresh) / rt);
    COMPARE_INTS(nlmdahist, 3);
@@ -1256,7 +1316,7 @@ TEST_CASE("EOST-ostlocal", "[ff][eost]")
    for (int istep = lmdaintv + 1; istep <= 2 * lmdaintv; ++istep) {
       lambda = (double)(imin - 1) * wlmda;
       dedl = 0.0;
-      eostDyn(istep);
+      elmdaDyn(istep);
    }
    hglobal = hbias * std::exp(-std::max(0.0, gmin - ostgthresh) / rt);
    COMPARE_INTS(nlmdahist, 4);
@@ -1358,9 +1418,11 @@ TEST_CASE("EOST-metaimage", "[ff][eost]")
 
 TEST_CASE("EOST-metatemper", "[ff][eost]")
 {
-   // drive eMetaDyn across several deposit intervals with tempering on.
+   // drive elmdaDyn across several deposit intervals with tempering on.
+   TestLmdaFlagGuard guard;
    bath::kelvin = 300.0;
    resetost(5, 5, 1);
+   use_meta = true;
    resetmeta(8);
    lmdaintv = 4;
    lmdanpa = 1;
@@ -1397,7 +1459,7 @@ TEST_CASE("EOST-metatemper", "[ff][eost]")
    const int ndep = 5;
    for (int istep = 1; istep <= ndep * lmdaintv; ++istep) {
       lambda = 0.5;
-      eMetaDyn(istep);
+      elmdaDyn(istep);
    }
    COMPARE_INTS(nmetahist, ndep);
 

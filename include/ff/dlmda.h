@@ -204,6 +204,10 @@ void dlmdaData(RcOp op);
 void dlmdaData2(RcOp op);
 /// Mean and population standard deviation of v[begin, begin+count).
 void avgstd(const std::vector<double>& v, int begin, int count, double& avg, double& sd);
+/// Whether the samples of the last interval are converged enough to be added
+/// to the lambda bias; every interval is accepted unless use_lmdacv is on
+/// (dlambda.f:depcriteria).
+bool depcriteria(double avg, double sd);
 /// Lambda bin index of a lambda value, clamped to [1, nlmda] (dlambda.f:lmdabin).
 int lmdaBin(double lambda);
 /// Splits the sample interval into its propagation, equilibration and averaging
@@ -218,6 +222,11 @@ void lmdaThetaInv(double lmda, double& theta);
 /// Propagates the theta lambda particle under the selected theta map
 /// (dlambda.f:lmdalangevin).
 void lmdaLangevin();
+/// Advances the OST, metadynamics or ABF lambda bias by one dynamics step:
+/// builds the effective lambda derivative, saves the interval samples, deposits
+/// the interval average at the end of each interval and propagates the lambda
+/// particle (dlambda.f:elmdadyn).
+void elmdaDyn(int istep);
 /// Free energy at the current lambda and its lambda derivative (dlambda.f:efreelmda).
 void efreeLmda(double& eflmda, double& dfdl);
 /// Total free energy change from the mean force (dlambda.f:efreetot).
@@ -295,6 +304,11 @@ TINKER_EXTERN double wlmda2;      ///< half width of lambda bins.
 TINKER_EXTERN double lmdaparatio; ///< interval fraction propagating the lambda particle.
 TINKER_EXTERN double lmdapbratio; ///< interval fraction equilibrating at fixed lambda.
 TINKER_EXTERN double lmdapcratio; ///< interval fraction averaging at fixed lambda.
+
+// convergence gate for accepting the interval samples of OST and ABF.
+TINKER_EXTERN bool use_lmdacv;    ///< gate the interval samples by convergence.
+TINKER_EXTERN double lmdacvstd;   ///< max interval deviation of dU/dlambda.
+TINKER_EXTERN double lmdacvrat;   ///< max ratio of interval deviation to its average.
 
 // theta lambda particle, lambda = lmdaThetaMap(theta).
 TINKER_EXTERN double lmdatheta;   ///< theta coordinate used to propagate lambda.

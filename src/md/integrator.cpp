@@ -1,8 +1,7 @@
 #include "md/integrator.h"
+#include "ff/dlmda.h"
 #include "ff/energy.h"
-#include "ff/ost.h"
 #include "ff/ethrmint.h"
-#include "ff/eabf.h"
 #include "md/lflpiston.h"
 #include "md/misc.h"
 #include "md/pq.h"
@@ -92,12 +91,8 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
       copyPosToXyz(true);
       energy(vers1);
       // propagate the lambda particle
-      if (use_ost)
-         eostDyn(istep);
-      else if (use_meta)
-         eMetaDyn(istep);
-      else if (use_abf)
-         eabfDyn(istep);
+      if (use_ost or use_meta or use_abf)
+         elmdaDyn(istep);
       else if (use_ti)
          etidyn(istep);
       if (vers1 & calc::virial)
@@ -148,12 +143,8 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
       // slow force
       energy(vers1, RESPA_SLOW, respaTSConfig());
       // propagate the lambda particle
-      if (use_ost)
-         eostDyn(istep);
-      else if (use_meta)
-         eMetaDyn(istep);
-      else if (use_abf)
-         eabfDyn(istep);
+      if (use_ost or use_meta or use_abf)
+         elmdaDyn(istep);
       else if (use_ti)
          etidyn(istep);
       darray::copy(g::q0, n, gx2, gx);
@@ -385,12 +376,8 @@ static void nhc_npt(int istep, time_prec dt)
    energy(vers1);
 
    // propagate the lambda particle.
-   if (use_ost)
-      eostDyn(istep);
-   else if (use_meta)
-      eMetaDyn(istep);
-   else if (use_abf)
-      eabfDyn(istep);
+   if (use_ost or use_meta or use_abf)
+      elmdaDyn(istep);
    else if (use_ti)
       etidyn(istep);
 

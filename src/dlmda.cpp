@@ -1,5 +1,7 @@
 #include "ff/dlmda.h"
 #include "ff/ost.h"
+#include "ff/eost.h"
+#include "ff/eabf.h"
 #include "ff/ethrmint.h"
 #include "ff/atom.h"
 #include "ff/egvop.h"
@@ -411,6 +413,9 @@ void dlmda_mech()
    lmdamass = dlmda::lmdamass;
    lmdafric = dlmda::lmdafric;
    lmdadt = dlmda::lmdadt;
+   use_lmdacv = (dlmda::use_lmdacv != 0);
+   lmdacvstd = dlmda::lmdacvstd;
+   lmdacvrat = dlmda::lmdacvrat;
 
    // dedl is owned by the energy routines and zeroed by zeroEGV each step.
    deffdl = 0;
@@ -491,6 +496,21 @@ void avgstd(const std::vector<double>& v, int begin, int count, double& avg, dou
    avg = k + total / (double)count;
    double var = (totalsq - total * total / (double)count) / (double)count;
    sd = std::sqrt(var > 0.0 ? var : 0.0);
+}
+
+// depcriteria -- whether the samples of the last interval are converged enough
+// to be added to the lambda bias, by comparing their deviation against a
+// tolerance with both absolute and relative parts; every interval is accepted
+// unless the convergence gate is turned on (dlambda.f:depcriteria).
+bool depcriteria(double avg, double sd)
+{
+   // accept every interval when the gate is off
+   if (not use_lmdacv)
+      return true;
+
+   // accept only a deviation strictly inside the tolerance
+   double tolerance = lmdacvstd + lmdacvrat * std::abs(avg);
+   return tolerance > 0.0 && sd / tolerance < 1.0;
 }
 
 // Lambda bin index of a lambda value, clamped to the grid (dlambda.f:lmdabin).
@@ -603,6 +623,64 @@ void lmdaLangevin()
 
    // map theta back to the main lambda
    lmdaThetaMap(lmdatheta, lambda, dldth);
+}
+
+// elmdaDyn -- advances the adaptive lambda bias by one dynamics step for
+// orthogonal space tempering, metadynamics or adaptive biasing force; it builds
+// the effective lambda derivative, saves the interval samples, deposits the
+// interval average at the end of each interval and propagates the lambda
+// particle (dlambda.f:elmdadyn).
+void elmdaDyn(int istep)
+{
+   int im = istep % lmdaintv;
+   int isamp = (istep - 1) % lmdaintv;
+
+   // build the effective lambda derivative from the unbiased dedl left behind
+   // by the energy call and the bias saved this step by eostBias or eabfBias
+   if (use_ost) {
+      ostdgdl = bdgdl + bdgdfl * d2edl2;
+      lmdaddgdl = lmdadfdl;
+      deffdl = dedl + ostdgdl - lmdaddgdl;
+   } else if (use_meta) {
+      deffdl = dedl + bdgdl;
+   } else if (use_abf) {
+      lmdaddgdl = lmdadfdl;
+      deffdl = dedl - lmdaddgdl;
+   }
+
+   // save all values in the interval, but average only after the propagation
+   // and equilibration phases; only OST and ABF keep dU/dlambda, which they
+   // average at a fixed lambda
+   lmdallist[isamp] = lambda;
+   if (use_ost or use_abf)
+      lmdaflist[isamp] = dedl;
+
+   // deposit the interval average every lmdaintv steps; an OST or ABF interval
+   // is kept only when its samples are converged
+   if (im == 0) {
+      int nskip = lmdanpa + lmdanpb;
+      avgstd(lmdallist, nskip, lmdanpc, lmdaavg, lmdastd);
+      if (use_ost or use_abf) {
+         avgstd(lmdaflist, nskip, lmdanpc, dedlavg, dedlstd);
+         if (depcriteria(dedlavg, dedlstd)) {
+            if (use_ost)
+               ostDeposit(istep);
+            if (use_abf)
+               abfDeposit(istep);
+         }
+      } else if (use_meta) {
+         metaDeposit(istep);
+      }
+   }
+
+   // propagate the lambda particle; OST and ABF hold lambda fixed after the
+   // propagation phase
+   if (use_ost or use_abf) {
+      if (isamp < lmdanpa)
+         lmdaLangevin();
+   } else {
+      lmdaLangevin();
+   }
 }
 
 // Free energy at the current lambda by piecewise-linear integration of the mean

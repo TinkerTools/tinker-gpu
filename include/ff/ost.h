@@ -11,14 +11,9 @@ void ost_mech();
 /// Allocates/initializes the host-side OST histogram and kernel storage.
 void eostData(RcOp op);
 
-/// Evaluates the OST bias at the current lambda and dU/dlambda.
+/// Evaluates the OST bias at the current lambda and dU/dlambda, and saves its
+/// derivatives for elmdaDyn (eost.f:eostbias).
 void eostBias(int vers);
-
-/// Orthogonal-space tempering driver (eost.f:eostdyn).
-void eostDyn(int istep);
-
-/// One-dimensional lambda metadynamics driver (eost.f:emetadyn).
-void eMetaDyn(int istep);
 }
 
 //====================================================================//
@@ -55,13 +50,6 @@ TINKER_EXTERN double oststdev;  ///< gaussian cutoff in standard deviations.
 // current-step derived quantities and running averages. The unbiased
 // dU/dlambda is \ref dedl itself; OST keeps no separate copy of it.
 TINKER_EXTERN double ostdgdl;   ///< dg/dlambda (with chain rule via d2edl2).
-TINKER_EXTERN double ostlambdaslp; ///< fitted lambda change per sample across the deposit interval.
-TINKER_EXTERN double ostdedlslp;   ///< fitted dU/dlambda change per sample across the deposit interval.
-
-TINKER_EXTERN double ostcvdif;
-TINKER_EXTERN double ostcvslp;
-TINKER_EXTERN double ostcvstd;
-TINKER_EXTERN double ostcvrat;
 
 // hybrid global + local tempering of the deposited gaussian heights.
 TINKER_EXTERN bool use_ostgtemp;      ///< temper heights by the global path bias level.

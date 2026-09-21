@@ -43,6 +43,12 @@ void resetabf(int nl, int nhist)
    lmdadeltag = 0.0;
    lmdadfdl = 0.0;
    lmdadt = 0.0;
+   use_abf = true;
+   use_ost = false;
+   use_meta = false;
+   use_lmdacv = false;
+   lmdacvstd = 0.0;
+   lmdacvrat = 0.0;
 
    lmdaihist.assign(sizelmdahist + 1, 0);
    lmdalhist.assign(sizelmdahist + 1, 0.0);
@@ -70,6 +76,7 @@ void resetabf(int nl, int nhist)
 TEST_CASE("EABF-bias", "[ff][eabf]")
 {
    // seed a linear mean force f(lambda) = 2 + 4*lambda on the grid
+   TestLmdaFlagGuard guard;
    resetabf(5, 4);
    for (int i = 1; i <= nlmda; ++i)
       lmdafmean[i] = 2.0 + 4.0 * (double)(i - 1) * wlmda;
@@ -90,6 +97,7 @@ TEST_CASE("EABF-bias", "[ff][eabf]")
 TEST_CASE("EABF-dyn", "[ff][eabf]")
 {
    // a settled interval records its lambda and dU/dlambda average
+   TestLmdaFlagGuard guard;
    resetabf(5, 4);
    lmdaintv = 4;
    lmdanpa = 0;
@@ -100,7 +108,7 @@ TEST_CASE("EABF-dyn", "[ff][eabf]")
    for (int istep = 1; istep <= lmdaintv; ++istep) {
       lambda = 0.5;
       dedl = 3.0;
-      eabfDyn(istep);
+      elmdaDyn(istep);
       if (istep < lmdaintv)
          COMPARE_INTS(nlmdahist, 0); // waits for the interval end
    }
@@ -113,22 +121,50 @@ TEST_CASE("EABF-dyn", "[ff][eabf]")
    COMPARE_REALS(lmdafmean[3], 3.0, 1.0e-12);
    COMPARE_REALS(lmdadeltag, 0.75, 1.0e-12);
 
-   // a noisy interval is still recorded, since abf has no gate
+   // a noisy interval is still recorded while the gate is off
    for (int istep = lmdaintv + 1; istep <= 2 * lmdaintv; ++istep) {
       lambda = 0.5;
       dedl = 1.0;
       if (istep % 2 == 0)
          dedl = 11.0;
-      eabfDyn(istep);
+      elmdaDyn(istep);
    }
    COMPARE_INTS(nlmdahist, 2);
    REQUIRE(lmdafwt[3] == 2.0);
    COMPARE_REALS(lmdafmean[3], 4.5, 1.0e-12);
+
+   // with the gate on a noisy interval leaves the history unchanged
+   use_lmdacv = true;
+   lmdacvstd = 1.0;
+   lmdacvrat = 0.0;
+   double egsave = lmdadeltag;
+   for (int istep = 2 * lmdaintv + 1; istep <= 3 * lmdaintv; ++istep) {
+      lambda = 0.5;
+      dedl = 1.0;
+      if (istep % 2 == 0)
+         dedl = 11.0;
+      elmdaDyn(istep);
+   }
+   COMPARE_INTS(nlmdahist, 2);
+   REQUIRE(lmdafwt[3] == 2.0);
+   COMPARE_REALS(lmdafmean[3], 4.5, 1.0e-12);
+   COMPARE_REALS(lmdadeltag, egsave, 1.0e-12);
+
+   // with the gate on a settled interval is still recorded
+   for (int istep = 3 * lmdaintv + 1; istep <= 4 * lmdaintv; ++istep) {
+      lambda = 0.5;
+      dedl = 3.0;
+      elmdaDyn(istep);
+   }
+   COMPARE_INTS(nlmdahist, 3);
+   REQUIRE(lmdafwt[3] == 3.0);
+   COMPARE_REALS(lmdafmean[3], 4.0, 1.0e-12);
 }
 
 TEST_CASE("EABF-mean", "[ff][eabf]")
 {
    // the bias force follows the running mean of the bin samples
+   TestLmdaFlagGuard guard;
    resetabf(5, 8);
    for (int i = 1; i <= 6; ++i) {
       lmdalhist[i] = 0.25;
@@ -150,6 +186,7 @@ TEST_CASE("EABF-gate", "[ff][eabf]")
 {
    // drive an interval with a deterministic frictionless lambda particle, so
    // that any lambda motion comes from the gate alone
+   TestLmdaFlagGuard guard;
    resetabf(5, 4);
    lmdaintv = 6;
    lmdanpa = 2;
@@ -167,7 +204,7 @@ TEST_CASE("EABF-gate", "[ff][eabf]")
    double lam[7] = {0};
    for (int istep = 1; istep <= lmdaintv; ++istep) {
       dedl = 1.0;
-      eabfDyn(istep);
+      elmdaDyn(istep);
       lam[istep] = lambda;
    }
 
@@ -186,6 +223,7 @@ TEST_CASE("EABF-gate", "[ff][eabf]")
 TEST_CASE("EABF-resize", "[ff][eabf]")
 {
    // three samples overflow a history sized for two
+   TestLmdaFlagGuard guard;
    resetabf(5, 2);
    lmdaintv = 4;
    lmdanpa = 0;
@@ -196,7 +234,7 @@ TEST_CASE("EABF-resize", "[ff][eabf]")
    for (int istep = 1; istep <= 3 * lmdaintv; ++istep) {
       lambda = 0.25;
       dedl = (double)((istep - 1) / lmdaintv + 1);
-      eabfDyn(istep);
+      elmdaDyn(istep);
    }
    COMPARE_INTS(nlmdahist, 3);
    COMPARE_INTS(sizelmdahist, 4);

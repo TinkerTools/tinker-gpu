@@ -950,3 +950,54 @@ TEST_CASE("DLMDA-theta-matches-fortran", "[ff][dlmda]")
       }
    }
 }
+
+namespace {
+// Saves the interval convergence gate on both the C++ and the Fortran side and
+// restores it on exit.
+struct ConvGateScope
+{
+   bool cv = use_lmdacv;
+   double cvstd = lmdacvstd, cvrat = lmdacvrat;
+   int fcv = dlmda::use_lmdacv;
+   double fcvstd = dlmda::lmdacvstd, fcvrat = dlmda::lmdacvrat;
+
+   ~ConvGateScope()
+   {
+      use_lmdacv = cv;
+      lmdacvstd = cvstd;
+      lmdacvrat = cvrat;
+      dlmda::use_lmdacv = fcv;
+      dlmda::lmdacvstd = fcvstd;
+      dlmda::lmdacvrat = fcvrat;
+   }
+};
+}
+
+TEST_CASE("DLMDA-depcriteria-matches-fortran", "[ff][dlmda]")
+{
+   // tinker9 and Tinker must accept or reject the same interval samples, so hold
+   // the C++ convergence gate against dlambda.f:depcriteria with the gate both
+   // off and on, over tolerances with absolute and relative parts.
+   ConvGateScope scope;
+
+   const double tols[][2] = {{50.0, 0.5}, {10.0, 0.2}, {1.0, 0.0}, {0.0, 0.1}, {0.0, 0.0}};
+   const double avgs[] = {-60.0, -1.0, 0.0, 0.5, 3.0, 100.0};
+   const double stds[] = {0.0, 0.3, 1.0, 9.99, 10.0, 25.0, 1.0e6};
+   for (int on = 0; on < 2; ++on) {
+      for (const auto& tol : tols) {
+         use_lmdacv = (on != 0);
+         lmdacvstd = tol[0];
+         lmdacvrat = tol[1];
+         dlmda::use_lmdacv = on;
+         dlmda::lmdacvstd = tol[0];
+         dlmda::lmdacvrat = tol[1];
+         for (double avg : avgs) {
+            for (double sd : stds) {
+               double a = avg, s = sd;
+               CAPTURE(on, tol[0], tol[1], avg, sd);
+               REQUIRE(depcriteria(avg, sd) == (tinker_f_depcriteria(&a, &s) != 0));
+            }
+         }
+      }
+   }
+}

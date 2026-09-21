@@ -1,4 +1,5 @@
 #pragma once
+#include "ff/dlmda.h"
 #include "ff/energy.h"
 
 #include "tinker9.h"
@@ -41,6 +42,21 @@ public:
 
 /// \brief The lambda-derivative sections of a reference file.
 ///
+/// \brief Restores the lambda method flags and the interval convergence gate in
+/// its destructor, so that a failed check cannot leave them set for the cases
+/// that run after it.
+struct TestLmdaFlagGuard
+{
+   bool ost = use_ost, meta = use_meta, abf = use_abf, cv = use_lmdacv;
+   ~TestLmdaFlagGuard()
+   {
+      use_ost = ost;
+      use_meta = meta;
+      use_abf = abf;
+      use_lmdacv = cv;
+   }
+};
+
 /// Filled from the \c "Analytical Lambda Derivatives", \c "Analytical 2nd Lambda
 /// Derivatives", \c "Lambda Gradient Breakdown" (rows tagged \c Lambda), and
 /// \c "Analytical dV/dL" blocks. Sections absent from the file stay zeroed, so a

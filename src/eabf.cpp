@@ -49,42 +49,20 @@ void eabfBias(int vers)
    lmdadfdl = dfdl;
 }
 
-void eabfDyn(int istep)
+// abfDeposit -- records the lambda and dU/dlambda average of one accepted
+// interval, adds it to the mean force of its lambda bin and updates the free
+// energy estimate (eabf.f:abfdeposit).
+void abfDeposit(int istep)
 {
-   int im = istep % lmdaintv;
-   int isamp = (istep - 1) % lmdaintv;
-
-   // remove the running mean force saved by eabfBias from the unbiased dedl
-   // left behind by the energy call.
-   lmdaddgdl = lmdadfdl;
-   deffdl = dedl - lmdaddgdl;
-
-   // buffer this step's sample.
-   lmdallist[isamp] = lambda;
-   lmdaflist[isamp] = dedl;
-
-   // record the averaging phase mean every lmdaintv steps.
-   if (im == 0) {
-      int nskip = lmdanpa + lmdanpb;
-      avgstd(lmdallist, nskip, lmdanpc, lmdaavg, lmdastd);
-      avgstd(lmdaflist, nskip, lmdanpc, dedlavg, dedlstd);
-
-      // every interval is kept, since rejecting the noisy intervals would bias
-      // the conditional mean of dU/dlambda.
-      nlmdahist = nlmdahist + 1;
-      if (nlmdahist > sizelmdahist)
-         resizeAbfHist();
-      lmdaihist[nlmdahist] = istep;
-      lmdalhist[nlmdahist] = lmdaavg;
-      lmdafhist[nlmdahist] = dedlavg;
-      addAbfHist(nlmdahist);
-      lmdadeltag = efreeTot();
-   }
-
-   // propagate the lambda particle only during the leading phase; lambda is
-   // then held fixed for the equilibration and averaging phases.
-   if (isamp < lmdanpa)
-      lmdaLangevin();
+   // save the interval sample and update the mean force
+   nlmdahist = nlmdahist + 1;
+   if (nlmdahist > sizelmdahist)
+      resizeAbfHist();
+   lmdaihist[nlmdahist] = istep;
+   lmdalhist[nlmdahist] = lmdaavg;
+   lmdafhist[nlmdahist] = dedlavg;
+   addAbfHist(nlmdahist);
+   lmdadeltag = efreeTot();
 }
 
 void addAbfHist(int ihist)

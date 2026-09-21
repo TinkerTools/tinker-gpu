@@ -55,10 +55,6 @@ void ost_mech()
    maxwfhist = ost::maxwfhist;
    hbias = ost::hbias;
    oststdev = ost::oststdev;
-   ostcvdif = ost::ostcvdif;
-   ostcvrat = ost::ostcvrat;
-   ostcvslp = ost::ostcvslp;
-   ostcvstd = ost::ostcvstd;
 
    use_ostgtemp = (ost::use_ostgtemp != 0);
    use_ostltemp = (ost::use_ostltemp != 0);
@@ -69,59 +65,6 @@ void ost_mech()
 
    // dedl is owned by the energy routines and zeroed by zeroEGV each step.
    ostdgdl = 0;
-   ostlambdaslp = 0;
-   ostdedlslp = 0;
-}
-
-static double fitSlope(double tdot, double sum, int n)
-{
-   if (n < 2)
-      return 0.0;
-   double sxx = (double)n * ((double)n * (double)n - 1.0) / 12.0;
-   double sxy = tdot - 0.5 * (double)(n - 1) * sum;
-   return sxy / sxx;
-}
-
-// histstat -- average, deviation and fitted drift of the samples in the
-// averaging phase of the interval collected since the last deposit
-// (eost.f:histstat).
-void histstat(const std::vector<double>& list, double& avg, double& std, double& slp)
-{
-   // skip the propagation and equilibration phases
-   int nskip = lmdanpa + lmdanpb;
-
-   // accumulate the drift sums about a shifted origin, so that a small drift on
-   // top of a large offset is not lost to roundoff
-   const double K = list[nskip];
-   double total = 0.0, tdot = 0.0;
-   for (int i = nskip; i < nskip + lmdanpc; ++i) {
-      double d = list[i] - K;
-      total += d;
-      tdot += (double)(i - nskip) * d;
-   }
-
-   // average, deviation and drift come from the averaging slice
-   avgstd(list, nskip, lmdanpc, avg, std);
-   slp = fitSlope(tdot, total, lmdanpc);
-}
-
-// bool depcriteria(double avg, double std, double slp, const std::vector<double>& avgbin)
-// {
-//    if (std > ostcvstd)
-//       return false;
-//    if ((avg == 0.0 && std != 0.0) || (avg != 0.0 && std::abs(std / avg) > ostcvrat))
-//       return false;
-//    if (std::abs(slp) > ostcvslp)
-//       return false;
-//    if (avgbin.size() >= 2 && std::abs(avgbin.back() - avgbin.front()) > ostcvdif)
-//       return false;
-//    return true;
-// }
-
-bool depcriteria(double avg, double std)
-{
-   double tolerance = ostcvstd + ostcvrat * std::abs(avg);
-   return tolerance > 0.0 && std / tolerance < 1.0;
 }
 
 double ostVminimax()
@@ -775,8 +718,8 @@ void eostBias(int vers)
 {
    // dedl is the unbiased dU/dlambda for this configuration, accumulated by the
    // energy terms, each already in main lambda units. Nothing below writes
-   // it, so it stays valid until eostDyn/eMetaDyn consume it after energy()
-   // returns; zeroEGV zeroes it again at the top of the next evaluation.
+   // it, so it stays valid until elmdaDyn consumes it after energy() returns;
+   // zeroEGV zeroes it again at the top of the next evaluation.
    if (use_meta) {
       eMetaBias(lambda, bgbias, bdgdl);
       // Vbias depends on lambda alone, so it carries no Cartesian force/virial.
@@ -808,101 +751,71 @@ void eostBias(int vers)
          vir[k] += bdgdfl * dvirdl[k];
 }
 
-void eostDyn(int istep)
+// ostDeposit -- records one accepted interval of orthogonal space tempering as
+// a biasing gaussian centered on the interval lambda and dU/dlambda averages,
+// then updates the bias kernels and the free energy estimate
+// (eost.f:ostdeposit).
+void ostDeposit(int istep)
 {
-   int im = istep % lmdaintv;
-   int isamp = (istep - 1) % lmdaintv;
+   // ensure histogram contains the unbiased dU/dlambda value
+   int ilmda = lmdaBin(lmdaavg);
+   maxwlhist = std::max(maxwlhist, wlhist);
+   maxwfhist = std::max(maxwfhist, wfhist);
+   ensureFlambda(dedlavg);
+   int iflmda = flambdaBin(dedlavg);
 
-   // effective lambda force, from the bias eostBias evaluated this step and the
-   // unbiased dedl left behind by the energy call.
-   ostdgdl = bdgdl + bdgdfl * d2edl2;
-   lmdaddgdl = lmdadfdl;
-   deffdl = dedl + ostdgdl - lmdaddgdl;
+   // ensure histogram array is sufficiently large
+   nlmdahist = nlmdahist + 1;
+   if (nlmdahist > sizelmdahist)
+      resizeOstHist();
+   int k;
+   ijToK(ilmda, iflmda, nlmda, k);
 
-   // buffer this step's sample.
-   lmdallist[isamp] = lambda;
-   lmdaflist[isamp] = dedl;
+   // save histogram information
+   osthist[nlmdahist] = k;
+   lmdaihist[nlmdahist] = istep;
+   lmdalhist[nlmdahist] = lmdaavg;
+   lmdafhist[nlmdahist] = dedlavg;
+   osthhist[nlmdahist] = temperedHeight(ostVminimax(), vkernelmax[ilmda]);
+   ostwlhist[nlmdahist] = wlhist;
+   ostwfhist[nlmdahist] = wfhist;
+   ostnext[nlmdahist] = osthead[gidx(ilmda, iflmda)];
+   osthead[gidx(ilmda, iflmda)] = nlmdahist;
 
-   // deposit a new histogram gaussian every lmdaintv steps.
-   if (im == 0) {
-      histstat(lmdallist, lmdaavg, lmdastd, ostlambdaslp);
-      histstat(lmdaflist, dedlavg, dedlstd, ostdedlslp);
-      // if (depcriteria(dedlavg, dedlstd, ostdedlslp, ostdedlavgbin)) {
-      if (depcriteria(dedlavg, dedlstd)) {
-         int ilmda = lmdaBin(lmdaavg);
-         maxwlhist = std::max(maxwlhist, wlhist);
-         maxwfhist = std::max(maxwfhist, wfhist);
-         ensureFlambda(dedlavg);
-         int iflmda = flambdaBin(dedlavg);
-
-         nlmdahist = nlmdahist + 1;
-         if (nlmdahist > sizelmdahist)
-            resizeOstHist();
-         int k;
-         ijToK(ilmda, iflmda, nlmda, k);
-         osthist[nlmdahist] = k;
-         lmdaihist[nlmdahist] = istep;
-         lmdalhist[nlmdahist] = lmdaavg;
-         lmdafhist[nlmdahist] = dedlavg;
-         osthhist[nlmdahist] = temperedHeight(ostVminimax(), vkernelmax[ilmda]);
-         ostwlhist[nlmdahist] = wlhist;
-         ostwfhist[nlmdahist] = wfhist;
-         ostnext[nlmdahist] = osthead[gidx(ilmda, iflmda)];
-         osthead[gidx(ilmda, iflmda)] = nlmdahist;
-
-         if (true) {
-            double vmm = ostVminimax();
-            double th = temperedHeight(vmm, vkernelmax[ilmda]);
-            printf("istep: %i\n", istep);
-            printf("ostlmda  avg, std, slp: %8.4f %8.4e %8.4e\n", lmdaavg, lmdastd, ostlambdaslp);
-            printf("ostdedl  avg, std, slp: %8.4f %8.4e %8.4e\n", dedlavg, dedlstd, ostdedlslp);
-            printf("vminmax temperedHeight: %8.4e %8.4e\n", vmm, th);
-            printf("\n");
-         }
-
-         if (fastkernel) {
-            updateKernels();
-         } else {
-            updateGkernel();
-            buildFkernel();
-         }
-         lmdadeltag = efreeTot();
-      }
+   if (true) {
+      double vmm = ostVminimax();
+      double th = temperedHeight(vmm, vkernelmax[ilmda]);
+      printf("istep: %i\n", istep);
+      printf("ostlmda  avg, std: %8.4f %8.4e\n", lmdaavg, lmdastd);
+      printf("ostdedl  avg, std: %8.4f %8.4e\n", dedlavg, dedlstd);
+      printf("vminmax temperedHeight: %8.4e %8.4e\n", vmm, th);
+      printf("\n");
    }
 
-   // propagate the lambda particle only during the leading phase; lambda is
-   // then held fixed for the equilibration and averaging phases.
-   if (isamp < lmdanpa)
-      lmdaLangevin();
+   if (fastkernel) {
+      updateKernels();
+   } else {
+      updateGkernel();
+      buildFkernel();
+   }
+   lmdadeltag = efreeTot();
 }
 
-void eMetaDyn(int istep)
+// metaDeposit -- records one interval of lambda metadynamics as a gaussian
+// centered on the interval lambda average, then updates the bias grid and the
+// free energy estimate (eost.f:metadeposit).
+void metaDeposit(int istep)
 {
-   int im = istep % lmdaintv;
-   int isamp = (istep - 1) % lmdaintv;
-
-   // effective lambda force, from the bias eostBias evaluated this step and the
-   // unbiased dedl left behind by the energy call.
-   deffdl = dedl + bdgdl;
-
-   // buffer this step's sample.
-   lmdallist[isamp] = lambda;
-
-   // deposit a new metadynamics gaussian every lmdaintv steps.
-   if (im == 0) {
-      histstat(lmdallist, lmdaavg, lmdastd, ostlambdaslp);
-      nmetahist = nmetahist + 1;
-      if (nmetahist > sizemetahist)
-         resizeMeta();
-      metalhist[nmetahist] = lmdaavg;
-      double vmm = metaVminimax();
-      metahhist[nmetahist] = temperedHeight(vmm, vmm);
-      metawhist[nmetahist] = wlmda;
-      metaihist[nmetahist] = istep;
-      addMetaGrid(nmetahist);
-      lmdadeltag = metaDeltaG();
-   }
-
-   lmdaLangevin();
+   // save the new gaussian and add it to the bias grid
+   nmetahist = nmetahist + 1;
+   if (nmetahist > sizemetahist)
+      resizeMeta();
+   metalhist[nmetahist] = lmdaavg;
+   double vmm = metaVminimax();
+   metahhist[nmetahist] = temperedHeight(vmm, vmm);
+   metawhist[nmetahist] = wlmda;
+   metaihist[nmetahist] = istep;
+   addMetaGrid(nmetahist);
+   lmdadeltag = metaDeltaG();
 }
 }

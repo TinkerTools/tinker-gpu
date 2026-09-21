@@ -8,11 +8,13 @@ namespace tinker {
 void eabfData(RcOp op);
 
 /// Removes the ABF free energy at the current lambda from the energy and saves
-/// its lambda derivative for eabfDyn (eabf.f:eabfbias).
+/// its lambda derivative for elmdaDyn (eabf.f:eabfbias).
 void eabfBias(int vers);
 
-/// Adaptive biasing force lambda dynamics driver (eabf.f:eabfdyn).
-void eabfDyn(int istep);
+/// Records the lambda and dU/dlambda average of one accepted interval, adds it
+/// to the mean force of its lambda bin and updates the free energy estimate
+/// (eabf.f:abfdeposit).
+void abfDeposit(int istep);
 
 /// Adds one saved interval sample to the mean force of its lambda bin
 /// (eabf.f:addabfhist).
