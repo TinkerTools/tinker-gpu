@@ -34,6 +34,7 @@ void finish()
 #include "tool/gpucard.h"
 #include "tool/platform.h"
 
+#include "ff/amoeba/induce.h"
 #include "ff/box.h"
 #include "ff/dlmda.h"
 #include "ff/energy.h"
@@ -68,6 +69,7 @@ void deviceData(RcOp op)
    RcMan group42{groupData, op};
 
    RcMan energy42{energyData, op};
+   RcMan wiggle42{induceWiggleData, op};
    RcMan osrw42{osrwData, op};
 
    // Neighbor lists must be initialized after potential initialization.

@@ -44,7 +44,9 @@ void induce2(real (*ud)[3])
    else
       induceMutualPcg2(ud);
 
-   ulspredSave(ud, nullptr);
-   inducePrint(ud);
+   if (not induceFailed()) {
+      ulspredSave(ud, nullptr);
+      inducePrint(ud);
+   }
 }
 }

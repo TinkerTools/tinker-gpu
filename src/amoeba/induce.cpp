@@ -1,3 +1,4 @@
+#include "ff/amoeba/induce.h"
 #include "ff/atom.h"
 #include "ff/dlmda.h"
 #include "ff/modamoeba.h"
@@ -109,7 +110,9 @@ void inducePrint(const real (*ud)[3])
 void induce(real (*ud)[3], real (*up)[3])
 {
    induceMutualPcg1(ud, up);
-   ulspredSave(ud, up);
-   inducePrint(ud);
+   if (not induceFailed()) {
+      ulspredSave(ud, up);
+      inducePrint(ud);
+   }
 }
 }

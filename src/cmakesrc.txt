@@ -49,6 +49,7 @@ hippo/erepel.cpp
 hippo/expol.cpp
 hippo/field.cpp
 hippo/induce.cpp
+inducewiggle.cpp
 initial.cpp
 iofortstr.cpp
 iotext.cpp

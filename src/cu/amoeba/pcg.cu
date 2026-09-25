@@ -32,6 +32,10 @@ void induceMutualPcg1_cu(real (*uind)[3], real (*uinp)[3])
       predict = false;
       dirguess = true;
    }
+   if (predict and induceNoPredict()) {
+      predict = false;
+      dirguess = true;
+   }
 
    // get the electrostatic field due to permanent multipoles
    dfield(field, fieldp);
@@ -180,6 +184,10 @@ void induceMutualPcg1_cu(real (*uind)[3], real (*uinp)[3])
 
    // terminate the calculation if dipoles failed to converge
    if (iter >= maxiter) {
+      if (induceWiggleOn()) {
+         induceReportFailure(rsd, rsdp);
+         return;
+      }
       printError();
       TINKER_THROW("INDUCE  --  Warning, Induced Dipoles are not Converged");
    }

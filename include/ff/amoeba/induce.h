@@ -1,5 +1,6 @@
 #pragma once
 #include "ff/precision.h"
+#include "tool/rcman.h"
 
 namespace tinker {
 /// \ingroup polar
@@ -32,6 +33,14 @@ void ulspredSum(real (*uind)[3], real (*uinp)[3]);
 
 void inducePrint(const real (*ud)[3]);
 void induce(real (*uind)[3], real (*uinp)[3]);
+
+// recovery from unconverged induced dipoles in MD (keyword INDUCE-WIGGLE)
+void induceWiggleData(RcOp);
+bool induceWiggleOn();   // keyword is set and running MD
+bool induceNoPredict();  // true while retrying after a wiggle
+void induceReportFailure(const real (*rsd)[3], const real (*rsdp)[3]); // rsdp may be nullptr
+bool induceFailed();     // a solver failed in the current energy evaluation
+bool induceWiggleRetry(); // wiggles atoms and returns true if energy must be recomputed
 /// \}
 }
 

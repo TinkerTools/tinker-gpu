@@ -313,6 +313,7 @@ void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
 }
 }
 
+#include "ff/amoeba/induce.h"
 #include "ff/elec.h"
 #include "ff/hippo/cflux.h"
 #include "ff/hippo/expol.h"
@@ -349,6 +350,12 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
 
    zeroEGV(vers);
    energy_core(vers, tsflag, tsconfig);
+   // If the induced dipoles failed to converge, the atoms have been wiggled;
+   // recompute every term at the new positions.
+   while (induceWiggleRetry()) {
+      zeroEGV(vers);
+      energy_core(vers, tsflag, tsconfig);
+   }
 
    auto rc_a = rc_flag & calc::analyz;
    auto do_e = vers & calc::energy;
