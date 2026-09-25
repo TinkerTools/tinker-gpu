@@ -6,6 +6,8 @@
 #include "tool/darray.h"
 #include "tool/error.h"
 #include "tool/ioprint.h"
+#include <tinker/detail/polpot.hh>
+#include <tinker/detail/units.hh>
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -57,23 +59,48 @@ void induceReportFailure(const real (*rsd)[3], const real (*rsdp)[3])
    }
    waitFor(g::q0);
 
+   // square in double so that tiny residuals do not underflow to zero
    std::vector<double> rsq(n);
    std::vector<int> idx(n);
+   double sum = 0, sump = 0;
+   int nnan = 0;
    for (int i = 0; i < n; ++i) {
       double s = 0, sp = 0;
       for (int j = 0; j < 3; ++j) {
-         s += r[3 * i + j] * r[3 * i + j];
-         if (rsdp)
-            sp += rp[3 * i + j] * rp[3 * i + j];
+         double v = r[3 * i + j];
+         s += v * v;
+         if (rsdp) {
+            double vp = rp[3 * i + j];
+            sp += vp * vp;
+         }
       }
-      rsq[i] = std::max(s, sp);
+      sum += s;
+      sump += sp;
+      if (std::isnan(s) or std::isnan(sp)) {
+         rsq[i] = std::nan("");
+         ++nnan;
+      } else {
+         rsq[i] = std::max(s, sp);
+      }
       idx[i] = i;
    }
+   // NaN first, then largest first, ties by atom number
    int ntop = std::min(n, 5);
-   std::partial_sort(idx.begin(), idx.begin() + ntop, idx.end(),
-      [&](int a, int b) { return rsq[a] > rsq[b]; });
+   std::partial_sort(idx.begin(), idx.begin() + ntop, idx.end(), [&](int a, int b) {
+      bool na = std::isnan(rsq[a]), nb = std::isnan(rsq[b]);
+      if (na != nb)
+         return na;
+      if (not na and rsq[a] != rsq[b])
+         return rsq[a] > rsq[b];
+      return a < b;
+   });
+   // the same RMS residual the solvers compare with POLAR-EPS
+   double eps = nnan ? std::nan("") : units::debye * std::sqrt(std::max(sum, sump) / n);
 
    print(stdout, " INDUCE  --  Warning, Induced Dipoles are not Converged\n");
+   print(stdout, " RMS Residual %12.4e Debye, Target POLAR-EPS %12.4e\n", eps, polpot::poleps);
+   if (nnan)
+      print(stdout, " %d Atoms Have NaN Residuals\n", nnan);
    print(stdout, " Largest Squared Residuals :\n");
    for (int k = 0; k < ntop; ++k)
       print(stdout, "    Atom %8d     Residual %12.4e\n", idx[k] + 1, rsq[idx[k]]);
