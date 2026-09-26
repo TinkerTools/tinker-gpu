@@ -57,8 +57,8 @@ void edispData(RcOp op)
       }
 
       if (dsppot::use_dcorr && not useDEwald()) {
-         double elrc = 0, vlrc = 0;
-         tinker_f_evcorr1({const_cast<char*>("DISP"), 4}, &elrc, &vlrc);
+         double elrc = 0, vlrc = 0, delrc = 0, dvlrc = 0;
+         tinker_f_evcorr1({const_cast<char*>("DISP"), 4}, &elrc, &vlrc, &delrc, &dvlrc);
          elrc_vol_dsp = elrc * boxVolume();
          vlrc_vol_dsp = vlrc * boxVolume();
       } else {

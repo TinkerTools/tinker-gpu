@@ -41,6 +41,10 @@ static energy_prec elrc0_vol;
 static energy_prec elrc1_vol;
 static virial_prec vlrc0_vol;
 static virial_prec vlrc1_vol;
+// Lambda slope of the plain long-range correction and the vlambda it was taken at.
+static energy_prec delrc_vol;
+static virial_prec dvlrc_vol;
+static double vlam_lrc0;
 // Long-range correction of each parameter-zeroed subsystem, indexed as relSlot.
 static energy_prec elrc_slot[nRelSlot];
 static virial_prec vlrc_slot[nRelSlot];
@@ -121,6 +125,9 @@ void evdwData(RcOp op)
       elrc1_vol = 0;
       vlrc0_vol = 0;
       vlrc1_vol = 0;
+      delrc_vol = 0;
+      dvlrc_vol = 0;
+      vlam_lrc0 = 0;
       for (int k = 0; k < nRelSlot; ++k) {
          elrc_slot[k] = 0;
          vlrc_slot[k] = 0;
@@ -476,10 +483,11 @@ void evdwData(RcOp op)
             double vlambda_orig = mutant::vlambda;
             double elrc0 = 0, vlrc0 = 0;
             double elrc1 = 0, vlrc1 = 0;
+            double dummy_de = 0, dummy_dv = 0;
             mutant::vlambda = 0;
-            tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &elrc0, &vlrc0);
+            tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &elrc0, &vlrc0, &dummy_de, &dummy_dv);
             mutant::vlambda = 1;
-            tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &elrc1, &vlrc1);
+            tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &elrc1, &vlrc1, &dummy_de, &dummy_dv);
             mutant::vlambda = vlambda_orig;
             elrc0_vol = elrc0 * boxVolume();
             elrc1_vol = elrc1 * boxVolume();
@@ -497,21 +505,28 @@ void evdwData(RcOp op)
             for (int k = 0; k < nRelSlot; ++k) {
                int la = kLa[k], lb = kLb[k], le = kLe[k];
                double eslot = 0, vslot = 0;
+               double dummy_de = 0, dummy_dv = 0;
                tinker_f_submask(&la, &lb, &le);
-               tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &eslot, &vslot);
+               tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &eslot, &vslot, &dummy_de, &dummy_dv);
                elrc_slot[k] = eslot * boxVolume();
                vlrc_slot[k] = vslot * boxVolume();
             }
             int active = 1;
             tinker_f_submask(&active, &active, &active);
          }
-         double elrc = 0, vlrc = 0;
-         tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &elrc, &vlrc);
+         double elrc = 0, vlrc = 0, delrc = 0, dvlrc = 0;
+         tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &elrc, &vlrc, &delrc, &dvlrc);
          elrc_vol = elrc * boxVolume();
          vlrc_vol = vlrc * boxVolume();
+         delrc_vol = delrc * boxVolume();
+         dvlrc_vol = dvlrc * boxVolume();
+         vlam_lrc0 = mutant::vlambda; // the vlambda evcorr1 actually used
       } else {
          elrc_vol = 0;
          vlrc_vol = 0;
+         delrc_vol = 0;
+         dvlrc_vol = 0;
+         vlam_lrc0 = 0;
          elrc0_vol = 0;
          elrc1_vol = 0;
          vlrc0_vol = 0;
@@ -606,7 +621,11 @@ void evdw(int vers)
 {
    evdwBegin(vers);
    evdwKernel(vers);
-   evdwFinish(vers, elrc_vol, vlrc_vol);
+   // The long-range correction is linear in vlambda, so the stored slope
+   // carries it to the current vlam exactly and gives its lambda derivatives.
+   double dvl = vlam - vlam_lrc0;
+   evdwFinish(vers, elrc_vol + dvl * delrc_vol, vlrc_vol + dvl * dvlrc_vol, //
+      delrc_vol * dvldlmda, delrc_vol * d2vldlmda2, dvlrc_vol * dvldlmda);
 }
 
 // Absolute dual topology. Endpoint 1 is the fully coupled system; endpoint 0 is

@@ -39,6 +39,9 @@ const Fixture kFixtures[] = {
    {"07_water_ast_ye_l10.key", "testlmda.7.txt", 1.0e-3},
    {"08_water_ast_ye_l05.key", "testlmda.8.txt", 1.0e-3},
    {"09_water_ast_ye_l00.key", "testlmda.9.txt", 1.0e-3},
+   {"10_water_ast_vcorr_l05.key", "testlmda.10.txt", 1.0e-2},
+   {"11_water_ast_vcorr_annih_l05.key", "testlmda.11.txt", 1.0e-2},
+   {"12_water_ast_vcorr_l06exp.key", "testlmda.12.txt", 1.0e-2},
 };
 
 void runFixture(const Fixture& fx)
@@ -121,4 +124,7 @@ TEST_CASE("TESTLMDA-06_water_ast_vonly_l05", "[ff][testlmda]") { runFixture(kFix
 TEST_CASE("TESTLMDA-07_water_ast_ye_l10", "[ff][testlmda][ast]") { runFixture(kFixtures[6]); }
 TEST_CASE("TESTLMDA-08_water_ast_ye_l05", "[ff][testlmda][ast]") { runFixture(kFixtures[7]); }
 TEST_CASE("TESTLMDA-09_water_ast_ye_l00", "[ff][testlmda][ast]") { runFixture(kFixtures[8]); }
+TEST_CASE("TESTLMDA-10_water_ast_vcorr_l05", "[ff][testlmda]") { runFixture(kFixtures[9]); }
+TEST_CASE("TESTLMDA-11_water_ast_vcorr_annih_l05", "[ff][testlmda]") { runFixture(kFixtures[10]); }
+TEST_CASE("TESTLMDA-12_water_ast_vcorr_l06exp", "[ff][testlmda]") { runFixture(kFixtures[11]); }
 #endif
