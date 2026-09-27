@@ -235,7 +235,6 @@ double efreeTot();
 TINKER_EXTERN bool use_dlmda;
 TINKER_EXTERN bool use_emdt;
 TINKER_EXTERN bool use_epdt;
-TINKER_EXTERN bool use_evdt;
 TINKER_EXTERN bool use_plmda;
 TINKER_EXTERN bool use_mainlmda;
 
@@ -420,7 +419,6 @@ TINKER_EXTERN bool use_emast;
 TINKER_EXTERN bool use_emrdt;
 TINKER_EXTERN bool use_epadt;
 TINKER_EXTERN bool use_eprdt;
-TINKER_EXTERN bool use_evadt;
 TINKER_EXTERN bool use_evast;
 TINKER_EXTERN bool use_evrdt;
 

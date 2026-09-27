@@ -52,7 +52,7 @@ void dlmdaData2(RcOp op)
 {
    if (op & RcOp::INIT) {
       bool lambda_dynamics = use_dlmda or use_ost or use_meta or use_ti or use_abf or use_emdt //
-         or use_epdt or use_evdt or use_rel;
+         or use_epdt or use_rel;
       if (lambda_dynamics and not(pltfm_config & Platform::CUDA))
          TINKER_THROW("LAMBDA  --  Lambda dynamics requires the CUDA platform");
    }
@@ -359,7 +359,6 @@ void dlmda_mech()
    use_dlmda = dlmda::use_dlmda;
    use_emdt = dlmda::use_emdt;
    use_epdt = dlmda::use_epdt;
-   use_evdt = dlmda::use_evdt;
    use_plmda = dlmda::use_plmda and not use_osrw;
    use_mainlmda = dlmda::use_mainlmda;
    use_rel = mutant::use_rel;
@@ -375,9 +374,8 @@ void dlmda_mech()
    use_emrdt = use_emdt && use_rel;
    use_epadt = use_epdt && !use_rel;
    use_eprdt = use_epdt && use_rel;
-   use_evadt = use_evdt && !use_rel;
-   use_evast = use_vdlmda && !use_evdt && !use_rel;
-   use_evrdt = use_evdt && use_rel;
+   use_evast = use_vdlmda && !use_rel;
+   use_evrdt = use_rel;
 
    emdtexp = dlmda::emdtexp;
    epdtexp = dlmda::epdtexp;

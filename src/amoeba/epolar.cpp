@@ -554,7 +554,7 @@ void epolarData(RcOp op)
       const double polmin = 1.0e-16;
       std::vector<double> polbuf(n);
       for (int i = 0; i < n; ++i) {
-         if (use_plmda and mutant::mut[i])
+         if (use_plmda and mutant::mutg[i] != 0)
             polbuf[i] = plam * dlmda::polarityorig[i];
          else
             polbuf[i] = polar::polarity[i];
@@ -584,7 +584,7 @@ void epolarData(RcOp op)
                   atom_mask = RdtMask::LIGA;
                else if (mutant::mutg[i] == 2)
                   atom_mask = RdtMask::LIGB;
-            } else if (mutant::mut[i]) {
+            } else if (mutant::mutg[i] != 0) {
                atom_mask = RdtMask::LIGA;
             }
             polar_active_mask |= static_cast<unsigned>(atom_mask);

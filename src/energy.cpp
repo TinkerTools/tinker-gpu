@@ -252,7 +252,7 @@ void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
 
    if (amoeba_evdw(vers))
       if (tscfg("evdw", ecore_vdw)) {
-         if (use_evdt)
+         if (use_evrdt)
             evdw_dt(vers);
          else
             evdw(vers);

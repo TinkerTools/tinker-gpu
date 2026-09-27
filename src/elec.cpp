@@ -41,7 +41,7 @@ static void pchgData(RcOp op)
          int itype = atoms::type[i] - 1;
          pchgbuf[i] = kchrge::chg[itype];
          double el;
-         if (mutant::mut[i])
+         if (mutant::mutg[i] != 0)
             el = elam;
          else
             el = 1;

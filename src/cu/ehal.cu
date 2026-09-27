@@ -212,9 +212,8 @@ static void ehaldt_cu3(const DtCoef& coef)
    const real cut = switchCut(Switch::VDW);
    const real off = switchOff(Switch::VDW);
 
-   // The relative schedule labels atoms by ligand; the absolute one only knows
-   // mutated from not.
-   const int* grp = use_rel ? rdt_group : mut;
+   // Van der Waals dual topology is relative only, so atoms are labeled by ligand.
+   const int* grp = rdt_group;
 
    if CONSTEXPR (do_g) {
       darray::zero(g::q0, n, gxred, gyred, gzred);

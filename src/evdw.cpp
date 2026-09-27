@@ -37,10 +37,6 @@ static std::vector<new_type> jvec;
 static std::vector<new_type> jvdwbuf;
 static int jcount;
 
-static energy_prec elrc0_vol;
-static energy_prec elrc1_vol;
-static virial_prec vlrc0_vol;
-static virial_prec vlrc1_vol;
 // Lambda slope of the plain long-range correction and the vlambda it was taken at.
 static energy_prec delrc_vol;
 static virial_prec dvlrc_vol;
@@ -70,7 +66,7 @@ void vdwSoftcoreData(RcOp op)
          vcouple = Vdw::ANNIHILATE;
       std::vector<int> mutvec(n);
       for (int i = 0; i < n; ++i) {
-         if (mutant::mut[i]) {
+         if (mutant::mutg[i] != 0) {
             mutvec[i] = 1;
          } else {
             mutvec[i] = 0;
@@ -121,10 +117,6 @@ void evdwData(RcOp op)
 
       elrc_vol = 0;
       vlrc_vol = 0;
-      elrc0_vol = 0;
-      elrc1_vol = 0;
-      vlrc0_vol = 0;
-      vlrc1_vol = 0;
       delrc_vol = 0;
       dvlrc_vol = 0;
       vlam_lrc0 = 0;
@@ -479,21 +471,7 @@ void evdwData(RcOp op)
 
       // Initialize elrc and vlrc.
       if (vdwpot::use_vcorr) {
-         if (use_evadt) {
-            double vlambda_orig = mutant::vlambda;
-            double elrc0 = 0, vlrc0 = 0;
-            double elrc1 = 0, vlrc1 = 0;
-            double dummy_de = 0, dummy_dv = 0;
-            mutant::vlambda = 0;
-            tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &elrc0, &vlrc0, &dummy_de, &dummy_dv);
-            mutant::vlambda = 1;
-            tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &elrc1, &vlrc1, &dummy_de, &dummy_dv);
-            mutant::vlambda = vlambda_orig;
-            elrc0_vol = elrc0 * boxVolume();
-            elrc1_vol = elrc1 * boxVolume();
-            vlrc0_vol = vlrc0 * boxVolume();
-            vlrc1_vol = vlrc1 * boxVolume();
-         } else if (use_evrdt) {
+         if (use_evrdt) {
             // One correction per parameter-zeroed subsystem, in relSlot order.
             // Tinker charges evcorr1 inside ehal1calc/ehal3calc, so each
             // subsystem carries its own; the endpoints are summed from these
@@ -527,10 +505,6 @@ void evdwData(RcOp op)
          delrc_vol = 0;
          dvlrc_vol = 0;
          vlam_lrc0 = 0;
-         elrc0_vol = 0;
-         elrc1_vol = 0;
-         vlrc0_vol = 0;
-         vlrc1_vol = 0;
          for (int k = 0; k < nRelSlot; ++k) {
             elrc_slot[k] = 0;
             vlrc_slot[k] = 0;
@@ -628,30 +602,6 @@ void evdw(int vers)
       delrc_vol * dvldlmda, delrc_vol * d2vldlmda2, dvlrc_vol * dvldlmda);
 }
 
-// Absolute dual topology. Endpoint 1 is the fully coupled system; endpoint 0 is
-// the same system at vlam = 0, where the softcore annihilates exactly the pairs
-// it touches. Groups are the binary mut flags.
-static DtCoef ehalDtCoefAdt(double w, double dw, double d2w)
-{
-   DtCoef c;
-   dtWeightsToCoef(c, w, dw, d2w, dvldlmda, d2vldlmda2, use_vdlmda);
-   c.in0bits = 0;
-   c.in1bits = 0;
-   for (int gi = 0; gi < 2; ++gi) {
-      for (int gk = gi; gk < 2; ++gk) {
-         dtCellSet(c.in1bits, gi, gk);
-         bool soft = (vcouple == Vdw::DECOUPLE) ? (gi != gk) : (gi or gk);
-         if (not soft)
-            dtCellSet(c.in0bits, gi, gk);
-      }
-   }
-   // Analysis reports the coupled endpoint's count even when that endpoint
-   // carries no weight (ehal3.f:1243-1251), so the counted set is not a subset
-   // of the live endpoints and cannot be gated on need1.
-   c.cntbits = c.in1bits;
-   return c;
-}
-
 // Relative dual topology. Groups are the ternary rdt_group labels.
 static DtCoef ehalDtCoefRdt(double w, double dw, double d2w, bool need1)
 {
@@ -679,7 +629,6 @@ static void evdwFinishMixed(int vers, double weight1, double dweight1, double d2
 void evdw_dt(int vers)
 {
    assert(vdwtyp == Vdw::HAL);
-   const bool relative = use_evrdt;
 
    double weight1, dweight1, d2weight1;
    bool need0, need1;
@@ -687,30 +636,22 @@ void evdw_dt(int vers)
 
    evdwBegin(vers);
 
-   ehalDt(vers,
-      relative ? ehalDtCoefRdt(weight1, dweight1, d2weight1, need1)
-               : ehalDtCoefAdt(weight1, dweight1, d2weight1));
+   ehalDt(vers, ehalDtCoefRdt(weight1, dweight1, d2weight1, need1));
 
-   energy_prec elrc0, elrc1;
-   virial_prec vlrc0, vlrc1;
-   if (relative) {
-      elrc0 = 0, elrc1 = 0, vlrc0 = 0, vlrc1 = 0;
-      for (int k = 0; k < nRelSlot; ++k) {
-         RdtMask mask;
-         bool in0, in1;
-         relSlot(k, evrelst0, evrelst1, mask, in0, in1);
-         if (in0) {
-            elrc0 += elrc_slot[k];
-            vlrc0 += vlrc_slot[k];
-         }
-         if (in1) {
-            elrc1 += elrc_slot[k];
-            vlrc1 += vlrc_slot[k];
-         }
+   energy_prec elrc0 = 0, elrc1 = 0;
+   virial_prec vlrc0 = 0, vlrc1 = 0;
+   for (int k = 0; k < nRelSlot; ++k) {
+      RdtMask mask;
+      bool in0, in1;
+      relSlot(k, evrelst0, evrelst1, mask, in0, in1);
+      if (in0) {
+         elrc0 += elrc_slot[k];
+         vlrc0 += vlrc_slot[k];
       }
-   } else {
-      elrc0 = elrc0_vol, elrc1 = elrc1_vol;
-      vlrc0 = vlrc0_vol, vlrc1 = vlrc1_vol;
+      if (in1) {
+         elrc1 += elrc_slot[k];
+         vlrc1 += vlrc_slot[k];
+      }
    }
 
    if (not need0) {
