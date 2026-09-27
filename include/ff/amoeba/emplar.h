@@ -18,7 +18,6 @@ void emplarData(RcOp);
 /// \note Does not count number of interactions and aborts the program
 /// if called erroneously (bug in the code).
 void emplar(int vers);
-void emplar_dt(int vers);
 void emplarAst(int vers);
 
 /// \ingroup mplar

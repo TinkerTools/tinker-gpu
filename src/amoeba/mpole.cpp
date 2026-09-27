@@ -4,6 +4,7 @@
 #include "ff/modamoeba.h"
 #include "ff/pme.h"
 #include "tool/externfunc.h"
+#include <cassert>
 
 namespace tinker {
 TINKER_FVOID2(acc1, cu1, torque, int, grad_prec*, grad_prec*, grad_prec*);
@@ -43,6 +44,9 @@ static void rotpoleState(RdtMask mask, const int* group)
 TINKER_FVOID2(acc0, cu1, mpoleScale, real);
 void mpoleScale(real factor)
 {
+   // Scales every mutated site alike, which only the absolute schedule means;
+   // a relative run scales each ligand group on its own (emScale).
+   assert(not use_rel);
    TINKER_FCALL2(acc0, cu1, mpoleScale, factor);
 }
 
@@ -64,24 +68,24 @@ static void mpoleZeroRecipVirial()
       darray::zero(g::q0, bufferSize(), vir_m);
 }
 
-static void mpoleInitEwald(bool do_dlmda, bool prepare_splines, bool prepare_polar_splines, bool build_cmp = true)
+// With do_dlmda, cmp is lambda scaled, and build_dl also fills dlcmp (d cmp / d
+// lambda), which only a version carrying a lambda derivative reads.
+static void mpoleInitEwald(bool do_dlmda, bool build_dl, bool prepare_splines, bool prepare_polar_splines)
 {
-   if (build_cmp) {
-      if (do_dlmda)
-         rpoleToCmpDlmda(); // fills both cmp (lambda scaled) and dlcmp (d cmp / d lambda)
-      else
-         rpoleToCmp();
-   }
+   if (do_dlmda)
+      rpoleToCmpDlmda(build_dl);
+   else
+      rpoleToCmp();
    if (prepare_splines && (pltfm_config & Platform::CUDA)) {
       bool precompute_theta = (!TINKER_CU_THETA_ON_THE_FLY_GRID_MPOLE) || (!TINKER_CU_THETA_ON_THE_FLY_GRID_UIND);
       if (epme_unit.valid()) {
          if (precompute_theta)
             bsplineFill(epme_unit, 3);
       }
-      if (do_dlmda && dlpme_unit.valid()) {
-         if (precompute_theta)
-            bsplineFill(dlpme_unit, 3);
-      }
+      // The lambda derivative grid is spread and gathered with on-the-fly
+      // B-splines, so its precomputed ones are only needed if that changes.
+      if (do_dlmda && dlpme_unit.valid() && !TINKER_CU_THETA_ON_THE_FLY_GRID_MPOLE)
+         bsplineFill(dlpme_unit, 3);
       if (prepare_polar_splines && ppme_unit.valid() && (ppme_unit != epme_unit)) {
          if (precompute_theta)
             bsplineFill(ppme_unit, 2);
@@ -100,19 +104,10 @@ void mpoleInit(int vers, bool do_dlmda)
    rotpole(do_dlmda);
 
    if (useEwald()) {
+      constexpr int dlbits = calc::energy_dlmda1 | calc::energy_dlmda2 | calc::grad_dlmda | calc::virial_dlmda;
+      const bool build_dl = do_dlmda and (lmdaDerivVers(vers, do_dlmda) & dlbits);
       mpoleZeroRecipVirial();
-      mpoleInitEwald(do_dlmda, true, true);
-   }
-}
-
-void mpoleInitDt(int vers)
-{
-   mpoleInitBuffers(vers, false);
-   chkpole();
-   rotpole(true);
-   if (useEwald()) {
-      mpoleZeroRecipVirial();
-      mpoleInitEwald(false, true, false, false);
+      mpoleInitEwald(do_dlmda, build_dl, true, true);
    }
 }
 
@@ -120,7 +115,7 @@ void mpoleInitAst()
 {
    rotpole(true);
    if (useEwald())
-      mpoleInitEwald(true, true, false);
+      mpoleInitEwald(true, true, true, false);
 }
 
 // A dual topology driver accumulates torque over every subsystem and converts it
@@ -134,7 +129,7 @@ void mpoleInitStateDt(int vers, RdtMask mask, const int* group, bool first_state
    rotpoleState(mask, group);
    if (useEwald()) {
       mpoleZeroRecipVirial();
-      mpoleInitEwald(false, first_state, first_state);
+      mpoleInitEwald(false, false, first_state, first_state);
    }
 }
 
@@ -142,7 +137,7 @@ void mpoleRefresh()
 {
    rotpole(false);
    if (useEwald())
-      mpoleInitEwald(false, false, false);
+      mpoleInitEwald(false, false, false, false);
 }
 
 // Undoes the masking a dual topology run leaves behind, so whatever runs next
@@ -152,6 +147,6 @@ void mpoleRestoreFullState(const int* group)
 {
    rotpoleState(RdtMask::ALL, group);
    if (useEwald())
-      mpoleInitEwald(false, false, false);
+      mpoleInitEwald(false, false, false, false);
 }
 }

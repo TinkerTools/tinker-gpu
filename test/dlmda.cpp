@@ -303,8 +303,7 @@ void setStagedLeg(RelStage leg)
 {
    use_relstage = true;
    relstage = leg;
-   // mutate.f floors these at 1; nothing has run dlmda_mech() here.
-   emdtexp = 1;
+   // mutate.f floors this at 1; nothing has run dlmda_mech() here.
    epdtexp = 1;
    elmdamap = Lmdamap::QNT;
    vlmdamap = Lmdamap::QNT;
@@ -323,8 +322,8 @@ TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
    // Ligand 2 is discharged as the main lambda rises; van der Waals sits on it.
    setStagedLeg(RelStage::LIG2);
    mapAt(0.0);
-   REQUIRE(emrelst0 == RelState::NONE);
-   REQUIRE(emrelst1 == RelState::LIG2);
+   REQUIRE(eprelst0 == RelState::NONE);
+   REQUIRE(eprelst1 == RelState::LIG2);
    COMPARE_REALS(elam, 1.0, 1.0e-7);
    COMPARE_REALS(vlam, 0.0, 1.0e-14);
    COMPARE_REALS(dvldlmda, 0.0, 1.0e-14);
@@ -340,8 +339,8 @@ TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
    for (double lambda : {0.3, 0.5, 0.7}) {
       CAPTURE(lambda);
       mapAt(lambda);
-      REQUIRE(emrelst0 == RelState::NONE);
-      REQUIRE(emrelst1 == RelState::NONE);
+      REQUIRE(eprelst0 == RelState::NONE);
+      REQUIRE(eprelst1 == RelState::NONE);
       COMPARE_REALS(elam, 0.0, 1.0e-14);
       COMPARE_REALS(deldlmda, 0.0, 1.0e-14);
       COMPARE_REALS(d2eldlmda2, 0.0, 1.0e-14);
@@ -356,8 +355,8 @@ TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
    // Ligand 1 is charged as the main lambda rises, van der Waals already on it.
    setStagedLeg(RelStage::LIG1);
    mapAt(0.7);
-   REQUIRE(emrelst0 == RelState::NONE);
-   REQUIRE(emrelst1 == RelState::LIG1);
+   REQUIRE(eprelst0 == RelState::NONE);
+   REQUIRE(eprelst1 == RelState::LIG1);
    COMPARE_REALS(elam, 0.0, 1.0e-7);
    COMPARE_REALS(vlam, 1.0, 1.0e-14);
    COMPARE_REALS(dvldlmda, 0.0, 1.0e-14);
@@ -374,15 +373,15 @@ TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
 TEST_CASE("DLMDA-relstage-pinned-endpoints", "[ff][dlmda]")
 {
    // A leg pins the sub-lambdas it is not walking, and a pinned sub-lambda has
-   // a flat chain rule. dtNeed() therefore drops the coupled electrostatic
-   // endpoint on the morph leg. Van der Waals is a single softcore pass with no
-   // endpoints to skip.
+   // a flat chain rule. dtNeed() therefore drops the coupled polarization
+   // endpoint on the morph leg. The multipoles and van der Waals are single
+   // passes with no endpoints to skip.
    double w, dw, d2w;
    bool need0, need1;
 
    setStagedLeg(RelStage::VDWM);
    mapAt(0.5);
-   dtWeightNeed(elam, emdtexp, deldlmda, d2eldlmda2, w, dw, d2w, need0, need1);
+   dtWeightNeed(plam, epdtexp, dpldlmda, d2pldlmda2, w, dw, d2w, need0, need1);
    REQUIRE(need0);
    REQUIRE_FALSE(need1);
 
@@ -391,7 +390,7 @@ TEST_CASE("DLMDA-relstage-pinned-endpoints", "[ff][dlmda]")
 
 TEST_CASE("DLMDA-relstage-continuity", "[ff][dlmda]")
 {
-   // Polarization stages with the multipoles exactly, so emplar stays usable.
+   // Polarization stages with the multipoles exactly.
    for (RelStage leg : {RelStage::LIG2, RelStage::VDWM, RelStage::LIG1}) {
       setStagedLeg(leg);
       for (double lambda : {0.05, 0.15, 0.3, 0.5, 0.7, 0.85, 0.95}) {
@@ -400,8 +399,6 @@ TEST_CASE("DLMDA-relstage-continuity", "[ff][dlmda]")
          COMPARE_REALS(plam, elam, 1.0e-15);
          COMPARE_REALS(dpldlmda, deldlmda, 1.0e-15);
          COMPARE_REALS(d2pldlmda2, d2eldlmda2, 1.0e-15);
-         REQUIRE(eprelst0 == emrelst0);
-         REQUIRE(eprelst1 == emrelst1);
          // The map complement on the ligand 2 leg is clamped into range.
          REQUIRE(elam >= 0.0);
          REQUIRE(elam <= 1.0);

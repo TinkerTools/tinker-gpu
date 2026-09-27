@@ -91,37 +91,38 @@ void dtWeightNeed(double sublmda, int dtexp, double chain, double d2chain, //
    double& w, double& dw, double& d2w, bool& need0, bool& need1);
 
 /// \ingroup ff
-/// The group-pair coefficients of one fused dual topology pass. A pair is
-/// classified by the groups of its two atoms, and the nine bits of each mask
-/// are those 3x3 cells, `1u << (3*gi + gk)`.
+/// The endpoint mixing weights of one dual topology term:
 ///
-///     E     <- (in0 ? a0 : 0) + (in1 ? a1 : 0)  times the pair energy
+///     E     <- (in0 ? a0 : 0) + (in1 ? a1 : 0)  times the subsystem energy
 ///     dE/dL <- (in0 ? b0 : 0) + (in1 ? b1 : 0)  times the same
 ///     d2E   <- (in0 ? c0 : 0) + (in1 ? c1 : 0)  times the same
 ///
-/// so one pass over the pair list covers both endpoints and the interpolation
-/// between them. The sub-lambda chain rule is folded into b and c, so what the
-/// kernel writes is already in main lambda units.
+/// The sub-lambda chain rule is folded into b and c, so what the kernel writes
+/// is already in main lambda units.
 struct DtCoef
 {
-   unsigned in0bits, in1bits, cntbits;
    real a0, a1; ///< energy, virial, gradient
    real b0, b1; ///< dE/dlambda
    real c0, c1; ///< d2E/dlambda2, energy channel only
 };
 
-/// A pair is unordered but the cell index is not, so both orderings are set.
-void dtCellSet(unsigned& bits, int gi, int gk);
+/// \ingroup ff
+/// The electrostatic scale of each atom group and its derivative with respect
+/// to the electrostatic sub-lambda (dlambda.f:emscale), indexed by the mutg
+/// group: 0 environment, 1 ligand 1, 2 ligand 2. The environment is unscaled,
+/// the charging ligand carries the sub-lambda, and in a staged relative leg the
+/// other ligand is annihilated.
+struct EmScale
+{
+   real s[3];
+   real ds[3];
+};
 
-/// The pair types one coupling state claims, as the union of its subsystems.
-unsigned dtStateBits(RelState ist);
+EmScale emScale();
 
-/// The pair types the reported endpoint counts under \c calc::analyz.
-unsigned dtCountBits(RelState reported);
-
-/// How many subsystems the reported endpoint counts, for a term that reports
-/// the same count in every one of them.
-int dtCountSlots(RelState reported);
+/// The per-atom group array the electrostatic scale is indexed by: the ternary
+/// relative dual topology labels when relative, the 0/1 mutation flags otherwise.
+const int* emGroup();
 
 /// Fills the six mixing weights of \c DtCoef from the interpolation weight and
 /// its two derivatives. \c chain and \c d2chain are the sub-lambda derivatives
@@ -175,17 +176,6 @@ inline bool dtPassIsIdle(int vers, real wa, real wb, real wc, bool counts)
    return not dl or (wb == 0 and wc == 0);
 }
 
-inline DtCoef dtCoefUniform(real wa, real wb, real wc)
-{
-   DtCoef c;
-   c.in0bits = 0;
-   c.in1bits = 0x1ffu; // all nine group-pair cells
-   c.cntbits = 0;
-   c.a0 = 0, c.b0 = 0, c.c0 = 0;
-   c.a1 = wa, c.b1 = wb, c.c1 = wc;
-   return c;
-}
-
 
 /// Quintic switching polynomial
 void quinticTaper(double x, double cut, double off, double& taper, double& dtaper, double& d2taper);
@@ -233,7 +223,9 @@ void efreeLmda(double& eflmda, double& dfdl);
 double efreeTot();
 
 TINKER_EXTERN bool use_dlmda;
-TINKER_EXTERN bool use_emdt;
+/// Whether the second, force and virial lambda derivatives are needed beyond
+/// the first; set by the LAMBDA-DERIV keyword and by OST (mutate.f).
+TINKER_EXTERN bool use_d2lmda;
 TINKER_EXTERN bool use_epdt;
 TINKER_EXTERN bool use_plmda;
 TINKER_EXTERN bool use_mainlmda;
@@ -250,11 +242,14 @@ TINKER_EXTERN bool use_meta;
 TINKER_EXTERN bool use_ti;
 TINKER_EXTERN bool use_abf;
 
+// Only the first lambda derivative is built unless use_d2lmda asks for the
+// second, force and virial ones; single topology polarization has no chain rule
+// past the first, so it reduces the dispatch as well (dlambda.f zeroes them).
 inline int lmdaDerivMask(int flag, bool term_driven)
 {
    if (not term_driven)
       return 0;
-   bool reduced = ((use_ti or use_meta or use_abf) and not use_ost) or use_epast;
+   bool reduced = (not use_d2lmda) or use_epast;
    int b = 0;
    if (flag & calc::energy) {
       b += calc::energy_dlmda1;
@@ -272,7 +267,7 @@ inline int lmdaDerivVers(int vers, bool term_driven)
 {
    if (not term_driven)
       return vers;
-   bool reduced = ((use_ti or use_meta or use_abf) and not use_ost) or use_epast;
+   bool reduced = (not use_d2lmda) or use_epast;
    if (vers == calc::v1)
       return reduced ? calc::v7 : calc::v9;
    if (vers == calc::v4)
@@ -397,9 +392,7 @@ TINKER_EXTERN bool use_relstage;
 /// The declared leg, read from the REL-STAGE keyword. Constant for a run.
 TINKER_EXTERN RelStage relstage;
 
-// The two coupling states holding each term's interpolation endpoints.
-TINKER_EXTERN RelState emrelst0;
-TINKER_EXTERN RelState emrelst1;
+// The two coupling states holding the polarization interpolation endpoints.
 TINKER_EXTERN RelState eprelst0;
 TINKER_EXTERN RelState eprelst1;
 
@@ -412,13 +405,10 @@ TINKER_EXTERN double d2pldlmda2;
 TINKER_EXTERN double d2vldlmda2;
 
 TINKER_EXTERN bool use_rel;
-TINKER_EXTERN bool use_emadt;
 TINKER_EXTERN bool use_emast;
-TINKER_EXTERN bool use_emrdt;
 TINKER_EXTERN bool use_epadt;
 TINKER_EXTERN bool use_eprdt;
 
-TINKER_EXTERN int emdtexp;
 TINKER_EXTERN int epdtexp;
 TINKER_EXTERN int* rdt_group;
 

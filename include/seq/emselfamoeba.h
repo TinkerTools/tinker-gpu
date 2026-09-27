@@ -1,5 +1,6 @@
 #pragma once
 #include "ff/amoeba/mpole.h"
+#include "ff/dlmda.h"
 #include "ff/energybuffer.h"
 #include "seq/add.h"
 
@@ -44,8 +45,8 @@ void empoleSelf_cu(CountBuffer restrict nem, EnergyBuffer restrict em, const rea
 template <class Ver>
 __global__
 void empoleSelfDlmda_cu(CountBuffer restrict nem, EnergyBuffer restrict em, EnergyBuffer restrict demdl,
-   EnergyBuffer restrict d2emdl2, const real (*restrict rpole)[10], const int* restrict mut, int n, real f,
-   real aewald, real elambda, real deldl, real d2eldl2)
+   EnergyBuffer restrict d2emdl2, const real (*restrict rpole)[10], const int* restrict grp, EmScale esc, int n,
+   real f, real aewald, real deldl, real d2eldl2)
 {
    constexpr bool do_a = Ver::a;
    constexpr bool do_dl1 = Ver::e_dlmda1;
@@ -57,13 +58,14 @@ void empoleSelfDlmda_cu(CountBuffer restrict nem, EnergyBuffer restrict em, Ener
    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < n; i += blockDim.x * gridDim.x) {
       int offset = threadIdx.x + blockIdx.x * blockDim.x;
       real e = empoleSelfEnergyAtomI(i, rpole, fterm, aewald_sq_2);
-      if (mut[i]) {
+      real s = esc.s[grp[i]], ds = esc.ds[grp[i]];
+      if (ds != 0) {
          if CONSTEXPR (do_dl1)
-            atomic_add(2 * elambda * deldl * e, demdl, offset);
+            atomic_add(2 * s * ds * deldl * e, demdl, offset);
          if CONSTEXPR (do_dl2)
-            atomic_add((2 * deldl * deldl + 2 * elambda * d2eldl2) * e, d2emdl2, offset);
-         e *= elambda * elambda;
+            atomic_add((2 * ds * ds * deldl * deldl + 2 * s * ds * d2eldl2) * e, d2emdl2, offset);
       }
+      e *= s * s;
       atomic_add(e, em, offset);
       if CONSTEXPR (do_a)
          atomic_add(1, nem, offset);

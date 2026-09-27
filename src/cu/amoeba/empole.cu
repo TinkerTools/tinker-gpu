@@ -38,7 +38,7 @@ static void empole_cu()
       if CONSTEXPR (do_e) {
          if CONSTEXPR (eq<LTYP, DLMDA>()) {
             launch_k1b(g::s0, n, empoleSelfDlmda_cu<Ver>, //
-               nem, em, demdl_buf, d2emdl2_buf, rpole, mut, n, f, aewald, elam, deldlmda, d2eldlmda2);
+               nem, em, demdl_buf, d2emdl2_buf, rpole, emGroup(), emScale(), n, f, aewald, deldlmda, d2eldlmda2);
          } else {
             launch_k1b(g::s0, n, empoleSelf_cu<do_a>, //
                nem, em, rpole, n, f, aewald);
@@ -50,7 +50,7 @@ static void empole_cu()
       empoledlmda_cu1<Ver, ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, demdl_buf, d2emdl2_buf,
          vir_em, dvirdl_buf, demx, demy, demz, dfdlx, dfdly, dfdlz, off, st.si1.bit0, nmdpuexclude,
          mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst,
-         trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, rpole, mut, f, aewald, elam, deldlmda, d2eldlmda2);
+         trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, rpole, emGroup(), f, aewald, emScale(), deldlmda, d2eldlmda2);
    } else {
       empole_cu1<Ver, ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, vir_em, demx, demy, demz,
          off, st.si1.bit0, nmdpuexclude, mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl,
@@ -228,7 +228,7 @@ static void exfieldDipoleDlmda_cu1(CountBuffer restrict nem, EnergyBuffer restri
    real* restrict trqx, real* restrict trqy, real* restrict trqz,                      //
    real* restrict dltrqx, real* restrict dltrqy, real* restrict dltrqz,                //
    int n, real f, real ef1, real ef2, real ef3, const real (*restrict rpole)[10],
-   const int* restrict mut, real elambda, const real* restrict x, const real* restrict y, const real* restrict z,
+   const int* restrict grp, EmScale esc, const real* restrict x, const real* restrict y, const real* restrict z,
    EnergyBuffer restrict d2emdl2, real deldl, real d2eldl2)
 {
    constexpr bool do_e = Ver::e;
@@ -246,9 +246,10 @@ static void exfieldDipoleDlmda_cu1(CountBuffer restrict nem, EnergyBuffer restri
       real xi = x[ii], yi = y[ii], zi = z[ii];
       real ci = rpole[ii][0], dix = rpole[ii][1], diy = rpole[ii][2], diz = rpole[ii][3];
 
-      // the mutated sites carry multipoles scaled by elambda
-      bool muti = mut[ii];
-      real s = muti ? elambda : 1;
+      // each site carries multipoles scaled for its group, and has a lambda
+      // derivative, of unit slope, when its group scale is the sub-lambda itself
+      real s = esc.s[grp[ii]];
+      bool muti = (esc.ds[grp[ii]] != 0);
 
       if CONSTEXPR (do_e) {
          real phi = xi * ef1 + yi * ef2 + zi * ef3; // negative potential
@@ -318,7 +319,7 @@ static void exfieldDipoleDlmda_cu2()
    real f = electric / dielec;
    real ef1 = extfld::texfld[0], ef2 = extfld::texfld[1], ef3 = extfld::texfld[2];
    launch_k1b(g::s0, n, exfieldDipoleDlmda_cu1<Ver>, nem, em, demdl_buf, vir_em, dvirdl_buf, demx, demy, demz,
-      dfdlx, dfdly, dfdlz, trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, n, f, ef1, ef2, ef3, rpole, mut, elam,
+      dfdlx, dfdly, dfdlz, trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, n, f, ef1, ef2, ef3, rpole, emGroup(), emScale(),
       x, y, z, d2emdl2_buf, deldlmda, d2eldlmda2);
 }
 

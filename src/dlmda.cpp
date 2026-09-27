@@ -51,8 +51,8 @@ void dlmdaData(RcOp op)
 void dlmdaData2(RcOp op)
 {
    if (op & RcOp::INIT) {
-      bool lambda_dynamics = use_dlmda or use_ost or use_meta or use_ti or use_abf or use_emdt //
-         or use_epdt or use_rel;
+      bool lambda_dynamics = use_dlmda or use_ost or use_meta or use_ti or use_abf or use_epdt //
+         or use_rel;
       if (lambda_dynamics and not(pltfm_config & Platform::CUDA))
          TINKER_THROW("LAMBDA  --  Lambda dynamics requires the CUDA platform");
    }
@@ -120,84 +120,30 @@ void relSlot(int k, RelState ist0, RelState ist1, RdtMask& mask, bool& in0, bool
    in1 = kMember[k][(int)ist1 - 1];
 }
 
-void dtCellSet(unsigned& bits, int gi, int gk)
+// dlambda.f:emscale. The environment is unscaled and the charging ligand
+// carries the electrostatic sub-lambda; a staged relative leg annihilates the
+// other ligand, and the LIG2 leg charges ligand 2 instead of ligand 1.
+EmScale emScale()
 {
-   bits |= 1u << (3 * gi + gk);
-   bits |= 1u << (3 * gk + gi);
+   EmScale c;
+   c.s[0] = 1;
+   c.ds[0] = 0;
+   c.s[1] = elam;
+   c.ds[1] = 1;
+   c.s[2] = 0;
+   c.ds[2] = 0;
+   if (use_relstage and relstage == RelStage::LIG2) {
+      c.s[1] = 0;
+      c.ds[1] = 0;
+      c.s[2] = elam;
+      c.ds[2] = 1;
+   }
+   return c;
 }
 
-// A state's slots are disjoint (relSlot: LIG1 = {env+ligA} u {ligB}, LIG2 =
-// {env+ligB} u {ligA}, NONE = {env} u {ligA} u {ligB}), so the union here is
-// the same total the slot-by-slot evaluation used to accumulate.
-unsigned dtStateBits(RelState ist)
+const int* emGroup()
 {
-   unsigned bits = 0;
-   for (int k = 0; k < nRelSlot; ++k) {
-      RdtMask mask;
-      bool in, dup;
-      relSlot(k, ist, ist, mask, in, dup);
-      if (not in)
-         continue;
-      for (int gi = 0; gi < 3; ++gi)
-         for (int gk = gi; gk < 3; ++gk)
-            if (rdtPairActive(mask, gi, gk))
-               dtCellSet(bits, gi, gk);
-   }
-   return bits;
-}
-
-// Mirrors the count gating the dual topology drivers apply. Within the reported endpoint
-// a single ligand-plus-environment subsystem carries the whole count if there
-// is one; a decoupled endpoint has none, so its subsystems sum.
-unsigned dtCountBits(RelState reported)
-{
-   bool coupled = false;
-   for (int k = 0; k < nRelSlot and not coupled; ++k) {
-      RdtMask mask;
-      bool in, dup;
-      relSlot(k, reported, reported, mask, in, dup);
-      coupled = in and relSlotIsCoupled(k);
-   }
-
-   unsigned bits = 0;
-   for (int k = 0; k < nRelSlot; ++k) {
-      RdtMask mask;
-      bool in, dup;
-      relSlot(k, reported, reported, mask, in, dup);
-      if (not in or (coupled and not relSlotIsCoupled(k)))
-         continue;
-      for (int gi = 0; gi < 3; ++gi)
-         for (int gk = gi; gk < 3; ++gk)
-            if (rdtPairActive(mask, gi, gk))
-               dtCellSet(bits, gi, gk);
-   }
-   return bits;
-}
-
-// How many subsystems the reported endpoint counts, by the same gating. A term
-// whose count does not depend on the subsystem's parameters -- the Ewald self
-// energy counts every atom whether or not its multipoles were zeroed -- reports
-// its whole count once per counted pass, so it needs the number of passes
-// rather than the set of pair types.
-int dtCountSlots(RelState reported)
-{
-   bool coupled = false;
-   for (int k = 0; k < nRelSlot and not coupled; ++k) {
-      RdtMask mask;
-      bool in, dup;
-      relSlot(k, reported, reported, mask, in, dup);
-      coupled = in and relSlotIsCoupled(k);
-   }
-
-   int nslot = 0;
-   for (int k = 0; k < nRelSlot; ++k) {
-      RdtMask mask;
-      bool in, dup;
-      relSlot(k, reported, reported, mask, in, dup);
-      if (in and (not coupled or relSlotIsCoupled(k)))
-         ++nslot;
-   }
-   return nslot;
+   return use_rel ? rdt_group : mut;
 }
 
 // E = w*E1 + (1-w)*E0, so dE/dl = dw*(E1-E0) and d2E/dl2 = d2w*(E1-E0), which
@@ -357,7 +303,7 @@ void dlmda_mech()
    lambda = mutant::lambda;
 
    use_dlmda = dlmda::use_dlmda;
-   use_emdt = dlmda::use_emdt;
+   use_d2lmda = dlmda::use_d2lmda;
    use_epdt = dlmda::use_epdt;
    use_plmda = dlmda::use_plmda and not use_osrw;
    use_mainlmda = dlmda::use_mainlmda;
@@ -369,13 +315,12 @@ void dlmda_mech()
 
    use_epast = (mutant::use_past != 0) and use_pdlmda and not use_osrw;
 
-   use_emadt = use_emdt && !use_rel;
-   use_emast = use_edlmda && !use_emdt && !use_rel;
-   use_emrdt = use_emdt && use_rel;
+   // Every multipole run takes the single topology path; a relative one scales
+   // each ligand group on its own (emScale).
+   use_emast = use_edlmda;
    use_epadt = use_epdt && !use_rel;
    use_eprdt = use_epdt && use_rel;
 
-   emdtexp = dlmda::emdtexp;
    epdtexp = dlmda::epdtexp;
 
    // which lambda-dynamics method owns the main lambda.
@@ -462,10 +407,8 @@ void dlmda_mech()
    use_relstage = (dlmda::use_relstage != 0);
    relstage = relStageFrom(dlmda::relstage);
 
-   // Plain relative interpolates between the two coupled states; mapRelStage()
-   // overrides the electrostatic pair on a staged leg (mutate.f:404-409).
-   emrelst0 = RelState::LIG2;
-   emrelst1 = RelState::LIG1;
+   // Plain relative interpolates the polarization between the two coupled
+   // states; mapRelStage() overrides the pair on a staged leg (mutate.f).
    eprelst0 = RelState::LIG2;
    eprelst1 = RelState::LIG1;
 }
@@ -842,11 +785,11 @@ static void mapRelStage(double lmda)
    double eval, vval;
 
    if (relstage == RelStage::VDWM) {
-      // The middle leg holds both ligands decoupled, so electrostatics and
+      // The middle leg holds both ligands uncharged, so electrostatics and
       // polarization sit at the reference state and leave the chain rule
       // while van der Waals morphs across its map.
-      emrelst0 = RelState::NONE;
-      emrelst1 = RelState::NONE;
+      eprelst0 = RelState::NONE;
+      eprelst1 = RelState::NONE;
       eval = 0.0;
       deldlmda = 0.0;
       d2eldlmda2 = 0.0;
@@ -856,8 +799,8 @@ static void mapRelStage(double lmda)
    } else if (relstage == RelStage::LIG1) {
       // The ligand 1 leg charges ligand 1 against the decoupled reference
       // with van der Waals already morphed onto it.
-      emrelst0 = RelState::NONE;
-      emrelst1 = RelState::LIG1;
+      eprelst0 = RelState::NONE;
+      eprelst1 = RelState::LIG1;
       mapOne(lmda, elmdamap, qntelmda0, qntelmda1, elmdaexp, elmdainvn, elmdainveps, //
          elmdaapmn, elmdaapmrho, eval, deldlmda, d2eldlmda2);
       vlam = 1.0;
@@ -866,8 +809,8 @@ static void mapRelStage(double lmda)
    } else {
       // The ligand 2 leg discharges ligand 2 as the main lambda rises, so its
       // weight is the complement of the map, with van der Waals still on it.
-      emrelst0 = RelState::NONE;
-      emrelst1 = RelState::LIG2;
+      eprelst0 = RelState::NONE;
+      eprelst1 = RelState::LIG2;
       mapOne(lmda, elmdamap, qntelmda0, qntelmda1, elmdaexp, elmdainvn, elmdainveps, //
          elmdaapmn, elmdaapmrho, eval, deldlmda, d2eldlmda2);
       eval = 1.0 - eval;
@@ -881,9 +824,7 @@ static void mapRelStage(double lmda)
    // Numerical guard on the map complement.
    elam = std::min(1.0, std::max(0.0, eval));
 
-   // Polarization stages with the multipoles: same states, same weight.
-   eprelst0 = emrelst0;
-   eprelst1 = emrelst1;
+   // Polarization stages with the multipoles at the same weight.
    plam = elam;
    dpldlmda = deldlmda;
    d2pldlmda2 = d2eldlmda2;

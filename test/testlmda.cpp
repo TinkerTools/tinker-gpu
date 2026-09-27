@@ -32,7 +32,11 @@ struct Fixture
 // The staged morph leg squeezes van der Waals into the 0.3-0.7 window, which
 // steepens every lambda derivative: 2e-3 balances truncation against round-off,
 // and the numerical second derivative still scatters from run to run, so its
-// numerical tolerances are doubled.
+// numerical tolerances are doubled. The staged charging legs squeeze the
+// electrostatic map into a 0.3 wide window the same way, but their numerical
+// second derivatives scatter more: at 2e-3 round-off swamps them, and at 1e-2
+// truncation throws the first ones off by a few tenths, so they step by 4e-3
+// and triple the numerical tolerances.
 const Fixture kFixtures[] = {
    {"01_water_adt_l05", 1.0e-2, 1.0},
    {"02_water_ast_l05", 1.0e-2, 1.0},
@@ -48,9 +52,12 @@ const Fixture kFixtures[] = {
    {"12_water_ast_vcorr_l06exp", 1.0e-2, 1.0},
    {"13_water_rdt_vcorr_l05", 1.0e-2, 1.0},
    {"14_water_rdt_vcorr_annih_l05", 1.0e-2, 1.0},
-   {"15_water_rdt_l06exp_nlist", 1.0e-2, 1.0},
    {"16_water_rdt_lights_l05", 1.0e-2, 1.0},
    {"17_water_rels_vdwm_vcorr_l050", 2.0e-3, 2.0},
+   {"18_water_rels_lig1_l085", 4.0e-3, 3.0},
+   {"19_water_rels_lig2_l015", 4.0e-3, 3.0},
+   {"20_water_rels_lig1_ne_l085", 4.0e-3, 3.0},
+   {"21_water_rels_lig1_nlist_exf_l085", 4.0e-3, 3.0},
 };
 
 void runFixture(const Fixture& fx)
@@ -111,10 +118,12 @@ void runFixture(const Fixture& fx)
 
    // Avoid contaminating later randomized tests.
    dlmda::use_dlmda = 0;
+   dlmda::use_d2lmda = 0;
    dlmda::use_edlmda = 0;
    dlmda::use_pdlmda = 0;
    dlmda::use_vdlmda = 0;
    use_dlmda = false;
+   use_d2lmda = false;
    use_edlmda = false;
    use_pdlmda = false;
    use_vdlmda = false;
@@ -142,7 +151,10 @@ TEST_CASE("TESTLMDA-11_water_ast_vcorr_annih_l05", "[ff][testlmda]") { runFixtur
 TEST_CASE("TESTLMDA-12_water_ast_vcorr_l06exp", "[ff][testlmda]") { runFixture(kFixtures[11]); }
 TEST_CASE("TESTLMDA-13_water_rdt_vcorr_l05", "[ff][testlmda][rdt]") { runFixture(kFixtures[12]); }
 TEST_CASE("TESTLMDA-14_water_rdt_vcorr_annih_l05", "[ff][testlmda][rdt]") { runFixture(kFixtures[13]); }
-TEST_CASE("TESTLMDA-15_water_rdt_l06exp_nlist", "[ff][testlmda][rdt]") { runFixture(kFixtures[14]); }
-TEST_CASE("TESTLMDA-16_water_rdt_lights_l05", "[ff][testlmda][rdt]") { runFixture(kFixtures[15]); }
-TEST_CASE("TESTLMDA-17_water_rels_vdwm_vcorr_l050", "[ff][testlmda][rdt]") { runFixture(kFixtures[16]); }
+TEST_CASE("TESTLMDA-16_water_rdt_lights_l05", "[ff][testlmda][rdt]") { runFixture(kFixtures[14]); }
+TEST_CASE("TESTLMDA-17_water_rels_vdwm_vcorr_l050", "[ff][testlmda][rdt]") { runFixture(kFixtures[15]); }
+TEST_CASE("TESTLMDA-18_water_rels_lig1_l085", "[ff][testlmda][rdt]") { runFixture(kFixtures[16]); }
+TEST_CASE("TESTLMDA-19_water_rels_lig2_l015", "[ff][testlmda][rdt]") { runFixture(kFixtures[17]); }
+TEST_CASE("TESTLMDA-20_water_rels_lig1_ne_l085", "[ff][testlmda][rdt]") { runFixture(kFixtures[18]); }
+TEST_CASE("TESTLMDA-21_water_rels_lig1_nlist_exf_l085", "[ff][testlmda][rdt]") { runFixture(kFixtures[19]); }
 #endif

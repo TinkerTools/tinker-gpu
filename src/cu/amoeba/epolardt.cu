@@ -13,25 +13,25 @@
 #include "seq/triangle.h"
 #include <tinker/detail/extfld.hh>
 
-// One dual topology subsystem of the polarization energy. Unlike the permanent
-// multipoles, the two endpoints cannot be fused: the induced dipoles solve a
-// global linear system over the masked polarity, so each subsystem has its own
-// uind and its own pair energies. What the endpoints do share is that the
-// masking is already baked into rpole and polarity before the pass runs, so
-// every interaction in a pass carries the same two weights,
+// One dual topology subsystem of the polarization energy. The two endpoints
+// cannot be fused: the induced dipoles solve a global linear system over the
+// masked polarity, so each subsystem has its own uind and its own pair
+// energies. What the endpoints do share is that the masking is already baked
+// into rpole and polarity before the pass runs, so every interaction in a pass
+// carries the same two weights,
 //
 //     energy, virial, gradient, torque  <- wa times the subsystem result
 //     their lambda derivatives          <- wb times the same
 //
-// and the kernel needs none of the per-pair group machinery empoledt uses. The
-// caller accumulates all the passes into the global buffers and converts the
-// torque once at the end. See DtCoef and dtPassWeights().
+// and the kernel needs no per-pair group machinery. The caller accumulates all
+// the passes into the global buffers and converts the torque once at the end.
+// See DtCoef and dtPassWeights().
 //
 // The energy travels with its own lambda derivatives, and for polarization all
 // three ride the dot product rather than this kernel -- the only version that
 // takes its energy from here is calc::v3, which carries no derivatives at all.
-// So unlike empoledt_cu1 this kernel has no energy channels beyond the analysis
-// breakdown. See epolarEnergyFromDotProd().
+// So this kernel has no energy channels beyond the analysis breakdown. See
+// epolarEnergyFromDotProd().
 
 namespace tinker {
 #include "epolardt_cu1.cc"

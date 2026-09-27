@@ -42,8 +42,8 @@ SCALE_1X_TYPE: real4_const_array,0
 EXTRA_PARAMS: |
   , real* restrict trqx, real* restrict trqy, real* restrict trqz
   , real* restrict dltrqx, real* restrict dltrqy, real* restrict dltrqz
-  , const real (*restrict rpole)[10], const int* restrict mut
-  , real f, real aewald, real elambda
+  , const real (*restrict rpole)[10], const int* restrict grp
+  , real f, real aewald, EmScale esc
   , real deldl, real d2eldl2
 # IMPLICIT_PARAMS:
 
@@ -61,7 +61,7 @@ I_VARIABLES:
   - shared real qiyy from:rpole,MPL_PME_YY
   - shared real qiyz from:rpole,MPL_PME_YZ
   - shared real qizz from:rpole,MPL_PME_ZZ
-  - shared int muti from:mut
+  - shared int gi from:grp
 K_VARIABLES:
   - shared   real xk   from:x
   - shared   real yk   from:y
@@ -76,7 +76,7 @@ K_VARIABLES:
   - register real qkyy from:rpole,MPL_PME_YY
   - register real qkyz from:rpole,MPL_PME_YZ
   - register real qkzz from:rpole,MPL_PME_ZZ
-  - register int mutk from:mut
+  - register int gk from:grp
 I_FORCE:
   - register real frcxi addto:gx
   - register real frcyi addto:gy
@@ -111,7 +111,11 @@ SCALED_PAIRWISE_INTERACTION: |
   real yr = @yk@ - @yi@;
   real zr = @zk@ - @zi@;
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  real si = esc.s[@gi@], dsi = esc.ds[@gi@];
+  real sk = esc.s[@gk@], dsk = esc.ds[@gk@];
+  // a pair with an annihilated site has neither energy nor lambda derivative
+  bool live = (si != 0 or dsi != 0) and (sk != 0 or dsk != 0);
+  if (r2 <= off * off and incl and live) {
     real e, vxx, vyx, vzx, vyy, vzy, vzz;
     real e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1;
     real pfrcxi = 0, pfrcyi = 0, pfrczi = 0;
@@ -145,18 +149,10 @@ SCALED_PAIRWISE_INTERACTION: |
       vzy = vzy + vzy1;
       vzz = vzz + vzz1;
     }
-    real scalelmda = 1;
-    real dlscale = 0;
-    real d2scale = 0;
-    if (@muti@ and @mutk@) {
-      scalelmda = elambda * elambda;
-      dlscale = 2 * elambda;
-      d2scale = 2;
-    } else if (@muti@ or @mutk@) {
-      scalelmda = elambda;
-      dlscale = 1;
-    }
-    if (@muti@ or @mutk@) {
+    real scalelmda = si * sk;
+    real dlscale = dsi * sk + si * dsk;
+    real d2scale = 2 * dsi * dsk;
+    if (dsi != 0 or dsk != 0) {
       real d2w = d2scale * deldl * deldl + dlscale * d2eldl2;
       real dlw = dlscale * deldl;
       if CONSTEXPR (do_e) {
@@ -230,7 +226,11 @@ FULL_PAIRWISE_INTERACTION: |
   real yr = @yk@ - @yi@;
   real zr = @zk@ - @zi@;
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  real si = esc.s[@gi@], dsi = esc.ds[@gi@];
+  real sk = esc.s[@gk@], dsk = esc.ds[@gk@];
+  // a pair with an annihilated site has neither energy nor lambda derivative
+  bool live = (si != 0 or dsi != 0) and (sk != 0 or dsk != 0);
+  if (r2 <= off * off and incl and live) {
     real e, vxx, vyx, vzx, vyy, vzy, vzz;
     real pfrcxi = 0, pfrcyi = 0, pfrczi = 0;
     real pfrcxk = 0, pfrcyk = 0, pfrczk = 0;
@@ -244,18 +244,10 @@ FULL_PAIRWISE_INTERACTION: |
       pfrcxi, pfrcyi, pfrczi, pfrcxk, pfrcyk, pfrczk,
       ptrqxi, ptrqyi, ptrqzi, ptrqxk, ptrqyk, ptrqzk,
       e, vxx, vyx, vzx, vyy, vzy, vzz);
-    real scalelmda = 1;
-    real dlscale = 0;
-    real d2scale = 0;
-    if (@muti@ and @mutk@) {
-      scalelmda = elambda * elambda;
-      dlscale = 2 * elambda;
-      d2scale = 2;
-    } else if (@muti@ or @mutk@) {
-      scalelmda = elambda;
-      dlscale = 1;
-    }
-    if (@muti@ or @mutk@) {
+    real scalelmda = si * sk;
+    real dlscale = dsi * sk + si * dsk;
+    real d2scale = 2 * dsi * dsk;
+    if (dsi != 0 or dsk != 0) {
       real d2w = d2scale * deldl * deldl + dlscale * d2eldl2;
       real dlw = dlscale * deldl;
       if CONSTEXPR (do_e) {

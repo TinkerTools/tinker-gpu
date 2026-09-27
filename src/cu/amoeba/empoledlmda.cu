@@ -33,6 +33,8 @@ void empoleEwaldRecipDlmdaGeneric_cu1(int n, real f,                            
    constexpr bool do_gdl = Ver::g_dlmda;
    constexpr bool do_tdl = Ver::g_dlmda or Ver::v_dlmda;
    constexpr bool do_vdl = Ver::v_dlmda;
+   // dle = dlfmp . fphi feeds both energy lambda derivatives
+   constexpr bool do_dle = do_e and (do_dl1 or do_dl2);
 
    int ithread = ITHREAD;
    for (int i = ithread; i < n; i += STRIDE) {
@@ -42,26 +44,27 @@ void empoleEwaldRecipDlmdaGeneric_cu1(int n, real f,                            
       real b1, b2, b3;
       real unused;
 
+      // dlfphi and dlcphi, the potential of the lambda derivative grid, only
+      // exist when a second, force or virial lambda derivative is requested.
       emrecipEnergyForceAtomI<do_e, do_g>(i, fmp, fphi, e, f1, f2, f3);
-      emrecipEnergyForceAtomI<do_e, do_g>(i, dlfmp, fphi, dle, a1, a2, a3);
-      emrecipEnergyForceAtomI<false, do_g>(i, fmp, dlfphi, unused, b1, b2, b3);
+      if CONSTEXPR (do_dle or do_gdl)
+         emrecipEnergyForceAtomI<do_dle, do_gdl>(i, dlfmp, fphi, dle, a1, a2, a3);
+      if CONSTEXPR (do_gdl)
+         emrecipEnergyForceAtomI<false, true>(i, fmp, dlfphi, unused, b1, b2, b3);
       if CONSTEXPR (do_e) {
-         emrecipEnergyForceAtomI<true, false>(i, dlfmp, dlfphi, d2le, unused, unused, unused);
          atomic_add(0.5f * e * f, em, ithread);
          if CONSTEXPR (do_dl1)
             atomic_add(dle * f * deldl, demdl, ithread);
-         if CONSTEXPR (do_dl2)
+         if CONSTEXPR (do_dl2) {
+            emrecipEnergyForceAtomI<true, false>(i, dlfmp, dlfphi, d2le, unused, unused, unused);
             atomic_add((d2le * deldl * deldl + dle * d2eldl2) * f, d2emdl2, ithread);
+         }
       }
 
       if CONSTEXPR (do_g) {
-         real dlf1 = a1 + b1, dlf2 = a2 + b2, dlf3 = a3 + b3;
          f1 *= nfft1;
          f2 *= nfft2;
          f3 *= nfft3;
-         dlf1 *= nfft1;
-         dlf2 *= nfft2;
-         dlf3 *= nfft3;
 
          real h1 = recipa.x * f1 + recipb.x * f2 + recipc.x * f3;
          real h2 = recipa.y * f1 + recipb.y * f2 + recipc.y * f3;
@@ -70,10 +73,11 @@ void empoleEwaldRecipDlmdaGeneric_cu1(int n, real f,                            
          atomic_add(h2 * f, demy, i);
          atomic_add(h3 * f, demz, i);
 
-         real dlh1 = recipa.x * dlf1 + recipb.x * dlf2 + recipc.x * dlf3;
-         real dlh2 = recipa.y * dlf1 + recipb.y * dlf2 + recipc.y * dlf3;
-         real dlh3 = recipa.z * dlf1 + recipb.z * dlf2 + recipc.z * dlf3;
          if CONSTEXPR (do_gdl) {
+            real dlf1 = (a1 + b1) * nfft1, dlf2 = (a2 + b2) * nfft2, dlf3 = (a3 + b3) * nfft3;
+            real dlh1 = recipa.x * dlf1 + recipb.x * dlf2 + recipc.x * dlf3;
+            real dlh2 = recipa.y * dlf1 + recipb.y * dlf2 + recipc.y * dlf3;
+            real dlh3 = recipa.z * dlf1 + recipb.z * dlf2 + recipc.z * dlf3;
             atomic_add(dlh1 * f * deldl, dfmdlx, i);
             atomic_add(dlh2 * f * deldl, dfmdly, i);
             atomic_add(dlh3 * f * deldl, dfmdlz, i);
@@ -115,35 +119,52 @@ template <class Ver>
 static void empoleEwaldRecipDlmdaGeneric_cu()
 {
    constexpr bool do_v = Ver::v;
+   // dE/dL = dlfmp . fphi needs only the ordinary grid; the lambda derivative
+   // grid is built for the second, force and virial lambda derivatives alone
+   // (empole4.f builds lqgrid only under use_d2lmda).
+   constexpr bool need_dl = Ver::e_dlmda2 or Ver::g_dlmda or Ver::v_dlmda;
+   // dlfmp is read by dE/dL and by everything the second grid serves
+   constexpr bool need_dlfmp = Ver::e_dlmda1 or need_dl;
 
    const PMEUnit pu = epme_unit;
    const PMEUnit dlpu = dlpme_unit;
 
    cmpToFmp(pu, cmp, fmp);
-   cmpToFmp(pu, dlcmp, dlfmp);
+   if CONSTEXPR (need_dlfmp)
+      cmpToFmp(pu, dlcmp, dlfmp);
    gridMpole(pu, fmp);
-   gridMpole(dlpu, dlfmp);
    fftfront(pu);
-   fftfront(dlpu);
+   if CONSTEXPR (need_dl) {
+      gridMpole(dlpu, dlfmp);
+      fftfront(dlpu);
+   }
 
+   VirialBuffer conv_vir = nullptr;
+   if CONSTEXPR (do_v)
+      conv_vir = vir_m ? vir_m : vir_em;
+   if CONSTEXPR (need_dl) {
+      pmeConvDlmda(pu, dlpu, conv_vir, conv_vir ? dvirdl_buf : nullptr, deldlmda);
+   } else {
+      if (conv_vir)
+         pmeConv(pu, conv_vir);
+      else
+         pmeConv(pu);
+   }
    if CONSTEXPR (do_v) {
       if (vir_m) {
-         pmeConvDlmda(pu, dlpu, vir_m, dvirdl_buf, deldlmda);
          auto size = bufferSize() * VirialBufferTraits::value;
          sumVirialBuffer(size, vir_em, vir_m);
-      } else {
-         pmeConvDlmda(pu, dlpu, vir_em, dvirdl_buf, deldlmda);
       }
-   } else {
-      pmeConvDlmda(pu, dlpu, nullptr, nullptr, deldlmda);
    }
 
    fftback(pu);
-   fftback(dlpu);
    fphiMpole(pu, fphi);
-   fphiMpole(dlpu, dlfphi);
    fphiToCphi(pu, fphi, cphi);
-   fphiToCphi(pu, dlfphi, dlcphi);
+   if CONSTEXPR (need_dl) {
+      fftback(dlpu);
+      fphiMpole(dlpu, dlfphi);
+      fphiToCphi(pu, dlfphi, dlcphi);
+   }
 
    auto& st = *pu;
    const int nfft1 = st.nfft1;

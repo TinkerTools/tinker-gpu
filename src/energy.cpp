@@ -264,12 +264,8 @@ void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
       }
 
    if (amoeba_empole(vers))
-      if (tscfg("empole", ecore_ele)) {
-         if (use_emdt)
-            empole_dt(vers);
-         else
-            empole(vers);
-      }
+      if (tscfg("empole", ecore_ele))
+         empole(vers);
    if (amoeba_epolar(vers))
       if (tscfg("epolar", ecore_ele)) {
          if (use_epdt)
@@ -279,9 +275,7 @@ void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
       }
    if (amoeba_emplar(vers))
       if (tscfg("emplar", ecore_ele)) {
-         if (use_emdt)
-            emplar_dt(vers);
-         else if (use_emast)
+         if (use_emast)
             emplarAst(vers);
          else
             emplar(vers);

@@ -37,15 +37,10 @@ static void pchgData(RcOp op)
 
    if (op & RcOp::INIT) {
       std::vector<real> pchgbuf(n);
+      const EmScale esc = emScale();
       for (int i = 0; i < n; ++i) {
          int itype = atoms::type[i] - 1;
-         pchgbuf[i] = kchrge::chg[itype];
-         double el;
-         if (mutant::mutg[i] != 0)
-            el = elam;
-         else
-            el = 1;
-         pchgbuf[i] *= el;
+         pchgbuf[i] = kchrge::chg[itype] * esc.s[mutant::mutg[i]];
       }
       darray::copyin(g::q0, n, pchg, pchgbuf.data());
       waitFor(g::q0);
@@ -68,7 +63,7 @@ static void mpoleData(RcOp op)
    if (op & RcOp::ALLOC) {
       darray::allocate(n, &zaxis, &pole, &rpole);
 
-      if (use_dlmda || use_emdt || use_epdt || use_plmda) {
+      if (use_dlmda || use_epdt || use_plmda) {
          darray::allocate(n, &poleorig);
       } else {
          poleorig = nullptr;
@@ -162,7 +157,7 @@ static void mpoleData(RcOp op)
       darray::copyin(g::q0, n, pole, polebuf.data());
       waitFor(g::q0);
 
-      if (use_dlmda || use_emdt || use_epdt || use_plmda) {
+      if (use_dlmda || use_epdt || use_plmda) {
          for (int i = 0; i < n; ++i) {
             int b1 = MPL_TOTAL * i;
             int b2 = mpole::maxpole * i;
