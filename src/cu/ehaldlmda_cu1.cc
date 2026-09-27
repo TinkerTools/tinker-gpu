@@ -9,7 +9,7 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
    const real* restrict exclude_scale, const real* restrict x, const real* restrict y, const real* restrict z,
    const Spatial::SortedAtom* restrict sorted, int nakpl, const int* restrict iakpl, int niak, const int* restrict iak,
    const int* restrict lst, int njvdw, real vlam, Vdw vcouple, const real* restrict radmin,
-   const real* restrict epsilon, const int* restrict jvdw, const int* restrict mut, real scexp, real scalphav,
+   const real* restrict epsilon, const int* restrict jvdw, const int* restrict mutg, real scexp, real scalphav,
    real dvldl, real d2vldl2)
 {
    constexpr bool do_e = Ver::e;
@@ -62,9 +62,9 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
       devvirdltlzz = 0;
    }
    real xi, yi, zi;
-   int ijvdw, imut;
+   int ijvdw, imutg;
    real xk, yk, zk;
-   int kjvdw, kmut;
+   int kjvdw, kmutg;
    real fix, fiy, fiz;
    real fkx, fky, fkz;
    real dfix, dfiy, dfiz;
@@ -97,29 +97,36 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
       yi = y[i];
       zi = z[i];
       ijvdw = jvdw[i];
-      imut = mut[i];
+      imutg = mutg[i];
       xk = x[k];
       yk = y[k];
       zk = z[k];
       kjvdw = jvdw[k];
-      kmut = mut[k];
+      kmutg = mutg[k];
 
       constexpr bool incl = true;
       real xr = xi - xk;
       real yr = yi - yk;
       real zr = zi - zk;
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off * off and incl) {
+      // The two ligands of a relative free energy calculation never interact.
+      int ig = max(imutg, kmutg);
+      bool cross = (imutg * kmutg == 2);
+      if (r2 <= off * off and incl and not cross) {
          real r = REAL_SQRT(r2);
          real rv = radmin[ijvdw * njvdw + kjvdw];
          real eps = epsilon[ijvdw * njvdw + kjvdw];
+         // Ligand 2 couples as the complement of vlambda.
+         real vl = (ig == 2 ? 1 - vlam : vlam);
          real vlambda = 1;
          if (vcouple == Vdw::DECOUPLE) {
-            vlambda = (imut == kmut ? 1 : vlam);
+            vlambda = (imutg == kmutg ? 1 : vl);
          } else if (vcouple == Vdw::ANNIHILATE) {
-            vlambda = (imut || kmut ? vlam : 1);
+            vlambda = (ig ? vl : 1);
          }
-         bool mutik = (imut || kmut) && (vcouple == Vdw::ANNIHILATE || !(imut && kmut));
+         bool mutik = (imutg || kmutg) && (vcouple == Vdw::ANNIHILATE || !(imutg && kmutg));
+         real dv1 = (ig == 2 ? -dvldl : dvldl);
+         real dv2 = (ig == 2 ? -d2vldl2 : d2vldl2);
          real e, de, dedl, d2edl2, dlde;
          pair_hal_v3<do_g, 0, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, scalea, rv, eps, cut, off, vlambda, GHAL, DHAL,
             SCEXP, SCALPHA, e, de, dedl, d2edl2, dlde);
@@ -127,9 +134,9 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
             evtl += floatTo<ebuf_prec>(e);
             if (mutik) {
                if CONSTEXPR (do_dl1)
-                  devdltl += floatTo<ebuf_prec>(dedl * dvldl);
+                  devdltl += floatTo<ebuf_prec>(dedl * dv1);
                if CONSTEXPR (do_dl2)
-                  d2evdl2tl += floatTo<ebuf_prec>(d2edl2 * dvldl * dvldl + dedl * d2vldl2);
+                  d2evdl2tl += floatTo<ebuf_prec>(d2edl2 * dv1 * dv1 + dedl * dv2);
             }
             if CONSTEXPR (do_a) {
                if (scalea != 0 and e != 0)
@@ -149,7 +156,7 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
             fky -= dedy;
             fkz -= dedz;
             if (mutik) {
-               dlde = dlde * dvldl * REAL_RECIP(r);
+               dlde = dlde * dv1 * REAL_RECIP(r);
                real dldedx = dlde * xr;
                real dldedy = dlde * yr;
                real dldedz = dlde * zr;
@@ -232,12 +239,12 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
       ijvdw = jvdw[i];
-      imut = mut[i];
+      imutg = mutg[i];
       xk = sorted[atomk].x;
       yk = sorted[atomk].y;
       zk = sorted[atomk].z;
       kjvdw = jvdw[k];
-      kmut = mut[k];
+      kmutg = mutg[k];
 
       unsigned int info0 = info[iw * WARP_SIZE + ilane];
       for (int j = 0; j < WARP_SIZE; ++j) {
@@ -249,17 +256,24 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
          real yr = yi - yk;
          real zr = zi - zk;
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // The two ligands of a relative free energy calculation never interact.
+         int ig = max(imutg, kmutg);
+         bool cross = (imutg * kmutg == 2);
+         if (r2 <= off * off and incl and not cross) {
             real r = REAL_SQRT(r2);
             real rv = radmin[ijvdw * njvdw + kjvdw];
             real eps = epsilon[ijvdw * njvdw + kjvdw];
+            // Ligand 2 couples as the complement of vlambda.
+            real vl = (ig == 2 ? 1 - vlam : vlam);
             real vlambda = 1;
             if (vcouple == Vdw::DECOUPLE) {
-               vlambda = (imut == kmut ? 1 : vlam);
+               vlambda = (imutg == kmutg ? 1 : vl);
             } else if (vcouple == Vdw::ANNIHILATE) {
-               vlambda = (imut || kmut ? vlam : 1);
+               vlambda = (ig ? vl : 1);
             }
-            bool mutik = (imut || kmut) && (vcouple == Vdw::ANNIHILATE || !(imut && kmut));
+            bool mutik = (imutg || kmutg) && (vcouple == Vdw::ANNIHILATE || !(imutg && kmutg));
+            real dv1 = (ig == 2 ? -dvldl : dvldl);
+            real dv2 = (ig == 2 ? -d2vldl2 : d2vldl2);
             real e, de, dedl, d2edl2, dlde;
             pair_hal_v3<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, vlambda, GHAL, DHAL,
                SCEXP, SCALPHA, e, de, dedl, d2edl2, dlde);
@@ -267,9 +281,9 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
                evtl += floatTo<ebuf_prec>(e);
                if (mutik) {
                   if CONSTEXPR (do_dl1)
-                     devdltl += floatTo<ebuf_prec>(dedl * dvldl);
+                     devdltl += floatTo<ebuf_prec>(dedl * dv1);
                   if CONSTEXPR (do_dl2)
-                     d2evdl2tl += floatTo<ebuf_prec>(d2edl2 * dvldl * dvldl + dedl * d2vldl2);
+                     d2evdl2tl += floatTo<ebuf_prec>(d2edl2 * dv1 * dv1 + dedl * dv2);
                }
                if CONSTEXPR (do_a) {
                   if (e != 0)
@@ -289,7 +303,7 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
                fky -= dedy;
                fkz -= dedz;
                if (mutik) {
-                  dlde = dlde * dvldl * REAL_RECIP(r);
+                  dlde = dlde * dv1 * REAL_RECIP(r);
                   real dldedx = dlde * xr;
                   real dldedy = dlde * yr;
                   real dldedz = dlde * zr;
@@ -326,7 +340,7 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
          yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
          zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
          ijvdw = __shfl_sync(ALL_LANES, ijvdw, ilane + 1);
-         imut = __shfl_sync(ALL_LANES, imut, ilane + 1);
+         imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
          if CONSTEXPR (do_g) {
             fix = __shfl_sync(ALL_LANES, fix, ilane + 1);
             fiy = __shfl_sync(ALL_LANES, fiy, ilane + 1);
@@ -384,12 +398,12 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
       ijvdw = jvdw[i];
-      imut = mut[i];
+      imutg = mutg[i];
       xk = sorted[atomk].x;
       yk = sorted[atomk].y;
       zk = sorted[atomk].z;
       kjvdw = jvdw[k];
-      kmut = mut[k];
+      kmutg = mutg[k];
 
       for (int j = 0; j < WARP_SIZE; ++j) {
          bool incl = atomk > 0;
@@ -397,17 +411,24 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
          real yr = yi - yk;
          real zr = zi - zk;
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // The two ligands of a relative free energy calculation never interact.
+         int ig = max(imutg, kmutg);
+         bool cross = (imutg * kmutg == 2);
+         if (r2 <= off * off and incl and not cross) {
             real r = REAL_SQRT(r2);
             real rv = radmin[ijvdw * njvdw + kjvdw];
             real eps = epsilon[ijvdw * njvdw + kjvdw];
+            // Ligand 2 couples as the complement of vlambda.
+            real vl = (ig == 2 ? 1 - vlam : vlam);
             real vlambda = 1;
             if (vcouple == Vdw::DECOUPLE) {
-               vlambda = (imut == kmut ? 1 : vlam);
+               vlambda = (imutg == kmutg ? 1 : vl);
             } else if (vcouple == Vdw::ANNIHILATE) {
-               vlambda = (imut || kmut ? vlam : 1);
+               vlambda = (ig ? vl : 1);
             }
-            bool mutik = (imut || kmut) && (vcouple == Vdw::ANNIHILATE || !(imut && kmut));
+            bool mutik = (imutg || kmutg) && (vcouple == Vdw::ANNIHILATE || !(imutg && kmutg));
+            real dv1 = (ig == 2 ? -dvldl : dvldl);
+            real dv2 = (ig == 2 ? -d2vldl2 : d2vldl2);
             real e, de, dedl, d2edl2, dlde;
             pair_hal_v3<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, vlambda, GHAL, DHAL,
                SCEXP, SCALPHA, e, de, dedl, d2edl2, dlde);
@@ -415,9 +436,9 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
                evtl += floatTo<ebuf_prec>(e);
                if (mutik) {
                   if CONSTEXPR (do_dl1)
-                     devdltl += floatTo<ebuf_prec>(dedl * dvldl);
+                     devdltl += floatTo<ebuf_prec>(dedl * dv1);
                   if CONSTEXPR (do_dl2)
-                     d2evdl2tl += floatTo<ebuf_prec>(d2edl2 * dvldl * dvldl + dedl * d2vldl2);
+                     d2evdl2tl += floatTo<ebuf_prec>(d2edl2 * dv1 * dv1 + dedl * dv2);
                }
                if CONSTEXPR (do_a) {
                   if (e != 0)
@@ -437,7 +458,7 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
                fky -= dedy;
                fkz -= dedz;
                if (mutik) {
-                  dlde = dlde * dvldl * REAL_RECIP(r);
+                  dlde = dlde * dv1 * REAL_RECIP(r);
                   real dldedx = dlde * xr;
                   real dldedy = dlde * yr;
                   real dldedz = dlde * zr;
@@ -473,7 +494,7 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
          yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
          zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
          ijvdw = __shfl_sync(ALL_LANES, ijvdw, ilane + 1);
-         imut = __shfl_sync(ALL_LANES, imut, ilane + 1);
+         imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
          if CONSTEXPR (do_g) {
             fix = __shfl_sync(ALL_LANES, fix, ilane + 1);
             fiy = __shfl_sync(ALL_LANES, fiy, ilane + 1);

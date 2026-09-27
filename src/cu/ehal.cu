@@ -108,7 +108,6 @@ namespace tinker {
 #endif
 #include "ehal_cu1.cc"
 #include "ehaldlmda_cu1.cc"
-#include "ehaldt_cu1.cc"
 
 template <class Ver>
 static void ehal_cu3()
@@ -119,6 +118,10 @@ static void ehal_cu3()
    const real cut = switchCut(Switch::VDW);
    const real off = switchOff(Switch::VDW);
 
+   // A relative calculation labels atoms by ligand group; ligand 2 couples as
+   // the complement of vlambda.
+   const int* grp = use_rel ? rdt_group : mut;
+
    if CONSTEXPR (do_g)
       darray::zero(g::q0, n, gxred, gyred, gzred);
 
@@ -126,7 +129,7 @@ static void ehal_cu3()
    auto ker1 = ehal_cu1<Ver>;
    ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, vir_ev, gxred, gyred, gzred, cut, off,
       st.si1.bit0, nvexclude, vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak,
-      st.iak, st.lst, njvdw, vlam, vcouple, radmin, epsilon, jvdw, mut, scexp, scalphav);
+      st.iak, st.lst, njvdw, vlam, vcouple, radmin, epsilon, jvdw, grp, scexp, scalphav);
 
    if CONSTEXPR (do_g)
       ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);
@@ -142,6 +145,10 @@ static void ehaldlmda_cu3()
    const real cut = switchCut(Switch::VDW);
    const real off = switchOff(Switch::VDW);
 
+   // A relative calculation labels atoms by ligand group; ligand 2 couples as
+   // the complement of vlambda.
+   const int* grp = use_rel ? rdt_group : mut;
+
    if CONSTEXPR (do_g) {
       darray::zero(g::q0, n, gxred, gyred, gzred);
       if CONSTEXPR (do_gdl)
@@ -153,7 +160,7 @@ static void ehaldlmda_cu3()
    ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, devdl_buf, d2evdl2_buf, vir_ev,
       dvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0, nvexclude,
       vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, njvdw,
-      vlam, vcouple, radmin, epsilon, jvdw, mut, scexp, scalphav, dvldlmda, d2vldlmda2);
+      vlam, vcouple, radmin, epsilon, jvdw, grp, scexp, scalphav, dvldlmda, d2vldlmda2);
 
    if CONSTEXPR (do_g) {
       ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);
@@ -164,7 +171,7 @@ static void ehaldlmda_cu3()
 
 void ehal_cu(int vers)
 {
-   if (use_evast) {
+   if (use_vdlmda) {
       if (vers == calc::v0)
          ehaldlmda_cu3<calc::V0>();
       else if (vers == calc::v1)
@@ -200,63 +207,5 @@ void ehal_cu(int vers)
       ehal_cu3<calc::V5>();
    else if (vers == calc::v6)
       ehal_cu3<calc::V6>();
-}
-
-template <class Ver>
-static void ehaldt_cu3(const DtCoef& coef)
-{
-   constexpr bool do_g = Ver::g;
-   constexpr bool do_gdl = Ver::g_dlmda;
-
-   const auto& st = *vspatial_v2_unit;
-   const real cut = switchCut(Switch::VDW);
-   const real off = switchOff(Switch::VDW);
-
-   // Van der Waals dual topology is relative only, so atoms are labeled by ligand.
-   const int* grp = rdt_group;
-
-   if CONSTEXPR (do_g) {
-      darray::zero(g::q0, n, gxred, gyred, gzred);
-      if CONSTEXPR (do_gdl)
-         darray::zero(g::q0, n, gxred_dlmda, gyred_dlmda, gzred_dlmda);
-   }
-
-   int ngrid = gpuGridSize(BLOCK_DIM);
-   auto ker1 = ehaldt_cu1<Ver>;
-   ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, devdl_buf, d2evdl2_buf, vir_ev,
-      dvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0, nvexclude,
-      vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, njvdw,
-      radmin, epsilon, jvdw, grp, scexp, scalphav, coef.in0bits, coef.in1bits, coef.cntbits, coef.a0, coef.a1,
-      coef.b0, coef.b1, coef.c0, coef.c1);
-
-   if CONSTEXPR (do_g) {
-      ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);
-      if CONSTEXPR (do_gdl)
-         ehalResolveGradient(gxred_dlmda, gyred_dlmda, gzred_dlmda, dfdlx, dfdly, dfdlz);
-   }
-}
-
-void ehalDt_cu(int vers, const DtCoef& coef)
-{
-   if (vers == calc::v0)
-      ehaldt_cu3<calc::V0>(coef);
-   else if (vers == calc::v1)
-      ehaldt_cu3<calc::V1>(coef);
-   else if (vers == calc::v3)
-      ehaldt_cu3<calc::V3>(coef);
-   else if (vers == calc::v4)
-      ehaldt_cu3<calc::V4>(coef);
-   else if (vers == calc::v5)
-      ehaldt_cu3<calc::V5>(coef);
-   else if (vers == calc::v6)
-      ehaldt_cu3<calc::V6>(coef);
-   else if (vers == calc::v7)
-      ehaldt_cu3<calc::V7>(coef);
-   else if (vers == calc::v8)
-      ehaldt_cu3<calc::V8>(coef);
-   else if (vers == calc::v9)
-      ehaldt_cu3<calc::V9>(coef);
-   else if (vers == calc::v10)
-      ehaldt_cu3<calc::V10>(coef);
 }
 }

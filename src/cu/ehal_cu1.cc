@@ -7,7 +7,7 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
    const real* restrict x, const real* restrict y, const real* restrict z, const Spatial::SortedAtom* restrict sorted,
    int nakpl, const int* restrict iakpl, int niak, const int* restrict iak, const int* restrict lst, int njvdw,
    real vlam, Vdw vcouple, const real* restrict radmin, const real* restrict epsilon, const int* restrict jvdw,
-   const int* restrict mut, real scexp, real scalphav)
+   const int* restrict mutg, real scexp, real scalphav)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;
@@ -38,9 +38,9 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
       vevtlzz = 0;
    }
    real xi, yi, zi;
-   int ijvdw, imut;
+   int ijvdw, imutg;
    real xk, yk, zk;
-   int kjvdw, kmut;
+   int kjvdw, kmutg;
    real fix, fiy, fiz;
    real fkx, fky, fkz;
 
@@ -63,27 +63,32 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
       yi = y[i];
       zi = z[i];
       ijvdw = jvdw[i];
-      imut = mut[i];
+      imutg = mutg[i];
       xk = x[k];
       yk = y[k];
       zk = z[k];
       kjvdw = jvdw[k];
-      kmut = mut[k];
+      kmutg = mutg[k];
 
       constexpr bool incl = true;
       real xr = xi - xk;
       real yr = yi - yk;
       real zr = zi - zk;
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off * off and incl) {
+      // The two ligands of a relative free energy calculation never interact.
+      int ig = max(imutg, kmutg);
+      bool cross = (imutg * kmutg == 2);
+      if (r2 <= off * off and incl and not cross) {
          real r = REAL_SQRT(r2);
          real rv = radmin[ijvdw * njvdw + kjvdw];
          real eps = epsilon[ijvdw * njvdw + kjvdw];
+         // Ligand 2 couples as the complement of vlambda.
+         real vl = (ig == 2 ? 1 - vlam : vlam);
          real vlambda = 1;
          if (vcouple == Vdw::DECOUPLE) {
-            vlambda = (imut == kmut ? 1 : vlam);
+            vlambda = (imutg == kmutg ? 1 : vl);
          } else if (vcouple == Vdw::ANNIHILATE) {
-            vlambda = (imut || kmut ? vlam : 1);
+            vlambda = (ig ? vl : 1);
          }
          real e, de;
          pair_hal_v2<do_g, 0>(r, scalea, rv, eps, cut, off, vlambda, GHAL, DHAL, SCEXP, SCALPHA, e, de);
@@ -152,12 +157,12 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
       ijvdw = jvdw[i];
-      imut = mut[i];
+      imutg = mutg[i];
       xk = sorted[atomk].x;
       yk = sorted[atomk].y;
       zk = sorted[atomk].z;
       kjvdw = jvdw[k];
-      kmut = mut[k];
+      kmutg = mutg[k];
 
       unsigned int info0 = info[iw * WARP_SIZE + ilane];
       for (int j = 0; j < WARP_SIZE; ++j) {
@@ -169,15 +174,20 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
          real yr = yi - yk;
          real zr = zi - zk;
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // The two ligands of a relative free energy calculation never interact.
+         int ig = max(imutg, kmutg);
+         bool cross = (imutg * kmutg == 2);
+         if (r2 <= off * off and incl and not cross) {
             real r = REAL_SQRT(r2);
             real rv = radmin[ijvdw * njvdw + kjvdw];
             real eps = epsilon[ijvdw * njvdw + kjvdw];
+            // Ligand 2 couples as the complement of vlambda.
+            real vl = (ig == 2 ? 1 - vlam : vlam);
             real vlambda = 1;
             if (vcouple == Vdw::DECOUPLE) {
-               vlambda = (imut == kmut ? 1 : vlam);
+               vlambda = (imutg == kmutg ? 1 : vl);
             } else if (vcouple == Vdw::ANNIHILATE) {
-               vlambda = (imut || kmut ? vlam : 1);
+               vlambda = (ig ? vl : 1);
             }
             real e, de;
             pair_hal_v2<do_g, 1>(r, 1, rv, eps, cut, off, vlambda, GHAL, DHAL, SCEXP, SCALPHA, e, de);
@@ -216,7 +226,7 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
          yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
          zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
          ijvdw = __shfl_sync(ALL_LANES, ijvdw, ilane + 1);
-         imut = __shfl_sync(ALL_LANES, imut, ilane + 1);
+         imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
          if CONSTEXPR (do_g) {
             fix = __shfl_sync(ALL_LANES, fix, ilane + 1);
             fiy = __shfl_sync(ALL_LANES, fiy, ilane + 1);
@@ -253,12 +263,12 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
       ijvdw = jvdw[i];
-      imut = mut[i];
+      imutg = mutg[i];
       xk = sorted[atomk].x;
       yk = sorted[atomk].y;
       zk = sorted[atomk].z;
       kjvdw = jvdw[k];
-      kmut = mut[k];
+      kmutg = mutg[k];
 
       for (int j = 0; j < WARP_SIZE; ++j) {
          bool incl = atomk > 0;
@@ -266,15 +276,20 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
          real yr = yi - yk;
          real zr = zi - zk;
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // The two ligands of a relative free energy calculation never interact.
+         int ig = max(imutg, kmutg);
+         bool cross = (imutg * kmutg == 2);
+         if (r2 <= off * off and incl and not cross) {
             real r = REAL_SQRT(r2);
             real rv = radmin[ijvdw * njvdw + kjvdw];
             real eps = epsilon[ijvdw * njvdw + kjvdw];
+            // Ligand 2 couples as the complement of vlambda.
+            real vl = (ig == 2 ? 1 - vlam : vlam);
             real vlambda = 1;
             if (vcouple == Vdw::DECOUPLE) {
-               vlambda = (imut == kmut ? 1 : vlam);
+               vlambda = (imutg == kmutg ? 1 : vl);
             } else if (vcouple == Vdw::ANNIHILATE) {
-               vlambda = (imut || kmut ? vlam : 1);
+               vlambda = (ig ? vl : 1);
             }
             real e, de;
             pair_hal_v2<do_g, 1>(r, 1, rv, eps, cut, off, vlambda, GHAL, DHAL, SCEXP, SCALPHA, e, de);
@@ -312,7 +327,7 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
          yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
          zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
          ijvdw = __shfl_sync(ALL_LANES, ijvdw, ilane + 1);
-         imut = __shfl_sync(ALL_LANES, imut, ilane + 1);
+         imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
          if CONSTEXPR (do_g) {
             fix = __shfl_sync(ALL_LANES, fix, ilane + 1);
             fiy = __shfl_sync(ALL_LANES, fiy, ilane + 1);

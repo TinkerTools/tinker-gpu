@@ -41,7 +41,7 @@ SCALE_1X_TYPE: real_const_array
 EXTRA_PARAMS: |
   , int njvdw, real vlam, Vdw vcouple
   , const real* restrict radmin, const real* restrict epsilon
-  , const int* restrict jvdw, const int* restrict mut
+  , const int* restrict jvdw, const int* restrict mutg
   , real scexp, real scalphav
   , real dvldl, real d2vldl2
 # IMPLICIT_PARAMS:
@@ -51,13 +51,13 @@ I_VARIABLES:
   - register real yi   from:y
   - register real zi   from:z
   - register int ijvdw from:jvdw
-  - register int imut  from:mut
+  - register int imutg from:mutg
 K_VARIABLES:
   - register real xk   from:x
   - register real yk   from:y
   - register real zk   from:z
   - register int kjvdw from:jvdw
-  - register int kmut  from:mut
+  - register int kmutg from:mutg
 I_FORCE:
   - register real fix addto:gx
   - register real fiy addto:gy
@@ -80,18 +80,25 @@ SCALED_PAIRWISE_INTERACTION: |
   real yr = @yi@ - @yk@;
   real zr = @zi@ - @zk@;
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  // The two ligands of a relative free energy calculation never interact.
+  int ig = max(@imutg@, @kmutg@);
+  bool cross = (@imutg@ * @kmutg@ == 2);
+  if (r2 <= off * off and incl and not cross) {
     real r = REAL_SQRT(r2);
     real rv = radmin[@ijvdw@ * njvdw + @kjvdw@];
     real eps = epsilon[@ijvdw@ * njvdw + @kjvdw@];
+    // Ligand 2 couples as the complement of vlambda.
+    real vl = (ig == 2 ? 1 - vlam : vlam);
     real vlambda = 1;
     if (vcouple == Vdw::DECOUPLE) {
-      vlambda = (@imut@ == @kmut@ ? 1 : vlam);
+      vlambda = (@imutg@ == @kmutg@ ? 1 : vl);
     } else if (vcouple == Vdw::ANNIHILATE) {
-      vlambda = (@imut@ || @kmut@ ? vlam : 1);
+      vlambda = (ig ? vl : 1);
     }
-    bool mutik = (@imut@ || @kmut@)
-      && (vcouple == Vdw::ANNIHILATE || !(@imut@ && @kmut@));
+    bool mutik = (@imutg@ || @kmutg@)
+      && (vcouple == Vdw::ANNIHILATE || !(@imutg@ && @kmutg@));
+    real dv1 = (ig == 2 ? -dvldl : dvldl);
+    real dv2 = (ig == 2 ? -d2vldl2 : d2vldl2);
     real e, de, dedl, d2edl2, dlde;
     pair_hal_v3<do_g, 0, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, scalea, rv, eps, cut, off, vlambda,
       GHAL, DHAL, SCEXP, SCALPHA, e, de, dedl, d2edl2, dlde);
@@ -99,9 +106,9 @@ SCALED_PAIRWISE_INTERACTION: |
       evtl += floatTo<ebuf_prec>(e);
       if (mutik) {
         if CONSTEXPR (do_dl1)
-          devdltl += floatTo<ebuf_prec>(dedl * dvldl);
+          devdltl += floatTo<ebuf_prec>(dedl * dv1);
         if CONSTEXPR (do_dl2)
-          d2evdl2tl += floatTo<ebuf_prec>(d2edl2 * dvldl * dvldl + dedl * d2vldl2);
+          d2evdl2tl += floatTo<ebuf_prec>(d2edl2 * dv1 * dv1 + dedl * dv2);
       }
       if CONSTEXPR (do_a) {
         if (scalea != 0 and e != 0)
@@ -121,7 +128,7 @@ SCALED_PAIRWISE_INTERACTION: |
       @fky@ -= dedy;
       @fkz@ -= dedz;
       if (mutik) {
-        dlde = dlde * dvldl * REAL_RECIP(r);
+        dlde = dlde * dv1 * REAL_RECIP(r);
         real dldedx = dlde * xr;
         real dldedy = dlde * yr;
         real dldedz = dlde * zr;
@@ -157,18 +164,25 @@ FULL_PAIRWISE_INTERACTION: |
   real yr = @yi@ - @yk@;
   real zr = @zi@ - @zk@;
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  // The two ligands of a relative free energy calculation never interact.
+  int ig = max(@imutg@, @kmutg@);
+  bool cross = (@imutg@ * @kmutg@ == 2);
+  if (r2 <= off * off and incl and not cross) {
     real r = REAL_SQRT(r2);
     real rv = radmin[@ijvdw@ * njvdw + @kjvdw@];
     real eps = epsilon[@ijvdw@ * njvdw + @kjvdw@];
+    // Ligand 2 couples as the complement of vlambda.
+    real vl = (ig == 2 ? 1 - vlam : vlam);
     real vlambda = 1;
     if (vcouple == Vdw::DECOUPLE) {
-      vlambda = (@imut@ == @kmut@ ? 1 : vlam);
+      vlambda = (@imutg@ == @kmutg@ ? 1 : vl);
     } else if (vcouple == Vdw::ANNIHILATE) {
-      vlambda = (@imut@ || @kmut@ ? vlam : 1);
+      vlambda = (ig ? vl : 1);
     }
-    bool mutik = (@imut@ || @kmut@)
-      && (vcouple == Vdw::ANNIHILATE || !(@imut@ && @kmut@));
+    bool mutik = (@imutg@ || @kmutg@)
+      && (vcouple == Vdw::ANNIHILATE || !(@imutg@ && @kmutg@));
+    real dv1 = (ig == 2 ? -dvldl : dvldl);
+    real dv2 = (ig == 2 ? -d2vldl2 : d2vldl2);
     real e, de, dedl, d2edl2, dlde;
     pair_hal_v3<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, vlambda,
       GHAL, DHAL, SCEXP, SCALPHA, e, de, dedl, d2edl2, dlde);
@@ -176,9 +190,9 @@ FULL_PAIRWISE_INTERACTION: |
       evtl += floatTo<ebuf_prec>(e);
       if (mutik) {
         if CONSTEXPR (do_dl1)
-          devdltl += floatTo<ebuf_prec>(dedl * dvldl);
+          devdltl += floatTo<ebuf_prec>(dedl * dv1);
         if CONSTEXPR (do_dl2)
-          d2evdl2tl += floatTo<ebuf_prec>(d2edl2 * dvldl * dvldl + dedl * d2vldl2);
+          d2evdl2tl += floatTo<ebuf_prec>(d2edl2 * dv1 * dv1 + dedl * dv2);
       }
       if CONSTEXPR (do_a) {
         if (e != 0)
@@ -198,7 +212,7 @@ FULL_PAIRWISE_INTERACTION: |
       @fky@ -= dedy;
       @fkz@ -= dedz;
       if (mutik) {
-        dlde = dlde * dvldl * REAL_RECIP(r);
+        dlde = dlde * dv1 * REAL_RECIP(r);
         real dldedx = dlde * xr;
         real dldedy = dlde * yr;
         real dldedz = dlde * zr;

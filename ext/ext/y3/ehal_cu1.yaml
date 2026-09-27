@@ -27,7 +27,7 @@ SCALE_1X_TYPE: real_const_array
 EXTRA_PARAMS: |
   , int njvdw, real vlam, Vdw vcouple
   , const real* restrict radmin, const real* restrict epsilon
-  , const int* restrict jvdw, const int* restrict mut
+  , const int* restrict jvdw, const int* restrict mutg
   , real scexp, real scalphav
 # IMPLICIT_PARAMS:
 
@@ -36,13 +36,13 @@ I_VARIABLES:
   - register real yi   from:y
   - register real zi   from:z
   - register int ijvdw from:jvdw
-  - register int imut  from:mut
+  - register int imutg from:mutg
 K_VARIABLES:
   - register real xk   from:x
   - register real yk   from:y
   - register real zk   from:z
   - register int kjvdw from:jvdw
-  - register int kmut  from:mut
+  - register int kmutg from:mutg
 I_FORCE:
   - register real fix addto:gx
   - register real fiy addto:gy
@@ -57,15 +57,20 @@ SCALED_PAIRWISE_INTERACTION: |
   real yr = @yi@ - @yk@;
   real zr = @zi@ - @zk@;
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  // The two ligands of a relative free energy calculation never interact.
+  int ig = max(@imutg@, @kmutg@);
+  bool cross = (@imutg@ * @kmutg@ == 2);
+  if (r2 <= off * off and incl and not cross) {
     real r = REAL_SQRT(r2);
     real rv = radmin[@ijvdw@ * njvdw + @kjvdw@];
     real eps = epsilon[@ijvdw@ * njvdw + @kjvdw@];
+    // Ligand 2 couples as the complement of vlambda.
+    real vl = (ig == 2 ? 1 - vlam : vlam);
     real vlambda = 1;
     if (vcouple == Vdw::DECOUPLE) {
-      vlambda = (@imut@ == @kmut@ ? 1 : vlam);
+      vlambda = (@imutg@ == @kmutg@ ? 1 : vl);
     } else if (vcouple == Vdw::ANNIHILATE) {
-      vlambda = (@imut@ || @kmut@ ? vlam : 1);
+      vlambda = (ig ? vl : 1);
     }
     real e, de;
     pair_hal_v2<do_g, 0>(r, scalea, rv, eps, cut, off, vlambda,
@@ -104,15 +109,20 @@ FULL_PAIRWISE_INTERACTION: |
   real yr = @yi@ - @yk@;
   real zr = @zi@ - @zk@;
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  // The two ligands of a relative free energy calculation never interact.
+  int ig = max(@imutg@, @kmutg@);
+  bool cross = (@imutg@ * @kmutg@ == 2);
+  if (r2 <= off * off and incl and not cross) {
     real r = REAL_SQRT(r2);
     real rv = radmin[@ijvdw@ * njvdw + @kjvdw@];
     real eps = epsilon[@ijvdw@ * njvdw + @kjvdw@];
+    // Ligand 2 couples as the complement of vlambda.
+    real vl = (ig == 2 ? 1 - vlam : vlam);
     real vlambda = 1;
     if (vcouple == Vdw::DECOUPLE) {
-      vlambda = (@imut@ == @kmut@ ? 1 : vlam);
+      vlambda = (@imutg@ == @kmutg@ ? 1 : vl);
     } else if (vcouple == Vdw::ANNIHILATE) {
-      vlambda = (@imut@ || @kmut@ ? vlam : 1);
+      vlambda = (ig ? vl : 1);
     }
     real e, de;
     pair_hal_v2<do_g, 1>(r, 1, rv, eps, cut, off, vlambda,

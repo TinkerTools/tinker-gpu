@@ -16,17 +16,16 @@ using namespace tinker;
 namespace {
 struct Fixture
 {
-   const char* key;
-   const char* ref;
+   const char* name;
 };
 
 const Fixture kFixtures[] = {
-   {"01_water_ye_m10v10.key", "testgrad.1.txt"},
-   {"02_water_ye_m05v05.key", "testgrad.2.txt"},
-   {"03_water_ye_m00v00.key", "testgrad.3.txt"},
-   {"04_water_ast_ye_l10.key", "testgrad.4.txt"},
-   {"05_water_ast_ye_l05.key", "testgrad.5.txt"},
-   {"06_water_ast_ye_l00.key", "testgrad.6.txt"},
+   {"01_water_ye_m10v10"},
+   {"02_water_ye_m05v05"},
+   {"03_water_ye_m00v00"},
+   {"04_water_ast_ye_l10"},
+   {"05_water_ast_ye_l05"},
+   {"06_water_ast_ye_l00"},
 };
 
 // Finite difference stepsize, in Angstroms.
@@ -38,10 +37,11 @@ void runFixture(const Fixture& fx)
    const char* xyzname = "water2.xyz";
 
    TestFile fxyz(dir + xyzname, xyzname);
-   TestFile fkey(dir + fx.key, fx.key);
+   std::string keyname = std::string(fx.name) + ".key";
+   TestFile fkey(dir + keyname, keyname);
    TestFile fprm(TINKER9_DIRSTR "/test/file/commit_6fe8e913/water03.prm");
 
-   const char* argv[] = {"dummy", xyzname, "-k", fx.key};
+   const char* argv[] = {"dummy", xyzname, "-k", keyname.c_str()};
    int argc = 4;
    testBeginWithArgs(argc, argv);
 
@@ -54,7 +54,7 @@ void runFixture(const Fixture& fx)
    initialize();
 
    auto r = testgradEvaluate(opts);
-   TestReference ref(std::string(TINKER9_DIRSTR "/test/ref/") + fx.ref);
+   TestReference ref(std::string(TINKER9_DIRSTR "/test/ref/testgrad/") + fx.name + ".txt");
    REQUIRE(ref.getGradientCount() == n);
    REQUIRE(ref.getNumerGradientCount() == n);
    auto ref_g = ref.getGradient();

@@ -65,8 +65,6 @@ void vdwSoftcoreData(RcOp);
 void evdwData(RcOp);
 /// \ingroup vdw
 void evdw(int vers);
-/// \ingroup vdw
-void evdw_dt(int vers);
 
 /// \ingroup vdw
 /// \brief Lennard-Jones 12-6 potential.
@@ -104,9 +102,6 @@ void egauss(int vers);
 /// \f]
 /// \f[ t=5,\ \alpha=0.7 \f]
 void ehal(int vers);
-/// \ingroup vdw
-/// \brief One fused pass over both dual topology endpoints.
-void ehalDt(int vers, const DtCoef& coef);
 
 /// \ingroup vdw
 void ehalReduceXyz();

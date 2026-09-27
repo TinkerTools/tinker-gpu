@@ -306,7 +306,6 @@ void setStagedLeg(RelStage leg)
    // mutate.f floors these at 1; nothing has run dlmda_mech() here.
    emdtexp = 1;
    epdtexp = 1;
-   evdtexp = 1;
    elmdamap = Lmdamap::QNT;
    vlmdamap = Lmdamap::QNT;
    qntelmda0 = (leg == RelStage::LIG1) ? 0.7 : 0.0;
@@ -326,8 +325,6 @@ TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
    mapAt(0.0);
    REQUIRE(emrelst0 == RelState::NONE);
    REQUIRE(emrelst1 == RelState::LIG2);
-   REQUIRE(evrelst0 == RelState::LIG2);
-   REQUIRE(evrelst1 == RelState::LIG1);
    COMPARE_REALS(elam, 1.0, 1.0e-7);
    COMPARE_REALS(vlam, 0.0, 1.0e-14);
    COMPARE_REALS(dvldlmda, 0.0, 1.0e-14);
@@ -345,8 +342,6 @@ TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
       mapAt(lambda);
       REQUIRE(emrelst0 == RelState::NONE);
       REQUIRE(emrelst1 == RelState::NONE);
-      REQUIRE(evrelst0 == RelState::LIG2);
-      REQUIRE(evrelst1 == RelState::LIG1);
       COMPARE_REALS(elam, 0.0, 1.0e-14);
       COMPARE_REALS(deldlmda, 0.0, 1.0e-14);
       COMPARE_REALS(d2eldlmda2, 0.0, 1.0e-14);
@@ -379,33 +374,17 @@ TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
 TEST_CASE("DLMDA-relstage-pinned-endpoints", "[ff][dlmda]")
 {
    // A leg pins the sub-lambdas it is not walking, and a pinned sub-lambda has
-   // a flat chain rule. dtNeed() therefore drops one van der Waals endpoint on
-   // both charging legs, which is where the staged schedule gets most of its
-   // speed: two subsystem evaluations instead of four.
+   // a flat chain rule. dtNeed() therefore drops the coupled electrostatic
+   // endpoint on the morph leg. Van der Waals is a single softcore pass with no
+   // endpoints to skip.
    double w, dw, d2w;
    bool need0, need1;
 
-   setStagedLeg(RelStage::LIG1);
-   mapAt(0.85);
-   dtWeightNeed(vlam, evdtexp, dvldlmda, d2vldlmda2, w, dw, d2w, need0, need1);
-   REQUIRE_FALSE(need0); // vlam pinned at 1, so only the coupled endpoint runs
-   REQUIRE(need1);
-
-   setStagedLeg(RelStage::LIG2);
-   mapAt(0.15);
-   dtWeightNeed(vlam, evdtexp, dvldlmda, d2vldlmda2, w, dw, d2w, need0, need1);
-   REQUIRE(need0); // vlam pinned at 0, so only the reference endpoint runs
-   REQUIRE_FALSE(need1);
-
-   // On the morph leg the electrostatics are the pinned pair instead.
    setStagedLeg(RelStage::VDWM);
    mapAt(0.5);
    dtWeightNeed(elam, emdtexp, deldlmda, d2eldlmda2, w, dw, d2w, need0, need1);
    REQUIRE(need0);
    REQUIRE_FALSE(need1);
-   dtWeightNeed(vlam, evdtexp, dvldlmda, d2vldlmda2, w, dw, d2w, need0, need1);
-   REQUIRE(need0);
-   REQUIRE(need1);
 
    use_relstage = false;
 }

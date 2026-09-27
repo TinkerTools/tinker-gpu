@@ -374,12 +374,9 @@ void dlmda_mech()
    use_emrdt = use_emdt && use_rel;
    use_epadt = use_epdt && !use_rel;
    use_eprdt = use_epdt && use_rel;
-   use_evast = use_vdlmda && !use_rel;
-   use_evrdt = use_rel;
 
    emdtexp = dlmda::emdtexp;
    epdtexp = dlmda::epdtexp;
-   evdtexp = dlmda::evdtexp;
 
    // which lambda-dynamics method owns the main lambda.
    use_ost = dlmda::use_ost;
@@ -471,8 +468,6 @@ void dlmda_mech()
    emrelst1 = RelState::LIG1;
    eprelst0 = RelState::LIG2;
    eprelst1 = RelState::LIG1;
-   evrelst0 = RelState::LIG2;
-   evrelst1 = RelState::LIG1;
 }
 
 void avgstd(const std::vector<double>& v, int begin, int count, double& avg, double& sd)
@@ -845,12 +840,6 @@ static void mapOne(double lmda, Lmdamap map, double qnt0, double qnt1, int expEx
 static void mapRelStage(double lmda)
 {
    double eval, vval;
-
-   // van der Waals interpolates between the two coupled states on every leg,
-   // morphing over its own map in the middle and held at one end or the other
-   // while a ligand is being charged.
-   evrelst0 = RelState::LIG2;
-   evrelst1 = RelState::LIG1;
 
    if (relstage == RelStage::VDWM) {
       // The middle leg holds both ligands decoupled, so electrostatics and

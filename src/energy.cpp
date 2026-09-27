@@ -251,12 +251,8 @@ void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
          ennintermol_cu(vers);
 
    if (amoeba_evdw(vers))
-      if (tscfg("evdw", ecore_vdw)) {
-         if (use_evrdt)
-            evdw_dt(vers);
-         else
-            evdw(vers);
-      }
+      if (tscfg("evdw", ecore_vdw))
+         evdw(vers);
 
    if (amoeba_echarge(vers))
       if (tscfg("echarge", ecore_ele))

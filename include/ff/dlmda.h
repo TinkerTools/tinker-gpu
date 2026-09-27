@@ -402,8 +402,6 @@ TINKER_EXTERN RelState emrelst0;
 TINKER_EXTERN RelState emrelst1;
 TINKER_EXTERN RelState eprelst0;
 TINKER_EXTERN RelState eprelst1;
-TINKER_EXTERN RelState evrelst0;
-TINKER_EXTERN RelState evrelst1;
 
 // first and second derivatives of each sub-lambda w.r.t. the main lambda.
 TINKER_EXTERN double deldlmda;
@@ -419,12 +417,9 @@ TINKER_EXTERN bool use_emast;
 TINKER_EXTERN bool use_emrdt;
 TINKER_EXTERN bool use_epadt;
 TINKER_EXTERN bool use_eprdt;
-TINKER_EXTERN bool use_evast;
-TINKER_EXTERN bool use_evrdt;
 
 TINKER_EXTERN int emdtexp;
 TINKER_EXTERN int epdtexp;
-TINKER_EXTERN int evdtexp;
 TINKER_EXTERN int* rdt_group;
 
 TINKER_EXTERN real (*poleorig)[MPL_TOTAL];

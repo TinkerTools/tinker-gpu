@@ -41,9 +41,6 @@ static int jcount;
 static energy_prec delrc_vol;
 static virial_prec dvlrc_vol;
 static double vlam_lrc0;
-// Long-range correction of each parameter-zeroed subsystem, indexed as relSlot.
-static energy_prec elrc_slot[nRelSlot];
-static virial_prec vlrc_slot[nRelSlot];
 
 void vdwSoftcoreData(RcOp op)
 {
@@ -120,10 +117,6 @@ void evdwData(RcOp op)
       delrc_vol = 0;
       dvlrc_vol = 0;
       vlam_lrc0 = 0;
-      for (int k = 0; k < nRelSlot; ++k) {
-         elrc_slot[k] = 0;
-         vlrc_slot[k] = 0;
-      }
    }
 
    if (op & RcOp::ALLOC) {
@@ -471,27 +464,6 @@ void evdwData(RcOp op)
 
       // Initialize elrc and vlrc.
       if (vdwpot::use_vcorr) {
-         if (use_evrdt) {
-            // One correction per parameter-zeroed subsystem, in relSlot order.
-            // Tinker charges evcorr1 inside ehal1calc/ehal3calc, so each
-            // subsystem carries its own; the endpoints are summed from these
-            // per the coupling states, which is why every slot is needed and
-            // not just the four a plain relative schedule happens to use.
-            static constexpr int kLa[nRelSlot] = {1, 0, 0, 1, 0};
-            static constexpr int kLb[nRelSlot] = {0, 1, 0, 0, 1};
-            static constexpr int kLe[nRelSlot] = {1, 1, 1, 0, 0};
-            for (int k = 0; k < nRelSlot; ++k) {
-               int la = kLa[k], lb = kLb[k], le = kLe[k];
-               double eslot = 0, vslot = 0;
-               double dummy_de = 0, dummy_dv = 0;
-               tinker_f_submask(&la, &lb, &le);
-               tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &eslot, &vslot, &dummy_de, &dummy_dv);
-               elrc_slot[k] = eslot * boxVolume();
-               vlrc_slot[k] = vslot * boxVolume();
-            }
-            int active = 1;
-            tinker_f_submask(&active, &active, &active);
-         }
          double elrc = 0, vlrc = 0, delrc = 0, dvlrc = 0;
          tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &elrc, &vlrc, &delrc, &dvlrc);
          elrc_vol = elrc * boxVolume();
@@ -505,10 +477,6 @@ void evdwData(RcOp op)
          delrc_vol = 0;
          dvlrc_vol = 0;
          vlam_lrc0 = 0;
-         for (int k = 0; k < nRelSlot; ++k) {
-            elrc_slot[k] = 0;
-            vlrc_slot[k] = 0;
-         }
       }
    }
 }
@@ -601,69 +569,6 @@ void evdw(int vers)
    evdwFinish(vers, elrc_vol + dvl * delrc_vol, vlrc_vol + dvl * dvlrc_vol, //
       delrc_vol * dvldlmda, delrc_vol * d2vldlmda2, dvlrc_vol * dvldlmda);
 }
-
-// Relative dual topology. Groups are the ternary rdt_group labels.
-static DtCoef ehalDtCoefRdt(double w, double dw, double d2w, bool need1)
-{
-   DtCoef c;
-   dtWeightsToCoef(c, w, dw, d2w, dvldlmda, d2vldlmda2, use_vdlmda);
-   c.in0bits = dtStateBits(evrelst0);
-   c.in1bits = dtStateBits(evrelst1);
-   c.cntbits = dtCountBits(need1 ? evrelst1 : evrelst0);
-   return c;
-}
-
-// Interpolates the long-range correction between two endpoint values and hands
-// the result, with its lambda derivatives, to evdwFinish.
-static void evdwFinishMixed(int vers, double weight1, double dweight1, double d2weight1, energy_prec elrc0,
-   energy_prec elrc1, virial_prec vlrc0, virial_prec vlrc1)
-{
-   energy_prec mix_elrc = weight1 * elrc1 + (1 - weight1) * elrc0;
-   virial_prec mix_vlrc = weight1 * vlrc1 + (1 - weight1) * vlrc0;
-   energy_prec mix_delrc = dweight1 * dvldlmda * (elrc1 - elrc0);
-   energy_prec mix_d2elrc = (d2weight1 * dvldlmda * dvldlmda + dweight1 * d2vldlmda2) * (elrc1 - elrc0);
-   virial_prec mix_dvlrc = dweight1 * dvldlmda * (vlrc1 - vlrc0);
-   evdwFinish(vers, mix_elrc, mix_vlrc, mix_delrc, mix_d2elrc, mix_dvlrc);
-}
-
-void evdw_dt(int vers)
-{
-   assert(vdwtyp == Vdw::HAL);
-
-   double weight1, dweight1, d2weight1;
-   bool need0, need1;
-   dtWeightNeed(vlam, evdtexp, dvldlmda, d2vldlmda2, weight1, dweight1, d2weight1, need0, need1);
-
-   evdwBegin(vers);
-
-   ehalDt(vers, ehalDtCoefRdt(weight1, dweight1, d2weight1, need1));
-
-   energy_prec elrc0 = 0, elrc1 = 0;
-   virial_prec vlrc0 = 0, vlrc1 = 0;
-   for (int k = 0; k < nRelSlot; ++k) {
-      RdtMask mask;
-      bool in0, in1;
-      relSlot(k, evrelst0, evrelst1, mask, in0, in1);
-      if (in0) {
-         elrc0 += elrc_slot[k];
-         vlrc0 += vlrc_slot[k];
-      }
-      if (in1) {
-         elrc1 += elrc_slot[k];
-         vlrc1 += vlrc_slot[k];
-      }
-   }
-
-   if (not need0) {
-      elrc0 = elrc1;
-      vlrc0 = vlrc1;
-   } else if (not need1) {
-      elrc1 = elrc0;
-      vlrc1 = vlrc0;
-   }
-
-   evdwFinishMixed(vers, weight1, dweight1, d2weight1, elrc0, elrc1, vlrc0, vlrc1);
-}
 }
 
 namespace tinker {
@@ -700,13 +605,7 @@ void egauss(int vers)
 TINKER_FVOID2(acc1, cu1, ehal, int);
 void ehal(int vers)
 {
-   TINKER_FCALL2(acc1, cu1, ehal, lmdaDerivVers(vers, use_evast));
-}
-
-TINKER_FVOID2(acc0, cu1, ehalDt, int, const DtCoef&);
-void ehalDt(int vers, const DtCoef& coef)
-{
-   TINKER_FCALL2(acc0, cu1, ehalDt, lmdaDerivVers(vers, use_vdlmda), coef);
+   TINKER_FCALL2(acc1, cu1, ehal, lmdaDerivVers(vers, use_vdlmda));
 }
 
 TINKER_FVOID2(acc1, cu1, ehalReduceXyz);
