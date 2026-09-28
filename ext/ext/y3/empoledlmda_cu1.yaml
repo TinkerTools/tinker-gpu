@@ -43,7 +43,7 @@ EXTRA_PARAMS: |
   , real* restrict trqx, real* restrict trqy, real* restrict trqz
   , real* restrict dltrqx, real* restrict dltrqy, real* restrict dltrqz
   , const real (*restrict rpole)[10], const int* restrict grp
-  , real f, real aewald, EmScale esc
+  , real f, real aewald, GrpScale esc
   , real deldl, real d2eldl2
 # IMPLICIT_PARAMS:
 

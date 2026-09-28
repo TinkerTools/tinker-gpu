@@ -1,5 +1,6 @@
 #include "ff/cumodamoeba.h"
 #include "ff/dlmda.h"
+#include "ff/elec.h"
 #include "ff/evdw.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
@@ -65,14 +66,15 @@ static void epolarAstDeriv_cu1(int n, real f, EnergyBuffer restrict depdl,
    const real (*restrict dfd)[3], const real (*restrict dfp)[3],   //
    const real (*restrict f0d)[3], const real (*restrict f0p)[3],   //
    const real (*restrict ufd)[3], const real (*restrict ufp)[3],   //
-   const real* restrict polarity_inv, const real* restrict polarityorig, const int* restrict mut)
+   const real* restrict polarity_inv, const real* restrict polarityorig, const int* restrict grp, GrpScale sc)
 {
    int ithread = ITHREAD;
    for (int i = ithread; i < n; i += STRIDE) {
       real term = uinp[i][0] * dfd[i][0] + uinp[i][1] * dfd[i][1] + uinp[i][2] * dfd[i][2]
          + uind[i][0] * dfp[i][0] + uind[i][1] * dfp[i][1] + uind[i][2] * dfp[i][2];
 
-      if (mut[i] and polarityorig[i] != 0) {
+      // only the charging ligand carries a polarizability derivative
+      if (sc.ds[grp[i]] != 0 and polarityorig[i] != 0) {
          real fdx, fdy, fdz, fpx, fpy, fpz;
          if (f0d) {
             fdx = f0d[i][0] + ufd[i][0], fdy = f0d[i][1] + ufd[i][1], fdz = f0d[i][2] + ufd[i][2];
@@ -94,7 +96,7 @@ void epolarAstDeriv_cu(EnergyBuffer depdl, const real (*dfd)[3], const real (*df
 {
    const real f = -0.5 * (electric / dielec) * dpldlmda;
    launch_k1b(g::s0, n, epolarAstDeriv_cu1, n, f, depdl, uind, uinp, dfd, dfp, f0d, f0p, ufd, ufp,
-      polarity_inv, polarityorig, mut);
+      polarity_inv, polarityorig, emGroup(), grpScale(plam));
 }
 
 __global__

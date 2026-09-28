@@ -4,7 +4,6 @@
 #include "ff/modamoeba.h"
 #include "ff/pme.h"
 #include "tool/externfunc.h"
-#include <cassert>
 
 namespace tinker {
 TINKER_FVOID2(acc1, cu1, torque, int, grad_prec*, grad_prec*, grad_prec*);
@@ -41,13 +40,10 @@ static void rotpoleState(RdtMask mask, const int* group)
    TINKER_FCALL2(acc0, cu1, rotpoleState, mask, group);
 }
 
-TINKER_FVOID2(acc0, cu1, mpoleScale, real);
-void mpoleScale(real factor)
+TINKER_FVOID2(acc0, cu1, mpoleScale, const int*, GrpScale);
+void mpoleScale(double lmda)
 {
-   // Scales every mutated site alike, which only the absolute schedule means;
-   // a relative run scales each ligand group on its own (emScale).
-   assert(not use_rel);
-   TINKER_FCALL2(acc0, cu1, mpoleScale, factor);
+   TINKER_FCALL2(acc0, cu1, mpoleScale, emGroup(), grpScale(lmda));
 }
 
 static void mpoleInitBuffers(int vers, bool use_vir_trq)
@@ -111,11 +107,13 @@ void mpoleInit(int vers, bool do_dlmda)
    }
 }
 
+// The B-splines were already filled by the mpoleInit() that precedes this
+// call for the same coordinates.
 void mpoleInitAst()
 {
    rotpole(true);
    if (useEwald())
-      mpoleInitEwald(true, true, true, false);
+      mpoleInitEwald(true, true, false, false);
 }
 
 // A dual topology driver accumulates torque over every subsystem and converts it
@@ -131,6 +129,13 @@ void mpoleInitStateDt(int vers, RdtMask mask, const int* group, bool first_state
       mpoleZeroRecipVirial();
       mpoleInitEwald(false, false, first_state, first_state);
    }
+}
+
+// Rotates the lambda scaled pole into rpole and leaves cmp alone, for callers
+// whose cmp already holds the same scaled multipoles.
+void mpoleRotateScaled()
+{
+   rotpole(false);
 }
 
 void mpoleRefresh()

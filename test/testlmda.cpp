@@ -58,6 +58,11 @@ const Fixture kFixtures[] = {
    {"19_water_rels_lig2_l015", 4.0e-3, 3.0},
    {"20_water_rels_lig1_ne_l085", 4.0e-3, 3.0},
    {"21_water_rels_lig1_nlist_exf_l085", 4.0e-3, 3.0},
+   {"22_water_rels_lig1_st_l085", 4.0e-3, 3.0},
+   {"23_water_rels_lig2_st_l015", 4.0e-3, 3.0},
+   {"24_water_rels_lig1_st_ne_l085", 4.0e-3, 3.0},
+   {"25_water_rels_lig1_st_polonly_l085", 4.0e-3, 3.0},
+   {"26_water_rels_lig1_dt_polonly_l078", 4.0e-3, 3.0},
 };
 
 void runFixture(const Fixture& fx)
@@ -157,4 +162,9 @@ TEST_CASE("TESTLMDA-18_water_rels_lig1_l085", "[ff][testlmda][rdt]") { runFixtur
 TEST_CASE("TESTLMDA-19_water_rels_lig2_l015", "[ff][testlmda][rdt]") { runFixture(kFixtures[17]); }
 TEST_CASE("TESTLMDA-20_water_rels_lig1_ne_l085", "[ff][testlmda][rdt]") { runFixture(kFixtures[18]); }
 TEST_CASE("TESTLMDA-21_water_rels_lig1_nlist_exf_l085", "[ff][testlmda][rdt]") { runFixture(kFixtures[19]); }
+TEST_CASE("TESTLMDA-22_water_rels_lig1_st_l085", "[ff][testlmda][rdt]") { runFixture(kFixtures[20]); }
+TEST_CASE("TESTLMDA-23_water_rels_lig2_st_l015", "[ff][testlmda][rdt]") { runFixture(kFixtures[21]); }
+TEST_CASE("TESTLMDA-24_water_rels_lig1_st_ne_l085", "[ff][testlmda][rdt]") { runFixture(kFixtures[22]); }
+TEST_CASE("TESTLMDA-25_water_rels_lig1_st_polonly_l085", "[ff][testlmda][rdt]") { runFixture(kFixtures[23]); }
+TEST_CASE("TESTLMDA-26_water_rels_lig1_dt_polonly_l078", "[ff][testlmda][rdt]") { runFixture(kFixtures[24]); }
 #endif

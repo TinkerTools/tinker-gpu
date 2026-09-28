@@ -45,7 +45,7 @@ void empoleSelf_cu(CountBuffer restrict nem, EnergyBuffer restrict em, const rea
 template <class Ver>
 __global__
 void empoleSelfDlmda_cu(CountBuffer restrict nem, EnergyBuffer restrict em, EnergyBuffer restrict demdl,
-   EnergyBuffer restrict d2emdl2, const real (*restrict rpole)[10], const int* restrict grp, EmScale esc, int n,
+   EnergyBuffer restrict d2emdl2, const real (*restrict rpole)[10], const int* restrict grp, GrpScale esc, int n,
    real f, real aewald, real deldl, real d2eldl2)
 {
    constexpr bool do_a = Ver::a;

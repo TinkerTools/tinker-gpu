@@ -249,7 +249,10 @@ void empoleEwaldRecipGeneric_cu1(int n, real f,                                 
    }
 }
 
-template <class Ver, int CFLX>
+// With REUSE, fmp, fphi and cphi are the ones induce() just built for the
+// direct field from this same cmp, and the convolution virial is already in
+// vir_m, so only the per-atom work is left.
+template <class Ver, int CFLX, bool REUSE = false>
 static void empoleEwaldRecipGeneric_cu()
 {
    constexpr bool do_e = Ver::e;
@@ -257,23 +260,32 @@ static void empoleEwaldRecipGeneric_cu()
    constexpr bool do_v = Ver::v;
 
    const PMEUnit pu = epme_unit;
-   cmpToFmp(pu, cmp, fmp);
-   gridMpole(pu, fmp);
-   fftfront(pu);
-   if CONSTEXPR (do_v) {
-      if (vir_m) {
-         pmeConv(pu, vir_m);
-         auto size = bufferSize() * VirialBufferTraits::value;
-         sumVirialBuffer(size, vir_em, vir_m);
-      } else {
-         pmeConv(pu, vir_em);
+   if CONSTEXPR (REUSE) {
+      if CONSTEXPR (do_v) {
+         if (vir_m) {
+            auto size = bufferSize() * VirialBufferTraits::value;
+            sumVirialBuffer(size, vir_em, vir_m);
+         }
       }
    } else {
-      pmeConv(pu);
+      cmpToFmp(pu, cmp, fmp);
+      gridMpole(pu, fmp);
+      fftfront(pu);
+      if CONSTEXPR (do_v) {
+         if (vir_m) {
+            pmeConv(pu, vir_m);
+            auto size = bufferSize() * VirialBufferTraits::value;
+            sumVirialBuffer(size, vir_em, vir_m);
+         } else {
+            pmeConv(pu, vir_em);
+         }
+      } else {
+         pmeConv(pu);
+      }
+      fftback(pu);
+      fphiMpole(pu, fphi);
+      fphiToCphi(pu, fphi, cphi);
    }
-   fftback(pu);
-   fphiMpole(pu, fphi);
-   fphiToCphi(pu, fphi, cphi);
 
    auto& st = *pu;
    const int nfft1 = st.nfft1;
@@ -285,6 +297,22 @@ static void empoleEwaldRecipGeneric_cu()
       n, f, em, vir_em, demx, demy, demz, trqx, trqy, trqz, pot,             //
       cmp, fmp, cphi, fphi,                                                  //
       nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS);
+}
+
+// Multipole reciprocal energy and forces from the potential induce() left in
+// fphi and cphi; the caller guarantees cmp and the coordinates are unchanged.
+void empoleEwaldRecipReuse_cu(int vers)
+{
+   if (vers == calc::v0)
+      empoleEwaldRecipGeneric_cu<calc::V0, 0, true>();
+   else if (vers == calc::v1)
+      empoleEwaldRecipGeneric_cu<calc::V1, 0, true>();
+   else if (vers == calc::v4)
+      empoleEwaldRecipGeneric_cu<calc::V4, 0, true>();
+   else if (vers == calc::v5)
+      empoleEwaldRecipGeneric_cu<calc::V5, 0, true>();
+   else if (vers == calc::v6)
+      empoleEwaldRecipGeneric_cu<calc::V6, 0, true>();
 }
 
 void empoleChgpenEwaldRecip_cu(int vers, int use_cf)

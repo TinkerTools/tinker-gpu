@@ -37,7 +37,7 @@ static void pchgData(RcOp op)
 
    if (op & RcOp::INIT) {
       std::vector<real> pchgbuf(n);
-      const EmScale esc = emScale();
+      const GrpScale esc = grpScale(elam);
       for (int i = 0; i < n; ++i) {
          int itype = atoms::type[i] - 1;
          pchgbuf[i] = kchrge::chg[itype] * esc.s[mutant::mutg[i]];

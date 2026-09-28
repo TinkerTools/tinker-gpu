@@ -10,7 +10,7 @@ void empoledlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, Energ
    const Spatial::SortedAtom* restrict sorted, int nakpl, const int* restrict iakpl, int niak, const int* restrict iak,
    const int* restrict lst, real* restrict trqx, real* restrict trqy, real* restrict trqz, real* restrict dltrqx,
    real* restrict dltrqy, real* restrict dltrqz, const real (*restrict rpole)[10], const int* restrict grp, real f,
-   real aewald, EmScale esc, real deldl, real d2eldl2)
+   real aewald, GrpScale esc, real deldl, real d2eldl2)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;

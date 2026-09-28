@@ -32,8 +32,8 @@ EXTRA_PARAMS: |
   , real* restrict trqx, real* restrict trqy, real* restrict trqz
   , const real (*restrict rpole)[10]
   , const real (*restrict uind)[3], const real (*restrict uinp)[3]
-  , const int* restrict mut
-  , real f, real aewald, real elambda, real deldl
+  , const int* restrict grp
+  , real f, real aewald, GrpScale esc, real deldl
 IMPLICIT_PARAMS:
   - d::jpolar
   - d::njpolar
@@ -62,7 +62,7 @@ I_VARIABLES:
   - shared real uipz from:uinp,2
   - shared real pdi  from:pdamp
   - shared int  jpi  from:jpolar
-  - shared int  muti from:mut
+  - shared int  gi from:grp
 K_VARIABLES:
   - shared   real xk   from:x
   - shared   real yk   from:y
@@ -85,7 +85,7 @@ K_VARIABLES:
   - register real ukpz from:uinp,2
   - register real pdk  from:pdamp
   - register int  jpk  from:jpolar
-  - register int  mutk from:mut
+  - register int  gk from:grp
 I_FORCE:
   - register real frcxi addto:gx
   - register real frcyi addto:gy
@@ -106,14 +106,14 @@ SCALED_PAIRWISE_INTERACTION: |
   real yr = @yk@ - @yi@;
   real zr = @zk@ - @zi@;
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  real si = esc.s[@gi@], dsi = esc.ds[@gi@];
+  real sk = esc.s[@gk@], dsk = esc.ds[@gk@];
+  // an annihilated site has no multipole and no induced dipole
+  bool live = (si != 0 or dsi != 0) and (sk != 0 or dsk != 0);
+  if (r2 <= off * off and incl and live) {
     real pga = thlval[njpolar * jpi[klane] + jpk];
     real e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1;
     real edl1 = 0;
-    real si = @muti@ ? elambda : 1;
-    real sk = @mutk@ ? elambda : 1;
-    real dsi = @muti@ ? 1 : 0;
-    real dsk = @mutk@ ? 1 : 0;
     pairMplar<Ver, NON_EWALD, true>(
       r2, make_real3(xr, yr, zr), scalea-1, scaleb-1, scalec-1, scaled-1,
       @ci@, make_real3(@dix@, @diy@, @diz@),
@@ -148,14 +148,14 @@ FULL_PAIRWISE_INTERACTION: |
   real yr = @yk@ - @yi@;
   real zr = @zk@ - @zi@;
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  real si = esc.s[@gi@], dsi = esc.ds[@gi@];
+  real sk = esc.s[@gk@], dsk = esc.ds[@gk@];
+  // an annihilated site has no multipole and no induced dipole
+  bool live = (si != 0 or dsi != 0) and (sk != 0 or dsk != 0);
+  if (r2 <= off * off and incl and live) {
     real pga = thlval[njpolar * jpi[klane] + jpk];
     real e, vxx, vyx, vzx, vyy, vzy, vzz;
     real edl = 0;
-    real si = @muti@ ? elambda : 1;
-    real sk = @mutk@ ? elambda : 1;
-    real dsi = @muti@ ? 1 : 0;
-    real dsk = @mutk@ ? 1 : 0;
     pairMplar<Ver, ETYP, true>(
       r2, make_real3(xr, yr, zr), 1, 1, 1, 1,
       @ci@, make_real3(@dix@, @diy@, @diz@),

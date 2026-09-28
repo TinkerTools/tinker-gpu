@@ -518,28 +518,23 @@ void epolarData(RcOp op)
       if (use_epast) {
          FstrView poltypstr = polpot::poltyp;
          if (not(poltypstr == "MUTUAL"))
-            TINKER_THROW("Absolute single topology polarization dU/dLambda supports "
+            TINKER_THROW("Single topology polarization dU/dLambda supports "
                          "MUTUAL polarization only.");
          if (not polpot::use_thole or polpot::use_tholed)
-            TINKER_THROW("Absolute single topology polarization dU/dLambda supports "
+            TINKER_THROW("Single topology polarization dU/dLambda supports "
                          "Thole damping only.");
          if (mplpot::use_chgpen)
-            TINKER_THROW("Absolute single topology polarization dU/dLambda does not "
+            TINKER_THROW("Single topology polarization dU/dLambda does not "
                          "support charge penetration.");
          if (polpot::use_expol)
-            TINKER_THROW("Absolute single topology polarization dU/dLambda does not "
+            TINKER_THROW("Single topology polarization dU/dLambda does not "
                          "support exchange polarization.");
          if (use(Potent::CHGFLX))
-            TINKER_THROW("Absolute single topology polarization dU/dLambda does not "
+            TINKER_THROW("Single topology polarization dU/dLambda does not "
                          "support charge flux.");
          if (use(Potent::SOLV))
-            TINKER_THROW("Absolute single topology polarization dU/dLambda does not "
+            TINKER_THROW("Single topology polarization dU/dLambda does not "
                          "support implicit solvent.");
-         // OST wants the second lambda derivative and the lambda force, neither
-         // of which this derivative yields.
-         if (use_ost)
-            TINKER_THROW("OST cannot be used with absolute single topology polarization; "
-                         "add POL-DUALTOPO or remove OST.");
       }
 
       std::vector<int> jpolarvec(n);
@@ -553,9 +548,10 @@ void epolarData(RcOp op)
 
       const double polmin = 1.0e-16;
       std::vector<double> polbuf(n);
+      const GrpScale psc = grpScale(plam);
       for (int i = 0; i < n; ++i) {
          if (use_plmda and mutant::mutg[i] != 0)
-            polbuf[i] = plam * dlmda::polarityorig[i];
+            polbuf[i] = psc.s[mutant::mutg[i]] * dlmda::polarityorig[i];
          else
             polbuf[i] = polar::polarity[i];
       }
@@ -690,7 +686,7 @@ void epolarAstDeriv(int vers)
       ufield(uind, uinp, ufd, ufp);
    }
 
-   mpoleInitStateDt(vers, RdtMask::LIGA, mut, false);
+   mpoleInitStateDt(vers, chargeMask(), emGroup(), false);
    if (useEwald())
       dfieldEwald(dfd, dfp);
    else
@@ -712,7 +708,7 @@ void epolar(int vers)
 
    if (use_plmda) {
       mpoleScale(plam);
-      polarState(RdtMask::ALL, mut, plam);
+      polarState(coupledMask(), emGroup(), plam);
    }
 
    if (use_cf)
@@ -867,29 +863,17 @@ static void epolarState(int vers, RdtMask mask, const int* group, bool first_sta
 
 // Whether one subsystem's interactions are the ones analysis reports.
 // Polarization reports whichever endpoint ran rather than always the coupled
-// one (epolar3.f:2559), so unlike the multipole and van der Waals terms there is
-// never a count-only pass -- but only that endpoint's subsystems may count, or
-// the two endpoints would be summed together.
-static bool epolarCounts(const DtPass& p, bool relative, bool coupled, bool need1)
+// one (epolar3.f:2559), so there is never a count-only pass -- but only that
+// endpoint may count, or the two endpoints would be summed together.
+static bool epolarCounts(const DtPass& p, bool need1)
 {
-   if (not(need1 ? p.in1 : p.in0))
-      return false;
-   if (not relative)
-      return true;
-   // Within the reported endpoint, one ligand-plus-environment subsystem carries
-   // the whole count if there is one; a decoupled endpoint has none, so its
-   // subsystems sum instead.
-   return not coupled or relSlotIsCoupled(p.slot);
+   return need1 ? p.in1 : p.in0;
 }
 
 void epolar_dt(int vers)
 {
    const int dvers = lmdaDerivVers(vers, use_pdlmda);
-   // use_eprdt is use_epdt and use_rel, and this is only reached under use_epdt.
-   const bool relative = use_eprdt;
-   // The relative schedule labels atoms by ligand; the absolute one only knows
-   // mutated from not.
-   const int* group = relative ? rdt_group : mut;
+   const int* group = emGroup();
    auto do_g = vers & calc::grad;
    auto do_a = vers & calc::analyz;
 
@@ -902,28 +886,14 @@ void epolar_dt(int vers)
    DtCoef c;
    dtWeightsToCoef(c, w, dw, d2w, dpldlmda, d2pldlmda2, use_pdlmda);
 
-   DtPass pass[nRelSlot];
-   const int npass = dtPassList(relative, eprelst0, eprelst1, pass);
-
-   // Whether the reported endpoint has a ligand-plus-environment subsystem to
-   // carry its whole interaction count. Only the relative schedule builds an
-   // endpoint out of several subsystems.
-   bool coupled = false;
-   if (relative) {
-      const RelState reported = need1 ? eprelst1 : eprelst0;
-      for (int k = 0; k < nRelSlot and not coupled; ++k) {
-         RdtMask mask;
-         bool in0, in1;
-         relSlot(k, reported, reported, mask, in0, in1);
-         coupled = in0 and relSlotIsCoupled(k);
-      }
-   }
+   DtPass pass[2];
+   const int npass = dtPassList(pass);
 
    bool first = true;
    for (int k = 0; k < npass; ++k) {
       real wa, wb, wc;
       dtPassWeights(c, pass[k], wa, wb, wc);
-      const bool counts = do_a and epolarCounts(pass[k], relative, coupled, need1);
+      const bool counts = do_a and epolarCounts(pass[k], need1);
       if (dtPassIsIdle(dvers, wa, wb, wc, counts))
          continue;
       epolarState(counts ? dvers : dvers & ~calc::analyz, pass[k].mask, group, first, wa, wb, wc);

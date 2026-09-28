@@ -90,52 +90,22 @@ RelStage relStageFrom(const char* s)
    return RelStage::VDWM;
 }
 
-void relSlot(int k, RelState ist0, RelState ist1, RdtMask& mask, bool& in0, bool& in1)
+// dlambda.f:grpscale. The environment is unscaled and the charging ligand
+// carries the coupling value; a staged relative leg annihilates the other
+// ligand, and the LIG2 leg charges ligand 2 instead of ligand 1.
+GrpScale grpScale(double lmda)
 {
-   // Only five subsystems are reachable, and the three coupling states of a
-   // relative dual topology are sums of them (mutate.f:relslot):
-   //
-   //    slot   la     lb     le     subsystem
-   //      0    T      F      T      ligand 1 with environment
-   //      1    F      T      T      ligand 2 with environment
-   //      2    F      F      T      environment alone
-   //      3    T      F      F      ligand 1 alone
-   //      4    F      T      F      ligand 2 alone
-   //
-   //    LIG1 = slots 0 and 4 ,   ligand 1 bound, ligand 2 free
-   //    LIG2 = slots 1 and 3 ,   ligand 2 bound, ligand 1 free
-   //    NONE = slots 2, 3 and 4 ,  neither ligand bound
-   static constexpr RdtMask kMask[nRelSlot] = {
-      RdtMask::AE, RdtMask::BE, RdtMask::ENV, RdtMask::LIGA, RdtMask::LIGB};
-   // kMember[slot][state - 1].
-   static constexpr bool kMember[nRelSlot][3] = {
-      {true, false, false},  //
-      {false, true, false},  //
-      {false, false, true},  //
-      {false, true, true},   //
-      {true, false, true}};  //
-
-   mask = kMask[k];
-   in0 = kMember[k][(int)ist0 - 1];
-   in1 = kMember[k][(int)ist1 - 1];
-}
-
-// dlambda.f:emscale. The environment is unscaled and the charging ligand
-// carries the electrostatic sub-lambda; a staged relative leg annihilates the
-// other ligand, and the LIG2 leg charges ligand 2 instead of ligand 1.
-EmScale emScale()
-{
-   EmScale c;
+   GrpScale c;
    c.s[0] = 1;
    c.ds[0] = 0;
-   c.s[1] = elam;
+   c.s[1] = lmda;
    c.ds[1] = 1;
    c.s[2] = 0;
    c.ds[2] = 0;
    if (use_relstage and relstage == RelStage::LIG2) {
       c.s[1] = 0;
       c.ds[1] = 0;
-      c.s[2] = elam;
+      c.s[2] = lmda;
       c.ds[2] = 1;
    }
    return c;
@@ -144,6 +114,16 @@ EmScale emScale()
 const int* emGroup()
 {
    return use_rel ? rdt_group : mut;
+}
+
+RdtMask chargeMask()
+{
+   return (use_relstage and relstage == RelStage::LIG2) ? RdtMask::LIGB : RdtMask::LIGA;
+}
+
+RdtMask coupledMask()
+{
+   return static_cast<RdtMask>(static_cast<unsigned>(RdtMask::ENV) | static_cast<unsigned>(chargeMask()));
 }
 
 // E = w*E1 + (1-w)*E0, so dE/dl = dw*(E1-E0) and d2E/dl2 = d2w*(E1-E0), which
@@ -269,25 +249,14 @@ void LmdaBuffer::flush(int vers) const
    }
 }
 
-int dtPassList(bool relative, RelState ist0, RelState ist1, DtPass out[nRelSlot])
+int dtPassList(DtPass out[2])
 {
-   if (not relative) {
-      // The absolute schedule zeroes the mutated atoms for endpoint 0 and keeps
-      // the whole system for endpoint 1; there is nothing the two share.
-      out[0] = {RdtMask::ENV, true, false, -1};
-      out[1] = {RdtMask::ALL, false, true, -1};
-      return 2;
-   }
-
-   int npass = 0;
-   for (int k = 0; k < nRelSlot; ++k) {
-      RdtMask mask;
-      bool in0, in1;
-      relSlot(k, ist0, ist1, mask, in0, in1);
-      if (in0 or in1)
-         out[npass++] = {mask, in0, in1, k};
-   }
-   return npass;
+   // Endpoint 0 zeroes both ligands and endpoint 1 keeps the charging one, with
+   // the other ligand of a staged relative leg annihilated (dlambda.f:grpscale);
+   // there is nothing the two share.
+   out[0] = {RdtMask::ENV, true, false};
+   out[1] = {coupledMask(), false, true};
+   return 2;
 }
 
 void dtPassWeights(const DtCoef& c, const DtPass& p, real& wa, real& wb, real& wc)
@@ -316,10 +285,8 @@ void dlmda_mech()
    use_epast = (mutant::use_past != 0) and use_pdlmda and not use_osrw;
 
    // Every multipole run takes the single topology path; a relative one scales
-   // each ligand group on its own (emScale).
+   // each ligand group on its own (grpScale).
    use_emast = use_edlmda;
-   use_epadt = use_epdt && !use_rel;
-   use_eprdt = use_epdt && use_rel;
 
    epdtexp = dlmda::epdtexp;
 
@@ -406,11 +373,6 @@ void dlmda_mech()
 
    use_relstage = (dlmda::use_relstage != 0);
    relstage = relStageFrom(dlmda::relstage);
-
-   // Plain relative interpolates the polarization between the two coupled
-   // states; mapRelStage() overrides the pair on a staged leg (mutate.f).
-   eprelst0 = RelState::LIG2;
-   eprelst1 = RelState::LIG1;
 }
 
 void avgstd(const std::vector<double>& v, int begin, int count, double& avg, double& sd)
@@ -774,11 +736,11 @@ static void mapOne(double lmda, Lmdamap map, double qnt0, double qnt1, int expEx
 // Maps the main lambda onto the sub-lambdas of the one declared staged
 // relative leg (dlambda.f:maprelstage):
 //
-//    LIG2   charge ligand 2 against the decoupled reference, its weight
-//             rising with the main lambda
-//    VDWM   both ligands electrostatically decoupled while van der Waals
-//             morphs from ligand 2 onto ligand 1
-//    LIG1   charge ligand 1 against the decoupled reference, its weight
+//    LIG2   charge ligand 2 with ligand 1 annihilated, its weight
+//             falling as the main lambda rises
+//    VDWM   both ligands electrostatically annihilated while van der
+//             Waals morphs from ligand 2 onto ligand 1
+//    LIG1   charge ligand 1 with ligand 2 annihilated, its weight
 //             rising with the main lambda
 static void mapRelStage(double lmda)
 {
@@ -788,8 +750,6 @@ static void mapRelStage(double lmda)
       // The middle leg holds both ligands uncharged, so electrostatics and
       // polarization sit at the reference state and leave the chain rule
       // while van der Waals morphs across its map.
-      eprelst0 = RelState::NONE;
-      eprelst1 = RelState::NONE;
       eval = 0.0;
       deldlmda = 0.0;
       d2eldlmda2 = 0.0;
@@ -797,10 +757,8 @@ static void mapRelStage(double lmda)
          vlmdaapmn, vlmdaapmrho, vval, dvldlmda, d2vldlmda2);
       vlam = vval;
    } else if (relstage == RelStage::LIG1) {
-      // The ligand 1 leg charges ligand 1 against the decoupled reference
-      // with van der Waals already morphed onto it.
-      eprelst0 = RelState::NONE;
-      eprelst1 = RelState::LIG1;
+      // The ligand 1 leg charges ligand 1 with ligand 2 annihilated and van
+      // der Waals already morphed onto ligand 1.
       mapOne(lmda, elmdamap, qntelmda0, qntelmda1, elmdaexp, elmdainvn, elmdainveps, //
          elmdaapmn, elmdaapmrho, eval, deldlmda, d2eldlmda2);
       vlam = 1.0;
@@ -809,8 +767,6 @@ static void mapRelStage(double lmda)
    } else {
       // The ligand 2 leg discharges ligand 2 as the main lambda rises, so its
       // weight is the complement of the map, with van der Waals still on it.
-      eprelst0 = RelState::NONE;
-      eprelst1 = RelState::LIG2;
       mapOne(lmda, elmdamap, qntelmda0, qntelmda1, elmdaexp, elmdainvn, elmdainveps, //
          elmdaapmn, elmdaapmrho, eval, deldlmda, d2eldlmda2);
       eval = 1.0 - eval;

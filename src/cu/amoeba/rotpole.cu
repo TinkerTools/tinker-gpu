@@ -74,18 +74,19 @@ void rotrepole_cu()
 
 __global__
 static void mpoleScale_cu1(int n, real (*restrict pole)[MPL_TOTAL],
-   const real (*restrict poleorig)[MPL_TOTAL], const int* restrict mut, real factor)
+   const real (*restrict poleorig)[MPL_TOTAL], const int* restrict grp, GrpScale sc)
 {
    for (int i = ITHREAD; i < n; i += STRIDE) {
-      if (mut[i]) {
+      if (grp[i]) {
+         real factor = sc.s[grp[i]];
          for (int j = 0; j < MPL_TOTAL; ++j)
             pole[i][j] = factor * poleorig[i][j];
       }
    }
 }
 
-void mpoleScale_cu(real factor)
+void mpoleScale_cu(const int* grp, GrpScale sc)
 {
-   launch_k1s(g::s0, n, mpoleScale_cu1, n, pole, poleorig, mut, factor);
+   launch_k1s(g::s0, n, mpoleScale_cu1, n, pole, poleorig, grp, sc);
 }
 }

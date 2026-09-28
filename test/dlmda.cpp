@@ -196,52 +196,6 @@ TEST_CASE("DLMDA-taper-degenerate", "[ff][dlmda]")
    COMPARE_REALS(dt, 0.0, 1.0e-14);
 }
 
-TEST_CASE("DLMDA-relslot", "[ff][dlmda]")
-{
-   // The subsystem table of mutate.f:relslot, and the three coupling states
-   // built out of it.
-   static const RdtMask kMask[nRelSlot] = {RdtMask::AE, RdtMask::BE, RdtMask::ENV, RdtMask::LIGA, RdtMask::LIGB};
-   for (int k = 0; k < nRelSlot; ++k) {
-      CAPTURE(k);
-      RdtMask mask;
-      bool in0, in1;
-      relSlot(k, RelState::LIG1, RelState::LIG2, mask, in0, in1);
-      REQUIRE(mask == kMask[k]);
-      // LIG1 = slots 0 and 4, LIG2 = slots 1 and 3.
-      REQUIRE(in0 == (k == 0 or k == 4));
-      REQUIRE(in1 == (k == 1 or k == 3));
-
-      relSlot(k, RelState::NONE, RelState::NONE, mask, in0, in1);
-      // NONE = slots 2, 3 and 4.
-      REQUIRE(in0 == (k == 2 or k == 3 or k == 4));
-      REQUIRE(in1 == in0);
-   }
-
-   // Only a ligand bound to the environment carries the reported count.
-   REQUIRE(relSlotIsCoupled(0));
-   REQUIRE(relSlotIsCoupled(1));
-   for (int k = 2; k < nRelSlot; ++k)
-      REQUIRE_FALSE(relSlotIsCoupled(k));
-
-   // Each state is disjoint from the other coupled one but shares a lone
-   // ligand with the decoupled reference; that overlap is what the relative
-   // driver hoists past the mix.
-   auto slotsOf = [](RelState st) {
-      int bits = 0;
-      for (int k = 0; k < nRelSlot; ++k) {
-         RdtMask mask;
-         bool in0, in1;
-         relSlot(k, st, st, mask, in0, in1);
-         if (in0)
-            bits |= 1 << k;
-      }
-      return bits;
-   };
-   REQUIRE((slotsOf(RelState::LIG1) & slotsOf(RelState::LIG2)) == 0);
-   REQUIRE((slotsOf(RelState::LIG1) & slotsOf(RelState::NONE)) == (1 << 4));
-   REQUIRE((slotsOf(RelState::LIG2) & slotsOf(RelState::NONE)) == (1 << 3));
-}
-
 TEST_CASE("DLMDA-dtneed", "[ff][dlmda]")
 {
    bool need0, need1;
@@ -322,8 +276,6 @@ TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
    // Ligand 2 is discharged as the main lambda rises; van der Waals sits on it.
    setStagedLeg(RelStage::LIG2);
    mapAt(0.0);
-   REQUIRE(eprelst0 == RelState::NONE);
-   REQUIRE(eprelst1 == RelState::LIG2);
    COMPARE_REALS(elam, 1.0, 1.0e-7);
    COMPARE_REALS(vlam, 0.0, 1.0e-14);
    COMPARE_REALS(dvldlmda, 0.0, 1.0e-14);
@@ -339,8 +291,6 @@ TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
    for (double lambda : {0.3, 0.5, 0.7}) {
       CAPTURE(lambda);
       mapAt(lambda);
-      REQUIRE(eprelst0 == RelState::NONE);
-      REQUIRE(eprelst1 == RelState::NONE);
       COMPARE_REALS(elam, 0.0, 1.0e-14);
       COMPARE_REALS(deldlmda, 0.0, 1.0e-14);
       COMPARE_REALS(d2eldlmda2, 0.0, 1.0e-14);
@@ -355,8 +305,6 @@ TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
    // Ligand 1 is charged as the main lambda rises, van der Waals already on it.
    setStagedLeg(RelStage::LIG1);
    mapAt(0.7);
-   REQUIRE(eprelst0 == RelState::NONE);
-   REQUIRE(eprelst1 == RelState::LIG1);
    COMPARE_REALS(elam, 0.0, 1.0e-7);
    COMPARE_REALS(vlam, 1.0, 1.0e-14);
    COMPARE_REALS(dvldlmda, 0.0, 1.0e-14);

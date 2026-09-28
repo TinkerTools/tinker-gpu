@@ -38,21 +38,10 @@ enum class LmdaThMap
 /// Declared leg of the staged relative schedule.
 enum class RelStage
 {
-   LIG2, ///< discharge ligand 2 against the decoupled reference
-   VDWM, ///< both ligands decoupled while van der Waals morphs 2 -> 1
-   LIG1  ///< charge ligand 1 against the decoupled reference
+   LIG2, ///< charge ligand 2 with ligand 1 annihilated
+   VDWM, ///< both ligands annihilated while van der Waals morphs 2 -> 1
+   LIG1  ///< charge ligand 1 with ligand 2 annihilated
 };
-
-/// Coupling state of a relative dual topology.
-enum class RelState
-{
-   LIG1 = 1, ///< ligand 1 bound to the environment, ligand 2 free
-   LIG2 = 2, ///< ligand 2 bound to the environment, ligand 1 free
-   NONE = 3  ///< neither ligand bound
-};
-
-/// The number of parameter-zeroed subsystems a coupling state is built from.
-constexpr int nRelSlot = 5;
 
 /// Parses a Fortran character*3 map selector into an Lmdamap value.
 Lmdamap lmdamapFrom(const char* s);
@@ -62,21 +51,6 @@ LmdaThMap lmdaThMapFrom(const char* s);
 
 /// Parses a Fortran character*4 leg selector into a RelStage value.
 RelStage relStageFrom(const char* s);
-
-/// Subsystem slot lookup.
-///     slot   subsystem                  mask
-///       0    ligand 1 with environment  AE
-///       1    ligand 2 with environment  BE
-///       2    environment alone          ENV
-///       3    ligand 1 alone             LIGA
-///       4    ligand 2 alone             LIGB
-void relSlot(int k, RelState ist0, RelState ist1, RdtMask& mask, bool& in0, bool& in1);
-
-/// Whether slot \c k couples a ligand to the environment.
-inline bool relSlotIsCoupled(int k)
-{
-   return k == 0 or k == 1;
-}
 
 /// Power law interpolation weight and its first two derivatives
 /// (dlambda.f:relpowerwt). Used by absolute and relative dual topology alike.
@@ -107,22 +81,30 @@ struct DtCoef
 };
 
 /// \ingroup ff
-/// The electrostatic scale of each atom group and its derivative with respect
-/// to the electrostatic sub-lambda (dlambda.f:emscale), indexed by the mutg
-/// group: 0 environment, 1 ligand 1, 2 ligand 2. The environment is unscaled,
-/// the charging ligand carries the sub-lambda, and in a staged relative leg the
-/// other ligand is annihilated.
-struct EmScale
+/// The electrostatic or polarization scale of each atom group at the coupling
+/// value \c lmda, and its derivative with respect to \c lmda
+/// (dlambda.f:grpscale), indexed by the mutg group: 0 environment, 1 ligand 1,
+/// 2 ligand 2. The environment is unscaled, the charging ligand carries
+/// \c lmda, and in a staged relative leg the other ligand is annihilated.
+struct GrpScale
 {
    real s[3];
    real ds[3];
 };
 
-EmScale emScale();
+GrpScale grpScale(double lmda);
 
-/// The per-atom group array the electrostatic scale is indexed by: the ternary
-/// relative dual topology labels when relative, the 0/1 mutation flags otherwise.
+/// The per-atom group array the group scale is indexed by: the ternary
+/// relative labels when relative, the 0/1 mutation flags otherwise.
 const int* emGroup();
+
+/// The atoms that charge with the coupling value: ligand 2 in the LIG2 leg of
+/// the staged relative schedule, ligand 1 (or the mutated atoms) otherwise.
+RdtMask chargeMask();
+
+/// The fully coupled state, the environment plus the charging ligand; the
+/// other ligand of a staged relative leg is annihilated.
+RdtMask coupledMask();
 
 /// Fills the six mixing weights of \c DtCoef from the interpolation weight and
 /// its two derivatives. \c chain and \c d2chain are the sub-lambda derivatives
@@ -132,19 +114,17 @@ void dtWeightsToCoef(DtCoef& c, double w, double dw, double d2w, double chain, d
 
 /// \ingroup ff
 /// One subsystem a dual topology term has to evaluate, and which of the two
-/// coupling state endpoints claim it.
+/// endpoints claim it.
 struct DtPass
 {
    RdtMask mask;
    bool in0, in1;
-   int slot; ///< relSlot() index, or -1 when the schedule is absolute.
 };
 
-/// The subsystems one dual topology term must evaluate, in order. A relative
-/// schedule walks the \c nRelSlot subsystems of relSlot(); an absolute one has
-/// only the environment (endpoint 0) and the whole system (endpoint 1).
+/// The subsystems one dual topology term must evaluate, in order: the
+/// environment alone (endpoint 0) and the fully coupled state (endpoint 1).
 /// Returns how many entries were written.
-int dtPassList(bool relative, RelState ist0, RelState ist1, DtPass out[nRelSlot]);
+int dtPassList(DtPass out[2]);
 
 /// The interpolation weights one pass carries, as the endpoint weights of
 /// \c DtCoef summed over the endpoints that claim it.
@@ -243,13 +223,14 @@ TINKER_EXTERN bool use_ti;
 TINKER_EXTERN bool use_abf;
 
 // Only the first lambda derivative is built unless use_d2lmda asks for the
-// second, force and virial ones; single topology polarization has no chain rule
-// past the first, so it reduces the dispatch as well (dlambda.f zeroes them).
+// second, force and virial ones (dlambda.f zeroes them otherwise). Single
+// topology polarization, which has no chain rule past the first, is only
+// chosen when use_d2lmda is off.
 inline int lmdaDerivMask(int flag, bool term_driven)
 {
    if (not term_driven)
       return 0;
-   bool reduced = (not use_d2lmda) or use_epast;
+   bool reduced = not use_d2lmda;
    int b = 0;
    if (flag & calc::energy) {
       b += calc::energy_dlmda1;
@@ -267,7 +248,7 @@ inline int lmdaDerivVers(int vers, bool term_driven)
 {
    if (not term_driven)
       return vers;
-   bool reduced = (not use_d2lmda) or use_epast;
+   bool reduced = not use_d2lmda;
    if (vers == calc::v1)
       return reduced ? calc::v7 : calc::v9;
    if (vers == calc::v4)
@@ -392,9 +373,6 @@ TINKER_EXTERN bool use_relstage;
 /// The declared leg, read from the REL-STAGE keyword. Constant for a run.
 TINKER_EXTERN RelStage relstage;
 
-// The two coupling states holding the polarization interpolation endpoints.
-TINKER_EXTERN RelState eprelst0;
-TINKER_EXTERN RelState eprelst1;
 
 // first and second derivatives of each sub-lambda w.r.t. the main lambda.
 TINKER_EXTERN double deldlmda;
@@ -406,8 +384,6 @@ TINKER_EXTERN double d2vldlmda2;
 
 TINKER_EXTERN bool use_rel;
 TINKER_EXTERN bool use_emast;
-TINKER_EXTERN bool use_epadt;
-TINKER_EXTERN bool use_eprdt;
 
 TINKER_EXTERN int epdtexp;
 TINKER_EXTERN int* rdt_group;

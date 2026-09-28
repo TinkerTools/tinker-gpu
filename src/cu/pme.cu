@@ -1128,7 +1128,7 @@ inline void rpoleToCmpAtomI(int i, real (*restrict cmp)[10], const real (*restri
 template <bool BUILD_DL>
 __device__
 inline void rpoleToCmpDlmdaAtomI(int i, real (*restrict cmp)[10], real (*restrict dlcmp)[10],
-   const real (*restrict rpole)[MPL_TOTAL], const int* restrict grp, EmScale esc)
+   const real (*restrict rpole)[MPL_TOTAL], const int* restrict grp, GrpScale esc)
 {
    real m[10];
    m[0] = rpole[i][MPL_PME_0];
@@ -1164,7 +1164,7 @@ void rpoleToCmp_cu1(int n, real (*restrict cmp)[10], const real (*restrict rpole
 template <bool BUILD_DL>
 __global__
 void rpoleToCmpDlmda_cu1(int n, real (*restrict cmp)[10], real (*restrict dlcmp)[10],
-   const real (*restrict rpole)[MPL_TOTAL], const int* restrict grp, EmScale esc)
+   const real (*restrict rpole)[MPL_TOTAL], const int* restrict grp, GrpScale esc)
 {
    for (int i = ITHREAD; i < n; i += STRIDE)
       rpoleToCmpDlmdaAtomI<BUILD_DL>(i, cmp, dlcmp, rpole, grp, esc);
@@ -1178,9 +1178,9 @@ void rpoleToCmp_cu()
 void rpoleToCmpDlmda_cu(bool build_dl)
 {
    if (build_dl)
-      launch_k1s(g::s0, n, rpoleToCmpDlmda_cu1<true>, n, cmp, dlcmp, rpole, emGroup(), emScale());
+      launch_k1s(g::s0, n, rpoleToCmpDlmda_cu1<true>, n, cmp, dlcmp, rpole, emGroup(), grpScale(elam));
    else
-      launch_k1s(g::s0, n, rpoleToCmpDlmda_cu1<false>, n, cmp, dlcmp, rpole, emGroup(), emScale());
+      launch_k1s(g::s0, n, rpoleToCmpDlmda_cu1<false>, n, cmp, dlcmp, rpole, emGroup(), grpScale(elam));
 }
 
 __global__

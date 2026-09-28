@@ -8,6 +8,7 @@
 #include "seq/add.h"
 #include "seq/emrecip.h"
 #include "seq/launch.h"
+#include <cassert>
 
 namespace tinker {
 template <class Ver>
@@ -115,8 +116,11 @@ void empoleEwaldRecipDlmdaGeneric_cu1(int n, real f,                            
    }
 }
 
+// With reuse_pot, fmp, fphi and cphi are the ones induce() just built for the
+// direct field from this same cmp, and the convolution virial is already in
+// vir_m, so only dlfmp and the per-atom work are left.
 template <class Ver>
-static void empoleEwaldRecipDlmdaGeneric_cu()
+static void empoleEwaldRecipDlmdaGeneric_cu(bool reuse_pot)
 {
    constexpr bool do_v = Ver::v;
    // dE/dL = dlfmp . fphi needs only the ordinary grid; the lambda derivative
@@ -129,41 +133,53 @@ static void empoleEwaldRecipDlmdaGeneric_cu()
    const PMEUnit pu = epme_unit;
    const PMEUnit dlpu = dlpme_unit;
 
-   cmpToFmp(pu, cmp, fmp);
    if CONSTEXPR (need_dlfmp)
       cmpToFmp(pu, dlcmp, dlfmp);
-   gridMpole(pu, fmp);
-   fftfront(pu);
-   if CONSTEXPR (need_dl) {
-      gridMpole(dlpu, dlfmp);
-      fftfront(dlpu);
-   }
 
-   VirialBuffer conv_vir = nullptr;
-   if CONSTEXPR (do_v)
-      conv_vir = vir_m ? vir_m : vir_em;
-   if CONSTEXPR (need_dl) {
-      pmeConvDlmda(pu, dlpu, conv_vir, conv_vir ? dvirdl_buf : nullptr, deldlmda);
-   } else {
-      if (conv_vir)
-         pmeConv(pu, conv_vir);
-      else
-         pmeConv(pu);
-   }
-   if CONSTEXPR (do_v) {
-      if (vir_m) {
-         auto size = bufferSize() * VirialBufferTraits::value;
-         sumVirialBuffer(size, vir_em, vir_m);
+   if (reuse_pot) {
+      // the lambda derivative grid would need a convolution of its own
+      assert(not need_dl);
+      if CONSTEXPR (do_v) {
+         if (vir_m) {
+            auto size = bufferSize() * VirialBufferTraits::value;
+            sumVirialBuffer(size, vir_em, vir_m);
+         }
       }
-   }
+   } else {
+      cmpToFmp(pu, cmp, fmp);
+      gridMpole(pu, fmp);
+      fftfront(pu);
+      if CONSTEXPR (need_dl) {
+         gridMpole(dlpu, dlfmp);
+         fftfront(dlpu);
+      }
 
-   fftback(pu);
-   fphiMpole(pu, fphi);
-   fphiToCphi(pu, fphi, cphi);
-   if CONSTEXPR (need_dl) {
-      fftback(dlpu);
-      fphiMpole(dlpu, dlfphi);
-      fphiToCphi(pu, dlfphi, dlcphi);
+      VirialBuffer conv_vir = nullptr;
+      if CONSTEXPR (do_v)
+         conv_vir = vir_m ? vir_m : vir_em;
+      if CONSTEXPR (need_dl) {
+         pmeConvDlmda(pu, dlpu, conv_vir, conv_vir ? dvirdl_buf : nullptr, deldlmda);
+      } else {
+         if (conv_vir)
+            pmeConv(pu, conv_vir);
+         else
+            pmeConv(pu);
+      }
+      if CONSTEXPR (do_v) {
+         if (vir_m) {
+            auto size = bufferSize() * VirialBufferTraits::value;
+            sumVirialBuffer(size, vir_em, vir_m);
+         }
+      }
+
+      fftback(pu);
+      fphiMpole(pu, fphi);
+      fphiToCphi(pu, fphi, cphi);
+      if CONSTEXPR (need_dl) {
+         fftback(dlpu);
+         fphiMpole(dlpu, dlfphi);
+         fphiToCphi(pu, dlfphi, dlcphi);
+      }
    }
 
    auto& st = *pu;
@@ -180,27 +196,27 @@ static void empoleEwaldRecipDlmdaGeneric_cu()
       nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS, deldlmda, d2eldlmda2);
 }
 
-void empoleEwaldRecipDlmda_cu(int vers)
+void empoleEwaldRecipDlmda_cu(int vers, bool reuse_pot)
 {
    if (vers == calc::v0)
-      empoleEwaldRecipDlmdaGeneric_cu<calc::V0>();
+      empoleEwaldRecipDlmdaGeneric_cu<calc::V0>(reuse_pot);
    else if (vers == calc::v1)
-      empoleEwaldRecipDlmdaGeneric_cu<calc::V1>();
+      empoleEwaldRecipDlmdaGeneric_cu<calc::V1>(reuse_pot);
    else if (vers == calc::v3)
-      empoleEwaldRecipDlmdaGeneric_cu<calc::V3>();
+      empoleEwaldRecipDlmdaGeneric_cu<calc::V3>(reuse_pot);
    else if (vers == calc::v4)
-      empoleEwaldRecipDlmdaGeneric_cu<calc::V4>();
+      empoleEwaldRecipDlmdaGeneric_cu<calc::V4>(reuse_pot);
    else if (vers == calc::v5)
-      empoleEwaldRecipDlmdaGeneric_cu<calc::V5>();
+      empoleEwaldRecipDlmdaGeneric_cu<calc::V5>(reuse_pot);
    else if (vers == calc::v6)
-      empoleEwaldRecipDlmdaGeneric_cu<calc::V6>();
+      empoleEwaldRecipDlmdaGeneric_cu<calc::V6>(reuse_pot);
    else if (vers == calc::v7)
-      empoleEwaldRecipDlmdaGeneric_cu<calc::V7>();
+      empoleEwaldRecipDlmdaGeneric_cu<calc::V7>(reuse_pot);
    else if (vers == calc::v8)
-      empoleEwaldRecipDlmdaGeneric_cu<calc::V8>();
+      empoleEwaldRecipDlmdaGeneric_cu<calc::V8>(reuse_pot);
    else if (vers == calc::v9)
-      empoleEwaldRecipDlmdaGeneric_cu<calc::V9>();
+      empoleEwaldRecipDlmdaGeneric_cu<calc::V9>(reuse_pot);
    else if (vers == calc::v10)
-      empoleEwaldRecipDlmdaGeneric_cu<calc::V10>();
+      empoleEwaldRecipDlmdaGeneric_cu<calc::V10>(reuse_pot);
 }
 }

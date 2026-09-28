@@ -67,11 +67,16 @@ static void empoleEwaldRealSelf(int vers)
    TINKER_FCALL2(acc1, cu1, empoleEwaldRealSelf, lmdaDerivVers(vers, use_emast));
 }
 
-TINKER_FVOID2(acc0, cu1, empoleEwaldRecipDlmda, int);
-void empoleEwaldRecip(int vers)
+TINKER_FVOID2(acc0, cu1, empoleEwaldRecipDlmda, int, bool);
+TINKER_FVOID2(acc0, cu1, empoleEwaldRecipReuse, int);
+void empoleEwaldRecip(int vers, bool reuse_pot)
 {
    if (use_emast) {
-      TINKER_FCALL2(acc0, cu1, empoleEwaldRecipDlmda, lmdaDerivVers(vers, use_emast));
+      TINKER_FCALL2(acc0, cu1, empoleEwaldRecipDlmda, lmdaDerivVers(vers, use_emast), reuse_pot);
+      return;
+   }
+   if (reuse_pot) {
+      TINKER_FCALL2(acc0, cu1, empoleEwaldRecipReuse, vers);
       return;
    }
    int use_cf = 0;

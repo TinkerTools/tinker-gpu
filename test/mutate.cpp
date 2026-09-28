@@ -11,6 +11,8 @@
 #include "testrt.h"
 #include "tinker9.h"
 
+#include <tinker/detail/mutant.hh>
+
 #include <algorithm>
 #include <array>
 #include <string>
@@ -78,12 +80,6 @@ const Fixture kFixtures[] = {
    {"052_water_adt_ne_p00", "water2", false, true, false, true, "adt"},
    {"056_water_adt_ye_mp05", "water2", true, true, false, true, "adt"},
    {"057_water_adt_ne_mp05", "water2", true, true, false, true, "adt"},
-   {"064_water_rdt_ye_p10", "water2", false, true, false, true, "rdt"},
-   {"065_water_rdt_ne_p10", "water2", false, true, false, true, "rdt"},
-   {"066_water_rdt_ye_p05", "water2", false, true, false, true, "rdt"},
-   {"067_water_rdt_ne_p05", "water2", false, true, false, true, "rdt"},
-   {"068_water_rdt_ye_p00", "water2", false, true, false, true, "rdt"},
-   {"069_water_rdt_ne_p00", "water2", false, true, false, true, "rdt"},
    {"070_water_rdt_v10", "water2", false, false, true, true, "rdt"},
    {"071_water_rdt_v05", "water2", false, false, true, true, "rdt"},
    {"072_water_rdt_v00", "water2", false, false, true, true, "rdt"},
@@ -111,9 +107,6 @@ const Fixture kFixtures[] = {
    {"111_water_exf_adt_p10", "water2", false, true, false, true, "exf"},
    {"112_water_exf_adt_p05", "water2", false, true, false, true, "exf"},
    {"113_water_exf_adt_p00", "water2", false, true, false, true, "exf"},
-   {"114_water_exf_rdt_p10", "water2", false, true, false, true, "exf"},
-   {"115_water_exf_rdt_p05", "water2", false, true, false, true, "exf"},
-   {"116_water_exf_rdt_p00", "water2", false, true, false, true, "exf"},
    {"117_water_exf_adt_mp05", "water2", true, true, false, true, "exf"},
    {"119_water_adt_ye_l10", "water2", true, true, false, true, "adt"},
    {"120_water_adt_ne_l10", "water2", true, true, false, true, "adt"},
@@ -185,6 +178,8 @@ const Fixture kFixtures[] = {
    {"200_water_vsoft_l10", "water2", true, true, true, true, "vsoft"},
    {"201_water_vsoft_l05", "water2", true, true, true, true, "vsoft"},
    {"202_water_vsoft_l00", "water2", true, true, true, true, "vsoft"},
+   {"203_water_rels_st_l085", "water2", true, true, true, true, "rels"},
+   {"204_water_rels_st_lig2_exp_l030", "water2", true, true, true, true, "rels"},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
@@ -260,7 +255,7 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
    // the kernels are never asked for them. Verify the dispatch contract here as
    // well as checking the resulting quantities below.
    const bool tiMode = lmdaMode == LmdaMode::ThermIntg;
-   const bool reducedLmda = (not use_d2lmda) or use_epast;
+   const bool reducedLmda = not use_d2lmda;
    if (use_dlmda) {
       REQUIRE(lmdaDerivVers(calc::v1, use_dlmda) == (reducedLmda ? calc::v7 : calc::v9));
       REQUIRE(lmdaDerivVers(calc::v4, use_dlmda) == (reducedLmda ? calc::v8 : calc::v10));
@@ -525,6 +520,37 @@ void runGateFixture(const Fixture& fx)
    finish();
    testEnd();
 }
+
+// Loads a fixture, with an optional keyword appended to its key file, and
+// checks how the derivative keywords choose the polarization topology: the
+// first derivative alone keeps single topology, while LAMBDA-DERIV2 needs the
+// second derivatives and with them dual topology (test_mutate.f).
+void runFlagsFixture(const Fixture& fx, const char* keyextra, bool d2, bool epdt, bool rel)
+{
+   std::string dir = TINKER9_DIRSTR "/test/file/mutate/";
+   std::string xyzdst = std::string(fx.base) + ".xyz";
+   std::string keyname = std::string(fx.name) + ".key";
+
+   TestFile fxyz(dir + xyzdst, xyzdst);
+   TestFile fkey(dir + keyname, keyname, keyextra);
+   TestFile fprm(TINKER9_DIRSTR "/test/file/commit_6fe8e913/water03.prm");
+
+   const char* argv[] = {"dummy", xyzdst.c_str(), "-k", keyname.c_str()};
+   int argc = 4;
+
+   rc_flag = calc::xyz | calc::mass | calc::vmask;
+   testBeginWithArgs(argc, argv);
+   initialize();
+
+   REQUIRE(use_dlmda);
+   REQUIRE(use_d2lmda == d2);
+   REQUIRE(use_epdt == epdt);
+   REQUIRE((mutant::use_past != 0) == not epdt);
+   REQUIRE(use_rel == rel);
+
+   finish();
+   testEnd();
+}
 } // namespace
 
 TEST_CASE("MUTATE-001_water_ye_m10", "[ff][mutate][mv]") { runFixture(fx("001_water_ye_m10")); }
@@ -575,12 +601,6 @@ TEST_CASE("MUTATE-051_water_adt_ye_p00", "[ff][mutate][adt]") { runFixture(fx("0
 TEST_CASE("MUTATE-052_water_adt_ne_p00", "[ff][mutate][adt]") { runFixture(fx("052_water_adt_ne_p00")); }
 TEST_CASE("MUTATE-056_water_adt_ye_mp05", "[ff][mutate][adt]") { runFixture(fx("056_water_adt_ye_mp05")); }
 TEST_CASE("MUTATE-057_water_adt_ne_mp05", "[ff][mutate][adt]") { runFixture(fx("057_water_adt_ne_mp05")); }
-TEST_CASE("MUTATE-064_water_rdt_ye_p10", "[ff][mutate][rdt]") { runFixture(fx("064_water_rdt_ye_p10")); }
-TEST_CASE("MUTATE-065_water_rdt_ne_p10", "[ff][mutate][rdt]") { runFixture(fx("065_water_rdt_ne_p10")); }
-TEST_CASE("MUTATE-066_water_rdt_ye_p05", "[ff][mutate][rdt]") { runFixture(fx("066_water_rdt_ye_p05")); }
-TEST_CASE("MUTATE-067_water_rdt_ne_p05", "[ff][mutate][rdt]") { runFixture(fx("067_water_rdt_ne_p05")); }
-TEST_CASE("MUTATE-068_water_rdt_ye_p00", "[ff][mutate][rdt]") { runFixture(fx("068_water_rdt_ye_p00")); }
-TEST_CASE("MUTATE-069_water_rdt_ne_p00", "[ff][mutate][rdt]") { runFixture(fx("069_water_rdt_ne_p00")); }
 TEST_CASE("MUTATE-070_water_rdt_v10", "[ff][mutate][rdt]") { runFixture(fx("070_water_rdt_v10")); }
 TEST_CASE("MUTATE-071_water_rdt_v05", "[ff][mutate][rdt]") { runFixture(fx("071_water_rdt_v05")); }
 TEST_CASE("MUTATE-072_water_rdt_v00", "[ff][mutate][rdt]") { runFixture(fx("072_water_rdt_v00")); }
@@ -608,9 +628,6 @@ TEST_CASE("MUTATE-104_water_exf_ast_m00", "[ff][mutate][exf]") { runFixture(fx("
 TEST_CASE("MUTATE-111_water_exf_adt_p10", "[ff][mutate][exf]") { runFixture(fx("111_water_exf_adt_p10")); }
 TEST_CASE("MUTATE-112_water_exf_adt_p05", "[ff][mutate][exf]") { runFixture(fx("112_water_exf_adt_p05")); }
 TEST_CASE("MUTATE-113_water_exf_adt_p00", "[ff][mutate][exf]") { runFixture(fx("113_water_exf_adt_p00")); }
-TEST_CASE("MUTATE-114_water_exf_rdt_p10", "[ff][mutate][exf]") { runFixture(fx("114_water_exf_rdt_p10")); }
-TEST_CASE("MUTATE-115_water_exf_rdt_p05", "[ff][mutate][exf]") { runFixture(fx("115_water_exf_rdt_p05")); }
-TEST_CASE("MUTATE-116_water_exf_rdt_p00", "[ff][mutate][exf]") { runFixture(fx("116_water_exf_rdt_p00")); }
 TEST_CASE("MUTATE-117_water_exf_adt_mp05", "[ff][mutate][exf]") { runFixture(fx("117_water_exf_adt_mp05")); }
 TEST_CASE("MUTATE-119_water_adt_ye_l10", "[ff][mutate][adt]") { runFixture(fx("119_water_adt_ye_l10")); }
 TEST_CASE("MUTATE-120_water_adt_ne_l10", "[ff][mutate][adt]") { runFixture(fx("120_water_adt_ne_l10")); }
@@ -676,17 +693,33 @@ TEST_CASE("MUTATE-193_water_exf_ast_l10", "[ff][mutate][exf][ast][astpol][emplar
 TEST_CASE("MUTATE-194_water_exf_ast_l05", "[ff][mutate][exf][ast][astpol][emplar]") { runEmplarAstFixture(fx("194_water_exf_ast_l05")); }
 TEST_CASE("MUTATE-195_water_exf_ast_l00", "[ff][mutate][exf][ast][astpol][emplar]") { runEmplarAstFixture(fx("195_water_exf_ast_l00")); }
 TEST_CASE("MUTATE-196_water_apm_ast_vpin_l05", "[ff][mutate][apm][pin]") { runFixture(fx("196_water_apm_ast_vpin_l05")); }
-TEST_CASE("MUTATE-197_water_apm_ast_epin_l00", "[ff][mutate][apm][pin][emplar]") { runEmplarFixture(fx("197_water_apm_ast_epin_l00")); }
-TEST_CASE("MUTATE-198_water_apm_ast_epin_l05", "[ff][mutate][apm][pin][emplar]") { runEmplarFixture(fx("198_water_apm_ast_epin_l05")); }
-TEST_CASE("MUTATE-199_water_apm_ast_epin_l10", "[ff][mutate][apm][pin][emplar]") { runEmplarFixture(fx("199_water_apm_ast_epin_l10")); }
+TEST_CASE("MUTATE-197_water_apm_ast_epin_l00", "[ff][mutate][apm][pin]") { runFixture(fx("197_water_apm_ast_epin_l00")); }
+TEST_CASE("MUTATE-198_water_apm_ast_epin_l05", "[ff][mutate][apm][pin]") { runFixture(fx("198_water_apm_ast_epin_l05")); }
+TEST_CASE("MUTATE-199_water_apm_ast_epin_l10", "[ff][mutate][apm][pin]") { runFixture(fx("199_water_apm_ast_epin_l10")); }
 TEST_CASE("MUTATE-200_water_vsoft_l10", "[ff][mutate][vsoft]") { runFixture(fx("200_water_vsoft_l10")); }
 TEST_CASE("MUTATE-201_water_vsoft_l05", "[ff][mutate][vsoft]") { runFixture(fx("201_water_vsoft_l05")); }
 TEST_CASE("MUTATE-202_water_vsoft_l00", "[ff][mutate][vsoft]") { runFixture(fx("202_water_vsoft_l00")); }
+TEST_CASE("MUTATE-203_water_rels_st_l085", "[ff][mutate][rels][astpol][emplar]") { runEmplarAstFixture(fx("203_water_rels_st_l085")); }
+TEST_CASE("MUTATE-204_water_rels_st_lig2_exp_l030", "[ff][mutate][rels][astpol][emplar]") { runEmplarAstFixture(fx("204_water_rels_st_lig2_exp_l030")); }
 
 TEST_CASE("MUTATE-TI-076_water_qnt_ast_l05", "[ff][mutate][ti][ast]") { runThermIntgFixture(fx("076_water_qnt_ast_l05")); }
 TEST_CASE("MUTATE-TI-079_water_qnt_adt_l05", "[ff][mutate][ti][adt]") { runThermIntgFixture(fx("079_water_qnt_adt_l05")); }
 TEST_CASE("MUTATE-TI-176_water_rels_ye_vdwm_exp_l050", "[ff][mutate][ti][rels]") {runThermIntgFixture(fx("176_water_rels_ye_vdwm_exp_l050"));}
 
+// The fused kernel on its own, for fixtures with no lambda derivative and one
+// lambda value for electrostatics and polarization, so plain emplar takes over.
+TEST_CASE("MUTATE-EMPLAR-001_water_ye_m10", "[ff][mutate][emplar]") { runFixture(fx("001_water_ye_m10"), Fuse::Require); }
+TEST_CASE("MUTATE-EMPLAR-003_water_ye_m05", "[ff][mutate][emplar]") { runFixture(fx("003_water_ye_m05"), Fuse::Require); }
+TEST_CASE("MUTATE-EMPLAR-147_water_lmda_ast_e05", "[ff][mutate][emplar]") { runFixture(fx("147_water_lmda_ast_e05"), Fuse::Require); }
+
 TEST_CASE("MUTATE-gate", "[ff][mutate][rels]") { runGateFixture(fx("136_water_rels_ye_l085")); }
+
+TEST_CASE("MUTATE-flags", "[ff][mutate][rels]")
+{
+   runFlagsFixture(fx("152_water_lmda_mp05"), "\nLAMBDA-DERIV\n", false, false, false);
+   runFlagsFixture(fx("152_water_lmda_mp05"), "\nLAMBDA-DERIV2\n", true, true, false);
+   runFlagsFixture(fx("203_water_rels_st_l085"), "", false, false, true);
+   runFlagsFixture(fx("136_water_rels_ye_l085"), "", true, true, true);
+}
 
 #endif

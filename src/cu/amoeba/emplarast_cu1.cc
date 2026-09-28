@@ -4,8 +4,8 @@ __global__
 void emplarast_cu1c(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, EnergyBuffer restrict demdl,
    VirialBuffer restrict vbuf, grad_prec* restrict gx, grad_prec* restrict gy, grad_prec* restrict gz, real off,
    real* restrict trqx, real* restrict trqy, real* restrict trqz, const real (*restrict rpole)[10],
-   const real (*restrict uind)[3], const real (*restrict uinp)[3], const int* restrict mut, real f, real aewald,
-   real elambda, real deldl, int nexclude, const int (*restrict exclude)[2], const real (*restrict exclude_scale)[4],
+   const real (*restrict uind)[3], const real (*restrict uinp)[3], const int* restrict grp, real f, real aewald,
+   GrpScale esc, real deldl, int nexclude, const int (*restrict exclude)[2], const real (*restrict exclude_scale)[4],
    const real* restrict x, const real* restrict y, const real* restrict z)
 {
    using d::jpolar;
@@ -44,10 +44,10 @@ void emplarast_cu1c(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, EnergyBuffe
       diz[BLOCK_DIM], qixx[BLOCK_DIM], qixy[BLOCK_DIM], qixz[BLOCK_DIM], qiyy[BLOCK_DIM], qiyz[BLOCK_DIM],
       qizz[BLOCK_DIM], uidx[BLOCK_DIM], uidy[BLOCK_DIM], uidz[BLOCK_DIM], uipx[BLOCK_DIM], uipy[BLOCK_DIM],
       uipz[BLOCK_DIM], pdi[BLOCK_DIM];
-   __shared__ int jpi[BLOCK_DIM], muti[BLOCK_DIM];
+   __shared__ int jpi[BLOCK_DIM], gi[BLOCK_DIM];
    __shared__ real xk[BLOCK_DIM], yk[BLOCK_DIM], zk[BLOCK_DIM], dkx[BLOCK_DIM], dky[BLOCK_DIM], dkz[BLOCK_DIM];
    real ck, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukdx, ukdy, ukdz, ukpx, ukpy, ukpz, pdk;
-   int jpk, mutk;
+   int jpk, gk;
 
    for (int ii = ithread; ii < nexclude; ii += blockDim.x * gridDim.x) {
       const int klane = threadIdx.x;
@@ -94,7 +94,7 @@ void emplarast_cu1c(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, EnergyBuffe
       uipz[klane] = uinp[i][2];
       pdi[klane] = pdamp[i];
       jpi[klane] = jpolar[i];
-      muti[klane] = mut[i];
+      gi[klane] = grp[i];
       xk[threadIdx.x] = x[k];
       yk[threadIdx.x] = y[k];
       zk[threadIdx.x] = z[k];
@@ -116,21 +116,21 @@ void emplarast_cu1c(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, EnergyBuffe
       ukpz = uinp[k][2];
       pdk = pdamp[k];
       jpk = jpolar[k];
-      mutk = mut[k];
+      gk = grp[k];
 
       constexpr bool incl = true;
       real xr = xk[threadIdx.x] - xi[klane];
       real yr = yk[threadIdx.x] - yi[klane];
       real zr = zk[threadIdx.x] - zi[klane];
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off * off and incl) {
+      real si = esc.s[gi[klane]], dsi = esc.ds[gi[klane]];
+      real sk = esc.s[gk], dsk = esc.ds[gk];
+      // an annihilated site has no multipole and no induced dipole
+      bool live = (si != 0 or dsi != 0) and (sk != 0 or dsk != 0);
+      if (r2 <= off * off and incl and live) {
          real pga = thlval[njpolar * jpi[klane] + jpk];
          real e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1;
          real edl1 = 0;
-         real si = muti[klane] ? elambda : 1;
-         real sk = mutk ? elambda : 1;
-         real dsi = muti[klane] ? 1 : 0;
-         real dsk = mutk ? 1 : 0;
          pairMplar<Ver, NON_EWALD, true>(r2, make_real3(xr, yr, zr), scalea - 1, scaleb - 1, scalec - 1, scaled - 1,
             ci[klane], make_real3(dix[klane], diy[klane], diz[klane]), qixx[klane], qixy[klane], qixz[klane],
             qiyy[klane], qiyz[klane], qizz[klane], make_real3(uidx[klane], uidy[klane], uidz[klane]),
@@ -186,8 +186,8 @@ __global__
 void emplarast_cu1b(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, EnergyBuffer restrict demdl,
    VirialBuffer restrict vbuf, grad_prec* restrict gx, grad_prec* restrict gy, grad_prec* restrict gz, real off,
    real* restrict trqx, real* restrict trqy, real* restrict trqz, const real (*restrict rpole)[10],
-   const real (*restrict uind)[3], const real (*restrict uinp)[3], const int* restrict mut, real f, real aewald,
-   real elambda, real deldl, const Spatial::SortedAtom* restrict sorted, int n, int nakpl, const int* restrict iakpl)
+   const real (*restrict uind)[3], const real (*restrict uinp)[3], const int* restrict grp, real f, real aewald,
+   GrpScale esc, real deldl, const Spatial::SortedAtom* restrict sorted, int n, int nakpl, const int* restrict iakpl)
 {
    using d::jpolar;
    using d::njpolar;
@@ -226,10 +226,10 @@ void emplarast_cu1b(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, EnergyBuffe
       diz[BLOCK_DIM], qixx[BLOCK_DIM], qixy[BLOCK_DIM], qixz[BLOCK_DIM], qiyy[BLOCK_DIM], qiyz[BLOCK_DIM],
       qizz[BLOCK_DIM], uidx[BLOCK_DIM], uidy[BLOCK_DIM], uidz[BLOCK_DIM], uipx[BLOCK_DIM], uipy[BLOCK_DIM],
       uipz[BLOCK_DIM], pdi[BLOCK_DIM];
-   __shared__ int jpi[BLOCK_DIM], muti[BLOCK_DIM];
+   __shared__ int jpi[BLOCK_DIM], gi[BLOCK_DIM];
    __shared__ real xk[BLOCK_DIM], yk[BLOCK_DIM], zk[BLOCK_DIM], dkx[BLOCK_DIM], dky[BLOCK_DIM], dkz[BLOCK_DIM];
    real ck, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukdx, ukdy, ukdz, ukpx, ukpy, ukpz, pdk;
-   int jpk, mutk;
+   int jpk, gk;
    real frcxi, frcyi, frczi, trqxi, trqyi, trqzi;
    real frcxk, frcyk, frczk, trqxk, trqyk, trqzk;
 
@@ -280,7 +280,7 @@ void emplarast_cu1b(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, EnergyBuffe
       uipz[threadIdx.x] = uinp[i][2];
       pdi[threadIdx.x] = pdamp[i];
       jpi[threadIdx.x] = jpolar[i];
-      muti[threadIdx.x] = mut[i];
+      gi[threadIdx.x] = grp[i];
       xk[threadIdx.x] = sorted[atomk].x;
       yk[threadIdx.x] = sorted[atomk].y;
       zk[threadIdx.x] = sorted[atomk].z;
@@ -302,7 +302,7 @@ void emplarast_cu1b(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, EnergyBuffe
       ukpz = uinp[k][2];
       pdk = pdamp[k];
       jpk = jpolar[k];
-      mutk = mut[k];
+      gk = grp[k];
       __syncwarp();
 
       for (int j = 0; j < WARP_SIZE; ++j) {
@@ -313,14 +313,14 @@ void emplarast_cu1b(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, EnergyBuffe
          real yr = yk[threadIdx.x] - yi[klane];
          real zr = zk[threadIdx.x] - zi[klane];
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         real si = esc.s[gi[klane]], dsi = esc.ds[gi[klane]];
+         real sk = esc.s[gk], dsk = esc.ds[gk];
+         // an annihilated site has no multipole and no induced dipole
+         bool live = (si != 0 or dsi != 0) and (sk != 0 or dsk != 0);
+         if (r2 <= off * off and incl and live) {
             real pga = thlval[njpolar * jpi[klane] + jpk];
             real e, vxx, vyx, vzx, vyy, vzy, vzz;
             real edl = 0;
-            real si = muti[klane] ? elambda : 1;
-            real sk = mutk ? elambda : 1;
-            real dsi = muti[klane] ? 1 : 0;
-            real dsk = mutk ? 1 : 0;
             pairMplar<Ver, ETYP, true>(r2, make_real3(xr, yr, zr), 1, 1, 1, 1, ci[klane],
                make_real3(dix[klane], diy[klane], diz[klane]), qixx[klane], qixy[klane], qixz[klane], qiyy[klane],
                qiyz[klane], qizz[klane], make_real3(uidx[klane], uidy[klane], uidz[klane]),
@@ -388,8 +388,8 @@ __global__
 void emplarast_cu1a(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, EnergyBuffer restrict demdl,
    VirialBuffer restrict vbuf, grad_prec* restrict gx, grad_prec* restrict gy, grad_prec* restrict gz, real off,
    real* restrict trqx, real* restrict trqy, real* restrict trqz, const real (*restrict rpole)[10],
-   const real (*restrict uind)[3], const real (*restrict uinp)[3], const int* restrict mut, real f, real aewald,
-   real elambda, real deldl, const Spatial::SortedAtom* restrict sorted, int niak, const int* restrict iak,
+   const real (*restrict uind)[3], const real (*restrict uinp)[3], const int* restrict grp, real f, real aewald,
+   GrpScale esc, real deldl, const Spatial::SortedAtom* restrict sorted, int niak, const int* restrict iak,
    const int* restrict lst)
 {
    using d::jpolar;
@@ -430,10 +430,10 @@ void emplarast_cu1a(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, EnergyBuffe
       diz[BLOCK_DIM], qixx[BLOCK_DIM], qixy[BLOCK_DIM], qixz[BLOCK_DIM], qiyy[BLOCK_DIM], qiyz[BLOCK_DIM],
       qizz[BLOCK_DIM], uidx[BLOCK_DIM], uidy[BLOCK_DIM], uidz[BLOCK_DIM], uipx[BLOCK_DIM], uipy[BLOCK_DIM],
       uipz[BLOCK_DIM], pdi[BLOCK_DIM];
-   __shared__ int jpi[BLOCK_DIM], muti[BLOCK_DIM];
+   __shared__ int jpi[BLOCK_DIM], gi[BLOCK_DIM];
    __shared__ real xk[BLOCK_DIM], yk[BLOCK_DIM], zk[BLOCK_DIM], dkx[BLOCK_DIM], dky[BLOCK_DIM], dkz[BLOCK_DIM];
    real ck, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukdx, ukdy, ukdz, ukpx, ukpy, ukpz, pdk;
-   int jpk, mutk;
+   int jpk, gk;
    real frcxi, frcyi, frczi, trqxi, trqyi, trqzi;
    real frcxk, frcyk, frczk, trqxk, trqyk, trqzk;
 
@@ -479,7 +479,7 @@ void emplarast_cu1a(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, EnergyBuffe
       uipz[threadIdx.x] = uinp[i][2];
       pdi[threadIdx.x] = pdamp[i];
       jpi[threadIdx.x] = jpolar[i];
-      muti[threadIdx.x] = mut[i];
+      gi[threadIdx.x] = grp[i];
       xk[threadIdx.x] = sorted[atomk].x;
       yk[threadIdx.x] = sorted[atomk].y;
       zk[threadIdx.x] = sorted[atomk].z;
@@ -501,7 +501,7 @@ void emplarast_cu1a(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, EnergyBuffe
       ukpz = uinp[k][2];
       pdk = pdamp[k];
       jpk = jpolar[k];
-      mutk = mut[k];
+      gk = grp[k];
       __syncwarp();
 
       for (int j = 0; j < WARP_SIZE; ++j) {
@@ -512,14 +512,14 @@ void emplarast_cu1a(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, EnergyBuffe
          real yr = yk[threadIdx.x] - yi[klane];
          real zr = zk[threadIdx.x] - zi[klane];
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         real si = esc.s[gi[klane]], dsi = esc.ds[gi[klane]];
+         real sk = esc.s[gk], dsk = esc.ds[gk];
+         // an annihilated site has no multipole and no induced dipole
+         bool live = (si != 0 or dsi != 0) and (sk != 0 or dsk != 0);
+         if (r2 <= off * off and incl and live) {
             real pga = thlval[njpolar * jpi[klane] + jpk];
             real e, vxx, vyx, vzx, vyy, vzy, vzz;
             real edl = 0;
-            real si = muti[klane] ? elambda : 1;
-            real sk = mutk ? elambda : 1;
-            real dsi = muti[klane] ? 1 : 0;
-            real dsk = mutk ? 1 : 0;
             pairMplar<Ver, ETYP, true>(r2, make_real3(xr, yr, zr), 1, 1, 1, 1, ci[klane],
                make_real3(dix[klane], diy[klane], diz[klane]), qixx[klane], qixy[klane], qixz[klane], qiyy[klane],
                qiyz[klane], qizz[klane], make_real3(uidx[klane], uidy[klane], uidz[klane]),

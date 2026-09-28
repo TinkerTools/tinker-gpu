@@ -187,7 +187,9 @@ TestlmdaResult testlmdaEvaluate(const FdTestOptions& opts)
 {
    TestlmdaResult r;
    const bool keylmda = use_dlmda;
-   const bool astpolar = use_epast;
+   // Without the second lambda derivatives the numerical ones are zeroed as
+   // well, so the two sets stay comparable (testlmda.f).
+   const bool reduced = not use_d2lmda;
    r.dfdl.assign(3 * n, 0.0);
    r.ndfdl.assign(3 * n, 0.0);
 
@@ -277,7 +279,7 @@ TestlmdaResult testlmdaEvaluate(const FdTestOptions& opts)
          }
       }
 
-      if (astpolar) {
+      if (reduced) {
          for (int k = 0; k < 4; ++k)
             r.nd2edl2[k] = 0.0;
          std::fill(r.ndfdl.begin(), r.ndfdl.end(), 0.0);

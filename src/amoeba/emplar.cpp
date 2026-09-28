@@ -100,13 +100,17 @@ void emplarAst(int vers)
 
    const int dvers = lmdaDerivVers(vers, use_edlmda);
    auto do_v = vers & calc::virial;
+   // The solve sees multipoles scaled by plam and the permanent terms by elam;
+   // only when the two are the same number is the solve's multipole potential
+   // theirs too, and the scaled state left behind the one to restore.
+   const bool same_state = (elam == plam);
 
    zeroOnHost(energy_em, virial_em);
    zeroOnHost(energy_ep, virial_ep);
 
    // Lambda scaled state, and the solve.
    mpoleScale(plam);
-   polarState(RdtMask::ALL, mut, plam);
+   polarState(coupledMask(), emGroup(), plam);
    mpoleInit(vers, false);
    induce(uind, uinp);
 
@@ -116,14 +120,19 @@ void emplarAst(int vers)
    mpoleInitAst();
    emplarAstKernel(dvers);
    if (useEwald())
-      empoleEwaldRecip(vers);
+      empoleEwaldRecip(vers, same_state);
    exfield(vers, 1);
 
    // Back to the lambda scaled state for the polarization reciprocal term, which
    // reads the permanent dipole straight out of rpole. Its version stays
    // undecorated too, but for the opposite reason: it has no lambda derivative
    // channel, and a version it does not recognize leaves it doing nothing at all.
-   mpoleRefresh();
+   // cmp is already the scaled one when the two lambdas agree, so only rpole is
+   // rotated back.
+   if (same_state)
+      mpoleRotateScaled();
+   else
+      mpoleRefresh();
    if (useEwald()) {
       const AccumRef out = em_buf.ref();
       epolarEwaldRecipSelf(vers & ~calc::energy, out.e, out.v, out.gx, out.gy, out.gz);
@@ -144,9 +153,11 @@ void emplarAst(int vers)
          virial_elec[iv] += v2[iv];
    }
 
-   // Leave pole where epolar() leaves it, and undo the masking epolarAstDeriv
-   // left behind so that whatever runs next sees the whole system again.
-   mpoleScale(elam);
+   // Leave pole where epolar() leaves it, which it already is when the two
+   // lambdas agree, and undo the ligand-only rotation epolarAstDeriv left behind
+   // so that whatever runs next sees the whole system again.
+   if (not same_state)
+      mpoleScale(elam);
    if (do_astdl)
       mpoleRefresh();
 }

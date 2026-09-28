@@ -66,8 +66,8 @@ static void emplarEwald_cu()
 
    // empole real self; epolar real without epolar energy
    emplar_cu<Ver, EWALD>(uind, uinp);
-   // empole recip
-   empoleEwaldRecip(Ver::value);
+   // empole recip, from the potential induce() just built for the direct field
+   empoleEwaldRecip(Ver::value, true);
    // epolar recip self; must toggle off the calc::energy flag
    AccumRef out = em_buf.ref();
    epolarEwaldRecipSelf(Ver::value & ~calc::energy, out.e, out.v, out.gx, out.gy, out.gz);

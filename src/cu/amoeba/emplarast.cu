@@ -15,10 +15,11 @@
 #include "seq/pair_mplar.h"
 #include "seq/triangle.h"
 
-// The absolute single topology flavour of the fused multipole/polarization
-// kernel. rpole holds the unscaled multipoles here, and the pair kernel applies
-// elambda to the permanent side itself -- that is what lets it hand back the
-// permanent energy derivative without dividing by a lambda that may be zero.
+// The single topology flavour of the fused multipole/polarization kernel.
+// rpole holds the unscaled multipoles here, and the pair kernel applies each
+// site's group scale (grpScale) to the permanent side itself -- that is what
+// lets it hand back the permanent energy derivative without dividing by a
+// lambda that may be zero. A pair with an annihilated site is skipped.
 // The induced dipoles arrive already solved against the lambda-scaled system,
 // so they need no scaling of their own.
 //
@@ -51,21 +52,21 @@ static void emplarast_cu(const real (*uind)[3], const real (*uinp)[3])
       if CONSTEXPR (Ver::e) {
          auto ker0 = empoleSelfDlmda_cu<Ver>;
          launch_k1b(g::s0, n, ker0, //
-            nullptr, em, demdl_buf, d2emdl2_buf, rpole, emGroup(), emScale(), n, f, aewald, deldlmda, d2eldlmda2);
+            nullptr, em, demdl_buf, d2emdl2_buf, rpole, emGroup(), grpScale(elam), n, f, aewald, deldlmda, d2eldlmda2);
       }
    }
    int ngrid = gpuGridSize(BLOCK_DIM);
    auto kera = emplarast_cu1a<Ver, ETYP>;
    kera<<<ngrid, BLOCK_DIM, 0, g::s0>>>(TINKER_IMAGE_ARGS, em, demdl_buf, vir_em, demx, demy, demz, off, trqx, trqy,
-      trqz, rpole, uind, uinp, mut, f, aewald, elam, deldlmda, //
+      trqz, rpole, uind, uinp, emGroup(), f, aewald, grpScale(elam), deldlmda, //
       st.sorted, st.niak, st.iak, st.lst);
    auto kerb = emplarast_cu1b<Ver, ETYP>;
    kerb<<<ngrid, BLOCK_DIM, 0, g::s0>>>(TINKER_IMAGE_ARGS, em, demdl_buf, vir_em, demx, demy, demz, off, trqx, trqy,
-      trqz, rpole, uind, uinp, mut, f, aewald, elam, deldlmda, //
+      trqz, rpole, uind, uinp, emGroup(), f, aewald, grpScale(elam), deldlmda, //
       st.sorted, st.n, st.nakpl, st.iakpl);
    auto kerc = emplarast_cu1c<Ver, ETYP>;
    kerc<<<ngrid, BLOCK_DIM, 0, g::s0>>>(TINKER_IMAGE_ARGS, em, demdl_buf, vir_em, demx, demy, demz, off, trqx, trqy,
-      trqz, rpole, uind, uinp, mut, f, aewald, elam, deldlmda, //
+      trqz, rpole, uind, uinp, emGroup(), f, aewald, grpScale(elam), deldlmda, //
       nmdpuexclude, mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z);
 }
 
@@ -73,8 +74,8 @@ template <class ETYP>
 static void emplarastVers_cu(int vers, const real (*uind)[3], const real (*uinp)[3])
 {
    // calc::v3 is unreachable: emplarDecide() turns emplar down under analysis.
-   // v9 and v10 are unreachable too -- use_epast pins the reduced dispatch, and
-   // epolarData() refuses OST outright, so v1 and v4 only ever become v7 and v8.
+   // v9 and v10 are unreachable too -- single topology polarization is only
+   // chosen without use_d2lmda, so v1 and v4 only ever become v7 and v8.
    if (vers == calc::v0)
       emplarast_cu<calc::V0, ETYP>(uind, uinp);
    else if (vers == calc::v1)
