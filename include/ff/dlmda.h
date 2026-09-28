@@ -207,7 +207,9 @@ TINKER_EXTERN bool use_dlmda;
 /// the first; set by the LAMBDA-DERIV keyword and by OST (mutate.f).
 TINKER_EXTERN bool use_d2lmda;
 TINKER_EXTERN bool use_epdt;
-TINKER_EXTERN bool use_plmda;
+/// Whether polarization takes the single topology path, evaluated from one
+/// parameter state at plambda (mutate.f:use_prst).
+TINKER_EXTERN bool use_prst;
 TINKER_EXTERN bool use_mainlmda;
 
 TINKER_EXTERN bool use_edlmda;
@@ -366,9 +368,10 @@ TINKER_EXTERN double qntvlmda1;
 //        staged relative free energy schedule                        //
 //====================================================================//
 
-/// Whether the staged (sequential) relative free energy schedule is active.
+/// Whether the staged two-ligand relative free energy schedule is active; the
+/// only relative free energy there is, so a second ligand group requires it.
 /// When off, the sub-lambdas move together under the ordinary maps above.
-TINKER_EXTERN bool use_relstage;
+TINKER_EXTERN bool use_rel;
 
 /// The declared leg, read from the REL-STAGE keyword. Constant for a run.
 TINKER_EXTERN RelStage relstage;
@@ -382,7 +385,6 @@ TINKER_EXTERN double d2eldlmda2;
 TINKER_EXTERN double d2pldlmda2;
 TINKER_EXTERN double d2vldlmda2;
 
-TINKER_EXTERN bool use_rel;
 TINKER_EXTERN bool use_emast;
 
 TINKER_EXTERN int epdtexp;

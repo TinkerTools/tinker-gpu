@@ -407,7 +407,7 @@ void epolarData(RcOp op)
       darray::allocate(njpolar * njpolar, &thlval);
 
       darray::allocate(n, &polarity, &thole, &pdamp, &polarity_inv);
-      if (use_epdt || use_plmda)
+      if (use_epdt || use_prst)
          darray::allocate(n, &polarityorig);
       else
          polarityorig = nullptr;
@@ -503,7 +503,7 @@ void epolarData(RcOp op)
             TINKER_THROW("Polarization dual topology does not support charge flux.");
       }
 
-      if (use_plmda and not polTracksEle()) {
+      if (use_prst and not polTracksEle()) {
          if (mplpot::use_chgpen)
             TINKER_THROW("A decoupled polarization lambda does not support charge penetration.");
          if (polpot::use_tholed)
@@ -550,7 +550,7 @@ void epolarData(RcOp op)
       std::vector<double> polbuf(n);
       const GrpScale psc = grpScale(plam);
       for (int i = 0; i < n; ++i) {
-         if (use_plmda and mutant::mutg[i] != 0)
+         if (use_prst and mutant::mutg[i] != 0)
             polbuf[i] = psc.s[mutant::mutg[i]] * dlmda::polarityorig[i];
          else
             polbuf[i] = polar::polarity[i];
@@ -563,7 +563,7 @@ void epolarData(RcOp op)
       darray::copyin(g::q0, n, thole, polar::thole);
       darray::copyin(g::q0, n, pdamp, polar::pdamp);
       darray::copyin(g::q0, n, polarity_inv, pinvbuf.data());
-      if (use_epdt || use_plmda)
+      if (use_epdt || use_prst)
          darray::copyin(g::q0, n, polarityorig, dlmda::polarityorig);
       if (polpot::use_tholed)
          darray::copyin(g::q0, n, dirdamp, polar::tholed);
@@ -706,14 +706,14 @@ void epolar(int vers)
 
    epolarBegin(vers);
 
-   if (use_plmda) {
+   if (use_prst) {
       mpoleScale(plam);
       polarState(coupledMask(), emGroup(), plam);
    }
 
    if (use_cf)
       alterchg();
-   mpoleInit(vers, use_emast and not use_plmda);
+   mpoleInit(vers, use_emast and not use_prst);
    if (use_cfgrad)
       cfluxZeroPot();
 
@@ -736,7 +736,7 @@ void epolar(int vers)
    if (do_astdl)
       epolarAstDeriv(vers);
 
-   if (use_plmda)
+   if (use_prst)
       mpoleScale(elam);
 
    if (do_astdl)

@@ -46,7 +46,7 @@ void vdwSoftcoreData(RcOp op)
 {
    if ((not use(Potent::VDW)) and (not use(Potent::REPULS)) and (not use(Potent::DISP)) and (not use(Potent::CHGTRN))
       and (not(use(Potent::MPOLE) and use_emast))
-      and (not(use(Potent::POLAR) and (use_epdt || use_plmda))))
+      and (not(use(Potent::POLAR) and (use_epdt || use_prst))))
       return;
 
    if (op & RcOp::DEALLOC)

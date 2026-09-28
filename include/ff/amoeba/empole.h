@@ -24,6 +24,8 @@ void mpoleRotateScaled();
 void mpoleRestoreFullState(const int* group);
 void mpoleInitStateDt(int vers, RdtMask mask, const int* group, bool first_state);
 void mpoleScale(double lmda);
+/// Forgets the lambda the multipoles were last scaled to, after pole is rewritten.
+void mpoleScaleInvalidate();
 /// \}
 
 void empoleBegin(int vers);

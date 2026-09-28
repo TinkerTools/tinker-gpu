@@ -1,3 +1,4 @@
+#include "ff/amoeba/empole.h"
 #include "ff/atom.h"
 #include "ff/evalence.h"
 #include "ff/modhippo.h"
@@ -60,6 +61,8 @@ TINKER_FVOID2(acc1, cu1, alterchg);
 void alterchg()
 {
    TINKER_FCALL2(acc1, cu1, alterchg);
+   // The flux monopoles part pole from the scaled poleorig.
+   mpoleScaleInvalidate();
 }
 
 void cfluxZeroPot()

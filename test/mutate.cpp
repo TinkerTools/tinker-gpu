@@ -1,4 +1,5 @@
 #include "ff/amoeba/emplar.h"
+#include "ff/amoeba/mpole.h"
 #include "ff/atom.h"
 #include "ff/dlmda.h"
 #include "ff/egvop.h"
@@ -11,10 +12,15 @@
 #include "testrt.h"
 #include "tinker9.h"
 
+#include <tinker/detail/atoms.hh>
+#include <tinker/detail/dlmda.hh>
+#include <tinker/detail/mpole.hh>
 #include <tinker/detail/mutant.hh>
+#include <tinker/routines.h>
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -29,6 +35,7 @@ struct Fixture
    const char* base;
    bool checkm, checkp, checkv, dolmda;
    const char* cat;
+   const char* ref = nullptr; ///< Reference borrowed from another fixture, if any.
 };
 
 const Fixture kFixtures[] = {
@@ -80,9 +87,6 @@ const Fixture kFixtures[] = {
    {"052_water_adt_ne_p00", "water2", false, true, false, true, "adt"},
    {"056_water_adt_ye_mp05", "water2", true, true, false, true, "adt"},
    {"057_water_adt_ne_mp05", "water2", true, true, false, true, "adt"},
-   {"070_water_rdt_v10", "water2", false, false, true, true, "rdt"},
-   {"071_water_rdt_v05", "water2", false, false, true, true, "rdt"},
-   {"072_water_rdt_v00", "water2", false, false, true, true, "rdt"},
    {"075_water_qnt_ast_l10", "water2", true, true, true, true, "qnt"},
    {"076_water_qnt_ast_l05", "water2", true, true, true, true, "qnt"},
    {"077_water_qnt_ast_l00", "water2", true, true, true, true, "qnt"},
@@ -123,8 +127,6 @@ const Fixture kFixtures[] = {
    {"139_water_rels_ye_l030", "water2", true, true, true, true, "rels"},
    {"140_water_rels_ye_l015", "water2", true, true, true, true, "rels"},
    {"141_water_rels_ye_l000", "water2", true, true, true, true, "rels"},
-   {"144_water_qnt_vcorr_rdt_l10", "water2", false, false, true, true, "vcorr"},
-   {"145_water_qnt_vcorr_rdt_l00", "water2", false, false, true, true, "vcorr"},
    {"146_water_lmda_ast_l05", "water2", true, true, true, false, "lmda"},
    {"147_water_lmda_ast_e05", "water2", true, true, true, false, "lmda"},
    {"148_water_lmda_ast_l10", "water2", true, true, true, false, "lmda"},
@@ -180,6 +182,10 @@ const Fixture kFixtures[] = {
    {"202_water_vsoft_l00", "water2", true, true, true, true, "vsoft"},
    {"203_water_rels_st_l085", "water2", true, true, true, true, "rels"},
    {"204_water_rels_st_lig2_exp_l030", "water2", true, true, true, true, "rels"},
+   // 135 without the LAMBDA keyword: REL-STAGE must default the main lambda to
+   // one, so it reproduces the 135 reference.
+   {"205_water_rels_nolmda", "water2", true, true, true, true, "rels", "135_water_rels_ye_l100"},
+   {"206_trpcage_chiral_m05", "trpcage", false, false, false, false, "chiral"},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
@@ -214,7 +220,7 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
    std::string dir = TINKER9_DIRSTR "/test/file/mutate/";
    std::string xyzdst = std::string(fx.base) + ".xyz";
    std::string keyname = std::string(fx.name) + ".key";
-   std::string refpath = std::string(TINKER9_DIRSTR "/test/ref/mutate/") + fx.name + ".txt";
+   std::string refpath = std::string(TINKER9_DIRSTR "/test/ref/mutate/") + (fx.ref ? fx.ref : fx.name) + ".txt";
 
    TestFile fxyz(dir + xyzdst, xyzdst);
    // TI owns the main lambda and starts at the first schedule window. These
@@ -545,8 +551,98 @@ void runFlagsFixture(const Fixture& fx, const char* keyextra, bool d2, bool epdt
    REQUIRE(use_dlmda);
    REQUIRE(use_d2lmda == d2);
    REQUIRE(use_epdt == epdt);
-   REQUIRE((mutant::use_past != 0) == not epdt);
+   REQUIRE((dlmda::use_prst != 0) == not epdt);
    REQUIRE(use_rel == rel);
+
+   finish();
+   testEnd();
+}
+
+// Mutates the first residues of trp-cage, whose alpha carbons carry chiral
+// multipole frames, with the multipole term alone at a fixed electrostatic
+// lambda (test_mutate.f:test_mutate_chiral). The shipped alpha carbon
+// multipoles have no y components, so a y dipole is seeded at every chiral site
+// to make the inversion visible. Mirroring the coordinates inverts every chiral
+// frame; chkpole must flip poleorig along with pole, so that a later rescale of
+// pole from poleorig keeps the inversion.
+//
+// Tinker allocates poleorig for any mutation, while tinker9 keeps it on the
+// device only for a lambda derivative, so one is asked for here. A derivative
+// needs a main lambda, and a main lambda needs a map; it drives van der Waals
+// alone, which this fixture leaves off, so elambda stays pinned by its keyword.
+void runChiralFixture(const Fixture& fx)
+{
+   std::string keyname = std::string(fx.name) + ".key";
+   const char* xyzname = "trpcage.xyz";
+
+   TestFile fxyz(TINKER9_DIRSTR "/test/file/trpcage/trpcage.xyz", xyzname);
+   TestFile fkey(TINKER9_DIRSTR "/test/file/mutate/" + keyname, keyname,
+      "\nlambda-deriv\nlambda 0.5\nvdw-lmda-map exp\n");
+   TestFile fprm(TINKER9_DIRSTR "/test/file/commit_291a85c1/amoebapro13.prm");
+
+   const char* argv[] = {"dummy", xyzname, "-k", keyname.c_str()};
+   int argc = 4;
+
+   const double eps_e = testGetEps(1.0e-3, 1.0e-8);
+   const double eps_p = testGetEps(1.0e-6, 1.0e-12);
+
+   rc_flag = calc::xyz | calc::mass | calc::energy;
+   testBeginWithArgs(argc, argv);
+
+   // tinker9 sets n in initialize(); the Fortran side is already set up.
+   std::vector<int> chiral;
+   for (int i = 0; i < atoms::n; ++i) {
+      if (std::strncmp(mpole::polaxe[i], "Z-then-X", 8) == 0 and mpole::yaxis[i] != 0) {
+         dlmda::poleorig[mpole::maxpole * i + 2] = 0.1;
+         chiral.push_back(i);
+      }
+   }
+   REQUIRE(chiral.size() > 0);
+   tinker_f_altelec();
+
+   initialize();
+   REQUIRE(poleorig != nullptr);
+   REQUIRE_FALSE(use_emast);
+
+   auto readY = [&](real (*arr)[MPL_TOTAL]) {
+      std::vector<std::array<real, MPL_TOTAL>> buf(n);
+      darray::copyout(g::q0, n, reinterpret_cast<real(*)[MPL_TOTAL]>(buf.data()), arr);
+      waitFor(g::q0);
+      std::vector<double> y;
+      for (int i : chiral)
+         y.push_back(buf[i][MPL_PME_Y]);
+      return y;
+   };
+
+   energy(calc::v0);
+   const double e0 = esum;
+   const auto pole0 = readY(pole);
+   const auto orig0 = readY(poleorig);
+
+   // Mirror the structure, which inverts every chiral frame.
+   std::vector<pos_prec> xbuf(n);
+   darray::copyout(g::q0, n, xbuf.data(), xpos);
+   waitFor(g::q0);
+   for (auto& v : xbuf)
+      v = -v;
+   darray::copyin(g::q0, n, xpos, xbuf.data());
+   waitFor(g::q0);
+   copyPosToXyz(true);
+
+   energy(calc::v0);
+   COMPARE_REALS(esum, e0, eps_e);
+
+   // pole and poleorig flipped together, so pole is still the scaled poleorig
+   // and a rescale from poleorig reproduces it.
+   const auto pole1 = readY(pole);
+   const auto orig1 = readY(poleorig);
+   for (size_t k = 0; k < chiral.size(); ++k) {
+      const int i = chiral[k];
+      const double sc = mutant::mutg[i] != 0 ? elam : 1.0;
+      COMPARE_REALS(pole1[k], -pole0[k], eps_p);
+      COMPARE_REALS(orig1[k], -orig0[k], eps_p);
+      COMPARE_REALS(pole1[k], sc * orig1[k], eps_p);
+   }
 
    finish();
    testEnd();
@@ -601,9 +697,6 @@ TEST_CASE("MUTATE-051_water_adt_ye_p00", "[ff][mutate][adt]") { runFixture(fx("0
 TEST_CASE("MUTATE-052_water_adt_ne_p00", "[ff][mutate][adt]") { runFixture(fx("052_water_adt_ne_p00")); }
 TEST_CASE("MUTATE-056_water_adt_ye_mp05", "[ff][mutate][adt]") { runFixture(fx("056_water_adt_ye_mp05")); }
 TEST_CASE("MUTATE-057_water_adt_ne_mp05", "[ff][mutate][adt]") { runFixture(fx("057_water_adt_ne_mp05")); }
-TEST_CASE("MUTATE-070_water_rdt_v10", "[ff][mutate][rdt]") { runFixture(fx("070_water_rdt_v10")); }
-TEST_CASE("MUTATE-071_water_rdt_v05", "[ff][mutate][rdt]") { runFixture(fx("071_water_rdt_v05")); }
-TEST_CASE("MUTATE-072_water_rdt_v00", "[ff][mutate][rdt]") { runFixture(fx("072_water_rdt_v00")); }
 TEST_CASE("MUTATE-075_water_qnt_ast_l10", "[ff][mutate][qnt]") { runFixture(fx("075_water_qnt_ast_l10")); }
 TEST_CASE("MUTATE-076_water_qnt_ast_l05", "[ff][mutate][qnt]") { runFixture(fx("076_water_qnt_ast_l05")); }
 TEST_CASE("MUTATE-077_water_qnt_ast_l00", "[ff][mutate][qnt]") { runFixture(fx("077_water_qnt_ast_l00")); }
@@ -644,8 +737,6 @@ TEST_CASE("MUTATE-138_water_rels_ye_l050", "[ff][mutate][rels]") { runFixture(fx
 TEST_CASE("MUTATE-139_water_rels_ye_l030", "[ff][mutate][rels]") { runFixture(fx("139_water_rels_ye_l030")); }
 TEST_CASE("MUTATE-140_water_rels_ye_l015", "[ff][mutate][rels]") { runFixture(fx("140_water_rels_ye_l015")); }
 TEST_CASE("MUTATE-141_water_rels_ye_l000", "[ff][mutate][rels]") { runFixture(fx("141_water_rels_ye_l000")); }
-TEST_CASE("MUTATE-144_water_qnt_vcorr_rdt_l10", "[ff][mutate][vcorr]") { runFixture(fx("144_water_qnt_vcorr_rdt_l10")); }
-TEST_CASE("MUTATE-145_water_qnt_vcorr_rdt_l00", "[ff][mutate][vcorr]") { runFixture(fx("145_water_qnt_vcorr_rdt_l00")); }
 TEST_CASE("MUTATE-146_water_lmda_ast_l05", "[ff][mutate][lmda]") { runFixture(fx("146_water_lmda_ast_l05")); }
 TEST_CASE("MUTATE-147_water_lmda_ast_e05", "[ff][mutate][lmda]") { runFixture(fx("147_water_lmda_ast_e05")); }
 TEST_CASE("MUTATE-148_water_lmda_ast_l10", "[ff][mutate][lmda]") { runFixture(fx("148_water_lmda_ast_l10")); }
@@ -701,6 +792,7 @@ TEST_CASE("MUTATE-201_water_vsoft_l05", "[ff][mutate][vsoft]") { runFixture(fx("
 TEST_CASE("MUTATE-202_water_vsoft_l00", "[ff][mutate][vsoft]") { runFixture(fx("202_water_vsoft_l00")); }
 TEST_CASE("MUTATE-203_water_rels_st_l085", "[ff][mutate][rels][astpol][emplar]") { runEmplarAstFixture(fx("203_water_rels_st_l085")); }
 TEST_CASE("MUTATE-204_water_rels_st_lig2_exp_l030", "[ff][mutate][rels][astpol][emplar]") { runEmplarAstFixture(fx("204_water_rels_st_lig2_exp_l030")); }
+TEST_CASE("MUTATE-205_water_rels_nolmda", "[ff][mutate][rels]") { runFixture(fx("205_water_rels_nolmda")); }
 
 TEST_CASE("MUTATE-TI-076_water_qnt_ast_l05", "[ff][mutate][ti][ast]") { runThermIntgFixture(fx("076_water_qnt_ast_l05")); }
 TEST_CASE("MUTATE-TI-079_water_qnt_adt_l05", "[ff][mutate][ti][adt]") { runThermIntgFixture(fx("079_water_qnt_adt_l05")); }
@@ -711,6 +803,8 @@ TEST_CASE("MUTATE-TI-176_water_rels_ye_vdwm_exp_l050", "[ff][mutate][ti][rels]")
 TEST_CASE("MUTATE-EMPLAR-001_water_ye_m10", "[ff][mutate][emplar]") { runFixture(fx("001_water_ye_m10"), Fuse::Require); }
 TEST_CASE("MUTATE-EMPLAR-003_water_ye_m05", "[ff][mutate][emplar]") { runFixture(fx("003_water_ye_m05"), Fuse::Require); }
 TEST_CASE("MUTATE-EMPLAR-147_water_lmda_ast_e05", "[ff][mutate][emplar]") { runFixture(fx("147_water_lmda_ast_e05"), Fuse::Require); }
+
+TEST_CASE("MUTATE-206_trpcage_chiral_m05", "[ff][mutate][chiral]") { runChiralFixture(fx("206_trpcage_chiral_m05")); }
 
 TEST_CASE("MUTATE-gate", "[ff][mutate][rels]") { runGateFixture(fx("136_water_rels_ye_l085")); }
 

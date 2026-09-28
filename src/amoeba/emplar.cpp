@@ -25,7 +25,7 @@ static bool emplarDecide()
 {
    if (mplpot::use_chgpen)
       return false;
-   if (use_plmda and not polTracksEle())
+   if (use_prst and not polTracksEle())
       return false;
    if (use_emast and not use_epast)
       return false;

@@ -44,14 +44,14 @@ TEST_CASE("DLMDA-one-main-lambda", "[ff][dlmda]")
 {
    // Without a sampling method the main lambda is the one from the key file.
    bool oldUseOst = use_ost, oldUseMeta = use_meta, oldUseTi = use_ti;
-   bool oldRel = use_relstage;
+   bool oldRel = use_rel;
    bool oldE = use_elmdamap, oldP = use_plmdamap, oldV = use_vlmdamap;
    Lmdamap oldEm = elmdamap, oldPm = plmdamap, oldVm = vlmdamap;
    int oldEx = elmdaexp, oldPx = plmdaexp, oldVx = vlmdaexp;
    double oldMutant = mutant::lambda, oldLambda = lambda;
 
    // A main lambda claims all three sub-lambdas, so map all three.
-   use_relstage = false;
+   use_rel = false;
    elmdamap = Lmdamap::EXP;
    plmdamap = Lmdamap::EXP;
    vlmdamap = Lmdamap::EXP;
@@ -78,7 +78,7 @@ TEST_CASE("DLMDA-one-main-lambda", "[ff][dlmda]")
    use_ost = oldUseOst;
    use_meta = oldUseMeta;
    use_ti = oldUseTi;
-   use_relstage = oldRel;
+   use_rel = oldRel;
    use_elmdamap = oldE;
    use_plmdamap = oldP;
    use_vlmdamap = oldV;
@@ -251,18 +251,80 @@ TEST_CASE("DLMDA-dtneed", "[ff][dlmda]")
 }
 
 namespace {
+// Puts back everything a staged leg walks on, so the schedule does not leak
+// into later cases.
+struct StagedScope
+{
+   bool rel, mainl, useE, useP, useV;
+   RelStage leg;
+   Lmdamap em, pm, vm;
+   double e0, e1, p0, p1, v0, v1, mainlmda;
+   int dtexp;
+
+   StagedScope()
+      : rel(use_rel)
+      , mainl(use_mainlmda)
+      , useE(use_elmdamap)
+      , useP(use_plmdamap)
+      , useV(use_vlmdamap)
+      , leg(relstage)
+      , em(elmdamap)
+      , pm(plmdamap)
+      , vm(vlmdamap)
+      , e0(qntelmda0)
+      , e1(qntelmda1)
+      , p0(qntplmda0)
+      , p1(qntplmda1)
+      , v0(qntvlmda0)
+      , v1(qntvlmda1)
+      , mainlmda(lambda)
+      , dtexp(epdtexp)
+   {}
+
+   ~StagedScope()
+   {
+      use_rel = rel;
+      use_mainlmda = mainl;
+      use_elmdamap = useE;
+      use_plmdamap = useP;
+      use_vlmdamap = useV;
+      relstage = leg;
+      elmdamap = em;
+      plmdamap = pm;
+      vlmdamap = vm;
+      qntelmda0 = e0;
+      qntelmda1 = e1;
+      qntplmda0 = p0;
+      qntplmda1 = p1;
+      qntvlmda0 = v0;
+      qntvlmda1 = v1;
+      lambda = mainlmda;
+      epdtexp = dtexp;
+   }
+};
+
 // The reference three-simulation staged protocol: one run per leg, each
 // declaring its leg and walking its own window over the full main lambda.
+// Polarization is given the same map and window as the multipoles, as the
+// staged fixtures do, so it tracks them exactly.
 void setStagedLeg(RelStage leg)
 {
-   use_relstage = true;
+   use_rel = true;
    relstage = leg;
+   // A staged leg drives every sub-lambda off the main lambda (mutate.f).
+   use_mainlmda = true;
+   use_elmdamap = true;
+   use_plmdamap = true;
+   use_vlmdamap = true;
    // mutate.f floors this at 1; nothing has run dlmda_mech() here.
    epdtexp = 1;
    elmdamap = Lmdamap::QNT;
+   plmdamap = Lmdamap::QNT;
    vlmdamap = Lmdamap::QNT;
    qntelmda0 = (leg == RelStage::LIG1) ? 0.7 : 0.0;
    qntelmda1 = (leg == RelStage::LIG1) ? 1.0 : 0.3;
+   qntplmda0 = qntelmda0;
+   qntplmda1 = qntelmda1;
    qntvlmda0 = 0.3;
    qntvlmda1 = 0.7;
 }
@@ -270,6 +332,7 @@ void setStagedLeg(RelStage leg)
 
 TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
 {
+   StagedScope scope;
    // Each leg is its own simulation now, so the leg is declared rather than
    // derived from where the main lambda happens to sit.
 
@@ -314,12 +377,11 @@ TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
    mapAt(1.0);
    COMPARE_REALS(elam, 1.0, 1.0e-7);
    COMPARE_REALS(deldlmda, 0.0, 1.0e-14);
-
-   use_relstage = false;
 }
 
 TEST_CASE("DLMDA-relstage-pinned-endpoints", "[ff][dlmda]")
 {
+   StagedScope scope;
    // A leg pins the sub-lambdas it is not walking, and a pinned sub-lambda has
    // a flat chain rule. dtNeed() therefore drops the coupled polarization
    // endpoint on the morph leg. The multipoles and van der Waals are single
@@ -332,13 +394,12 @@ TEST_CASE("DLMDA-relstage-pinned-endpoints", "[ff][dlmda]")
    dtWeightNeed(plam, epdtexp, dpldlmda, d2pldlmda2, w, dw, d2w, need0, need1);
    REQUIRE(need0);
    REQUIRE_FALSE(need1);
-
-   use_relstage = false;
 }
 
 TEST_CASE("DLMDA-relstage-continuity", "[ff][dlmda]")
 {
-   // Polarization stages with the multipoles exactly.
+   StagedScope scope;
+   // Polarization on the same map and window stages with the multipoles exactly.
    for (RelStage leg : {RelStage::LIG2, RelStage::VDWM, RelStage::LIG1}) {
       setStagedLeg(leg);
       for (double lambda : {0.05, 0.15, 0.3, 0.5, 0.7, 0.85, 0.95}) {
@@ -347,6 +408,7 @@ TEST_CASE("DLMDA-relstage-continuity", "[ff][dlmda]")
          COMPARE_REALS(plam, elam, 1.0e-15);
          COMPARE_REALS(dpldlmda, deldlmda, 1.0e-15);
          COMPARE_REALS(d2pldlmda2, d2eldlmda2, 1.0e-15);
+         REQUIRE(polTracksEle());
          // The map complement on the ligand 2 leg is clamped into range.
          REQUIRE(elam >= 0.0);
          REQUIRE(elam <= 1.0);
@@ -397,8 +459,40 @@ TEST_CASE("DLMDA-relstage-continuity", "[ff][dlmda]")
       legMatchesTaper(RelStage::LIG1, lambda, 0.7, 1.0, 1.0);
    for (double lambda : {0.05, 0.15, 0.25})
       legMatchesTaper(RelStage::LIG2, lambda, 0.0, 0.3, -1.0);
+}
 
-   use_relstage = false;
+TEST_CASE("DLMDA-relstage-own-pol-map", "[ff][dlmda]")
+{
+   // Polarization follows its own window on the charging legs, read the other
+   // way on the ligand 2 leg, and stays at zero on the middle leg
+   // (test_eostmap.f). At the middle of a window the quintic taper is one half
+   // with slope 15/8 over the window width.
+   StagedScope scope;
+
+   setStagedLeg(RelStage::LIG2);
+   qntplmda0 = 0.0;
+   qntplmda1 = 0.2;
+   mapAt(0.1);
+   COMPARE_REALS(plam, 0.5, 1.0e-6);
+   COMPARE_REALS(dpldlmda, -9.375, 1.0e-12);
+   COMPARE_REALS(elam, 1.0 - 17.0 / 81.0, 1.0e-6);
+   REQUIRE_FALSE(polTracksEle());
+
+   setStagedLeg(RelStage::LIG1);
+   qntplmda0 = 0.8;
+   qntplmda1 = 1.0;
+   mapAt(0.9);
+   COMPARE_REALS(plam, 0.5, 1.0e-6);
+   COMPARE_REALS(dpldlmda, 9.375, 1.0e-12);
+   REQUIRE_FALSE(polTracksEle());
+
+   setStagedLeg(RelStage::VDWM);
+   qntplmda0 = 0.8;
+   qntplmda1 = 1.0;
+   mapAt(0.5);
+   REQUIRE(plam == 0.0);
+   REQUIRE(dpldlmda == 0.0);
+   REQUIRE(d2pldlmda2 == 0.0);
 }
 
 namespace {
@@ -413,7 +507,7 @@ struct ApmScope
    double erho, prho, vrho, mainlmda;
 
    ApmScope()
-      : rel(use_relstage)
+      : rel(use_rel)
       , mainl(use_mainlmda)
       , useE(use_elmdamap)
       , useP(use_plmdamap)
@@ -430,7 +524,7 @@ struct ApmScope
       , mainlmda(lambda)
    {
       // One main lambda claiming all three sub-lambdas, each on the apm map.
-      use_relstage = false;
+      use_rel = false;
       use_mainlmda = true;
       use_elmdamap = true;
       use_plmdamap = true;
@@ -442,7 +536,7 @@ struct ApmScope
 
    ~ApmScope()
    {
-      use_relstage = rel;
+      use_rel = rel;
       use_mainlmda = mainl;
       use_elmdamap = useE;
       use_plmdamap = useP;

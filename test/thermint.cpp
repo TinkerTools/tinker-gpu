@@ -19,6 +19,7 @@
 
 #include <tinker/detail/dlmda.hh>
 #include <tinker/detail/files.hh>
+#include <tinker/detail/mutant.hh>
 #include <tinker/detail/thrmint.hh>
 #include <tinker/routines.h>
 
@@ -55,7 +56,7 @@ void mapAt(double lmda)
 // QNT/NONE taper branch calls tinker_f_switch and needs the Fortran runtime.
 void useExpMaps(int eexp, int pexp, int vexp)
 {
-   use_relstage = false;
+   use_rel = false;
    elmdamap = Lmdamap::EXP;
    plmdamap = Lmdamap::EXP;
    vlmdamap = Lmdamap::EXP;
@@ -501,7 +502,7 @@ TEST_CASE("THERMINT-save", "[ff][thermint]")
    // mutate.f never ran, so seed what it would have parsed and let settisched
    // build the schedule itself
    dlmda::use_ti = 1;
-   dlmda::use_relstage = 0;
+   mutant::use_rel = 0;
    FstrView(dlmda::elmdamap) = "EXP";
    FstrView(dlmda::plmdamap) = "EXP";
    FstrView(dlmda::vlmdamap) = "EXP";

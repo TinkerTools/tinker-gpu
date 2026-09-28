@@ -102,7 +102,7 @@ GrpScale grpScale(double lmda)
    c.ds[1] = 1;
    c.s[2] = 0;
    c.ds[2] = 0;
-   if (use_relstage and relstage == RelStage::LIG2) {
+   if (use_rel and relstage == RelStage::LIG2) {
       c.s[1] = 0;
       c.ds[1] = 0;
       c.s[2] = lmda;
@@ -118,7 +118,7 @@ const int* emGroup()
 
 RdtMask chargeMask()
 {
-   return (use_relstage and relstage == RelStage::LIG2) ? RdtMask::LIGB : RdtMask::LIGA;
+   return (use_rel and relstage == RelStage::LIG2) ? RdtMask::LIGB : RdtMask::LIGA;
 }
 
 RdtMask coupledMask()
@@ -274,7 +274,7 @@ void dlmda_mech()
    use_dlmda = dlmda::use_dlmda;
    use_d2lmda = dlmda::use_d2lmda;
    use_epdt = dlmda::use_epdt;
-   use_plmda = dlmda::use_plmda and not use_osrw;
+   use_prst = dlmda::use_prst and not use_osrw;
    use_mainlmda = dlmda::use_mainlmda;
    use_rel = mutant::use_rel;
 
@@ -282,7 +282,7 @@ void dlmda_mech()
    use_pdlmda = (dlmda::use_pdlmda != 0);
    use_vdlmda = (dlmda::use_vdlmda != 0);
 
-   use_epast = (mutant::use_past != 0) and use_pdlmda and not use_osrw;
+   use_epast = use_prst and use_pdlmda;
 
    // Every multipole run takes the single topology path; a relative one scales
    // each ligand group on its own (grpScale).
@@ -371,7 +371,6 @@ void dlmda_mech()
    qntvlmda0 = dlmda::qntvlmda0;
    qntvlmda1 = dlmda::qntvlmda1;
 
-   use_relstage = (dlmda::use_relstage != 0);
    relstage = relStageFrom(dlmda::relstage);
 }
 
@@ -742,6 +741,9 @@ static void mapOne(double lmda, Lmdamap map, double qnt0, double qnt1, int expEx
 //             Waals morphs from ligand 2 onto ligand 1
 //    LIG1   charge ligand 1 with ligand 2 annihilated, its weight
 //             rising with the main lambda
+//
+// As in the absolute free energy, the electrostatic and polarization weights
+// of a charging leg each follow their own map and window.
 static void mapRelStage(double lmda)
 {
    double eval, vval;
@@ -780,10 +782,24 @@ static void mapRelStage(double lmda)
    // Numerical guard on the map complement.
    elam = std::min(1.0, std::max(0.0, eval));
 
-   // Polarization stages with the multipoles at the same weight.
-   plam = elam;
-   dpldlmda = deldlmda;
-   d2pldlmda2 = d2eldlmda2;
+   // Polarization follows its own map on a charging leg, just as the
+   // multipoles do, as the complement of that map on the ligand 2 leg; the
+   // middle leg holds it at zero with the multipoles.
+   if (relstage == RelStage::VDWM) {
+      plam = 0.0;
+      dpldlmda = 0.0;
+      d2pldlmda2 = 0.0;
+   } else {
+      double pval;
+      mapOne(lmda, plmdamap, qntplmda0, qntplmda1, plmdaexp, plmdainvn, plmdainveps, //
+         plmdaapmn, plmdaapmrho, pval, dpldlmda, d2pldlmda2);
+      if (relstage == RelStage::LIG2) {
+         pval = 1.0 - pval;
+         dpldlmda = -dpldlmda;
+         d2pldlmda2 = -d2pldlmda2;
+      }
+      plam = std::min(1.0, std::max(0.0, pval));
+   }
 }
 
 bool lmdaSameValue(double a, double b)
@@ -794,10 +810,8 @@ bool lmdaSameValue(double a, double b)
 
 bool polTracksEle()
 {
-   // The staged schedule drives polarization off the multipole weight by
-   // construction, so the per-map comparisons below do not apply to it.
-   if (use_relstage)
-      return true;
+   // A staged leg drives both sub-lambdas (mutate.f), so it falls through to the
+   // same map and window comparison as any other run.
    // One sub-lambda driven and the other frozen: they part company as soon as
    // the main lambda moves off the value they happen to share now.
    if (use_elmdamap != use_plmdamap)
@@ -822,7 +836,7 @@ bool polTracksEle()
 
 void mapSubLambda()
 {
-   if (use_relstage) {
+   if (use_rel) {
       mapRelStage(lambda);
       return;
    }

@@ -5,6 +5,8 @@
 #include "ff/pme.h"
 #include "tool/externfunc.h"
 
+#include <limits>
+
 namespace tinker {
 TINKER_FVOID2(acc1, cu1, torque, int, grad_prec*, grad_prec*, grad_prec*);
 void torque(int vers, grad_prec* dx, grad_prec* dy, grad_prec* dz)
@@ -40,10 +42,25 @@ static void rotpoleState(RdtMask mask, const int* group)
    TINKER_FCALL2(acc0, cu1, rotpoleState, mask, group);
 }
 
+// The lambda pole was last scaled to, or NaN when unknown. chkpole inverts pole
+// and poleorig together, so it keeps pole the scaled poleorig and leaves this
+// valid; only a wholesale rewrite of pole invalidates it.
+static double pole_scale = std::numeric_limits<double>::quiet_NaN();
+
+void mpoleScaleInvalidate()
+{
+   pole_scale = std::numeric_limits<double>::quiet_NaN();
+}
+
+// Reinstalls pole only when it is not already scaled to lmda, so polarization
+// at a plambda equal to elambda reuses the multipole state (mutate.f:altepset).
 TINKER_FVOID2(acc0, cu1, mpoleScale, const int*, GrpScale);
 void mpoleScale(double lmda)
 {
+   if (lmda == pole_scale)
+      return;
    TINKER_FCALL2(acc0, cu1, mpoleScale, emGroup(), grpScale(lmda));
+   pole_scale = lmda;
 }
 
 static void mpoleInitBuffers(int vers, bool use_vir_trq)
