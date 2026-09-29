@@ -144,6 +144,7 @@ void xyzData(RcOp op)
          darray::copyin(g::q0, n, zpos, atoms::z);
          copyPosToXyz();
       }
+      ++xyz_epoch;
    }
 }
 }
@@ -152,6 +153,8 @@ namespace tinker {
 TINKER_FVOID2(acc1, cu1, copyPosToXyz);
 void copyPosToXyz()
 {
+   // Callers get here after moving the atoms, even when x aliases xpos.
+   ++xyz_epoch;
    if CONSTEXPR (sizeof(pos_prec) == sizeof(real))
       return;
 

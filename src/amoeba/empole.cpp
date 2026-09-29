@@ -127,6 +127,9 @@ void empole(int vers)
 
    empoleBegin(vers);
 
+   // With use_emast the multipoles are scaled on the fly from poleorig.
+   if (not use_emast)
+      mpoleEnsureElec();
    mpoleInit(vers, use_emast);
    empoleKernel(vers);
    exfield(vers, 1);

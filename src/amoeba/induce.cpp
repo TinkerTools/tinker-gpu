@@ -2,13 +2,17 @@
 #include "ff/atom.h"
 #include "ff/dlmda.h"
 #include "ff/modamoeba.h"
+#include "ff/modhippo.h"
 #include "ff/nblist.h"
 #include "ff/potent.h"
 #include "tool/externfunc.h"
 #include "tool/ioprint.h"
 #include <tinker/detail/inform.hh>
 #include <tinker/detail/polar.hh>
+#include <tinker/detail/polpot.hh>
 #include <tinker/detail/units.hh>
+
+#include <vector>
 
 namespace tinker {
 TINKER_FVOID2(acc1, cu1, diagPrecond, const real (*)[3], const real (*)[3], //
@@ -68,6 +72,94 @@ TINKER_FVOID2(acc1, cu1, ulspredSum, real (*)[3], real (*)[3]);
 void ulspredSum(real (*uind)[3], real (*uinp)[3])
 {
    TINKER_FCALL2(acc1, cu1, ulspredSum, uind, uinp);
+}
+}
+
+namespace tinker {
+static real (**udalt[])[3] = {&udalt_00, &udalt_01, &udalt_02, &udalt_03, &udalt_04, &udalt_05, &udalt_06, &udalt_07,
+   &udalt_08, &udalt_09, &udalt_10, &udalt_11, &udalt_12, &udalt_13, &udalt_14, &udalt_15};
+static real (**upalt[])[3] = {&upalt_00, &upalt_01, &upalt_02, &upalt_03, &upalt_04, &upalt_05, &upalt_06, &upalt_07,
+   &upalt_08, &upalt_09, &upalt_10, &upalt_11, &upalt_12, &upalt_13, &upalt_14, &upalt_15};
+
+InducedSnapshot::InducedSnapshot()
+   : m_ud{nullptr, nullptr}
+   , m_up{nullptr, nullptr}
+   , m_nualt(0)
+{
+   // Every buffer is picked by the flags that allocate it, never by its pointer:
+   // deallocation leaves the pointers of an earlier system dangling.
+   if (not use(Potent::POLAR))
+      return;
+
+   // the dipoles, as mpoleData allocates them
+   for (auto* s : {&uind, &uinp, &udir, &udirp}) {
+      Copy<real[3]> c{s, nullptr};
+      darray::allocate(n, &c.copy);
+      m_vec.push_back(c);
+   }
+
+   // A solve writes only slot nualt % maxualt of the predictor history and
+   // advances nualt (ulspredSave), so that slot and nualt are all a trial leaves
+   // behind. The history is in use as epolarData allocates it.
+   if (maxualt > 0 and not use_epdt) {
+      darray::allocate(n, &m_ud.copy);
+      if (not polpot::use_tholed)
+         darray::allocate(n, &m_up.copy);
+   }
+
+   // exchange polarization, as expolData allocates them
+   if (polpot::use_expol) {
+      for (auto* s : {&polinv, &polscale}) {
+         Copy<real[3][3]> c{s, nullptr};
+         darray::allocate(n, &c.copy);
+         m_mat.push_back(c);
+      }
+   }
+}
+
+InducedSnapshot::~InducedSnapshot()
+{
+   for (auto& c : m_vec)
+      darray::deallocate(c.copy);
+   for (auto& c : m_mat)
+      darray::deallocate(c.copy);
+   darray::deallocate(m_ud.copy, m_up.copy);
+}
+
+void InducedSnapshot::save()
+{
+   for (auto& c : m_vec)
+      darray::copy(g::q0, n, c.copy, *c.src);
+   // flat, as mdsave copies them; the 3x3 element type does not flatten const
+   for (auto& c : m_mat)
+      darray::copy(g::q0, 9 * n, &c.copy[0][0][0], &(*c.src)[0][0][0]);
+   m_nualt = nualt;
+
+   // the slot the trial solve will overwrite
+   if (m_ud.copy) {
+      int pos = nualt % maxualt;
+      m_ud.src = udalt[pos];
+      darray::copy(g::q0, n, m_ud.copy, *m_ud.src);
+      if (m_up.copy) {
+         m_up.src = upalt[pos];
+         darray::copy(g::q0, n, m_up.copy, *m_up.src);
+      }
+   }
+}
+
+void InducedSnapshot::restore()
+{
+   for (auto& c : m_vec)
+      darray::copy(g::q0, n, *c.src, c.copy);
+   for (auto& c : m_mat)
+      darray::copy(g::q0, 9 * n, &(*c.src)[0][0][0], &c.copy[0][0][0]);
+   nualt = m_nualt;
+
+   if (m_ud.copy) {
+      darray::copy(g::q0, n, *m_ud.src, m_ud.copy);
+      if (m_up.copy)
+         darray::copy(g::q0, n, *m_up.src, m_up.copy);
+   }
 }
 }
 

@@ -1,11 +1,19 @@
+#include "ff/amoeba/induce.h"
+#include "ff/atom.h"
+#include "ff/energy.h"
+#include "ff/modamoeba.h"
+#include "ff/potent.h"
 #include "md/integrator.h"
 #include "md/misc.h"
 #include <tinker/detail/bath.hh>
 #include <tinker/detail/boxes.hh>
 #include <tinker/detail/inform.hh>
+#include <tinker/detail/polpot.hh>
 
 #include "test.h"
 #include "testrt.h"
+
+#include <vector>
 
 using namespace tinker;
 
@@ -795,4 +803,131 @@ TEST_CASE("NPT-Monte-Aniso", "[ff][npt][Monte][aniso]")
    bath::atmsph = 0.;
    bath::isothermal = 0;
    bath::isobaric = 0;
+}
+
+namespace {
+// Loads water30 with the induced dipole predictor, and fills its history with
+// solves at nearby geometries, past maxualt so that the predictor is in use and
+// the next solve overwrites a real entry.
+void loadWater30Predictor()
+{
+   const char* k = "test_water30.key";
+   const char* x = "test_water30.xyz";
+   TestFile fke(TINKER9_DIRSTR "/test/file/water30/water30.key", k, "\nintegrator verlet\n");
+   TestFile fx(TINKER9_DIRSTR "/test/file/water30/water30_iso.xyz", x);
+   TestFile fp(TINKER9_DIRSTR "/test/file/commit_6fe8e913/water03.prm");
+
+   const char* argv[] = {"dummy", x};
+   int argc = 2;
+   testBeginWithArgs(argc, argv);
+   testMdInit(298., 1.);
+   rc_flag = usage_;
+   initialize();
+   REQUIRE(use(Potent::POLAR));
+   REQUIRE(maxualt > 0);
+   REQUIRE_FALSE(polpot::use_tholed);
+
+   std::vector<pos_prec> xb(n);
+   for (int step = 0; step < maxualt + 3; ++step) {
+      darray::copyout(g::q0, n, xb.data(), xpos);
+      waitFor(g::q0);
+      for (int i = 0; i < n; ++i)
+         xb[i] += 0.01 * ((i + step) % 3 - 1);
+      darray::copyin(g::q0, n, xpos, xb.data());
+      waitFor(g::q0);
+      copyPosToXyz(true);
+      energy(calc::v1);
+   }
+}
+
+std::vector<real> grab(real (*dev)[3])
+{
+   std::vector<real> v(3 * n);
+   darray::copyout(g::q0, n, reinterpret_cast<real(*)[3]>(v.data()), dev);
+   waitFor(g::q0);
+   return v;
+}
+
+// A rejected Monte Carlo volume move: the trial energy solves the induced
+// dipoles at the trial geometry and adds them to the predictor history, and the
+// reject restores both along with the coordinates.
+void checkRejectKeepsInduced()
+{
+   real(*slots[])[3] = {udalt_00, udalt_01, udalt_02, udalt_03, udalt_04, udalt_05, udalt_06, udalt_07, udalt_08,
+      udalt_09, udalt_10, udalt_11, udalt_12, udalt_13, udalt_14, udalt_15};
+   real(*pslots[])[3] = {upalt_00, upalt_01, upalt_02, upalt_03, upalt_04, upalt_05, upalt_06, upalt_07, upalt_08,
+      upalt_09, upalt_10, upalt_11, upalt_12, upalt_13, upalt_14, upalt_15};
+   REQUIRE(nualt >= maxualt);
+   const auto uind0 = grab(uind);
+   const auto uinp0 = grab(uinp);
+   const auto udir0 = grab(udir);
+   const auto udirp0 = grab(udirp);
+   std::vector<std::vector<real>> slots0, pslots0;
+   for (int i = 0; i < maxualt; ++i) {
+      slots0.push_back(grab(slots[i]));
+      pslots0.push_back(grab(pslots[i]));
+   }
+   const int nualt0 = nualt;
+   std::vector<pos_prec> xb(n);
+   darray::copyout(g::q0, n, xb.data(), xpos);
+   waitFor(g::q0);
+
+   {
+      MonteCarloBarostat mc;
+      InducedSnapshot snapshot;
+      // an old energy far below any trial energy rejects the move for certain
+      monteCarloBarostat(-1.0e30, 298., false, false, &snapshot);
+   }
+
+   std::vector<pos_prec> xa(n);
+   darray::copyout(g::q0, n, xa.data(), xpos);
+   waitFor(g::q0);
+   REQUIRE(xa == xb);
+   REQUIRE(grab(uind) == uind0);
+   REQUIRE(grab(uinp) == uinp0);
+   REQUIRE(grab(udir) == udir0);
+   REQUIRE(grab(udirp) == udirp0);
+   REQUIRE(nualt == nualt0);
+   for (int i = 0; i < maxualt; ++i) {
+      REQUIRE(grab(slots[i]) == slots0[i]);
+      REQUIRE(grab(pslots[i]) == pslots0[i]);
+   }
+}
+}
+
+TEST_CASE("NPT-Monte-Reject-Keeps-Induced", "[ff][npt][Monte][reject]")
+{
+   loadWater30Predictor();
+   checkRejectKeepsInduced();
+   finish();
+   testEnd();
+}
+
+TEST_CASE("NPT-Monte-Reject-After-Expol", "[ff][npt][Monte][reject]")
+{
+   // A HIPPO system with exchange polarization first. Its polinv and polscale
+   // stay dangling after finish(), so a snapshot that picked its buffers by
+   // pointer rather than by use_expol read freed memory in the AMOEBA system.
+   {
+      const char* x = "water30_2.xyz";
+      TestFile fx(TINKER9_DIRSTR "/test/file/tinkernist/water30_2.xyz", x);
+      TestFile fk(TINKER9_DIRSTR "/test/file/tinkernist/water30_2.key");
+      TestFile fp(TINKER9_DIRSTR "/test/file/commit_aad9340c/water21.prm");
+
+      const char* argv[] = {"dummy", x};
+      int argc = 2;
+      testBeginWithArgs(argc, argv);
+      rc_flag = calc::xyz | calc::vmask;
+      initialize();
+      REQUIRE(polpot::use_expol);
+      energy(calc::v0);
+      finish();
+      testEnd();
+   }
+
+   loadWater30Predictor();
+   REQUIRE_FALSE(polpot::use_expol);
+   checkRejectKeepsInduced();
+   finish();
+   testEnd();
 }

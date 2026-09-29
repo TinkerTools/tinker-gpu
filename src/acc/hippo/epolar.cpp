@@ -1,3 +1,4 @@
+#include "ff/amoeba/mpolestate.h"
 #include "ff/atom.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
@@ -546,6 +547,8 @@ static void epolarChgpenEwaldRecipSelf_acc1(const real (*gpu_uind)[3], bool use_
 
       // qgrip: pvu_qgrid
       const PMEUnit pvu = pvpme_unit;
+      // the induced dipoles are added into cmp in place
+      mpoleCmpClobbered();
       #pragma acc parallel loop independent async deviceptr(cmp,gpu_uind)
       for (int i = 0; i < n; ++i) {
          cmp[i][1] += gpu_uind[i][0];

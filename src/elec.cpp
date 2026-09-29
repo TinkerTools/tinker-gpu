@@ -1,6 +1,6 @@
-#include "ff/amoeba/empole.h"
-#include "ff/dlmda.h"
 #include "ff/elec.h"
+#include "ff/amoeba/mpolestate.h"
+#include "ff/dlmda.h"
 #include "ff/echarge.h"
 #include "ff/energy.h"
 #include "ff/modamoeba.h"
@@ -64,7 +64,7 @@ static void mpoleData(RcOp op)
    if (op & RcOp::ALLOC) {
       darray::allocate(n, &zaxis, &pole, &rpole);
 
-      if (use_dlmda || use_epdt || use_prst) {
+      if (usePoleorig()) {
          darray::allocate(n, &poleorig);
       } else {
          poleorig = nullptr;
@@ -157,9 +157,9 @@ static void mpoleData(RcOp op)
       }
       darray::copyin(g::q0, n, pole, polebuf.data());
       waitFor(g::q0);
-      mpoleScaleInvalidate();
+      mpoleStateReset();
 
-      if (use_dlmda || use_epdt || use_prst) {
+      if (usePoleorig()) {
          for (int i = 0; i < n; ++i) {
             int b1 = MPL_TOTAL * i;
             int b2 = mpole::maxpole * i;

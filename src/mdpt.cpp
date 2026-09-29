@@ -1,3 +1,4 @@
+#include "ff/amoeba/induce.h"
 #include "ff/energy.h"
 #include "ff/molecule.h"
 #include "ff/nblist.h"
@@ -90,7 +91,7 @@ static void invert3(double dst[3][3], const double src[3][3])
 
 TINKER_FVOID2(acc1, cu1, monteCarloMolMove, double);
 TINKER_FVOID2(acc1, cu1, monteCarloMolMoveAniso, const double (*)[3]);
-void monteCarloBarostat(energy_prec epot, T_prec temp, bool semiiso, bool aniso)
+void monteCarloBarostat(energy_prec epot, T_prec temp, bool semiiso, bool aniso, InducedSnapshot* induced)
 {
    if (not bound::use_bounds)
       return;
@@ -120,6 +121,10 @@ void monteCarloBarostat(energy_prec epot, T_prec temp, bool semiiso, bool aniso)
    darray::copy(g::q0, n, x_pmonte, xpos);
    darray::copy(g::q0, n, y_pmonte, ypos);
    darray::copy(g::q0, n, z_pmonte, zpos);
+   // The trial energy solves the induced dipoles at the trial geometry and adds
+   // them to the predictor history.
+   if (induced)
+      induced->save();
    double step = volmove * (2 * random<double>() - 1);
 
    if (isotropic) {
@@ -321,6 +326,8 @@ void monteCarloBarostat(energy_prec epot, T_prec temp, bool semiiso, bool aniso)
       darray::copy(g::q0, n, zpos, z_pmonte);
       copyPosToXyz();
       nblistRefresh();
+      if (induced)
+         induced->restore();
    }
 }
 

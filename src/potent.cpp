@@ -100,6 +100,10 @@ bool use(Potent term)
       val = potent::use_repel;
       break;
 
+   case Potent::SOLV:
+      val = potent::use_solv;
+      break;
+
    case Potent::CHGFLX:
       val = potent::use_chgflx;
       break;

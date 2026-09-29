@@ -2,6 +2,8 @@
 #include "ff/precision.h"
 #include "tool/rcman.h"
 
+#include <vector>
+
 namespace tinker {
 /// \ingroup polar
 /// \{
@@ -30,6 +32,32 @@ void sparsePrecondApply(const real (*rsd)[3],
 
 void ulspredSave(const real (*uind)[3], const real (*uinp)[3]);
 void ulspredSum(real (*uind)[3], real (*uinp)[3]);
+
+/// A copy of the induced dipoles, the predictor history and, with exchange
+/// polarization, its matrices, so that an energy evaluated at a trial geometry
+/// which is then rejected leaves no trace.
+class InducedSnapshot
+{
+public:
+   InducedSnapshot();
+   ~InducedSnapshot();
+   InducedSnapshot(const InducedSnapshot&) = delete;
+   InducedSnapshot& operator=(const InducedSnapshot&) = delete;
+   void save();
+   void restore();
+
+private:
+   template <class T>
+   struct Copy
+   {
+      T** src;
+      T* copy;
+   };
+   std::vector<Copy<real[3]>> m_vec;
+   std::vector<Copy<real[3][3]>> m_mat;
+   Copy<real[3]> m_ud, m_up; // the one predictor slot a trial overwrites
+   int m_nualt;
+};
 
 void inducePrint(const real (*ud)[3]);
 void induce(real (*uind)[3], real (*uinp)[3]);

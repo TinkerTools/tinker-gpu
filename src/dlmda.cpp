@@ -834,6 +834,12 @@ bool polTracksEle()
    }
 }
 
+bool usePoleorig()
+{
+   bool elec = use(Potent::MPOLE) or use(Potent::POLAR) or use(Potent::REPULS);
+   return elec and (use_dlmda or use_epdt or use_prst);
+}
+
 void mapSubLambda()
 {
    if (use_rel) {

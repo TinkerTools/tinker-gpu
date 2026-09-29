@@ -16,8 +16,14 @@ inline void chkpoleInvertI(int i, real (*restrict pole)[MPL_TOTAL])
    pole[i][MPL_PME_YZ] = -pole[i][MPL_PME_YZ];
 }
 
+/// Inverts the multipoles at a chiral site whose handedness no longer matches
+/// its local frame, and records the inversion in zaxis (chkpole.f). Every copy
+/// of the multipoles is inverted together, since the record serves them all;
+/// a copy that is not in use is passed as a null pointer.
 SEQ_ROUTINE
-inline void chkpoleAtomI(int i, real (*restrict pole)[MPL_TOTAL], real (*restrict pole2)[MPL_TOTAL], LocalFrame* zaxis, const real* restrict x, const real* restrict y, const real* restrict z)
+inline void chkpoleAtomI(int i, real (*restrict pole)[MPL_TOTAL], real (*restrict poleorig)[MPL_TOTAL],
+   real (*restrict repole)[MPL_TOTAL], LocalFrame* zaxis, const real* restrict x, const real* restrict y,
+   const real* restrict z)
 {
    int polaxe = zaxis[i].polaxe;
    bool check = ((polaxe != LFRM_Z_THEN_X) or (zaxis[i].yaxis) == 0) ? false : true;
@@ -48,17 +54,14 @@ inline void chkpoleAtomI(int i, real (*restrict pole)[MPL_TOTAL], real (*restric
 
       if ((k < 0 && vol > 0) or (k > 0 && vol < 0)) {
          zaxis[i].yaxis = -k;
-         chkpoleInvertI(i, pole);
-         if (pole2)
-            chkpoleInvertI(i, pole2);
+         if (pole)
+            chkpoleInvertI(i, pole);
+         if (poleorig)
+            chkpoleInvertI(i, poleorig);
+         if (repole)
+            chkpoleInvertI(i, repole);
       }
    }
-}
-
-SEQ_ROUTINE
-inline void chkpoleAtomI(int i, real (*restrict pole)[MPL_TOTAL], LocalFrame* zaxis, const real* restrict x, const real* restrict y, const real* restrict z)
-{
-   chkpoleAtomI(i, pole, nullptr, zaxis, x, y, z);
 }
 }
 

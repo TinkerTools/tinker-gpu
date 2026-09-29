@@ -1,3 +1,4 @@
+#include "ff/amoeba/mpolestate.h"
 #include "ff/atom.h"
 #include "ff/elec.h"
 #include "ff/nblist.h"
@@ -18,17 +19,27 @@ void dfieldEwaldRecipSelfP1(real (*field)[3])
 {
    darray::zero(g::q0, n, field);
 
+   // The multipole term before this one may have left the reciprocal space
+   // potential of the same cmp behind. A term computing the virial also needs
+   // the virial of that convolution in vir_m, which the polarization virial
+   // subtracts, so it reuses only a convolution that left one there.
    const PMEUnit pu = ppme_unit;
-   cmpToFmp(pu, cmp, fmp);
-   gridMpole(pu, fmp);
-   fftfront(pu);
-   if (vir_m)
-      pmeConv(pu, vir_m);
-   else
-      pmeConv(pu);
-   fftback(pu);
-   fphiMpole(pu, fphi);
-   fphiToCphi(pu, fphi, cphi);
+   const bool need_vir = mpoleRecipVirial();
+   if (not mpoleFphiCurrent(pu, need_vir)) {
+      cmpToFmp(pu, cmp, fmp);
+      gridMpole(pu, fmp);
+      fftfront(pu);
+      if (need_vir) {
+         darray::zero(g::q0, bufferSize(), vir_m);
+         pmeConv(pu, vir_m);
+      } else {
+         pmeConv(pu);
+      }
+      fftback(pu);
+      fphiMpole(pu, fphi);
+      fphiToCphi(pu, fphi, cphi);
+      mpoleFphiProduced(pu, need_vir);
+   }
 
    TINKER_FCALL2(acc1, cu1, dfieldEwaldRecipSelfP2, field);
 }

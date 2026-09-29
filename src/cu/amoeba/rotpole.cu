@@ -6,21 +6,17 @@
 
 namespace tinker {
 __global__
-void chkpole_cu1(int n, real (*restrict pole)[MPL_TOTAL], real (*restrict pole2)[MPL_TOTAL],
-   LocalFrame* zaxis, const real* restrict x, const real* restrict y, const real* restrict z)
+void chkpole_cu1(int n, real (*restrict pole)[MPL_TOTAL], real (*restrict poleorig)[MPL_TOTAL],
+   real (*restrict repole)[MPL_TOTAL], LocalFrame* zaxis, const real* restrict x, const real* restrict y,
+   const real* restrict z)
 {
    for (int i = ITHREAD; i < n; i += STRIDE)
-      chkpoleAtomI(i, pole, pole2, zaxis, x, y, z);
+      chkpoleAtomI(i, pole, poleorig, repole, zaxis, x, y, z);
 }
 
-void chkpole_cu()
+void chkpole_cu(real (*pole)[MPL_TOTAL], real (*poleorig)[MPL_TOTAL], real (*repole)[MPL_TOTAL])
 {
-   launch_k1s(g::s0, n, chkpole_cu1, n, pole, poleorig, zaxis, x, y, z);
-}
-
-void chkrepole_cu()
-{
-   launch_k1s(g::s0, n, chkpole_cu1, n, repole, nullptr, zaxis, x, y, z);
+   launch_k1s(g::s0, n, chkpole_cu1, n, pole, poleorig, repole, zaxis, x, y, z);
 }
 }
 

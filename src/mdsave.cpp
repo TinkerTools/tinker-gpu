@@ -1,11 +1,12 @@
+#include "ff/amoeba/empole.h"
 #include "ff/dlmda.h"
 #include "ff/energy.h"
 #include "ff/eost.h"
+#include "ff/ethrmint.h"
 #include "ff/modamoeba.h"
 #include "ff/modhippo.h"
 #include "ff/ost.h"
 #include "ff/potent.h"
-#include "ff/ethrmint.h"
 #include "md/misc.h"
 #include "md/pq.h"
 #include "tool/cudalib.h"
@@ -441,11 +442,31 @@ void mdsaveAsync(int istep, time_prec dt)
    cv_write.wait(lck_write, [=]() { return idle_write; });
    idle_write = false;
 
+   // The terms leave rpole in whatever state they last needed; the saved
+   // dipoles are the physical ones. Done here, on the thread that owns the
+   // multipole state, before the copy is queued behind it.
+   if (mdsaveUseUstc() and (use(Potent::MPOLE) or use(Potent::POLAR)))
+      mpoleEnsurePhysical();
+
    fut_dup_then_write = std::async(std::launch::async, mdsaveDupThenWrite, istep, dt);
 
    std::unique_lock<std::mutex> lck_copy(mtx_dup);
    cv_dup.wait(lck_copy, [=]() { return idle_dup; });
    idle_dup = false;
+}
+
+bool mdsaveWritesInduced()
+{
+   return mdsaveUseUind() or mdsaveUseUdir();
+}
+
+void mdsaveCheckInduced()
+{
+   // Dual topology leaves only its last endpoint pass in uind and udir.
+   if (use_epdt and mdsaveWritesInduced())
+      TINKER_THROW("MDSAVE  --  Induced and direct dipoles cannot be saved with dual topology "
+                   "polarization; remove the SAVE-UINDUCE, SAVE-USYSTEM, SAVE-TEFIELD, "
+                   "SAVE-UDIRECT and SAVE-DEFIELD keywords");
 }
 
 void mdsaveSynchronize()

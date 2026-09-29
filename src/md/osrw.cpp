@@ -1,5 +1,5 @@
 #include "md/osrw.h"
-#include "ff/amoeba/empole.h"
+#include "ff/amoeba/mpolestate.h"
 #include "ff/echarge.h"
 #include "ff/energy.h"
 #include "ff/evalence.h"
@@ -203,7 +203,7 @@ TINKER_FVOID2(acc1, cu0, osrw_altele, double);
 void osrw_altele(double el)
 {
    TINKER_FCALL2(acc1, cu0, osrw_altele, el);
-   mpoleScaleInvalidate();
+   mpolePoleWritten();
 }
 
 TINKER_FVOID2(acc1, cu0, osrw_alttor, double);

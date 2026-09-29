@@ -1,3 +1,4 @@
+#include "ff/amoeba/mpolestate.h"
 #include "ff/atom.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
@@ -270,14 +271,17 @@ static void empoleEwaldRecipGeneric_acc()
    cmpToFmp(pu, cmp, fmp);
    gridMpole(pu, fmp);
    fftfront(pu);
+   bool conv_vir_m = false;
    if CONSTEXPR (do_v) {
       if (vir_m) {
+         darray::zero(g::q0, bufferSize(), vir_m);
          pmeConv(pu, vir_m);
          auto size = bufferSize() * VirialBufferTraits::value;
          #pragma acc parallel loop independent async deviceptr(vir_m,vir_em)
          for (size_t i = 0; i < size; ++i) {
             vir_em[0][i] += vir_m[0][i];
          }
+         conv_vir_m = true;
       } else {
          pmeConv(pu, vir_em);
       }
@@ -287,6 +291,7 @@ static void empoleEwaldRecipGeneric_acc()
    fftback(pu);
    fphiMpole(pu, fphi);
    fphiToCphi(pu, fphi, cphi);
+   mpoleFphiProduced(pu, conv_vir_m);
 
    auto& st = *pu;
    const int nfft1 = st.nfft1;

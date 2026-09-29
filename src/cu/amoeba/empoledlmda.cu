@@ -1,7 +1,8 @@
 #include "ff/amoeba/empole.h"
+#include "ff/amoeba/mpolestate.h"
 #include "ff/dlmda.h"
-#include "ff/elec.h"
 #include "ff/egvop.h"
+#include "ff/elec.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/pme.h"
@@ -157,6 +158,11 @@ static void empoleEwaldRecipDlmdaGeneric_cu(bool reuse_pot)
       VirialBuffer conv_vir = nullptr;
       if CONSTEXPR (do_v)
          conv_vir = vir_m ? vir_m : vir_em;
+      // pmeConvDlmda puts the ordinary grid's virial in conv_vir and the lambda
+      // derivative grid's in dvirdl_buf, so vir_m holds the same as elsewhere.
+      const bool conv_vir_m = conv_vir and conv_vir == vir_m;
+      if (conv_vir_m)
+         darray::zero(g::q0, bufferSize(), vir_m);
       if CONSTEXPR (need_dl) {
          pmeConvDlmda(pu, dlpu, conv_vir, conv_vir ? dvirdl_buf : nullptr, deldlmda);
       } else {
@@ -175,6 +181,7 @@ static void empoleEwaldRecipDlmdaGeneric_cu(bool reuse_pot)
       fftback(pu);
       fphiMpole(pu, fphi);
       fphiToCphi(pu, fphi, cphi);
+      mpoleFphiProduced(pu, conv_vir_m);
       if CONSTEXPR (need_dl) {
          fftback(dlpu);
          fphiMpole(dlpu, dlfphi);

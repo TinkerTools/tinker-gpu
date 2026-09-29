@@ -1,4 +1,4 @@
-#include "ff/amoeba/empole.h"
+#include "ff/amoeba/mpolestate.h"
 #include "ff/atom.h"
 #include "ff/evalence.h"
 #include "ff/modhippo.h"
@@ -60,9 +60,11 @@ void cfluxData(RcOp op)
 TINKER_FVOID2(acc1, cu1, alterchg);
 void alterchg()
 {
+   // The flux depends on the coordinates alone, so pole may still carry it.
+   if (mpoleFluxCurrent())
+      return;
    TINKER_FCALL2(acc1, cu1, alterchg);
-   // The flux monopoles part pole from the scaled poleorig.
-   mpoleScaleInvalidate();
+   mpoleFluxApplied();
 }
 
 void cfluxZeroPot()

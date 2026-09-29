@@ -1,9 +1,10 @@
 #include "ff/amoeba/epolar.h"
+#include "ff/amoeba/mpolestate.h"
 #include "ff/elec.h"
-#include "ff/termbuf.h"
 #include "ff/modamoeba.h"
 #include "ff/modhippo.h"
 #include "ff/pme.h"
+#include "ff/termbuf.h"
 #include "seq/add.h"
 #include "seq/launch.h"
 
@@ -527,6 +528,8 @@ static void epolarEwaldRecipSelf_cu1(const real (*gpu_uind)[3], const real (*gpu
 
       // qgrip: pvu_qgrid
       const PMEUnit pvu = pvpme_unit;
+      // the induced dipoles are added into cmp in place
+      mpoleCmpClobbered();
       launch_k1s(g::s0, n, epolarEwaldRecipSelfVirial_cu3, n, cmp, gpu_uinp);
       cmpToFmp(pvu, cmp, fmp);
       gridMpole(pvu, fmp);
@@ -669,6 +672,8 @@ static void epolarChgpenEwaldRecipSelf_cu1(const real (*gpu_uind)[3], bool use_c
 
       // qgrip: pvu_qgrid
       const PMEUnit pvu = pvpme_unit;
+      // the induced dipoles are added into cmp in place
+      mpoleCmpClobbered();
       launch_k1s(g::s0, n, epolarEwaldRecipSelfVirial_cu3, n, cmp, gpu_uind);
       cmpToFmp(pvu, cmp, fmp);
       gridMpole(pvu, fmp);

@@ -1,7 +1,8 @@
 #include "ff/energy.h"
-#include "ff/ost.h"
-#include "ff/ethrmint.h"
+#include "ff/atom.h"
 #include "ff/eabf.h"
+#include "ff/ethrmint.h"
+#include "ff/ost.h"
 #include "tool/error.h"
 
 namespace tinker {
@@ -334,6 +335,9 @@ static DHRc* ev_dptr;
 
 void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
 {
+   // Nothing derived from the coordinates carries over from an earlier call.
+   ++xyz_epoch;
+
    // Whichever method owns the main lambda drives the sub-lambda maps.
    if (use_mainlmda)
       mapSubLambda();

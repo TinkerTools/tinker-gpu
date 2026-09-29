@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <tinker/detail/dlmda.hh>
 #include <tinker/detail/mutant.hh>
 #include <tinker/routines.h>
@@ -743,6 +744,19 @@ double mapDldth(double theta)
    return d;
 }
 
+// Roundoff in the map at theta. At a triangle extremum dlambda/dcos(2*theta)
+// is about 7e3 at the sharpness selectMap uses, so one ulp of 2*theta or of
+// cos moves lambda by ~1e-12, and nvc++ (-fast in particular) rounds sin and
+// cos differently from glibc and gfortran.
+double mapNoise(double theta)
+{
+   double eps = std::numeric_limits<double>::epsilon() * (1.0 + std::fabs(2.0 * theta));
+   if (lmdathmap != LmdaThMap::TRI)
+      return eps;
+   double y = lmdathalpha * std::cos(2.0 * theta);
+   return eps * (1.0 + 1.0 / (2.0 * std::asin(lmdathalpha) * std::sqrt(1.0 - y * y)));
+}
+
 // The two maps as the Fortran cases drive them, sine squared at a sharpness it
 // ignores and the smoothed triangle at one close to a flat traversal.
 void selectMap(int j)
@@ -825,7 +839,7 @@ TEST_CASE("DLMDA-theta-map-derivative", "[ff][dlmda]")
          double theta = -dpi + 2.0 * dpi * (double)i / 40.0;
          double dnum = (mapLmda(theta + h) - mapLmda(theta - h)) / (2.0 * h);
          CAPTURE(j, theta);
-         COMPARE_REALS(mapDldth(theta), dnum, 1.0e-8);
+         COMPARE_REALS(mapDldth(theta), dnum, 1.0e-8 + 2.0 * mapNoise(theta) / h);
       }
    }
 }
@@ -932,8 +946,8 @@ TEST_CASE("DLMDA-theta-matches-fortran", "[ff][dlmda]")
          lmdaThetaMap(theta, l9, d9);
          tinker_f_lmdathetamap(&theta, &lf, &df);
          CAPTURE(j, theta);
-         COMPARE_REALS(l9, lf, 1.0e-14);
-         COMPARE_REALS(d9, df, 1.0e-14);
+         COMPARE_REALS(l9, lf, 1.0e-14 + 4.0 * mapNoise(theta));
+         COMPARE_REALS(d9, df, 1.0e-14 + 4.0 * mapNoise(theta));
       }
 
       // the inverse, including the clipped endpoints

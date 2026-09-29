@@ -7,6 +7,7 @@
 #include "ff/evdw.h"
 #include "ff/hippo/cflux.h"
 #include "ff/hippo/epolar.h"
+#include "ff/hippo/induce.h"
 #include "ff/modamoeba.h"
 #include "ff/nblist.h"
 #include "ff/ost.h"
@@ -29,6 +30,7 @@
 #include <tinker/detail/uprior.hh>
 
 #include <cassert>
+#include <vector>
 
 namespace tinker {
 static unsigned polar_active_mask;
@@ -669,7 +671,7 @@ static void epolarFinish(int vers);
 TINKER_FVOID2(acc0, cu1, epolarAstDeriv, EnergyBuffer, const real (*)[3], const real (*)[3],
    const real (*)[3], const real (*)[3], const real (*)[3], const real (*)[3]);
 
-void epolarAstDeriv(int vers)
+void epolarAstDeriv()
 {
    // Scratch comes from the solver work arrays, idle now that induce() is done.
    real(*dfd)[3] = work01_;
@@ -681,12 +683,12 @@ void epolarAstDeriv(int vers)
 
    if (plam == 0) {
       f0d = work03_, f0p = work04_, ufd = work05_, ufp = work06_;
-      mpoleRefresh();
+      mpoleUsePole();
       dfield(f0d, f0p);
       ufield(uind, uinp, ufd, ufp);
    }
 
-   mpoleInitStateDt(vers, chargeMask(), emGroup(), false);
+   mpoleUseState(chargeMask(), emGroup());
    if (useEwald())
       dfieldEwald(dfd, dfp);
    else
@@ -734,14 +736,10 @@ void epolar(int vers)
 
    const bool do_astdl = use_epast and (lmdaDerivVers(vers, use_pdlmda) & calc::energy_dlmda1);
    if (do_astdl)
-      epolarAstDeriv(vers);
+      epolarAstDeriv();
 
-   if (use_prst)
-      mpoleScale(elam);
-
-   if (do_astdl)
-      mpoleRefresh();
-
+   // pole and rpole are left in the polarization state; every reader of them
+   // asks for the state it needs.
    epolarFinish(vers);
 }
 
@@ -800,12 +798,6 @@ void epolarEwaldRecipSelfDt(int vers, EnergyBuffer out_e, VirialBuffer out_v, gr
    TINKER_FCALL2(acc0, cu1, epolarEwaldRecipSelfDt, vers, uind, uinp, out_e, out_v, out_gx, out_gy, out_gz, dt);
 }
 
-void dtRestoreFullState(const int* group)
-{
-   mpoleRestoreFullState(group);
-   polarState(RdtMask::ALL, group);
-}
-
 RecipDt dtRecipSinks(int vers, real wa, real wb)
 {
    RecipDt dt;
@@ -834,7 +826,11 @@ RecipDt dtRecipSinks(int vers, real wa, real wb)
 static void epolarState(int vers, RdtMask mask, const int* group, bool first_state, //
    real wa, real wb, real wc)
 {
-   mpoleInitStateDt(vers, mask, group, first_state);
+   // A dual topology driver accumulates torque over every subsystem and converts
+   // it once at the end, so the torque buffers are cleared on the first pass only.
+   if (first_state)
+      mpoleBegin(vers, false);
+   mpoleUseState(mask, group);
    polarState(mask, group);
 
    if (not epolarStateHasActiveSite(mask)) {
@@ -909,8 +905,35 @@ void epolar_dt(int vers)
 
    epolarFinish(vers);
 
-   // The last pass leaves rpole and polarity masked down to a subsystem.
-   dtRestoreFullState(group);
+   // The last pass leaves polarity masked down to a subsystem. It leaves rpole
+   // masked too, but every reader of rpole asks for the state it needs.
+   polarState(RdtMask::ALL, group);
+}
+
+// The dipoles a reported moment is made of are the ones the polarization energy
+// is made of: -dE/dF for a uniform field. Single topology solves once at the
+// polarization lambda, as epolar() does. Dual topology leaves only its last
+// endpoint pass in uind and udir, so it has no such dipoles to report.
+void epolarPhysicalInduced()
+{
+   if (use_epdt)
+      TINKER_THROW("Induced dipoles cannot be reported with dual topology polarization");
+
+   if (use_prst and (pltfm_config & Platform::CUDA)) {
+      mpoleScale(plam);
+      polarState(coupledMask(), emGroup(), plam);
+      if (use(Potent::CHGFLX))
+         alterchg();
+      mpoleInit(calc::energy, false);
+      induce(uind, uinp);
+   } else {
+      mpoleEnsurePhysical();
+      mpoleInit(calc::energy, false);
+      if (mplpot::use_chgpen)
+         induce2(uind);
+      else
+         induce(uind, uinp);
+   }
 }
 
 TINKER_FVOID2(acc1, cu1, epolar0DotProd, const real (*)[3], const real (*)[3], EnergyBuffer);

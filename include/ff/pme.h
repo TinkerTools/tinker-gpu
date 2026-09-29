@@ -30,6 +30,7 @@ struct PME
    real* qgrid;
    int* igrid;
    real *thetai1, *thetai2, *thetai3;
+   bool unique = false; ///< Whether the grid is kept from every other request.
 
    struct Params
    {

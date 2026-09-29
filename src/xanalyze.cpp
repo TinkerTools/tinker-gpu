@@ -1,5 +1,5 @@
 #include "ff/amoeba/empole.h"
-#include "ff/amoeba/induce.h"
+#include "ff/amoeba/epolar.h"
 #include "ff/echarge.h"
 #include "ff/energy.h"
 #include "ff/ennintermol.h"
@@ -7,7 +7,6 @@
 #include "ff/evdw.h"
 #include "ff/hippo/edisp.h"
 #include "ff/hippo/erepel.h"
-#include "ff/hippo/induce.h"
 #include "ff/modamoeba.h"
 #include "ff/modhippo.h"
 #include "ff/nblist.h"
@@ -27,7 +26,6 @@
 #include <tinker/detail/dipole.hh>
 #include <tinker/detail/files.hh>
 #include <tinker/detail/moment.hh>
-#include <tinker/detail/mplpot.hh>
 #include <tinker/detail/mpole.hh>
 #include <tinker/detail/polar.hh>
 #include <tinker/detail/units.hh>
@@ -228,13 +226,10 @@ static void xAnalyzeMoments()
    if (use(Potent::MPOLE) or use(Potent::POLAR)) {
       // download rpole, uind
       std::vector<real> rpolev(n * 10), uindv(n * 3);
-      mpoleInit(calc::energy, use_emast);
+      mpoleEnsurePhysical();
       darray::copyout(g::q0, n * 10, rpolev.data(), &rpole[0][0]);
       if (use(Potent::POLAR)) {
-         if (mplpot::use_chgpen)
-            induce2(uind);
-         else
-            induce(uind, uinp);
+         epolarPhysicalInduced();
          darray::copyout(g::q0, n * 3, uindv.data(), &uind[0][0]);
       } else {
          std::fill(uindv.begin(), uindv.end(), 0);

@@ -71,6 +71,7 @@ void emplar(int vers)
    zeroOnHost(energy_em, virial_em);
    zeroOnHost(energy_ep, virial_ep);
 
+   mpoleEnsureElec();
    mpoleInit(vers, use_emast);
    emplarKernel(vers);
    exfield(vers, 1);
@@ -117,7 +118,7 @@ void emplarAst(int vers)
    // Unscaled state: the permanent multipole terms and their lambda derivative.
    // empoleEwaldRecip and exfield both decorate the version themselves once
    // use_emast is set, so they take the undecorated one.
-   mpoleInitAst();
+   mpoleUseOrig(true);
    emplarAstKernel(dvers);
    if (useEwald())
       empoleEwaldRecip(vers, same_state);
@@ -132,7 +133,7 @@ void emplarAst(int vers)
    if (same_state)
       mpoleRotateScaled();
    else
-      mpoleRefresh();
+      mpoleUsePole();
    if (useEwald()) {
       const AccumRef out = em_buf.ref();
       epolarEwaldRecipSelf(vers & ~calc::energy, out.e, out.v, out.gx, out.gy, out.gz);
@@ -142,7 +143,7 @@ void emplarAst(int vers)
 
    const bool do_astdl = lmdaDerivVers(vers, use_pdlmda) & calc::energy_dlmda1;
    if (do_astdl)
-      epolarAstDeriv(vers);
+      epolarAstDeriv();
 
    torque(vers, demx, demy, demz);
    if (do_v) {
@@ -152,13 +153,5 @@ void emplarAst(int vers)
       for (int iv = 0; iv < 9; ++iv)
          virial_elec[iv] += v2[iv];
    }
-
-   // Leave pole where epolar() leaves it, which it already is when the two
-   // lambdas agree, and undo the ligand-only rotation epolarAstDeriv left behind
-   // so that whatever runs next sees the whole system again.
-   if (not same_state)
-      mpoleScale(elam);
-   if (do_astdl)
-      mpoleRefresh();
 }
 }

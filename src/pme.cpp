@@ -58,17 +58,24 @@ PME::~PME()
    darray::deallocate(igrid, thetai1, thetai2, thetai3);
 }
 
+// A unit opened unique keeps its grid to itself; any other request shares the
+// first unit with the same parameters that is not unique.
 static void pmeOpAlloc(PMEUnit& unit, const PME::Params& p, bool unique)
 {
    unit.close();
-   for (PMEUnit idx = 0; idx < PMEUnit::size(); idx = idx + 1) {
-      if (*idx == p)
-         unit = idx;
+   if (not unique) {
+      for (PMEUnit idx = 0; idx < PMEUnit::size(); idx = idx + 1) {
+         if (not idx->unique and *idx == p) {
+            unit = idx;
+            break;
+         }
+      }
    }
 
-   if (!unit.valid() || unique == true) {
+   if (!unit.valid()) {
       unit = PMEUnit::open();
       auto& st = *unit;
+      st.unique = unique;
 
       // see also subroutine moduli in pmestuf.f
       darray::allocate(p.nfft1, &st.bsmod1);
@@ -128,6 +135,7 @@ void pmeData(RcOp op)
       ppme_unit.close();
       pvpme_unit.close();
       dpme_unit.close();
+      dlpme_unit.close();
    }
 
    if (op & RcOp::INIT) {

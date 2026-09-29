@@ -50,9 +50,12 @@ struct RecipDt
 void epolarData(RcOp);
 void epolar(int vers);
 void epolar_dt(int vers);
-void epolarAstDeriv(int vers);
+void epolarAstDeriv();
 void polarState(RdtMask mask, const int* group, real factor = 1);
-void dtRestoreFullState(const int* group);
+/// Leaves in uind and udir the dipoles the polarization energy is made of, at
+/// the current coordinates: the solve at plambda for single topology. Throws
+/// for dual topology, which leaves only its last endpoint pass in them.
+void epolarPhysicalInduced();
 RecipDt dtRecipSinks(int vers, real wa, real wb);
 void epolarEwaldRecipSelf(int vers, EnergyBuffer out_e, VirialBuffer out_v,
    grad_prec* out_gx, grad_prec* out_gy, grad_prec* out_gz);

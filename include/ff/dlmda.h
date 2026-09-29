@@ -168,6 +168,11 @@ bool lmdaSameValue(double a, double b);
 
 bool polTracksEle();
 
+/// Whether poleorig, the unscaled copy of the multipoles, is allocated. Its
+/// users gate on this rather than on the pointer, which deallocation leaves
+/// dangling for the next system (elec.cpp:mpoleData).
+bool usePoleorig();
+
 /// Reads the shared lambda-dynamics state from the Fortran modules.
 void dlmda_mech();
 void dlmdaData(RcOp op);

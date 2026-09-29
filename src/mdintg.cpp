@@ -25,6 +25,10 @@ void mdData(RcOp op)
    if (not(calc::md & rc_flag))
       return;
 
+   // before anything of the dynamics is set up, so nothing is left half made
+   if (op & RcOp::ALLOC)
+      mdsaveCheckInduced();
+
    RcMan intg42{mdIntegrateData, op};
    RcMan save42{mdsaveData, op};
 }

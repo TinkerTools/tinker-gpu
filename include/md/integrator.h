@@ -1,8 +1,13 @@
 #pragma once
 #include "ff/precision.h"
 #include <cstdio>
+#include <memory>
 #include <string>
 #include <tinker/detail/bath.hh>
+
+namespace tinker {
+class InducedSnapshot;
+}
 
 namespace tinker {
 /// \ingroup mdintg
@@ -289,6 +294,10 @@ public:
    void control4(time_prec) override;
    bool ifApply(int istep) override;
    void setPrintPressure(int) override;
+
+private:
+   /// Created on the first trial of a polarizable system.
+   std::unique_ptr<InducedSnapshot> m_induced;
 };
 
 /// \ingroup mdpt

@@ -63,6 +63,10 @@ TINKER_EXTERN real* trajz; ///< Coordinates of all the trajectory frames.
 TINKER_EXTERN pos_prec *xpos, *ypos, *zpos;
 static_assert(sizeof(pos_prec) >= sizeof(real), "Type pos_prec cannot be shorter than type real.");
 
+/// Bumped whenever the coordinates or the periodic box may have changed, so
+/// that data derived from them alone can tell whether it is still current.
+TINKER_EXTERN unsigned long long xyz_epoch;
+
 TINKER_EXTERN double* mass;    ///< Atomic mass.
 TINKER_EXTERN double* massinv; ///< Inversed atomic mass.
 TINKER_EXTERN int* atomic;     ///< atomic number.

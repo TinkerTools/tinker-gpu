@@ -307,6 +307,7 @@ TINKER_FVOID2(acc1, cu1, boxCopyin);
 void boxCopyin()
 {
    TINKER_FCALL0(boxCopyin);
+   ++xyz_epoch;
 }
 
 real boxVolume()

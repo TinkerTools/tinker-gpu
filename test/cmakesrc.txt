@@ -30,6 +30,7 @@ localframe3.cpp
 main.cpp
 matexp.cpp
 mathfunc.cpp
+mpolestate.cpp
 mutate.cpp
 nacl.cpp
 nblist.cpp
