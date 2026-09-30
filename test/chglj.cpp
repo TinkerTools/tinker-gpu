@@ -33,8 +33,8 @@ torsionterm  none
       auto ref_v = r.getVirial();
       auto ref_g = r.getGradient();
 
-      testBeginWithArgs(argc, argv);
-      initialize();
+      TestSession session(argc, argv);
+      session.init();
 
       energy(calc::v0);
       COMPARE_REALS(esum, ref_e, eps_e);
@@ -59,8 +59,7 @@ torsionterm  none
          for (int j = 0; j < 3; ++j)
             COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-      finish();
-      testEnd();
+      session.end();
    }
 
    SECTION("  - echglj -- pbc, cutoff")
@@ -85,8 +84,8 @@ vdw-correction
       auto ref_v = r.getVirial();
       auto ref_g = r.getGradient();
 
-      testBeginWithArgs(argc, argv);
-      initialize();
+      TestSession session(argc, argv);
+      session.init();
 
       energy(calc::v0);
       COMPARE_REALS(esum, ref_e, eps_e);
@@ -111,7 +110,6 @@ vdw-correction
          for (int j = 0; j < 3; ++j)
             COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-      finish();
-      testEnd();
+      session.end();
    }
 }

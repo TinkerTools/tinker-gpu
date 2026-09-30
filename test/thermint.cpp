@@ -491,10 +491,32 @@ TEST_CASE("THERMINT-save", "[ff][thermint]")
    tinkerFortranRuntimeBegin(1, (char**)argv);
    initial();
 
+   // Ends the runtime and puts back the base name and the TI state as the case
+   // leaves scope, so that a failed check leaves none of them to the cases that
+   // run after it.
+   struct Teardown
+   {
+      char savedname[240];
+      int savedleng;
+      std::string tifile;
+      ~Teardown()
+      {
+         try {
+            if (tifile.size())
+               fileExistsAndDelete(tifile);
+            std::memcpy(files::filename, savedname, 240);
+            files::leng = savedleng;
+            dlmda::use_ti = 0;
+            clearti();
+            testEnd();
+         } catch (...) {
+         }
+      }
+   } teardown;
+
    // write into a scratch base name rather than whatever the runtime picked
-   char savedname[240];
-   std::memcpy(savedname, files::filename, 240);
-   int savedleng = files::leng;
+   std::memcpy(teardown.savedname, files::filename, 240);
+   teardown.savedleng = files::leng;
    FstrView fname = files::filename;
    fname = "tisave_tmp";
    files::leng = 10;
@@ -546,6 +568,7 @@ TEST_CASE("THERMINT-save", "[ff][thermint]")
 
    // prttihead claims a new version, so take the name it actually used
    std::string tifile = FstrView(thrmint::tifile).trim();
+   teardown.tifile = tifile;
    REQUIRE(tifile.size() > 0);
    REQUIRE(tiCountRows(tifile) == 0); // header only
 
@@ -573,13 +596,6 @@ TEST_CASE("THERMINT-save", "[ff][thermint]")
    COMPARE_REALS(tiRowLambda(tifile, 1), 1.0, 1.0e-8);
    COMPARE_REALS(tiRowLambda(tifile, 5), 0.5, 1.0e-8);
    COMPARE_REALS(tiRowLambda(tifile, 10), 0.0, 1.0e-8);
-
-   fileExistsAndDelete(tifile);
-   std::memcpy(files::filename, savedname, 240);
-   files::leng = savedleng;
-   dlmda::use_ti = 0;
-   clearti();
-   testEnd();
 }
 
 TEST_CASE("THERMINT-mapsublambda", "[ff][thermint]")

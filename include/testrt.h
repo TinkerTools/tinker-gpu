@@ -40,6 +40,27 @@ public:
    ~TestRemoveFileOnExit();                        ///< Removes the file in the destructor.
 };
 
+/// \brief Begins a test with testBeginWithArgs(), and ends it with end() or,
+/// failing that, in its destructor. A failed REQUIRE throws past the end of the
+/// case; without this the teardown is skipped, and the device state left
+/// behind breaks the cases that run after it (zero energies, then a sticky
+/// cudaErrorIllegalAddress, or the evdwData assert in a Debug build). Declare
+/// it after the TestFile objects, so that the files outlive the teardown.
+class TestSession
+{
+public:
+   TestSession(int argc, const char** argv); ///< Calls testBeginWithArgs().
+   ~TestSession();                           ///< Calls end() unless it has run.
+   TestSession(const TestSession&) = delete;
+   TestSession& operator=(const TestSession&) = delete;
+   void init(); ///< Calls initialize().
+   void end();  ///< Calls finish() after init(), then testEnd(); only the first call does anything.
+
+private:
+   bool m_init = false;
+   bool m_ended = false;
+};
+
 /// \brief The lambda-derivative sections of a reference file.
 ///
 /// \brief Restores the lambda method flags and the interval convergence gate in

@@ -26,7 +26,8 @@ void mpoleUseOrig(bool build_dl);
 /// rpole from poleorig, with the sites outside \c mask zeroed, and cmp from it.
 void mpoleUseState(RdtMask mask, const int* group);
 /// mpoleBegin(), then mpoleUseOrig() with \c do_dlmda or mpoleUsePole()
-/// without. dlcmp is built only if \c vers carries a lambda derivative.
+/// without. dlcmp is built only if \c vers carries a lambda derivative and the
+/// electrostatic map has slope here (edlmdaActive()).
 void mpoleInit(int vers, bool do_dlmda);
 /// rpole from pole, leaving cmp alone, for callers whose cmp already holds the
 /// same scaled multipoles.

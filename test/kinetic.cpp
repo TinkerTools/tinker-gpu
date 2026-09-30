@@ -23,11 +23,11 @@ TEST_CASE("Kinetic-ArBox", "[ff][kinetic][arbox]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(0, 0);
 
    rc_flag = usage_;
-   initialize();
+   session.init();
 
    T_prec temp;
    kinetic(temp);
@@ -39,6 +39,5 @@ TEST_CASE("Kinetic-ArBox", "[ff][kinetic][arbox]")
    REQUIRE(eksum == Approx(ref_eksum).margin(eps_e));
    REQUIRE(temp == Approx(ref_temp).margin(eps_e));
 
-   finish();
-   testEnd();
+   session.end();
 }

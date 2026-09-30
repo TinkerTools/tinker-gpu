@@ -151,9 +151,7 @@ inline bool dtPassIsIdle(int vers, real wa, real wb, real wc, bool counts)
 {
    if (wa != 0 or counts)
       return false;
-   const int dl = vers
-      & (calc::energy_dlmda1 | calc::energy_dlmda2 | calc::grad_dlmda | calc::virial_dlmda);
-   return not dl or (wb == 0 and wc == 0);
+   return not(vers & calc::dlmda) or (wb == 0 and wc == 0);
 }
 
 
@@ -389,6 +387,26 @@ TINKER_EXTERN double dvldlmda;
 TINKER_EXTERN double d2eldlmda2;
 TINKER_EXTERN double d2pldlmda2;
 TINKER_EXTERN double d2vldlmda2;
+
+/// Whether a term takes its lambda derivative now: it is lambda driven and its
+/// map has slope or curvature at the current lambda. A flat map, such as a
+/// quintic taper away from its window, zeroes the chain rule, and the plain
+/// version gives the same energy and gradient for less work (gradient.f: edrv,
+/// pdrv, vdrv). Allocation and the kernel family still follow use_*dlmda.
+inline bool edlmdaActive()
+{
+   return use_edlmda and (deldlmda != 0 or d2eldlmda2 != 0);
+}
+
+inline bool pdlmdaActive()
+{
+   return use_pdlmda and (dpldlmda != 0 or d2pldlmda2 != 0);
+}
+
+inline bool vdlmdaActive()
+{
+   return use_vdlmda and (dvldlmda != 0 or d2vldlmda2 != 0);
+}
 
 TINKER_EXTERN bool use_emast;
 

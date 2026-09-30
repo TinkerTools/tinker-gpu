@@ -28,11 +28,11 @@ TEST_CASE("NPT-VRESPA", "[ff][npt][respa]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 1);
 
    rc_flag = calc::xyz | calc::vel | calc::mass | calc::energy | calc::grad | calc::md | calc::virial;
-   initialize();
+   session.init();
 
    COMPARE_INTS(mdstuf::nrespa, 2);
    COMPARE_INTS(bath::voltrial, 25);
@@ -43,8 +43,7 @@ TEST_CASE("NPT-VRESPA", "[ff][npt][respa]")
    FstrView itg = mdstuf::integrate;
    REQUIRE(itg == "VRESPA");
 
-   finish();
-   testEnd();
+   session.end();
    bath::kelvin = 0.;
    bath::atmsph = 0.;
    bath::isothermal = 0;

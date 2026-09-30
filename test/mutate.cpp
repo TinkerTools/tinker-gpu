@@ -1,4 +1,6 @@
 #include "ff/amoeba/emplar.h"
+#include "ff/amoeba/empole.h"
+#include "ff/amoeba/epolar.h"
 #include "ff/amoeba/mpole.h"
 #include "ff/atom.h"
 #include "ff/dlmda.h"
@@ -20,6 +22,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -159,7 +162,9 @@ const Fixture kFixtures[] = {
    {"137_water_rels_ye_l070", "water2", true, true, true, true, "rels"},
    {"138_water_rels_ye_l050", "water2", true, true, true, true, "rels"},
    {"139_water_rels_ye_l030", "water2", true, true, true, true, "rels"},
-   {"140_water_rels_ye_l015", "water2", true, true, true, true, "rels"},
+   // The references solve the induced dipoles only to POLAR-EPS 1e-5, so even
+   // a double precision build lands about 1.3e-4 from their dF/dL.
+   {"140_water_rels_ye_l015", "water2", true, true, true, true, "rels", nullptr, Tols().grad(1.0e-3, 5.0e-4)},
    {"141_water_rels_ye_l000", "water2", true, true, true, true, "rels"},
    {"146_water_lmda_ast_l05", "water2", true, true, true, false, "lmda"},
    {"147_water_lmda_ast_e05", "water2", true, true, true, false, "lmda"},
@@ -234,7 +239,11 @@ const Fixture kFixtures[] = {
    // carries a lambda derivative. 216 needs the vacuum Ewald boundary, which
    // tinker9 lacks, so it is left out.
    {"215_water_ast_ne_mcut_l05", "water2", true, true, true, true, "mpole4"},
-   {"217_g3_rels_lig1_l085", "g3", true, true, true, true, "mpole4"},
+   // dF/dL reaches about 87 here. Single precision leaves up to 8e-4 of it in a
+   // --use_fast_math build and 1.1e-3 without, as in Debug. The POLAR-EPS 1e-5
+   // reference is itself up to 4e-4 from converged, and double precision lands
+   // up to 2.5e-4 from it.
+   {"217_g3_rels_lig1_l085", "g3", true, true, true, true, "mpole4", nullptr, Tols().grad(2.0e-3, 5.0e-4)},
    // Only the water is scaled in this lig2 leg, so d2E/dL2 is what is left of its
    // interaction with itself and its images after the Ewald terms cancel. The
    // single precision reciprocal sum leaves about 1.3e-3 of it behind, which the
@@ -246,10 +255,12 @@ const Fixture kFixtures[] = {
    {"220_frames_ast_ye_l05", "frames", true, true, true, true, "frames"},
    {"221_frames_ast_nobox_l05", "frames", true, true, true, true, "frames"},
    // Chignolin and its mirror image, whose chiral frames are inverted under lambda.
-   {"222_chig_ast_nobox_l05", "chig", true, true, true, true, "mirror"},
-   {"223_chigm_ast_nobox_l05", "chigm", true, true, true, true, "mirror"},
-   {"224_chig_ast_ye_l05", "chig", true, true, true, true, "mirror"},
-   {"225_chigm_ast_ye_l05", "chigm", true, true, true, true, "mirror"},
+   // As for 140, a double precision build lands about 1.3e-4 from the POLAR-EPS
+   // 1e-5 references' dF/dL.
+   {"222_chig_ast_nobox_l05", "chig", true, true, true, true, "mirror", nullptr, Tols().grad(1.0e-3, 5.0e-4)},
+   {"223_chigm_ast_nobox_l05", "chigm", true, true, true, true, "mirror", nullptr, Tols().grad(1.0e-3, 5.0e-4)},
+   {"224_chig_ast_ye_l05", "chig", true, true, true, true, "mirror", nullptr, Tols().grad(1.0e-3, 5.0e-4)},
+   {"225_chigm_ast_ye_l05", "chigm", true, true, true, true, "mirror", nullptr, Tols().grad(1.0e-3, 5.0e-4)},
    // Earlier cases with LAMBDA-DERIV alone, so polarization takes the single
    // topology dE/dL path (test_mutate_polst). 229 is left out with 216.
    {"226_water_ast_ne_mcut_d1_l05", "water2", true, true, true, true, "polst"},
@@ -308,6 +319,32 @@ std::vector<std::unique_ptr<TestFile>> copyParams(const std::string& base)
    return files;
 }
 
+// Copies a fixture's coordinates, its key file with \c keyextra appended, and
+// its parameters into the working directory, and begins a session on them with
+// \c rc as rc_flag. The session is declared after the files, so it ends before
+// they are removed.
+struct Setup
+{
+   std::string xyz, key;
+   const char* argv[4];
+   TestFile fxyz, fkey;
+   std::vector<std::unique_ptr<TestFile>> fprm;
+   TestSession session;
+
+   Setup(const Fixture& fx, int rc, const char* keyextra = "")
+      : xyz(std::string(fx.base) + ".xyz")
+      , key(std::string(fx.name) + ".key")
+      , argv{"dummy", xyz.c_str(), "-k", key.c_str()}
+      , fxyz(systemDir(fx.base) + xyz, xyz)
+      , fkey(TINKER9_DIRSTR "/test/file/mutate/" + key, key, keyextra)
+      , fprm(copyParams(fx.base))
+      , session(4, argv)
+   {
+      rc_flag = rc;
+      session.init();
+   }
+};
+
 // How a run should treat the fused multipole/polarization kernel. emplar cannot
 // report interaction counts, so any evaluation that asks for them routes around
 // it -- which is why an ordinary run never exercises it at all.
@@ -326,21 +363,7 @@ enum class LmdaMode
 
 void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = LmdaMode::Default)
 {
-   std::string dir = TINKER9_DIRSTR "/test/file/mutate/";
-   std::string xyzdst = std::string(fx.base) + ".xyz";
-   std::string keyname = std::string(fx.name) + ".key";
    std::string refpath = std::string(TINKER9_DIRSTR "/test/ref/mutate/") + (fx.ref ? fx.ref : fx.name) + ".txt";
-
-   TestFile fxyz(systemDir(fx.base) + xyzdst, xyzdst);
-   // TI owns the main lambda and starts at the first schedule window. These
-   // four fixtures all reference lambda 0.5, so keep that operating point
-   // instead of accepting TI's default first window at lambda 1.
-   const char* keyextra = lmdaMode == LmdaMode::ThermIntg ? "\nlambda-mode ti\nti-window 0.5\n" : "";
-   TestFile fkey(dir + keyname, keyname, keyextra);
-   auto fprm = copyParams(fx.base);
-
-   const char* argv[] = {"dummy", xyzdst.c_str(), "-k", keyname.c_str()};
-   int argc = 4;
 
    const double eps_e = Tols::pick(fx.tol.e, 1.0e-3, 1.0e-4);
    const double eps_g = Tols::pick(fx.tol.g, 1.0e-3, 1.0e-4);
@@ -352,14 +375,17 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
    const double eps_l = Tols::pick(fx.tol.l, 1.0e-3, 1.0e-4);
    const double eps_l2 = Tols::pick(fx.tol.l2, 1.0e-3, 1.0e-4);
 
-   rc_flag = calc::xyz | calc::mass | calc::vmask;
+   int rc = calc::xyz | calc::mass | calc::vmask;
    if (fuse != Fuse::Off)
-      rc_flag &= ~calc::analyz;
+      rc &= ~calc::analyz;
 
+   // TI owns the main lambda and starts at the first schedule window. These
+   // four fixtures all reference lambda 0.5, so keep that operating point
+   // instead of accepting TI's default first window at lambda 1.
+   const char* keyextra = lmdaMode == LmdaMode::ThermIntg ? "\nlambda-mode ti\nti-window 0.5\n" : "";
    // These key files enable the lambda-derivative machinery through the
    // "lambda-deriv" keyword, so the Fortran-side use_dlmda needs no nudging here.
-   testBeginWithArgs(argc, argv);
-   initialize();
+   Setup s(fx, rc, keyextra);
 
    // The fixtures carry LAMBDA-DERIV, which asks for every derivative channel
    // whatever the sampling mode; without it TI, META and ABF would ask for the
@@ -517,8 +543,7 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
             COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
    }
 
-   finish();
-   testEnd();
+   s.session.end();
 }
 
 // Runs a fixture twice: once the ordinary way, which asks for interaction
@@ -588,22 +613,9 @@ void runLegSkipFixture(const Fixture& fx, bool expect0, bool expect1)
 // derivatives unchanged, and leave the second lambda derivatives at zero.
 void runGateFixture(const Fixture& fx)
 {
-   std::string dir = TINKER9_DIRSTR "/test/file/mutate/";
-   std::string xyzdst = std::string(fx.base) + ".xyz";
-   std::string keyname = std::string(fx.name) + ".key";
-
-   TestFile fxyz(dir + xyzdst, xyzdst);
-   TestFile fkey(dir + keyname, keyname);
-   TestFile fprm(TINKER9_DIRSTR "/test/file/commit_6fe8e913/water03.prm");
-
-   const char* argv[] = {"dummy", xyzdst.c_str(), "-k", keyname.c_str()};
-   int argc = 4;
-
    const double eps = testGetEps(1.0e-4, 1.0e-8);
 
-   rc_flag = calc::xyz | calc::mass | calc::vmask;
-   testBeginWithArgs(argc, argv);
-   initialize();
+   Setup s(fx, calc::xyz | calc::mass | calc::vmask);
 
    // Full lambda derivatives, as the LAMBDA-DERIV keyword requests.
    REQUIRE(use_d2lmda);
@@ -631,8 +643,146 @@ void runGateFixture(const Fixture& fx)
    REQUIRE(d2edl2 == 0);
    use_d2lmda = true;
 
-   finish();
-   testEnd();
+   s.session.end();
+}
+
+// One multipole or polarization result of runFlatFixture.
+struct FlatTerm
+{
+   double e;
+   std::array<double, 9> v;
+   std::vector<double> gx, gy, gz;
+};
+
+static FlatTerm flatTerm(double e, const virial_prec* v, const grad_prec* gx, const grad_prec* gy, const grad_prec* gz)
+{
+   FlatTerm t;
+   t.e = e;
+   for (int i = 0; i < 9; ++i)
+      t.v[i] = v[i];
+   t.gx.resize(n);
+   t.gy.resize(n);
+   t.gz.resize(n);
+   copyGradient(calc::grad, t.gx.data(), t.gy.data(), t.gz.data(), gx, gy, gz);
+   return t;
+}
+
+static void compareFlatTerm(const FlatTerm& got, const FlatTerm& ref, double eps)
+{
+   COMPARE_REALS(got.e, ref.e, eps * std::max(1.0, std::fabs(ref.e)));
+   for (int i = 0; i < 9; ++i)
+      COMPARE_REALS(got.v[i], ref.v[i], eps * std::max(1.0, std::fabs(ref.v[i])));
+   for (int i = 0; i < n; ++i) {
+      COMPARE_REALS(got.gx[i], ref.gx[i], eps);
+      COMPARE_REALS(got.gy[i], ref.gy[i], eps);
+      COMPARE_REALS(got.gz[i], ref.gz[i], eps);
+   }
+}
+
+// Moves a staged ligand 1 charging leg below its 0.7 to 1.0 electrostatic
+// window, where the quintic map is flat and energy() takes the plain versions
+// (test_mutate_flat). The lambda derivatives must be exact zeros there, giving
+// the flat maps a slope must leave the energy, gradient and virial alone, and
+// moving back inside the window must restore the multipole lambda derivative.
+// Analysis runs empole and epolar apart, so each is compared on its own; fused
+// runs emplarAst, compared through the electrostatic accumulators it adds into.
+void runFlatFixture(const Fixture& fx, bool fused)
+{
+   // Grid spreading adds floats atomically, so a rebuild is not bit identical.
+   const double eps = testGetEps(1.0e-4, 1.0e-6);
+
+   int rc = calc::xyz | calc::mass | calc::vmask;
+   if (fused)
+      rc &= ~calc::analyz;
+   Setup s(fx, rc);
+
+   REQUIRE(use_mainlmda);
+   REQUIRE(use_edlmda);
+   REQUIRE(use_pdlmda);
+   REQUIRE(useEmplar() == fused);
+
+   // Below the window the chain rule is flat and every lambda derivative is an
+   // exact zero.
+   lambda = 0.5;
+   energy(calc::v1);
+   REQUIRE_FALSE(edlmdaActive());
+   REQUIRE_FALSE(pdlmdaActive());
+   REQUIRE(deldlmda == 0);
+   REQUIRE(dpldlmda == 0);
+   REQUIRE(dedl == 0);
+   REQUIRE(d2edl2 == 0);
+   if (not fused) {
+      REQUIRE(demdl == 0);
+      REQUIRE(depdl == 0);
+   }
+   if (dfdlx) {
+      std::vector<double> lx(n), ly(n), lz(n);
+      copyGradient(calc::grad, lx.data(), ly.data(), lz.data(), dfdlx, dfdly, dfdlz);
+      double dfdl = 0;
+      for (int i = 0; i < n; ++i)
+         dfdl += std::fabs(lx[i]) + std::fabs(ly[i]) + std::fabs(lz[i]);
+      REQUIRE(dfdl == 0);
+   }
+   double dvdl = 0;
+   for (int i = 0; i < 9; ++i)
+      dvdl += std::fabs(dvirdl[i]);
+   REQUIRE(dvdl == 0);
+
+   // A slope only scales the lambda derivative channels, so it must leave the
+   // energy, gradient and virial as the plain versions left them, which is what
+   // lets energy() skip the lambda derivative ones on a flat map. Polarization
+   // may reuse the reciprocal multipole potential and cmp the multipole call
+   // just before it left, so each polarization call follows one, and the mixed
+   // pairs cover maps whose windows differ.
+   auto flatPair = [&](bool me, bool pe, FlatTerm& em_out, FlatTerm& ep_out) {
+      deldlmda = me ? 1 : 0;
+      dpldlmda = pe ? 1 : 0;
+      REQUIRE(edlmdaActive() == me);
+      REQUIRE(pdlmdaActive() == pe);
+      zeroEGV(calc::v1);
+      if (fused) {
+         emplarAst(calc::v1);
+         virial_prec v[9];
+         virialReduce(v, vir_buf_elec);
+         for (int i = 0; i < 9; ++i)
+            v[i] += virial_elec[i];
+         em_out = flatTerm(energyReduce(eng_buf_elec), v, gx_elec, gy_elec, gz_elec);
+      } else {
+         empole(calc::v1);
+         if (use_epdt)
+            epolar_dt(calc::v1);
+         else
+            epolar(calc::v1);
+         em_out = flatTerm(energy_em, virial_em, demx, demy, demz);
+         ep_out = flatTerm(energy_ep, virial_ep, depx, depy, depz);
+      }
+   };
+
+   FlatTerm em0, ep0, em1, ep1;
+   flatPair(false, false, em0, ep0);
+   for (auto mp : {std::make_pair(true, true), std::make_pair(true, false), std::make_pair(false, true)}) {
+      CAPTURE(mp.first, mp.second);
+      flatPair(mp.first, mp.second, em1, ep1);
+      compareFlatTerm(em1, em0, eps);
+      if (not fused) {
+         compareFlatTerm(ep1, ep0, eps);
+         // the slope did send each term down its lambda derivative version
+         REQUIRE((demdl != 0) == mp.first);
+         REQUIRE((depdl != 0) == mp.second);
+      }
+   }
+   deldlmda = 0;
+   dpldlmda = 0;
+
+   // Back inside the window the multipole lambda derivative returns.
+   lambda = 0.85;
+   energy(calc::v1);
+   REQUIRE(edlmdaActive());
+   REQUIRE(dedl != 0);
+   if (not fused)
+      REQUIRE(demdl != 0);
+
+   s.session.end();
 }
 
 // Loads a fixture, with an optional keyword appended to its key file, and
@@ -641,20 +791,7 @@ void runGateFixture(const Fixture& fx)
 // second derivatives and with them dual topology (test_mutate.f).
 void runFlagsFixture(const Fixture& fx, const char* keyextra, bool d2, bool epdt, bool rel)
 {
-   std::string dir = TINKER9_DIRSTR "/test/file/mutate/";
-   std::string xyzdst = std::string(fx.base) + ".xyz";
-   std::string keyname = std::string(fx.name) + ".key";
-
-   TestFile fxyz(dir + xyzdst, xyzdst);
-   TestFile fkey(dir + keyname, keyname, keyextra);
-   TestFile fprm(TINKER9_DIRSTR "/test/file/commit_6fe8e913/water03.prm");
-
-   const char* argv[] = {"dummy", xyzdst.c_str(), "-k", keyname.c_str()};
-   int argc = 4;
-
-   rc_flag = calc::xyz | calc::mass | calc::vmask;
-   testBeginWithArgs(argc, argv);
-   initialize();
+   Setup s(fx, calc::xyz | calc::mass | calc::vmask, keyextra);
 
    REQUIRE(use_dlmda);
    REQUIRE(use_d2lmda == d2);
@@ -662,8 +799,7 @@ void runFlagsFixture(const Fixture& fx, const char* keyextra, bool d2, bool epdt
    REQUIRE((dlmda::use_prst != 0) == not epdt);
    REQUIRE(use_rel == rel);
 
-   finish();
-   testEnd();
+   s.session.end();
 }
 
 // Mutates the first residues of trp-cage, whose alpha carbons carry chiral
@@ -695,7 +831,7 @@ void runChiralFixture(const Fixture& fx)
    const double eps_p = testGetEps(1.0e-6, 1.0e-12);
 
    rc_flag = calc::xyz | calc::mass | calc::energy;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
 
    // tinker9 sets n in initialize(); the Fortran side is already set up.
    std::vector<int> chiral;
@@ -708,7 +844,7 @@ void runChiralFixture(const Fixture& fx)
    REQUIRE(chiral.size() > 0);
    tinker_f_altelec();
 
-   initialize();
+   session.init();
    REQUIRE(poleorig != nullptr);
    REQUIRE_FALSE(use_emast);
 
@@ -752,8 +888,7 @@ void runChiralFixture(const Fixture& fx)
       COMPARE_REALS(pole1[k], sc * orig1[k], eps_p);
    }
 
-   finish();
-   testEnd();
+   session.end();
 }
 } // namespace
 
@@ -941,6 +1076,10 @@ TEST_CASE("MUTATE-EMPLAR-147_water_lmda_ast_e05", "[ff][mutate][emplar]") { runF
 TEST_CASE("MUTATE-206_trpcage_chiral_m05", "[ff][mutate][chiral]") { runChiralFixture(fx("206_trpcage_chiral_m05")); }
 
 TEST_CASE("MUTATE-gate", "[ff][mutate][rels]") { runGateFixture(fx("136_water_rels_ye_l085")); }
+
+TEST_CASE("MUTATE-flat-single", "[ff][mutate][rels][flat]") { runFlatFixture(fx("203_water_rels_st_l085"), false); }
+TEST_CASE("MUTATE-flat-single-fused", "[ff][mutate][rels][flat][emplar]") { runFlatFixture(fx("203_water_rels_st_l085"), true); }
+TEST_CASE("MUTATE-flat-dual", "[ff][mutate][rels][flat]") { runFlatFixture(fx("136_water_rels_ye_l085"), false); }
 
 TEST_CASE("MUTATE-flags", "[ff][mutate][rels]")
 {

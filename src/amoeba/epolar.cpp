@@ -734,7 +734,7 @@ void epolar(int vers)
       }
    }
 
-   const bool do_astdl = use_epast and (lmdaDerivVers(vers, use_pdlmda) & calc::energy_dlmda1);
+   const bool do_astdl = use_epast and (lmdaDerivVers(vers, pdlmdaActive()) & calc::energy_dlmda1);
    if (do_astdl)
       epolarAstDeriv();
 
@@ -868,7 +868,7 @@ static bool epolarCounts(const DtPass& p, bool need1)
 
 void epolar_dt(int vers)
 {
-   const int dvers = lmdaDerivVers(vers, use_pdlmda);
+   const int dvers = lmdaDerivVers(vers, pdlmdaActive());
    const int* group = emGroup();
    auto do_g = vers & calc::grad;
    auto do_a = vers & calc::analyz;
@@ -880,7 +880,7 @@ void epolar_dt(int vers)
    epolarBegin(vers);
 
    DtCoef c;
-   dtWeightsToCoef(c, w, dw, d2w, dpldlmda, d2pldlmda2, use_pdlmda);
+   dtWeightsToCoef(c, w, dw, d2w, dpldlmda, d2pldlmda2, pdlmdaActive());
 
    DtPass pass[2];
    const int npass = dtPassList(pass);

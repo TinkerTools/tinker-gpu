@@ -26,8 +26,8 @@ TEST_CASE("EREPEL-1", "[ff][hippo][erepel][c5h12-acnh2]")
    auto ref_g = r.getGradient();
 
    rc_flag = calc::xyz | calc::vmask;
-   testBeginWithArgs(argc, argv);
-   initialize();
+   TestSession session(argc, argv);
+   session.init();
 
    energy(calc::v0);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -56,8 +56,7 @@ TEST_CASE("EREPEL-1", "[ff][hippo][erepel][c5h12-acnh2]")
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("EREPEL-2", "[ff][hippo][erepel][water]")
@@ -81,8 +80,8 @@ TEST_CASE("EREPEL-2", "[ff][hippo][erepel][water]")
    auto ref_g = r.getGradient();
 
    rc_flag = calc::xyz | calc::vmask;
-   testBeginWithArgs(argc, argv);
-   initialize();
+   TestSession session(argc, argv);
+   session.init();
 
    energy(calc::v0);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -111,6 +110,5 @@ TEST_CASE("EREPEL-2", "[ff][hippo][erepel][water]")
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }

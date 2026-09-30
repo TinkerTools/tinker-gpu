@@ -576,7 +576,7 @@ static void evdwFinish(int vers, energy_prec elrcv, virial_prec vlrcv, energy_pr
    auto rc_a = rc_flag & calc::analyz;
    auto do_e = vers & calc::energy;
    auto do_v = vers & calc::virial;
-   const int vdl = lmdaDerivVers(vers, use_vdlmda);
+   const int vdl = lmdaDerivVers(vers, vdlmdaActive());
 
    if (do_e) {
       if (elrcv != 0) {
@@ -662,7 +662,7 @@ void egauss(int vers)
 TINKER_FVOID2(acc1, cu1, ehal, int);
 void ehal(int vers)
 {
-   TINKER_FCALL2(acc1, cu1, ehal, lmdaDerivVers(vers, use_vdlmda));
+   TINKER_FCALL2(acc1, cu1, ehal, lmdaDerivVers(vers, vdlmdaActive()));
 }
 
 TINKER_FVOID2(acc1, cu1, ehalReduceXyz);

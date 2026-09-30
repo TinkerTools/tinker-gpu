@@ -32,10 +32,10 @@ TEST_CASE("Rattle", "[ff][rattle]")
    const char* argv[] = {"dummy", x1};
    int argc = 2;
 
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(0.0, 0.0);
    rc_flag = mask;
-   initialize();
+   session.init();
 
    // NVE: zero initial velocities
    double dt_ps = 0.002;
@@ -73,6 +73,5 @@ TEST_CASE("Rattle", "[ff][rattle]")
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_vir);
 
-   finish();
-   testEnd();
+   session.end();
 }

@@ -276,6 +276,37 @@ void testEnd()
    tinkerFortranRuntimeEnd();
 }
 
+TestSession::TestSession(int argc, const char** argv)
+{
+   testBeginWithArgs(argc, argv);
+}
+
+void TestSession::init()
+{
+   initialize();
+   m_init = true;
+}
+
+void TestSession::end()
+{
+   if (m_ended)
+      return;
+   m_ended = true;
+   if (m_init)
+      finish();
+   testEnd();
+}
+
+TestSession::~TestSession()
+{
+   // This runs while a failed check unwinds the case, where a second throw,
+   // such as a CUDA error the failure left behind, would terminate the run.
+   try {
+      end();
+   } catch (...) {
+   }
+}
+
 void testMdInit(double t, double atm)
 {
    if (t > 0) {

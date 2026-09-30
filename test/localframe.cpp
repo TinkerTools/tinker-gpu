@@ -73,9 +73,9 @@ TEST_CASE("Local-Frame-1", "[ff][empole][nonewald][local-frame]")
       const double eps_v = 0.005;
       const double ref_v[][3] = {{72.636, -34.992, 9.243}, {-34.992, 53.410, 6.517}, {9.243, 6.517, 4.708}};
 
-      testBeginWithArgs(argc, argv);
+      TestSession session(argc, argv);
       rc_flag = usage;
-      initialize();
+      session.init();
 
       energy(calc::v0);
       COMPARE_ENERGY(em, ref_eng, eps_e);
@@ -89,8 +89,7 @@ TEST_CASE("Local-Frame-1", "[ff][empole][nonewald][local-frame]")
       COMPARE_ENERGY(em, ref_eng, eps_e);
       COMPARE_COUNT(nem, ref_count);
 
-      finish();
-      testEnd();
+      session.end();
    }
 }
 
@@ -140,9 +139,9 @@ TEST_CASE("Local-Frame-2", "[ff][empole][ewald][local-frame]")
       const double eps_v = 0.001;
       const double ref_v[][3] = {{76.909, -31.146, 7.610}, {-31.146, 53.934, 7.245}, {7.610, 7.245, 3.181}};
 
-      testBeginWithArgs(argc, argv);
+      TestSession session(argc, argv);
       rc_flag = usage;
-      initialize();
+      session.init();
 
       energy(calc::v0);
       COMPARE_ENERGY(em, ref_eng, eps_e);
@@ -156,8 +155,7 @@ TEST_CASE("Local-Frame-2", "[ff][empole][ewald][local-frame]")
       COMPARE_ENERGY(em, ref_eng, eps_e);
       COMPARE_COUNT(nem, ref_count);
 
-      finish();
-      testEnd();
+      session.end();
    }
 }
 
@@ -209,9 +207,9 @@ TEST_CASE("Local-Frame-3", "[ff][epolar][nonewald][local-frame]")
    const double debye = units::debye;
    const double eps_f = 0.0001;
 
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    rc_flag = usage;
-   initialize();
+   session.init();
 
    SECTION("dfield -- non-ewald no cutoff")
    {
@@ -354,8 +352,7 @@ TEST_CASE("Local-Frame-3", "[ff][epolar][nonewald][local-frame]")
       COMPARE_CODE_BLOCK2;
    }
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("Local-Frame-4", "[ff][epolar][ewald][local-frame]")
@@ -385,9 +382,9 @@ TEST_CASE("Local-Frame-4", "[ff][epolar][ewald][local-frame]")
    const double debye = units::debye;
    const double eps_f = 0.0001;
 
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    rc_flag = usage;
-   initialize();
+   session.init();
 
    SECTION("dfield -- pme")
    {
@@ -531,6 +528,5 @@ TEST_CASE("Local-Frame-4", "[ff][epolar][ewald][local-frame]")
       COMPARE_CODE_BLOCK2;
    }
 
-   finish();
-   testEnd();
+   session.end();
 }

@@ -156,12 +156,12 @@ TEST_CASE("NBList-ArBox", "[ff][nblist][arbox][mixcuda]")
 
    const char* argv[] = {"dummy", x1};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
 
    rc_flag = usage_;
    pltfm_config = Platform::ACC; // to always use nblist
    trajn = 5;
-   initialize();
+   session.init();
 
    copyin_arc_file(x1, 1, 5, 1);
 
@@ -188,6 +188,5 @@ TEST_CASE("NBList-ArBox", "[ff][nblist][arbox][mixcuda]")
          break;
    }
 
-   finish();
-   testEnd();
+   session.end();
 }

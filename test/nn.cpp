@@ -29,8 +29,8 @@ TEST_CASE("NNMET-CU-WATER", "[ff][nn][ennmet][cu-water]")
    auto ref_g = r.getGradient();
 
    rc_flag = calc::xyz | calc::vmask;
-   testBeginWithArgs(argc, argv);
-   initialize();
+   TestSession session(argc, argv);
+   session.init();
 
    energy(calc::v0);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -59,8 +59,7 @@ TEST_CASE("NNMET-CU-WATER", "[ff][nn][ennmet][cu-water]")
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("NNVAL-ALATET", "[ff][nn][ennval][alatet]")
@@ -73,8 +72,10 @@ TEST_CASE("NNVAL-ALATET", "[ff][nn][ennval][alatet]")
    const char* argv[] = {"dummy", xn, "-k", kn};
    int argc = 4;
 
+   // The reference is a single precision result: a mixed build matches its
+   // printed gradient to the last digit, and a double one differs by up to 9e-4.
    const double eps_e = testGetEps(0.0005, 0.0001);
-   const double eps_g = testGetEps(0.0005, 0.0001);
+   const double eps_g = testGetEps(0.0005, 0.002);
    const double eps_v = testGetEps(0.001, 0.001);
 
    TestReference r(TINKER9_DIRSTR "/test/ref/alatet_nnval.txt");
@@ -84,8 +85,8 @@ TEST_CASE("NNVAL-ALATET", "[ff][nn][ennval][alatet]")
    auto ref_g = r.getGradient();
 
    rc_flag = calc::xyz | calc::vmask;
-   testBeginWithArgs(argc, argv);
-   initialize();
+   TestSession session(argc, argv);
+   session.init();
 
    energy(calc::v0);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -114,8 +115,7 @@ TEST_CASE("NNVAL-ALATET", "[ff][nn][ennval][alatet]")
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 #endif

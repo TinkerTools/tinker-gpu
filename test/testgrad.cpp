@@ -43,7 +43,7 @@ void runFixture(const Fixture& fx)
 
    const char* argv[] = {"dummy", xyzname, "-k", keyname.c_str()};
    int argc = 4;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
 
    FdTestOptions opts;
    opts.analyt = true;
@@ -51,7 +51,7 @@ void runFixture(const Fixture& fx)
    opts.eps = kEps;
 
    rc_flag = testgradFlags(opts);
-   initialize();
+   session.init();
 
    auto r = testgradEvaluate(opts);
    TestReference ref(std::string(TINKER9_DIRSTR "/test/ref/testgrad/") + fx.name + ".txt");
@@ -71,8 +71,7 @@ void runFixture(const Fixture& fx)
    COMPARE_GRADIENT_FLAT(r.ganlyt, ref_g, eps_g);
    COMPARE_GRADIENT_FLAT(r.gnumer, ref_gn, eps_n);
 
-   finish();
-   testEnd();
+   session.end();
 
    // The lambda-scaled fixtures leave the derivative machinery switched on.
    // Clear it so later tests in the same binary start from a clean state, the

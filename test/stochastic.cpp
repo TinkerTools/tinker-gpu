@@ -233,11 +233,11 @@ void runArbox(const char* keyExtra, double kelvin, int nsteps, double dt, //
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(kelvin, 0.);
 
    rc_flag = calc::xyz | calc::vel | calc::mass | calc::energy | calc::grad | calc::md;
-   initialize();
+   session.init();
 
    int old = inform::iwrite;
    inform::iwrite = 1;
@@ -251,8 +251,7 @@ void runArbox(const char* keyExtra, double kelvin, int nsteps, double dt, //
    }
    inform::iwrite = old;
 
-   finish();
-   testEnd();
+   session.end();
 
    TestRemoveFileOnExit arc("test_arbox.arc");
    bath::kelvin = 0.;
@@ -311,10 +310,10 @@ TEST_CASE("SD-GuardRails", "[md][stochastic]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 0.);
    rc_flag = calc::xyz | calc::vel | calc::mass | calc::energy | calc::grad | calc::md;
-   initialize();
+   session.init();
 
    auto constructThrows = [] {
       bool threw = false;
@@ -349,8 +348,7 @@ TEST_CASE("SD-GuardRails", "[md][stochastic]")
    REQUIRE(constructThrows() == true);
    bath::isobaric = 0;
 
-   finish();
-   testEnd();
+   session.end();
    bath::kelvin = 0.;
    bath::isothermal = 0;
 }
@@ -417,11 +415,11 @@ TEST_CASE("SD-TrajectoryVsTinker-G3", "[md][stochastic][g3]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 0.);
 
    rc_flag = calc::xyz | calc::vel | calc::mass | calc::energy | calc::grad | calc::md;
-   initialize();
+   session.init();
 
    // n is reset by finish(), so keep the atom count for the checks below --
    // otherwise the per-atom loop would quietly iterate zero times
@@ -444,8 +442,7 @@ TEST_CASE("SD-TrajectoryVsTinker-G3", "[md][stochastic][g3]")
    }
    inform::iwrite = old;
 
-   finish();
-   testEnd();
+   session.end();
    bath::kelvin = 0.;
    bath::isothermal = 0;
 

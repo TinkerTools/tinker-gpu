@@ -101,7 +101,7 @@ void emplarAst(int vers)
       TINKER_THROW("The electrostatic and polarization lambda values have drifted apart; "
                    "the fused multipole/polarization single topology needs them to be equal.");
 
-   const int dvers = lmdaDerivVers(vers, use_edlmda);
+   const int dvers = lmdaDerivVers(vers, edlmdaActive());
    auto do_v = vers & calc::virial;
    // The solve sees multipoles scaled by plam and the permanent terms by elam;
    // only when the two are the same number is the solve's multipole potential
@@ -117,10 +117,11 @@ void emplarAst(int vers)
    mpoleInit(vers, false);
    induce(uind, uinp);
 
-   // Unscaled state: the permanent multipole terms and their lambda derivative.
-   // empoleEwaldRecip and exfield both decorate the version themselves once
-   // use_emast is set, so they take the undecorated one.
-   mpoleUseOrig(true);
+   // Unscaled state: the permanent multipole terms and their lambda derivative,
+   // whose dlcmp is only built while the map has slope. empoleEwaldRecip and
+   // exfield both decorate the version themselves by edlmdaActive(), so they
+   // take the undecorated one.
+   mpoleUseOrig(dvers & calc::dlmda);
    emplarAstKernel(dvers);
    if (useEwald()) {
       empoleEwaldBackground(vers, dvers);
@@ -145,7 +146,7 @@ void emplarAst(int vers)
    if (vers & calc::energy)
       epolar0DotProd(uind, udirp, em_buf.ref().e);
 
-   const bool do_astdl = lmdaDerivVers(vers, use_pdlmda) & calc::energy_dlmda1;
+   const bool do_astdl = lmdaDerivVers(vers, pdlmdaActive()) & calc::energy_dlmda1;
    if (do_astdl)
       epolarAstDeriv();
 

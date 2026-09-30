@@ -129,8 +129,8 @@ void runFixture(const Fixture& fx, int vers)
    const double eps = testGetEps(1.0e-5, 1.0e-10);
 
    rc_flag = calc::xyz | calc::mass | calc::energy | calc::grad | calc::virial;
-   testBeginWithArgs(argc, argv);
-   initialize();
+   TestSession session(argc, argv);
+   session.init();
 
    energy(vers);
    mpoleEnsurePhysical();
@@ -156,8 +156,7 @@ void runFixture(const Fixture& fx, int vers)
    mpoleEnsurePhysical();
    COMPARE_REALS(rpoleError(), 0, eps);
 
-   finish();
-   testEnd();
+   session.end();
 }
 }
 
@@ -176,8 +175,8 @@ TEST_CASE("MPOLESTATE-pme-units", "[ff][mpolestate]")
    int argc = 4;
 
    rc_flag = calc::xyz | calc::mass | calc::energy | calc::grad | calc::virial;
-   testBeginWithArgs(argc, argv);
-   initialize();
+   TestSession session(argc, argv);
+   session.init();
 
    REQUIRE(use_emast);
    REQUIRE(dlpme_unit.valid());
@@ -185,8 +184,7 @@ TEST_CASE("MPOLESTATE-pme-units", "[ff][mpolestate]")
    REQUIRE(dlpme_unit != epme_unit);
    REQUIRE(pvpme_unit != ppme_unit);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("MPOLESTATE-physical", "[ff][mpolestate]")
@@ -200,26 +198,23 @@ TEST_CASE("MPOLESTATE-physical", "[ff][mpolestate]")
 }
 
 namespace {
-// Sets a fixture up, and keeps its files, for as long as it is in scope.
+// Sets a fixture up, and keeps its files, for as long as it is in scope. The
+// session is declared after the files, so it ends before they are removed.
+const char* kSetupArgv[] = {"dummy", "mpolestate.xyz", "-k", "mpolestate.key"};
+
 struct Setup
 {
    TestFile fxyz, fkey, fprm;
+   TestSession session;
 
    Setup(const Fixture& f, int rc)
       : fxyz(kDir + f.xyz, "mpolestate.xyz")
       , fkey(kDir + f.key, "mpolestate.key")
       , fprm(kDir + f.prm, std::string(f.prm).substr(std::string(f.prm).find('/') + 1))
+      , session(4, kSetupArgv)
    {
-      const char* argv[] = {"dummy", "mpolestate.xyz", "-k", "mpolestate.key"};
       rc_flag = rc;
-      testBeginWithArgs(4, argv);
-      initialize();
-   }
-
-   ~Setup()
-   {
-      finish();
-      testEnd();
+      session.init();
    }
 };
 

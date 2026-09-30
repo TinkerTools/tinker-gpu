@@ -28,7 +28,7 @@ rattle                      water
    const char* argv[] = {"dummy", x1};
    int argc = 2;
 
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
 
    std::vector<int> vint;
    getKV("ROTATABLE-BOND", vint);
@@ -77,5 +77,5 @@ rattle                      water
    REQUIRE(rw == "WATER");
    REQUIRE(rd == "Cubic-Mean");
 
-   testEnd();
+   session.end();
 }

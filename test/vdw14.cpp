@@ -31,8 +31,8 @@ TEST_CASE("Vdw14-Trpcage", "[ff][evdw][vdw14][lj][trpcage]")
       auto ref_count = r.getCount();
       auto ref_g = r.getGradient();
 
-      testBeginWithArgs(argc, argv);
-      initialize();
+      TestSession session(argc, argv);
+      session.init();
 
       energy(calc::v0);
       COMPARE_REALS(esum, ref_e, eps_e);
@@ -61,8 +61,7 @@ TEST_CASE("Vdw14-Trpcage", "[ff][evdw][vdw14][lj][trpcage]")
          for (int j = 0; j < 3; ++j)
             COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-      finish();
-      testEnd();
+      session.end();
    }
 
    SECTION("  - elj -- pbc, cutoff")
@@ -85,8 +84,8 @@ TEST_CASE("Vdw14-Trpcage", "[ff][evdw][vdw14][lj][trpcage]")
       auto ref_count = r.getCount();
       auto ref_g = r.getGradient();
 
-      testBeginWithArgs(argc, argv);
-      initialize();
+      TestSession session(argc, argv);
+      session.init();
 
       energy(calc::v0);
       COMPARE_REALS(esum, ref_e, eps_e);
@@ -115,8 +114,7 @@ TEST_CASE("Vdw14-Trpcage", "[ff][evdw][vdw14][lj][trpcage]")
          for (int j = 0; j < 3; ++j)
             COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-      finish();
-      testEnd();
+      session.end();
    }
 }
 
@@ -153,8 +151,8 @@ TEST_CASE("Vdw14-G3-Hal", "[ff][evdw][vdw14][hal]")
       auto ref_count = r.getCount();
       auto ref_g = r.getGradient();
 
-      testBeginWithArgs(argc, argv);
-      initialize();
+      TestSession session(argc, argv);
+      session.init();
 
       energy(calc::v0);
       COMPARE_REALS(esum, ref_e, eps_e);
@@ -183,8 +181,7 @@ TEST_CASE("Vdw14-G3-Hal", "[ff][evdw][vdw14][hal]")
          for (int j = 0; j < 3; ++j)
             COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-      finish();
-      testEnd();
+      session.end();
    };
 
    SECTION("  - ehal -- no pbc, no cutoff") { run(k0, "vdw14.3.txt"); }

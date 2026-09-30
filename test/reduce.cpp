@@ -63,8 +63,8 @@ TEST_CASE("Reduce", "[util][math][reduce]")
    TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoebapro13.prm");
    const char* argv[] = {"dummy", x1};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
-   initialize();
+   TestSession session(argc, argv);
+   session.init();
 
    darray::allocate(N, &di, &df, &dd, &du);
    darray::allocate(N, &df2, &dd2, &du2);
@@ -104,6 +104,5 @@ TEST_CASE("Reduce", "[util][math][reduce]")
    darray::deallocate(di, df, dd, du);
    darray::deallocate(df2, dd2, du2);
 
-   finish();
-   testEnd();
+   session.end();
 }

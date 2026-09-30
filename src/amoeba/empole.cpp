@@ -56,7 +56,7 @@ namespace tinker {
 TINKER_FVOID2(acc1, cu1, empoleNonEwald, int);
 static void empoleNonEwald(int vers)
 {
-   TINKER_FCALL2(acc1, cu1, empoleNonEwald, lmdaDerivVers(vers, use_emast));
+   TINKER_FCALL2(acc1, cu1, empoleNonEwald, lmdaDerivVers(vers, edlmdaActive()));
 }
 }
 
@@ -64,7 +64,7 @@ namespace tinker {
 TINKER_FVOID2(acc1, cu1, empoleEwaldRealSelf, int);
 static void empoleEwaldRealSelf(int vers)
 {
-   TINKER_FCALL2(acc1, cu1, empoleEwaldRealSelf, lmdaDerivVers(vers, use_emast));
+   TINKER_FCALL2(acc1, cu1, empoleEwaldRealSelf, lmdaDerivVers(vers, edlmdaActive()));
 }
 
 TINKER_FVOID2(acc0, cu1, empoleEwaldRecipDlmda, int, bool);
@@ -72,7 +72,7 @@ TINKER_FVOID2(acc0, cu1, empoleEwaldRecipReuse, int);
 void empoleEwaldRecip(int vers, bool reuse_pot)
 {
    if (use_emast) {
-      TINKER_FCALL2(acc0, cu1, empoleEwaldRecipDlmda, lmdaDerivVers(vers, use_emast), reuse_pot);
+      TINKER_FCALL2(acc0, cu1, empoleEwaldRecipDlmda, lmdaDerivVers(vers, edlmdaActive()), reuse_pot);
       return;
    }
    if (reuse_pot) {
@@ -86,7 +86,7 @@ void empoleEwaldRecip(int vers, bool reuse_pot)
 static void empoleEwald(int vers)
 {
    empoleEwaldRealSelf(vers);
-   empoleEwaldBackground(vers, lmdaDerivVers(vers, use_emast));
+   empoleEwaldBackground(vers, lmdaDerivVers(vers, edlmdaActive()));
    empoleEwaldRecip(vers);
 }
 }
@@ -135,7 +135,7 @@ void empole(int vers)
    empoleKernel(vers);
    exfield(vers, 1);
    torque(vers, demx, demy, demz);
-   if (lmdaDerivVers(vers, use_emast) & (calc::grad_dlmda | calc::virial_dlmda))
+   if (lmdaDerivVers(vers, edlmdaActive()) & (calc::grad_dlmda | calc::virial_dlmda))
       torque(vers, dfdlx, dfdly, dfdlz, dltrqx, dltrqy, dltrqz, dvirdl_buf);
    if (do_v) {
       VirialBuffer u2 = vir_trq;

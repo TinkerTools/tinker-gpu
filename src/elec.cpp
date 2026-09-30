@@ -955,7 +955,7 @@ void exfield(int vers, int useDipole)
 
    if (useDipole) {
       if (use_emast)
-         TINKER_FCALL2(acc0, cu1, exfieldDipoleDlmda, lmdaDerivVers(vers, use_emast));
+         TINKER_FCALL2(acc0, cu1, exfieldDipoleDlmda, lmdaDerivVers(vers, edlmdaActive()));
       else
          TINKER_FCALL2(acc1, cu1, exfieldDipole, vers);
    } else {

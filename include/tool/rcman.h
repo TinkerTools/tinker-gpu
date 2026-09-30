@@ -123,10 +123,11 @@ struct calc
    static constexpr int energy_dlmda2 = 0x400; ///< Evaluate second lambda derivative energy.
    static constexpr int grad_dlmda = 0x800;    ///< Evaluate lambda derivative energy gradient.
    static constexpr int virial_dlmda = 0x1000;  ///< Evaluate lambda derivative virial tensor.
+   /// Bits of every lambda derivative.
+   static constexpr int dlmda = energy_dlmda1 + energy_dlmda2 + grad_dlmda + virial_dlmda;
 
    /// Bits mask to clear energy-irrelevant flags.
-   static constexpr int vmask = energy + grad + virial + analyz + energy_dlmda1 + energy_dlmda2 + grad_dlmda
-      + virial_dlmda;
+   static constexpr int vmask = energy + grad + virial + analyz + dlmda;
    /// Similar to Tinker energy routines. Energy only.
    static constexpr int v0 = energy;
    /// Similar to version 1 Tinker energy routines.

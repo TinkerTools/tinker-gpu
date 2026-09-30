@@ -303,7 +303,7 @@ void mpoleBegin(int vers, bool zero_vir_trq)
    recip_vir = vir_m and (vers & calc::virial);
    if (vers & calc::grad) {
       darray::zero(g::q0, n, trqx, trqy, trqz);
-      if (lmdaDerivVers(vers, use_edlmda or use_pdlmda) & (calc::grad_dlmda | calc::virial_dlmda))
+      if (lmdaDerivVers(vers, edlmdaActive() or pdlmdaActive()) & (calc::grad_dlmda | calc::virial_dlmda))
          darray::zero(g::q0, n, dltrqx, dltrqy, dltrqz);
    }
    if (zero_vir_trq and (vers & calc::virial))
@@ -333,8 +333,7 @@ void mpoleInit(int vers, bool do_dlmda)
 {
    mpoleBegin(vers);
    if (do_dlmda) {
-      constexpr int dlbits = calc::energy_dlmda1 | calc::energy_dlmda2 | calc::grad_dlmda | calc::virial_dlmda;
-      mpoleUseOrig(lmdaDerivVers(vers, true) & dlbits);
+      mpoleUseOrig(lmdaDerivVers(vers, edlmdaActive()) & calc::dlmda);
    } else {
       mpoleUsePole();
    }

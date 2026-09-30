@@ -13,6 +13,7 @@
 #include "test.h"
 #include "testrt.h"
 
+#include <memory>
 #include <vector>
 
 using namespace tinker;
@@ -52,11 +53,11 @@ TEST_CASE("NPT-Berendsen-Iso", "[ff][npt][Berendsen][iso]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 1.);
 
    rc_flag = usage_;
-   initialize();
+   session.init();
 
    const double dt_ps = 0.002;
    const int nsteps = 5;
@@ -87,8 +88,7 @@ TEST_CASE("NPT-Berendsen-Iso", "[ff][npt][Berendsen][iso]")
 
    delete intg;
    intg = nullptr;
-   finish();
-   testEnd();
+   session.end();
 
    for (int i = 0; i < nsteps; ++i) {
       REQUIRE(epots[i] == Approx(ref_epot[i]).margin(eps_e));
@@ -138,11 +138,11 @@ TEST_CASE("NPT-Berendsen-Semiiso", "[ff][npt][Berendsen][semiiso]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 1.);
 
    rc_flag = usage_;
-   initialize();
+   session.init();
 
    const double dt_ps = 0.002;
    const int nsteps = 5;
@@ -173,8 +173,7 @@ TEST_CASE("NPT-Berendsen-Semiiso", "[ff][npt][Berendsen][semiiso]")
 
    delete intg;
    intg = nullptr;
-   finish();
-   testEnd();
+   session.end();
 
    for (int i = 0; i < nsteps; ++i) {
       REQUIRE(epots[i] == Approx(ref_epot[i]).margin(eps_e));
@@ -224,11 +223,11 @@ TEST_CASE("NPT-Berendsen-Aniso", "[ff][npt][Berendsen][aniso]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 1.);
 
    rc_flag = usage_;
-   initialize();
+   session.init();
 
    const double dt_ps = 0.002;
    const int nsteps = 5;
@@ -259,8 +258,7 @@ TEST_CASE("NPT-Berendsen-Aniso", "[ff][npt][Berendsen][aniso]")
 
    delete intg;
    intg = nullptr;
-   finish();
-   testEnd();
+   session.end();
 
    for (int i = 0; i < nsteps; ++i) {
       REQUIRE(epots[i] == Approx(ref_epot[i]).margin(eps_e));
@@ -310,11 +308,11 @@ TEST_CASE("NPT-Bussi-Iso", "[ff][npt][Bussi][iso]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 1.);
 
    rc_flag = usage_;
-   initialize();
+   session.init();
 
    const double dt_ps = 0.002;
    const int nsteps = 5;
@@ -345,8 +343,7 @@ TEST_CASE("NPT-Bussi-Iso", "[ff][npt][Bussi][iso]")
 
    delete intg;
    intg = nullptr;
-   finish();
-   testEnd();
+   session.end();
 
    for (int i = 0; i < nsteps; ++i) {
       REQUIRE(epots[i] == Approx(ref_epot[i]).margin(eps_e));
@@ -397,11 +394,11 @@ TEST_CASE("NPT-Bussi-Semiiso", "[ff][npt][Bussi][semiiso]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 1.);
 
    rc_flag = usage_;
-   initialize();
+   session.init();
 
    const double dt_ps = 0.002;
    const int nsteps = 5;
@@ -432,8 +429,7 @@ TEST_CASE("NPT-Bussi-Semiiso", "[ff][npt][Bussi][semiiso]")
 
    delete intg;
    intg = nullptr;
-   finish();
-   testEnd();
+   session.end();
 
    for (int i = 0; i < nsteps; ++i) {
       REQUIRE(epots[i] == Approx(ref_epot[i]).margin(eps_e));
@@ -484,11 +480,11 @@ TEST_CASE("NPT-Bussi-Aniso", "[ff][npt][Bussi][aniso]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 1.);
 
    rc_flag = usage_;
-   initialize();
+   session.init();
 
    const double dt_ps = 0.002;
    const int nsteps = 5;
@@ -519,8 +515,7 @@ TEST_CASE("NPT-Bussi-Aniso", "[ff][npt][Bussi][aniso]")
 
    delete intg;
    intg = nullptr;
-   finish();
-   testEnd();
+   session.end();
 
    for (int i = 0; i < nsteps; ++i) {
       REQUIRE(epots[i] == Approx(ref_epot[i]).margin(eps_e));
@@ -570,11 +565,11 @@ TEST_CASE("NPT-Monte-Iso", "[ff][npt][Monte][iso]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 1.);
 
    rc_flag = usage_ & ~calc::md;
-   initialize();
+   session.init();
    rc_flag = usage_;
 
    const double dt_ps = 0.002;
@@ -607,8 +602,7 @@ TEST_CASE("NPT-Monte-Iso", "[ff][npt][Monte][iso]")
    delete intg;
    intg = nullptr;
    rc_flag = usage_ & ~calc::md;
-   finish();
-   testEnd();
+   session.end();
 
    for (int i = 0; i < nsteps; ++i) {
       REQUIRE(epots[i] == Approx(ref_epot[i]).margin(eps_e));
@@ -659,11 +653,11 @@ TEST_CASE("NPT-Monte-Semiiso", "[ff][npt][Monte][semiiso]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 1.);
 
    rc_flag = usage_ & ~calc::md;
-   initialize();
+   session.init();
    rc_flag = usage_;
 
    const double dt_ps = 0.002;
@@ -696,8 +690,7 @@ TEST_CASE("NPT-Monte-Semiiso", "[ff][npt][Monte][semiiso]")
    delete intg;
    intg = nullptr;
    rc_flag = usage_ & ~calc::md;
-   finish();
-   testEnd();
+   session.end();
 
    for (int i = 0; i < nsteps; ++i) {
       REQUIRE(epots[i] == Approx(ref_epot[i]).margin(eps_e));
@@ -748,11 +741,11 @@ TEST_CASE("NPT-Monte-Aniso", "[ff][npt][Monte][aniso]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 1.);
 
    rc_flag = usage_ & ~calc::md;
-   initialize();
+   session.init();
    rc_flag = usage_;
 
    const double dt_ps = 0.002;
@@ -785,8 +778,7 @@ TEST_CASE("NPT-Monte-Aniso", "[ff][npt][Monte][aniso]")
    delete intg;
    intg = nullptr;
    rc_flag = usage_ & ~calc::md;
-   finish();
-   testEnd();
+   session.end();
 
    for (int i = 0; i < nsteps; ++i) {
       REQUIRE(epots[i] == Approx(ref_epot[i]).margin(eps_e));
@@ -808,8 +800,8 @@ TEST_CASE("NPT-Monte-Aniso", "[ff][npt][Monte][aniso]")
 namespace {
 // Loads water30 with the induced dipole predictor, and fills its history with
 // solves at nearby geometries, past maxualt so that the predictor is in use and
-// the next solve overwrites a real entry.
-void loadWater30Predictor()
+// the next solve overwrites a real entry. The caller ends the returned session.
+std::unique_ptr<TestSession> loadWater30Predictor()
 {
    const char* k = "test_water30.key";
    const char* x = "test_water30.xyz";
@@ -819,10 +811,10 @@ void loadWater30Predictor()
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   auto session = std::make_unique<TestSession>(argc, argv);
    testMdInit(298., 1.);
    rc_flag = usage_;
-   initialize();
+   session->init();
    REQUIRE(use(Potent::POLAR));
    REQUIRE(maxualt > 0);
    REQUIRE_FALSE(polpot::use_tholed);
@@ -838,6 +830,7 @@ void loadWater30Predictor()
       copyPosToXyz(true);
       energy(calc::v1);
    }
+   return session;
 }
 
 std::vector<real> grab(real (*dev)[3])
@@ -897,10 +890,9 @@ void checkRejectKeepsInduced()
 
 TEST_CASE("NPT-Monte-Reject-Keeps-Induced", "[ff][npt][Monte][reject]")
 {
-   loadWater30Predictor();
+   auto session = loadWater30Predictor();
    checkRejectKeepsInduced();
-   finish();
-   testEnd();
+   session->end();
 }
 
 TEST_CASE("NPT-Monte-Reject-After-Expol", "[ff][npt][Monte][reject]")
@@ -916,18 +908,16 @@ TEST_CASE("NPT-Monte-Reject-After-Expol", "[ff][npt][Monte][reject]")
 
       const char* argv[] = {"dummy", x};
       int argc = 2;
-      testBeginWithArgs(argc, argv);
+      TestSession session(argc, argv);
       rc_flag = calc::xyz | calc::vmask;
-      initialize();
+      session.init();
       REQUIRE(polpot::use_expol);
       energy(calc::v0);
-      finish();
-      testEnd();
+      session.end();
    }
 
-   loadWater30Predictor();
+   auto session = loadWater30Predictor();
    REQUIRE_FALSE(polpot::use_expol);
    checkRejectKeepsInduced();
-   finish();
-   testEnd();
+   session->end();
 }
