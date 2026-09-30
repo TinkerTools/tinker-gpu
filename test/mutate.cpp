@@ -257,6 +257,14 @@ const Fixture kFixtures[] = {
    {"228_g3_ast_d1_l00", "g3", true, true, true, true, "polst"},
    {"230_g3_rels_lig1_d1_l085", "g3", true, true, true, true, "polst"},
    {"231_g3_rels_lig2_d1_l015", "g3", true, true, true, true, "polst"},
+   // LAMBDA-DERIV alone on paths otherwise only run with second derivatives
+   // (test_mutate_deriv1): squared-weight dual topology polarization, whose
+   // nonzero weight curvature must not reach d2E/dL2, the annihilated van der
+   // Waals with its long range correction, and a staged relative vdW leg. The
+   // second, force and virial lambda derivatives must all stay zero.
+   {"232_water_adt_d1_x2_l06", "water2", false, true, false, true, "deriv1"},
+   {"233_water_ast_vcorr_annih_d1_l05", "water2", true, true, true, true, "deriv1"},
+   {"234_water_rels_ye_vdwm_d1_l040", "water2", true, true, true, true, "deriv1"},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
@@ -916,6 +924,9 @@ TEST_CASE("MUTATE-227_g3_ast_d1_l05", "[ff][mutate][polst][astpol][emplar]") { r
 TEST_CASE("MUTATE-228_g3_ast_d1_l00", "[ff][mutate][polst][astpol][emplar]") { runEmplarAstFixture(fx("228_g3_ast_d1_l00")); }
 TEST_CASE("MUTATE-230_g3_rels_lig1_d1_l085", "[ff][mutate][polst][astpol][emplar]") { runEmplarAstFixture(fx("230_g3_rels_lig1_d1_l085")); }
 TEST_CASE("MUTATE-231_g3_rels_lig2_d1_l015", "[ff][mutate][polst][astpol][emplar]") { runEmplarAstFixture(fx("231_g3_rels_lig2_d1_l015")); }
+TEST_CASE("MUTATE-232_water_adt_d1_x2_l06", "[ff][mutate][deriv1]") { runFixture(fx("232_water_adt_d1_x2_l06")); }
+TEST_CASE("MUTATE-233_water_ast_vcorr_annih_d1_l05", "[ff][mutate][deriv1]") { runFixture(fx("233_water_ast_vcorr_annih_d1_l05")); }
+TEST_CASE("MUTATE-234_water_rels_ye_vdwm_d1_l040", "[ff][mutate][deriv1]") { runFixture(fx("234_water_rels_ye_vdwm_d1_l040")); }
 
 TEST_CASE("MUTATE-TI-076_water_qnt_ast_l05", "[ff][mutate][ti][ast]") { runThermIntgFixture(fx("076_water_qnt_ast_l05")); }
 TEST_CASE("MUTATE-TI-079_water_qnt_adt_l05", "[ff][mutate][ti][adt]") { runThermIntgFixture(fx("079_water_qnt_adt_l05")); }
