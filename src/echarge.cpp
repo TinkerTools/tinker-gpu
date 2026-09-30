@@ -166,6 +166,7 @@ void echargeEwaldRecipSelf(int vers)
    // fphi_pchg, recip, self
 
    TINKER_FCALL2(acc1, cu1, echargeEwaldFphiSelf, vers);
+   echargeEwaldBackground(vers);
 
    pmeStreamFinishRecord(use_pme_stream);
 }

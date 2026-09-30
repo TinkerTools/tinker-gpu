@@ -1,6 +1,7 @@
 #include "md/osrw.h"
 #include "ff/amoeba/mpolestate.h"
 #include "ff/echarge.h"
+#include "ff/elec.h"
 #include "ff/energy.h"
 #include "ff/evalence.h"
 #include "ff/evdw.h"
@@ -203,6 +204,7 @@ TINKER_FVOID2(acc1, cu0, osrw_altele, double);
 void osrw_altele(double el)
 {
    TINKER_FCALL2(acc1, cu0, osrw_altele, el);
+   ewaldBackgroundScale(el);
    mpolePoleWritten();
 }
 

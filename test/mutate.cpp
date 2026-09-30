@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -186,6 +187,14 @@ const Fixture kFixtures[] = {
    // one, so it reproduces the 135 reference.
    {"205_water_rels_nolmda", "water2", true, true, true, true, "rels", "135_water_rels_ye_l100"},
    {"206_trpcage_chiral_m05", "trpcage", false, false, false, false, "chiral"},
+   {"207_g3_ast_ye_l10", "g3", true, true, true, true, "g3"},
+   {"208_g3_ast_ye_l05", "g3", true, true, true, true, "g3"},
+   {"209_g3_ast_annih_l05", "g3", true, true, true, true, "g3"},
+   {"210_g3_ast_nobox_l05", "g3", true, true, true, true, "g3"},
+   {"211_water_ast_vcorr_annih_l05", "water2", true, true, true, true, "hal"},
+   {"212_water_ast_mono_l05", "water2", true, true, true, true, "hal"},
+   {"213_water_ast_tric_l05", "water2", true, true, true, true, "hal"},
+   {"214_water_rels_ye_vdwm_lig2t_l040", "water2", true, true, true, true, "hal"},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
@@ -197,6 +206,31 @@ const Fixture& fx(const char* name)
          return f;
    FAIL("no mutate fixture named " << name);
    return kFixtures[0];
+}
+
+// The directory holding a base system's coordinates: the SAMPL8 guest 3 has a
+// directory of its own, and the water systems sit with the mutation fixtures.
+std::string systemDir(const std::string& base)
+{
+   if (base == "g3")
+      return TINKER9_DIRSTR "/test/file/g3/";
+   return TINKER9_DIRSTR "/test/file/mutate/";
+}
+
+// Copies the parameter files a base system loads into the working directory.
+// The water fixtures share water03; the SAMPL8 guest 3 carries its own force
+// field, plus the artificial vdw14 values fixture 209 loads as a second file.
+std::vector<std::unique_ptr<TestFile>> copyParams(const std::string& base)
+{
+   std::vector<std::unique_ptr<TestFile>> files;
+   if (base == "g3") {
+      std::string dir = systemDir(base);
+      files.emplace_back(new TestFile(dir + "g3.prm"));
+      files.emplace_back(new TestFile(dir + "g3_vdw14.prm"));
+   } else {
+      files.emplace_back(new TestFile(TINKER9_DIRSTR "/test/file/commit_6fe8e913/water03.prm"));
+   }
+   return files;
 }
 
 // How a run should treat the fused multipole/polarization kernel. emplar cannot
@@ -222,13 +256,13 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
    std::string keyname = std::string(fx.name) + ".key";
    std::string refpath = std::string(TINKER9_DIRSTR "/test/ref/mutate/") + (fx.ref ? fx.ref : fx.name) + ".txt";
 
-   TestFile fxyz(dir + xyzdst, xyzdst);
+   TestFile fxyz(systemDir(fx.base) + xyzdst, xyzdst);
    // TI owns the main lambda and starts at the first schedule window. These
    // four fixtures all reference lambda 0.5, so keep that operating point
    // instead of accepting TI's default first window at lambda 1.
    const char* keyextra = lmdaMode == LmdaMode::ThermIntg ? "\nlambda-mode ti\nti-window 0.5\n" : "";
    TestFile fkey(dir + keyname, keyname, keyextra);
-   TestFile fprm(TINKER9_DIRSTR "/test/file/commit_6fe8e913/water03.prm");
+   auto fprm = copyParams(fx.base);
 
    const char* argv[] = {"dummy", xyzdst.c_str(), "-k", keyname.c_str()};
    int argc = 4;
@@ -793,6 +827,14 @@ TEST_CASE("MUTATE-202_water_vsoft_l00", "[ff][mutate][vsoft]") { runFixture(fx("
 TEST_CASE("MUTATE-203_water_rels_st_l085", "[ff][mutate][rels][astpol][emplar]") { runEmplarAstFixture(fx("203_water_rels_st_l085")); }
 TEST_CASE("MUTATE-204_water_rels_st_lig2_exp_l030", "[ff][mutate][rels][astpol][emplar]") { runEmplarAstFixture(fx("204_water_rels_st_lig2_exp_l030")); }
 TEST_CASE("MUTATE-205_water_rels_nolmda", "[ff][mutate][rels]") { runFixture(fx("205_water_rels_nolmda")); }
+TEST_CASE("MUTATE-207_g3_ast_ye_l10", "[ff][mutate][g3]") { runFixture(fx("207_g3_ast_ye_l10")); }
+TEST_CASE("MUTATE-208_g3_ast_ye_l05", "[ff][mutate][g3]") { runFixture(fx("208_g3_ast_ye_l05")); }
+TEST_CASE("MUTATE-209_g3_ast_annih_l05", "[ff][mutate][g3]") { runFixture(fx("209_g3_ast_annih_l05")); }
+TEST_CASE("MUTATE-210_g3_ast_nobox_l05", "[ff][mutate][g3]") { runFixture(fx("210_g3_ast_nobox_l05")); }
+TEST_CASE("MUTATE-211_water_ast_vcorr_annih_l05", "[ff][mutate][hal]") { runFixture(fx("211_water_ast_vcorr_annih_l05")); }
+TEST_CASE("MUTATE-212_water_ast_mono_l05", "[ff][mutate][hal]") { runFixture(fx("212_water_ast_mono_l05")); }
+TEST_CASE("MUTATE-213_water_ast_tric_l05", "[ff][mutate][hal]") { runFixture(fx("213_water_ast_tric_l05")); }
+TEST_CASE("MUTATE-214_water_rels_ye_vdwm_lig2t_l040", "[ff][mutate][hal]") { runFixture(fx("214_water_rels_ye_vdwm_lig2t_l040")); }
 
 TEST_CASE("MUTATE-TI-076_water_qnt_ast_l05", "[ff][mutate][ti][ast]") { runThermIntgFixture(fx("076_water_qnt_ast_l05")); }
 TEST_CASE("MUTATE-TI-079_water_qnt_adt_l05", "[ff][mutate][ti][adt]") { runThermIntgFixture(fx("079_water_qnt_adt_l05")); }

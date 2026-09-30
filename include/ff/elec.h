@@ -73,6 +73,20 @@ void extfieldModifyDField(real (*field)[3], ///< Permanent field.
                           real (*fieldp)[3] ///< Set to \c nullptr if not using AMOEBA.
 );
 
+/// The Ewald uniform background charge correction, -f pi Q^2 / (2 V aewald^2),
+/// for a periodic cell of net charge Q (empole1.f, echarge1.f). It is constant in
+/// the coordinates, and Tinker adds no virial for it. Under single topology the
+/// charges follow the electrostatic lambda, and so do Q and its derivatives
+/// (empole4.f). A neutral cell with no lambda derivative adds nothing.
+void empoleEwaldBackground(int vers,  ///< Energy version.
+                           int dlvers ///< Lambda-derivative version, as from lmdaDerivVers().
+);
+/// \copydoc empoleEwaldBackground
+void echargeEwaldBackground(int vers);
+/// Records that the charges of the mutated atoms now carry \c el times their
+/// copied-in values, as OSRW leaves them, for the Ewald background correction.
+void ewaldBackgroundScale(double el);
+
 //====================================================================//
 //                                                                    //
 //                          Global Variables                          //

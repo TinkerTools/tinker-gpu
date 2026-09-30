@@ -119,3 +119,80 @@ TEST_CASE("Vdw14-Trpcage", "[ff][evdw][vdw14][lj][trpcage]")
       testEnd();
    }
 }
+
+// Buffered 14-7 van der Waals on SAMPL8 guest 3 and its 29 waters, with the
+// artificial vdw14 values of fixture 209 and a 1-4 scale of one half, so every
+// 1-4 pair inside the guest takes a scaled vdw14 radius and well depth.
+TEST_CASE("Vdw14-G3-Hal", "[ff][evdw][vdw14][hal]")
+{
+   rc_flag = calc::xyz | calc::vmask;
+
+   const char* kname = "test_vdw14.key";
+   const char* xname = "g3.xyz";
+   const std::string k0 = "parameters g3\n"
+                          "parameters g3_vdw14\n"
+                          "vdw-14-scale 0.5\n"
+                          "vdwterm only\n";
+
+   const double eps_e = testGetEps(1.0e-3, 1.0e-4);
+   const double eps_g = testGetEps(1.0e-3, 1.0e-4);
+   const double eps_v = testGetEps(2.0e-3, 1.0e-3);
+   const char* argv[] = {"dummy", xname, "-k", kname};
+   int argc = 4;
+
+   auto run = [&](const std::string& key, const char* refname) {
+      std::string dir = TINKER9_DIRSTR "/test/file/g3/";
+      TestFile fxy(dir + "g3.xyz", xname);
+      TestFile fke("", kname, key);
+      TestFile fp1(dir + "g3.prm");
+      TestFile fp2(dir + "g3_vdw14.prm");
+
+      TestReference r(std::string(TINKER9_DIRSTR "/test/ref/") + refname);
+      auto ref_e = r.getEnergy();
+      auto ref_v = r.getVirial();
+      auto ref_count = r.getCount();
+      auto ref_g = r.getGradient();
+
+      testBeginWithArgs(argc, argv);
+      initialize();
+
+      energy(calc::v0);
+      COMPARE_REALS(esum, ref_e, eps_e);
+
+      energy(calc::v1);
+      COMPARE_REALS(esum, ref_e, eps_e);
+      COMPARE_GRADIENT(ref_g, eps_g);
+      for (int i = 0; i < 3; ++i)
+         for (int j = 0; j < 3; ++j)
+            COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
+
+      energy(calc::v3);
+      COMPARE_REALS(esum, ref_e, eps_e);
+      COMPARE_INTS(countReduce(nev), ref_count);
+
+      energy(calc::v4);
+      COMPARE_REALS(esum, ref_e, eps_e);
+      COMPARE_GRADIENT(ref_g, eps_g);
+
+      energy(calc::v5);
+      COMPARE_GRADIENT(ref_g, eps_g);
+
+      energy(calc::v6);
+      COMPARE_GRADIENT(ref_g, eps_g);
+      for (int i = 0; i < 3; ++i)
+         for (int j = 0; j < 3; ++j)
+            COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
+
+      finish();
+      testEnd();
+   };
+
+   SECTION("  - ehal -- no pbc, no cutoff") { run(k0, "vdw14.3.txt"); }
+
+   SECTION("  - ehal -- pbc, cutoff")
+   {
+      run(k0 + "a-axis 18.643\n"
+               "vdw-cutoff 7.0\n",
+         "vdw14.4.txt");
+   }
+}

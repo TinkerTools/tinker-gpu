@@ -1,7 +1,7 @@
  partialcharge.cpp
 
  Energy Component Breakdown :           Kcal/mole        Interactions
- Charge-Charge                          -784.1710             5039
+ Charge-Charge                          -784.3682             5040
 
  Internal Virial Tensor :                 308.950      -10.859       21.517
                                           -10.859      307.362       18.690

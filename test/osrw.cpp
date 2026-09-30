@@ -19,9 +19,9 @@ static const double geps = 0.0005;
 
 static const double s1 = 0.5;
 static const double refev_1 = 4.1749;
-static const double refem_1 = -42.4972;
+static const double refem_1 = -42.7687;
 static const double refep_1 = -4.0921;
-static const double refe_1 = -42.2312;
+static const double refe_1 = -42.5026;
 static const double refvir_1[][3] = {{7.948, -0.088, -0.017}, {-0.088, 7.438, 0.025}, {-0.017, 0.025, 7.874}};
 static const double refg_1[][3] = {{0.0025, 0.0004, -0.0089}, {0.0031, -0.0058, -0.0063}, {-0.0037, 0.0011, 0.0042},
    {-0.0068, -0.0027, -0.0003}};

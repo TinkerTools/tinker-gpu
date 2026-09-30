@@ -197,8 +197,15 @@ TINKER_EXTERN grad_prec* gzred_dlmda;
 TINKER_EXTERN int nvdw14;
 TINKER_EXTERN int (*vdw14ik)[2];
 TINKER_EXTERN int nvexclude;
+/// \brief Number of leading #vexclude pairs with a nonzero scale or a vdw14
+/// flag. The scale-0 pairs after them only mask the neighbor list, so the
+/// CUDA buffered 14-7 exclusion loop stops here.
+TINKER_EXTERN int nvexclude_scaled;
 TINKER_EXTERN int (*vexclude)[2];
 TINKER_EXTERN real* vexclude_scale;
+/// \brief Per-exclusion flag, set for the 1-4 pairs that take #radmin4 and
+/// #epsilon4 in the buffered 14-7 exclusion loop; \c nullptr when there are none.
+TINKER_EXTERN int* vexclude14;
 }
 
 namespace tinker {

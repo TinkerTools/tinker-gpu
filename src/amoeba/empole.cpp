@@ -86,6 +86,7 @@ void empoleEwaldRecip(int vers, bool reuse_pot)
 static void empoleEwald(int vers)
 {
    empoleEwaldRealSelf(vers);
+   empoleEwaldBackground(vers, lmdaDerivVers(vers, use_emast));
    empoleEwaldRecip(vers);
 }
 }

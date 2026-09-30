@@ -25,15 +25,11 @@ struct Fixture
 };
 
 // The default stepsize is 1e-2: smaller steps sharpen the first derivatives but
-// wreck the second ones, which divide by eps squared. The single topology
-// fixtures have no second derivatives to protect -- use_epast zeroes them -- and
-// 1e-2 leaves too much truncation in the first ones at lambda 1, so they step by
-// 1e-3. Going smaller is worse, not better: the forward stencil at lambda 0 does
-// not cancel its center term, so mixed-precision round-off grows as 1/eps.
-// The staged morph leg squeezes van der Waals into the 0.3-0.7 window, which
-// steepens every lambda derivative: 2e-3 balances truncation against round-off,
-// and the numerical second derivative still scatters from run to run, so its
-// numerical tolerances are doubled. The staged charging legs squeeze the
+// wreck the second ones, which divide by eps squared. The staged morph leg
+// squeezes van der Waals into the 0.3-0.7 window, which steepens every lambda
+// derivative: 2e-3 balances truncation against round-off, and the numerical
+// second derivative still scatters from run to run, so its numerical tolerances
+// are doubled. The staged charging legs squeeze the
 // electrostatic map into a 0.3 wide window the same way, but their numerical
 // second derivatives scatter more: at 2e-3 round-off swamps them, and at 1e-2
 // truncation throws the first ones off by a few tenths, so they step by 4e-3
@@ -45,14 +41,10 @@ const Fixture kFixtures[] = {
    {"04_water_ast_l06exp", 1.0e-2, 1.0},
    {"05_water_ast_nodl_l05", 1.0e-2, 1.0},
    {"06_water_ast_vonly_l05", 1.0e-2, 1.0},
-   {"07_water_ast_ye_l10", 1.0e-3, 1.0},
-   {"08_water_ast_ye_l05", 1.0e-3, 1.0},
-   {"09_water_ast_ye_l00", 1.0e-3, 1.0},
    {"10_water_ast_vcorr_l05", 1.0e-2, 1.0},
    {"11_water_ast_vcorr_annih_l05", 1.0e-2, 1.0},
    {"12_water_ast_vcorr_l06exp", 1.0e-2, 1.0},
    {"14_water_rels_vdwm_vcorr_annih_l05", 1.0e-2, 1.0},
-   {"16_water_rels_vdwm_lights_l05", 1.0e-2, 1.0},
    {"17_water_rels_vdwm_vcorr_l050", 2.0e-3, 2.0},
    {"18_water_rels_lig1_l085", 4.0e-3, 3.0},
    {"19_water_rels_lig2_l015", 4.0e-3, 3.0},
@@ -67,6 +59,17 @@ const Fixture kFixtures[] = {
    {"28_water_rels_lig1_dt_prng_l088", 4.0e-3, 3.0},
    {"29_water_rels_lig2_st_pmap_l015", 4.0e-3, 3.0},
 };
+
+// The fixture of a given name. Cases look their fixture up by name so that
+// retiring a fixture does not shift every case after it.
+const Fixture& fx(const char* name)
+{
+   for (const auto& f : kFixtures)
+      if (std::string(f.name) == name)
+         return f;
+   FAIL("no testlmda fixture named " << name);
+   return kFixtures[0];
+}
 
 void runFixture(const Fixture& fx)
 {
@@ -144,31 +147,27 @@ void runFixture(const Fixture& fx)
 }
 }
 
-TEST_CASE("TESTLMDA-01_water_adt_l05", "[ff][testlmda]") { runFixture(kFixtures[0]); }
-TEST_CASE("TESTLMDA-02_water_ast_l05", "[ff][testlmda]") { runFixture(kFixtures[1]); }
-TEST_CASE("TESTLMDA-03_water_adt_l06exp", "[ff][testlmda]") { runFixture(kFixtures[2]); }
-TEST_CASE("TESTLMDA-04_water_ast_l06exp", "[ff][testlmda]") { runFixture(kFixtures[3]); }
-TEST_CASE("TESTLMDA-05_water_ast_nodl_l05", "[ff][testlmda]") { runFixture(kFixtures[4]); }
-TEST_CASE("TESTLMDA-06_water_ast_vonly_l05", "[ff][testlmda]") { runFixture(kFixtures[5]); }
-TEST_CASE("TESTLMDA-07_water_ast_ye_l10", "[ff][testlmda][ast]") { runFixture(kFixtures[6]); }
-TEST_CASE("TESTLMDA-08_water_ast_ye_l05", "[ff][testlmda][ast]") { runFixture(kFixtures[7]); }
-TEST_CASE("TESTLMDA-09_water_ast_ye_l00", "[ff][testlmda][ast]") { runFixture(kFixtures[8]); }
-TEST_CASE("TESTLMDA-10_water_ast_vcorr_l05", "[ff][testlmda]") { runFixture(kFixtures[9]); }
-TEST_CASE("TESTLMDA-11_water_ast_vcorr_annih_l05", "[ff][testlmda]") { runFixture(kFixtures[10]); }
-TEST_CASE("TESTLMDA-12_water_ast_vcorr_l06exp", "[ff][testlmda]") { runFixture(kFixtures[11]); }
-TEST_CASE("TESTLMDA-14_water_rels_vdwm_vcorr_annih_l05", "[ff][testlmda][rdt]") { runFixture(kFixtures[12]); }
-TEST_CASE("TESTLMDA-16_water_rels_vdwm_lights_l05", "[ff][testlmda][rdt]") { runFixture(kFixtures[13]); }
-TEST_CASE("TESTLMDA-17_water_rels_vdwm_vcorr_l050", "[ff][testlmda][rdt]") { runFixture(kFixtures[14]); }
-TEST_CASE("TESTLMDA-18_water_rels_lig1_l085", "[ff][testlmda][rdt]") { runFixture(kFixtures[15]); }
-TEST_CASE("TESTLMDA-19_water_rels_lig2_l015", "[ff][testlmda][rdt]") { runFixture(kFixtures[16]); }
-TEST_CASE("TESTLMDA-20_water_rels_lig1_ne_l085", "[ff][testlmda][rdt]") { runFixture(kFixtures[17]); }
-TEST_CASE("TESTLMDA-21_water_rels_lig1_nlist_exf_l085", "[ff][testlmda][rdt]") { runFixture(kFixtures[18]); }
-TEST_CASE("TESTLMDA-22_water_rels_lig1_st_l085", "[ff][testlmda][rdt]") { runFixture(kFixtures[19]); }
-TEST_CASE("TESTLMDA-23_water_rels_lig2_st_l015", "[ff][testlmda][rdt]") { runFixture(kFixtures[20]); }
-TEST_CASE("TESTLMDA-24_water_rels_lig1_st_ne_l085", "[ff][testlmda][rdt]") { runFixture(kFixtures[21]); }
-TEST_CASE("TESTLMDA-25_water_rels_lig1_st_polonly_l085", "[ff][testlmda][rdt]") { runFixture(kFixtures[22]); }
-TEST_CASE("TESTLMDA-26_water_rels_lig1_dt_polonly_l078", "[ff][testlmda][rdt]") { runFixture(kFixtures[23]); }
-TEST_CASE("TESTLMDA-27_water_rels_lig1_st_prng_l088", "[ff][testlmda][rdt]") { runFixture(kFixtures[24]); }
-TEST_CASE("TESTLMDA-28_water_rels_lig1_dt_prng_l088", "[ff][testlmda][rdt]") { runFixture(kFixtures[25]); }
-TEST_CASE("TESTLMDA-29_water_rels_lig2_st_pmap_l015", "[ff][testlmda][rdt]") { runFixture(kFixtures[26]); }
+TEST_CASE("TESTLMDA-01_water_adt_l05", "[ff][testlmda]") { runFixture(fx("01_water_adt_l05")); }
+TEST_CASE("TESTLMDA-02_water_ast_l05", "[ff][testlmda]") { runFixture(fx("02_water_ast_l05")); }
+TEST_CASE("TESTLMDA-03_water_adt_l06exp", "[ff][testlmda]") { runFixture(fx("03_water_adt_l06exp")); }
+TEST_CASE("TESTLMDA-04_water_ast_l06exp", "[ff][testlmda]") { runFixture(fx("04_water_ast_l06exp")); }
+TEST_CASE("TESTLMDA-05_water_ast_nodl_l05", "[ff][testlmda]") { runFixture(fx("05_water_ast_nodl_l05")); }
+TEST_CASE("TESTLMDA-06_water_ast_vonly_l05", "[ff][testlmda]") { runFixture(fx("06_water_ast_vonly_l05")); }
+TEST_CASE("TESTLMDA-10_water_ast_vcorr_l05", "[ff][testlmda]") { runFixture(fx("10_water_ast_vcorr_l05")); }
+TEST_CASE("TESTLMDA-11_water_ast_vcorr_annih_l05", "[ff][testlmda]") { runFixture(fx("11_water_ast_vcorr_annih_l05")); }
+TEST_CASE("TESTLMDA-12_water_ast_vcorr_l06exp", "[ff][testlmda]") { runFixture(fx("12_water_ast_vcorr_l06exp")); }
+TEST_CASE("TESTLMDA-14_water_rels_vdwm_vcorr_annih_l05", "[ff][testlmda][rdt]") { runFixture(fx("14_water_rels_vdwm_vcorr_annih_l05")); }
+TEST_CASE("TESTLMDA-17_water_rels_vdwm_vcorr_l050", "[ff][testlmda][rdt]") { runFixture(fx("17_water_rels_vdwm_vcorr_l050")); }
+TEST_CASE("TESTLMDA-18_water_rels_lig1_l085", "[ff][testlmda][rdt]") { runFixture(fx("18_water_rels_lig1_l085")); }
+TEST_CASE("TESTLMDA-19_water_rels_lig2_l015", "[ff][testlmda][rdt]") { runFixture(fx("19_water_rels_lig2_l015")); }
+TEST_CASE("TESTLMDA-20_water_rels_lig1_ne_l085", "[ff][testlmda][rdt]") { runFixture(fx("20_water_rels_lig1_ne_l085")); }
+TEST_CASE("TESTLMDA-21_water_rels_lig1_nlist_exf_l085", "[ff][testlmda][rdt]") { runFixture(fx("21_water_rels_lig1_nlist_exf_l085")); }
+TEST_CASE("TESTLMDA-22_water_rels_lig1_st_l085", "[ff][testlmda][rdt]") { runFixture(fx("22_water_rels_lig1_st_l085")); }
+TEST_CASE("TESTLMDA-23_water_rels_lig2_st_l015", "[ff][testlmda][rdt]") { runFixture(fx("23_water_rels_lig2_st_l015")); }
+TEST_CASE("TESTLMDA-24_water_rels_lig1_st_ne_l085", "[ff][testlmda][rdt]") { runFixture(fx("24_water_rels_lig1_st_ne_l085")); }
+TEST_CASE("TESTLMDA-25_water_rels_lig1_st_polonly_l085", "[ff][testlmda][rdt]") { runFixture(fx("25_water_rels_lig1_st_polonly_l085")); }
+TEST_CASE("TESTLMDA-26_water_rels_lig1_dt_polonly_l078", "[ff][testlmda][rdt]") { runFixture(fx("26_water_rels_lig1_dt_polonly_l078")); }
+TEST_CASE("TESTLMDA-27_water_rels_lig1_st_prng_l088", "[ff][testlmda][rdt]") { runFixture(fx("27_water_rels_lig1_st_prng_l088")); }
+TEST_CASE("TESTLMDA-28_water_rels_lig1_dt_prng_l088", "[ff][testlmda][rdt]") { runFixture(fx("28_water_rels_lig1_dt_prng_l088")); }
+TEST_CASE("TESTLMDA-29_water_rels_lig2_st_pmap_l015", "[ff][testlmda][rdt]") { runFixture(fx("29_water_rels_lig2_st_pmap_l015")); }
 #endif

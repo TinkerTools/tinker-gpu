@@ -209,7 +209,7 @@ double efreeTot();
 
 TINKER_EXTERN bool use_dlmda;
 /// Whether the second, force and virial lambda derivatives are needed beyond
-/// the first; set by the LAMBDA-DERIV keyword and by OST (mutate.f).
+/// the first; set by the LAMBDA-DERIV2 keyword and by OST (mutate.f).
 TINKER_EXTERN bool use_d2lmda;
 TINKER_EXTERN bool use_epdt;
 /// Whether polarization takes the single topology path, evaluated from one

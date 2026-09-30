@@ -289,4 +289,26 @@ void exfieldCharge_cu(int vers)
    else if (vers == calc::v6)
       exfieldCharge_cu2<calc::V6>();
 }
+
+// One thread adds the Ewald uniform background charge correction, already
+// evaluated on the host, into the first slot of the term's buffers.
+__global__
+static void ewaldBackgroundAdd_cu1(CountBuffer restrict nc, EnergyBuffer restrict eb, EnergyBuffer restrict dl1b,
+   EnergyBuffer restrict dl2b, int count, real e, real dl1, real dl2)
+{
+   if (nc)
+      atomic_add(count, nc, 0);
+   if (eb)
+      atomic_add(e, eb, 0);
+   if (dl1b)
+      atomic_add(dl1, dl1b, 0);
+   if (dl2b)
+      atomic_add(dl2, dl2b, 0);
+}
+
+void ewaldBackgroundAdd_cu(CountBuffer nc, EnergyBuffer eb, EnergyBuffer dl1b, EnergyBuffer dl2b, int count, real e,
+   real dl1, real dl2)
+{
+   ewaldBackgroundAdd_cu1<<<1, 1, 0, g::s0>>>(nc, eb, dl1b, dl2b, count, e, dl1, dl2);
+}
 }

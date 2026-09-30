@@ -431,4 +431,22 @@ void exfieldCharge_acc(int vers)
    else if (vers == calc::v6)
       exfieldCharge_acc1<calc::V6>();
 }
+
+// Adds the Ewald uniform background charge correction, already evaluated on
+// the host, into the first slot of the term's buffers.
+void ewaldBackgroundAdd_acc(CountBuffer nc, EnergyBuffer eb, EnergyBuffer dl1b, EnergyBuffer dl2b, int count, real e,
+   real dl1, real dl2)
+{
+   #pragma acc serial async deviceptr(nc,eb,dl1b,dl2b)
+   {
+      if (nc)
+         atomic_add(count, nc, 0);
+      if (eb)
+         atomic_add(e, eb, 0);
+      if (dl1b)
+         atomic_add(dl1, dl1b, 0);
+      if (dl2b)
+         atomic_add(dl2, dl2b, 0);
+   }
+}
 }

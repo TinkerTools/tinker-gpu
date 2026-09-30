@@ -114,6 +114,7 @@ void empoleChgpen(int vers)
          empoleChgpenEwald(vers, use_cfgrad);
       else if (pentyp == Chgpen::GORDON2)
          empoleAplusEwald(vers, use_cfgrad);
+      empoleEwaldBackground(vers, 0);
    } else {
       if (pentyp == Chgpen::GORDON1)
          empoleChgpenNonEwald(vers, use_cfgrad);

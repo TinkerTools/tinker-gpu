@@ -1,6 +1,6 @@
  extfield.cpp -- multipole and polarization terms
 
- Total Potential Energy :               -129.7347 Kcal/mole
+ Total Potential Energy :               -130.0061 Kcal/mole
 
  Internal Virial Tensor :                   0.045        6.396       11.818
                                             6.396      -29.011        7.945

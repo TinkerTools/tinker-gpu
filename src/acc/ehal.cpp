@@ -163,7 +163,7 @@ static void ehal_acc1()
    } // end for (int i)
 
    #pragma acc parallel async present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(DEVICE_PTRS,vexclude,vexclude_scale)
+               deviceptr(DEVICE_PTRS,vexclude,vexclude_scale,vexclude14,radmin4,epsilon4)
    #pragma acc loop independent
    for (int ii = 0; ii < nvexclude; ++ii) {
       int offset = ii & (bufsize - 1);
@@ -199,9 +199,23 @@ static void ehal_acc1()
          real eps = epsilon[it * njvdw + kt];
 
          MAYBE_UNUSED real e, de;
-         pair_hal<do_g>(rik, rv, eps, vscale, vlambda, //
-            ghal, dhal, scexp, scalphav,                //
+         // A 1-4 pair with vdw14 values takes them instead: remove the whole
+         // pair the neighbor loop added, and add it back scaled with them.
+         bool v14 = vexclude14 and vexclude14[ii];
+         pair_hal<do_g>(rik, rv, eps, (v14 ? -1 : vscale), vlambda, //
+            ghal, dhal, scexp, scalphav,                             //
             e, de);
+         if (v14) {
+            MAYBE_UNUSED real e4, de4;
+            real rv4 = radmin4[it * njvdw + kt];
+            real eps4 = epsilon4[it * njvdw + kt];
+            pair_hal<do_g>(rik, rv4, eps4, vscale + 1, vlambda, //
+               ghal, dhal, scexp, scalphav,                      //
+               e4, de4);
+            e += e4;
+            if CONSTEXPR (do_g)
+               de += de4;
+         }
 
          if (rik2 > cut2) {
             real taper, dtaper;

@@ -74,6 +74,8 @@ void emplar(int vers)
    mpoleEnsureElec();
    mpoleInit(vers, use_emast);
    emplarKernel(vers);
+   if (useEwald())
+      empoleEwaldBackground(vers, 0);
    exfield(vers, 1);
    // epolarPairwiseExtfield(vers, uind); // emplar uses the dot product version
    torque(vers, demx, demy, demz);
@@ -120,8 +122,10 @@ void emplarAst(int vers)
    // use_emast is set, so they take the undecorated one.
    mpoleUseOrig(true);
    emplarAstKernel(dvers);
-   if (useEwald())
+   if (useEwald()) {
+      empoleEwaldBackground(vers, dvers);
       empoleEwaldRecip(vers, same_state);
+   }
    exfield(vers, 1);
 
    // Back to the lambda scaled state for the polarization reciprocal term, which

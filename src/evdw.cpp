@@ -96,7 +96,9 @@ void evdwData(RcOp op)
       darray::deallocate(jvdw, radmin, epsilon);
 
       nvexclude = 0;
-      darray::deallocate(vexclude, vexclude_scale);
+      nvexclude_scaled = 0;
+      darray::deallocate(vexclude, vexclude_scale, vexclude14);
+      vexclude14 = nullptr;
 
       if (nvdw14 > 0) {
          darray::deallocate(radmin4, epsilon4, vdw14ik);
@@ -289,13 +291,8 @@ void evdwData(RcOp op)
             }
          }
       }
-      nvexclude = excls.size();
-      darray::allocate(nvexclude, &vexclude, &vexclude_scale);
-      darray::copyin(g::q0, nvexclude, vexclude, exclik.data());
-      darray::copyin(g::q0, nvexclude, vexclude_scale, excls.data());
-      waitFor(g::q0);
-
       // check VDW14 interations
+      std::vector<int> excl14;
       nvdw14 = 0;
       if (v4scale != 0) {
          // otherwise, there is no reason to worry about vdw14 energies
@@ -390,7 +387,67 @@ void evdwData(RcOp op)
             darray::copyin(g::q0, nvdw14, vdw14ik, v14ikbuf.data());
             waitFor(g::q0);
          }
+
+         // The buffered 14-7 kernels take the vdw14 values inside their
+         // exclusion loop (ehal1.f), so every 1-4 pair that has them joins the
+         // exclusion list, at a 1-4 scale of one too, flagged to use them.
+         if (vdwtyp == Vdw::HAL and nvdw14 > 0) {
+            std::map<std::pair<int, int>, size_t> where;
+            for (size_t ie = 0; ie < excls.size(); ++ie)
+               where[{exclik[2 * ie], exclik[2 * ie + 1]}] = ie;
+            excl14.assign(excls.size(), 0);
+            for (int ip = 0; ip < nvdw14; ++ip) {
+               int i = v14ikbuf[2 * ip];
+               int k = v14ikbuf[2 * ip + 1];
+               auto iter = where.find({i, k});
+               if (iter != where.end()) {
+                  excl14[iter->second] = 1;
+               } else {
+                  exclik.push_back(i);
+                  exclik.push_back(k);
+                  excls.push_back(v4scale);
+                  excl14.push_back(1);
+               }
+            }
+         }
       }
+
+      // Put the pairs that still interact first. The scale-0 pairs after them
+      // only mask the neighbor list, so the CUDA HAL kernel skips them.
+      {
+         std::vector<int> ik2;
+         std::vector<real> s2;
+         std::vector<int> v142;
+         for (int pass = 0; pass < 2; ++pass) {
+            for (size_t ie = 0; ie < excls.size(); ++ie) {
+               bool scaled = excls[ie] != 0 or (excl14.size() and excl14[ie]);
+               if (scaled == (pass == 0)) {
+                  ik2.push_back(exclik[2 * ie]);
+                  ik2.push_back(exclik[2 * ie + 1]);
+                  s2.push_back(excls[ie]);
+                  if (excl14.size())
+                     v142.push_back(excl14[ie]);
+               }
+            }
+            if (pass == 0)
+               nvexclude_scaled = s2.size();
+         }
+         exclik.swap(ik2);
+         excls.swap(s2);
+         excl14.swap(v142);
+      }
+
+      nvexclude = excls.size();
+      darray::allocate(nvexclude, &vexclude, &vexclude_scale);
+      darray::copyin(g::q0, nvexclude, vexclude, exclik.data());
+      darray::copyin(g::q0, nvexclude, vexclude_scale, excls.data());
+      if (excl14.size()) {
+         darray::allocate(nvexclude, &vexclude14);
+         darray::copyin(g::q0, nvexclude, vexclude14, excl14.data());
+      } else {
+         vexclude14 = nullptr;
+      }
+      waitFor(g::q0);
 
       nev = nullptr;
       ev_buf.manage(op, rc_flag, {&ev, &vir_ev, &devx, &devy, &devz},

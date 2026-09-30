@@ -9,8 +9,9 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
    const real* restrict exclude_scale, const real* restrict x, const real* restrict y, const real* restrict z,
    const Spatial::SortedAtom* restrict sorted, int nakpl, const int* restrict iakpl, int niak, const int* restrict iak,
    const int* restrict lst, int njvdw, real vlam, Vdw vcouple, const real* restrict radmin,
-   const real* restrict epsilon, const int* restrict jvdw, const int* restrict mutg, real scexp, real scalphav,
-   real dvldl, real d2vldl2)
+   const real* restrict epsilon, const int* restrict exclude14, const real* restrict radmin4,
+   const real* restrict epsilon4, const int* restrict jvdw, const int* restrict mutg, real scexp, real scalphav,
+   real dvldl, real d2vldl2, PairHalLambdaPow lp1, PairHalLambdaPow lp2)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;
@@ -114,22 +115,24 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
       bool cross = (imutg * kmutg == 2);
       if (r2 <= off * off and incl and not cross) {
          real r = REAL_SQRT(r2);
-         real rv = radmin[ijvdw * njvdw + kjvdw];
-         real eps = epsilon[ijvdw * njvdw + kjvdw];
+         // A 1-4 pair takes the vdw14 radius and well depth, when there are any.
+         bool v14 = exclude14 and exclude14[ii];
+         real rv = (v14 ? radmin4 : radmin)[ijvdw * njvdw + kjvdw];
+         real eps = (v14 ? epsilon4 : epsilon)[ijvdw * njvdw + kjvdw];
          // Ligand 2 couples as the complement of vlambda.
-         real vl = (ig == 2 ? 1 - vlam : vlam);
+         bool coupled = (vcouple == Vdw::DECOUPLE and imutg != kmutg) or (vcouple == Vdw::ANNIHILATE and ig);
          real vlambda = 1;
-         if (vcouple == Vdw::DECOUPLE) {
-            vlambda = (imutg == kmutg ? 1 : vl);
-         } else if (vcouple == Vdw::ANNIHILATE) {
-            vlambda = (ig ? vl : 1);
+         PairHalLambdaPow lp = {1, 1, 1};
+         if (coupled) {
+            vlambda = (ig == 2 ? 1 - vlam : vlam);
+            lp = (ig == 2 ? lp2 : lp1);
          }
          bool mutik = (imutg || kmutg) && (vcouple == Vdw::ANNIHILATE || !(imutg && kmutg));
          real dv1 = (ig == 2 ? -dvldl : dvldl);
          real dv2 = (ig == 2 ? -d2vldl2 : d2vldl2);
          real e, de, dedl, d2edl2, dlde;
-         pair_hal_v3<do_g, 0, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, scalea, rv, eps, cut, off, vlambda, GHAL, DHAL,
-            SCEXP, SCALPHA, e, de, dedl, d2edl2, dlde);
+         pair_hal_v3<do_g, 0, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, scalea, rv, eps, cut, off, vlambda, lp, GHAL, DHAL,
+            SCEXP, SCALPHA, e, de, dedl, d2edl2, dlde, mutik);
          if CONSTEXPR (do_e) {
             evtl += floatTo<ebuf_prec>(e);
             if (mutik) {
@@ -264,19 +267,19 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
             real rv = radmin[ijvdw * njvdw + kjvdw];
             real eps = epsilon[ijvdw * njvdw + kjvdw];
             // Ligand 2 couples as the complement of vlambda.
-            real vl = (ig == 2 ? 1 - vlam : vlam);
+            bool coupled = (vcouple == Vdw::DECOUPLE and imutg != kmutg) or (vcouple == Vdw::ANNIHILATE and ig);
             real vlambda = 1;
-            if (vcouple == Vdw::DECOUPLE) {
-               vlambda = (imutg == kmutg ? 1 : vl);
-            } else if (vcouple == Vdw::ANNIHILATE) {
-               vlambda = (ig ? vl : 1);
+            PairHalLambdaPow lp = {1, 1, 1};
+            if (coupled) {
+               vlambda = (ig == 2 ? 1 - vlam : vlam);
+               lp = (ig == 2 ? lp2 : lp1);
             }
             bool mutik = (imutg || kmutg) && (vcouple == Vdw::ANNIHILATE || !(imutg && kmutg));
             real dv1 = (ig == 2 ? -dvldl : dvldl);
             real dv2 = (ig == 2 ? -d2vldl2 : d2vldl2);
             real e, de, dedl, d2edl2, dlde;
-            pair_hal_v3<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, vlambda, GHAL, DHAL,
-               SCEXP, SCALPHA, e, de, dedl, d2edl2, dlde);
+            pair_hal_v3<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, vlambda, lp, GHAL, DHAL,
+               SCEXP, SCALPHA, e, de, dedl, d2edl2, dlde, mutik);
             if CONSTEXPR (do_e) {
                evtl += floatTo<ebuf_prec>(e);
                if (mutik) {
@@ -419,19 +422,19 @@ void ehaldlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyB
             real rv = radmin[ijvdw * njvdw + kjvdw];
             real eps = epsilon[ijvdw * njvdw + kjvdw];
             // Ligand 2 couples as the complement of vlambda.
-            real vl = (ig == 2 ? 1 - vlam : vlam);
+            bool coupled = (vcouple == Vdw::DECOUPLE and imutg != kmutg) or (vcouple == Vdw::ANNIHILATE and ig);
             real vlambda = 1;
-            if (vcouple == Vdw::DECOUPLE) {
-               vlambda = (imutg == kmutg ? 1 : vl);
-            } else if (vcouple == Vdw::ANNIHILATE) {
-               vlambda = (ig ? vl : 1);
+            PairHalLambdaPow lp = {1, 1, 1};
+            if (coupled) {
+               vlambda = (ig == 2 ? 1 - vlam : vlam);
+               lp = (ig == 2 ? lp2 : lp1);
             }
             bool mutik = (imutg || kmutg) && (vcouple == Vdw::ANNIHILATE || !(imutg && kmutg));
             real dv1 = (ig == 2 ? -dvldl : dvldl);
             real dv2 = (ig == 2 ? -d2vldl2 : d2vldl2);
             real e, de, dedl, d2edl2, dlde;
-            pair_hal_v3<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, vlambda, GHAL, DHAL,
-               SCEXP, SCALPHA, e, de, dedl, d2edl2, dlde);
+            pair_hal_v3<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, vlambda, lp, GHAL, DHAL,
+               SCEXP, SCALPHA, e, de, dedl, d2edl2, dlde, mutik);
             if CONSTEXPR (do_e) {
                evtl += floatTo<ebuf_prec>(e);
                if (mutik) {

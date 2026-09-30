@@ -9,6 +9,7 @@
 #include "seq/ost.h"
 #include "seq/pair_hal.h"
 #include "seq/triangle.h"
+#include <cmath>
 
 namespace tinker {
 __global__
@@ -109,6 +110,16 @@ namespace tinker {
 #include "ehal_cu1.cc"
 #include "ehaldlmda_cu1.cc"
 
+// The soft core powers of lambda v, taken here once instead of per pair.
+static PairHalLambdaPow ehalLambdaPow(double v)
+{
+   PairHalLambdaPow lp;
+   lp.p0 = std::pow(v, scexp);
+   lp.p1 = std::pow(v, scexp - 1);
+   lp.p2 = (scexp >= 2 ? std::pow(v, scexp - 2) : 0);
+   return lp;
+}
+
 template <class Ver>
 static void ehal_cu3()
 {
@@ -121,6 +132,8 @@ static void ehal_cu3()
    // A relative calculation labels atoms by ligand group; ligand 2 couples as
    // the complement of vlambda.
    const int* grp = use_rel ? rdt_group : mut;
+   const auto lp1 = ehalLambdaPow(vlam);
+   const auto lp2 = ehalLambdaPow(1 - vlam);
 
    if CONSTEXPR (do_g)
       darray::zero(g::q0, n, gxred, gyred, gzred);
@@ -128,8 +141,9 @@ static void ehal_cu3()
    int ngrid = gpuGridSize(BLOCK_DIM);
    auto ker1 = ehal_cu1<Ver>;
    ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, vir_ev, gxred, gyred, gzred, cut, off,
-      st.si1.bit0, nvexclude, vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak,
-      st.iak, st.lst, njvdw, vlam, vcouple, radmin, epsilon, jvdw, grp, scexp, scalphav);
+      st.si1.bit0, nvexclude_scaled, vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak,
+      st.iak, st.lst, njvdw, vlam, vcouple, radmin, epsilon, vexclude14, radmin4, epsilon4, jvdw, grp, scexp,
+      scalphav, lp1, lp2);
 
    if CONSTEXPR (do_g)
       ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);
@@ -148,6 +162,8 @@ static void ehaldlmda_cu3()
    // A relative calculation labels atoms by ligand group; ligand 2 couples as
    // the complement of vlambda.
    const int* grp = use_rel ? rdt_group : mut;
+   const auto lp1 = ehalLambdaPow(vlam);
+   const auto lp2 = ehalLambdaPow(1 - vlam);
 
    if CONSTEXPR (do_g) {
       darray::zero(g::q0, n, gxred, gyred, gzred);
@@ -158,9 +174,10 @@ static void ehaldlmda_cu3()
    int ngrid = gpuGridSize(BLOCK_DIM);
    auto ker1 = ehaldlmda_cu1<Ver>;
    ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, devdl_buf, d2evdl2_buf, vir_ev,
-      dvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0, nvexclude,
+      dvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0, nvexclude_scaled,
       vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, njvdw,
-      vlam, vcouple, radmin, epsilon, jvdw, grp, scexp, scalphav, dvldlmda, d2vldlmda2);
+      vlam, vcouple, radmin, epsilon, vexclude14, radmin4, epsilon4, jvdw, grp, scexp, scalphav, dvldlmda, d2vldlmda2,
+      lp1, lp2);
 
    if CONSTEXPR (do_g) {
       ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);
