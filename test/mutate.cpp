@@ -30,6 +30,38 @@ using namespace tinker;
 #if TINKER_GPULANG_CUDA
 
 namespace {
+/// Tolerances a fixture overrides. Each check left unset keeps the default in
+/// runFixture; one that is set takes the given single/mixed and double
+/// precision values instead. Rows set them by name, e.g. Tols().virial(...).
+struct Tols
+{
+   struct Tol
+   {
+      double mixed = 0, dbl = 0;
+   };
+   Tol e, g, v, l, l2;
+
+   Tols energy(double mixed, double dbl) const { return with(&Tols::e, mixed, dbl); }
+   Tols grad(double mixed, double dbl) const { return with(&Tols::g, mixed, dbl); }
+   Tols virial(double mixed, double dbl) const { return with(&Tols::v, mixed, dbl); }
+   Tols lmda(double mixed, double dbl) const { return with(&Tols::l, mixed, dbl); }
+   Tols lmda2(double mixed, double dbl) const { return with(&Tols::l2, mixed, dbl); }
+
+   /// The tolerance of a check: the override if set, otherwise the default.
+   static double pick(const Tol& t, double mixed, double dbl)
+   {
+      return (t.mixed or t.dbl) ? testGetEps(t.mixed, t.dbl) : testGetEps(mixed, dbl);
+   }
+
+private:
+   Tols with(Tol Tols::*m, double mixed, double dbl) const
+   {
+      Tols t = *this;
+      t.*m = {mixed, dbl};
+      return t;
+   }
+};
+
 struct Fixture
 {
    const char* name;
@@ -37,6 +69,7 @@ struct Fixture
    bool checkm, checkp, checkv, dolmda;
    const char* cat;
    const char* ref = nullptr; ///< Reference borrowed from another fixture, if any.
+   Tols tol = {};             ///< Tolerances that differ from the defaults.
 };
 
 const Fixture kFixtures[] = {
@@ -191,10 +224,39 @@ const Fixture kFixtures[] = {
    {"208_g3_ast_ye_l05", "g3", true, true, true, true, "g3"},
    {"209_g3_ast_annih_l05", "g3", true, true, true, true, "g3"},
    {"210_g3_ast_nobox_l05", "g3", true, true, true, true, "g3"},
-   {"211_water_ast_vcorr_annih_l05", "water2", true, true, true, true, "hal"},
+   // The long-range van der Waals correction adds a large diagonal virial.
+   {"211_water_ast_vcorr_annih_l05", "water2", true, true, true, true, "hal", nullptr, Tols().virial(1.0e-2, 1.0e-2)},
    {"212_water_ast_mono_l05", "water2", true, true, true, true, "hal"},
    {"213_water_ast_tric_l05", "water2", true, true, true, true, "hal"},
    {"214_water_rels_ye_vdwm_lig2t_l040", "water2", true, true, true, true, "hal"},
+   // Multipole lambda paths (test_mutate_mpole4): the no-Ewald list path with a
+   // 6.5 multipole cutoff, and the charged relative legs, whose uniform background
+   // carries a lambda derivative. 216 needs the vacuum Ewald boundary, which
+   // tinker9 lacks, so it is left out.
+   {"215_water_ast_ne_mcut_l05", "water2", true, true, true, true, "mpole4"},
+   {"217_g3_rels_lig1_l085", "g3", true, true, true, true, "mpole4"},
+   // Only the water is scaled in this lig2 leg, so d2E/dL2 is what is left of its
+   // interaction with itself and its images after the Ewald terms cancel. The
+   // single precision reciprocal sum leaves about 1.3e-3 of it behind, which the
+   // relative slack of the larger second derivatives elsewhere absorbs; the
+   // double precision build reproduces the reference exactly.
+   {"218_g3_rels_lig2_l015", "g3", true, true, true, true, "mpole4", nullptr, Tols().lmda2(2.0e-3, 1.0e-4)},
+   {"219_water_rels_ne_lig2_l015", "water2", true, true, true, true, "mpole4"},
+   // The z-only, 3-fold and z-bisector local frames, with and without Ewald.
+   {"220_frames_ast_ye_l05", "frames", true, true, true, true, "frames"},
+   {"221_frames_ast_nobox_l05", "frames", true, true, true, true, "frames"},
+   // Chignolin and its mirror image, whose chiral frames are inverted under lambda.
+   {"222_chig_ast_nobox_l05", "chig", true, true, true, true, "mirror"},
+   {"223_chigm_ast_nobox_l05", "chigm", true, true, true, true, "mirror"},
+   {"224_chig_ast_ye_l05", "chig", true, true, true, true, "mirror"},
+   {"225_chigm_ast_ye_l05", "chigm", true, true, true, true, "mirror"},
+   // Earlier cases with LAMBDA-DERIV alone, so polarization takes the single
+   // topology dE/dL path (test_mutate_polst). 229 is left out with 216.
+   {"226_water_ast_ne_mcut_d1_l05", "water2", true, true, true, true, "polst"},
+   {"227_g3_ast_d1_l05", "g3", true, true, true, true, "polst"},
+   {"228_g3_ast_d1_l00", "g3", true, true, true, true, "polst"},
+   {"230_g3_rels_lig1_d1_l085", "g3", true, true, true, true, "polst"},
+   {"231_g3_rels_lig2_d1_l015", "g3", true, true, true, true, "polst"},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
@@ -220,6 +282,7 @@ std::string systemDir(const std::string& base)
 // Copies the parameter files a base system loads into the working directory.
 // The water fixtures share water03; the SAMPL8 guest 3 carries its own force
 // field, plus the artificial vdw14 values fixture 209 loads as a second file.
+// The frames dimer loads amoeba09, and chignolin and its mirror amoebabio09.
 std::vector<std::unique_ptr<TestFile>> copyParams(const std::string& base)
 {
    std::vector<std::unique_ptr<TestFile>> files;
@@ -227,6 +290,10 @@ std::vector<std::unique_ptr<TestFile>> copyParams(const std::string& base)
       std::string dir = systemDir(base);
       files.emplace_back(new TestFile(dir + "g3.prm"));
       files.emplace_back(new TestFile(dir + "g3_vdw14.prm"));
+   } else if (base == "frames") {
+      files.emplace_back(new TestFile(TINKER9_DIRSTR "/test/file/commit_ebe3611e/amoeba09.prm"));
+   } else if (base == "chig" or base == "chigm") {
+      files.emplace_back(new TestFile(TINKER9_DIRSTR "/test/file/commit_ebe3611e/amoebabio09.prm"));
    } else {
       files.emplace_back(new TestFile(TINKER9_DIRSTR "/test/file/commit_6fe8e913/water03.prm"));
    }
@@ -267,16 +334,15 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
    const char* argv[] = {"dummy", xyzdst.c_str(), "-k", keyname.c_str()};
    int argc = 4;
 
-   const double eps_e = testGetEps(1.0e-3, 1.0e-4);
-   const double eps_g = testGetEps(1.0e-3, 1.0e-4);
-   double eps_v = testGetEps(2.0e-3, 1.0e-3);
-   if (std::string(fx.name).find("_vcorr_") != std::string::npos)
-      eps_v = 1.0e-2;
+   const double eps_e = Tols::pick(fx.tol.e, 1.0e-3, 1.0e-4);
+   const double eps_g = Tols::pick(fx.tol.g, 1.0e-3, 1.0e-4);
+   const double eps_v = Tols::pick(fx.tol.v, 2.0e-3, 1.0e-3);
    // dV/dL is a difference of two endpoint virials of comparable size, so it
    // loses the leading digits the plain virial keeps, and the references print
    // it to three decimals. testlmda.cpp uses the same allowance.
    const double eps_dv = std::max(eps_v, testGetEps(1.0e-2, 2.0e-3));
-   const double eps_l = testGetEps(1.0e-3, 1.0e-4);
+   const double eps_l = Tols::pick(fx.tol.l, 1.0e-3, 1.0e-4);
+   const double eps_l2 = Tols::pick(fx.tol.l2, 1.0e-3, 1.0e-4);
 
    rc_flag = calc::xyz | calc::mass | calc::vmask;
    if (fuse != Fuse::Off)
@@ -347,15 +413,15 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
    };
 
    auto checkLmdaSecondScalars = [&]() {
-      COMPARE_REALS(d2edl2, lr.d2edl2[0], eps_l);
+      COMPARE_REALS(d2edl2, lr.d2edl2[0], eps_l2);
       if (not splitTerms)
          return;
-      COMPARE_REALS(d2evdl2, lr.d2edl2[1], eps_l);
+      COMPARE_REALS(d2evdl2, lr.d2edl2[1], eps_l2);
       if (fuse == Fuse::Require) {
-         COMPARE_REALS(d2emdl2 + d2epdl2, lr.d2edl2[2] + lr.d2edl2[3], eps_l);
+         COMPARE_REALS(d2emdl2 + d2epdl2, lr.d2edl2[2] + lr.d2edl2[3], eps_l2);
       } else {
-         COMPARE_REALS(d2emdl2, lr.d2edl2[2], eps_l);
-         COMPARE_REALS(d2epdl2, lr.d2edl2[3], eps_l);
+         COMPARE_REALS(d2emdl2, lr.d2edl2[2], eps_l2);
+         COMPARE_REALS(d2epdl2, lr.d2edl2[3], eps_l2);
       }
    };
 
@@ -835,6 +901,21 @@ TEST_CASE("MUTATE-211_water_ast_vcorr_annih_l05", "[ff][mutate][hal]") { runFixt
 TEST_CASE("MUTATE-212_water_ast_mono_l05", "[ff][mutate][hal]") { runFixture(fx("212_water_ast_mono_l05")); }
 TEST_CASE("MUTATE-213_water_ast_tric_l05", "[ff][mutate][hal]") { runFixture(fx("213_water_ast_tric_l05")); }
 TEST_CASE("MUTATE-214_water_rels_ye_vdwm_lig2t_l040", "[ff][mutate][hal]") { runFixture(fx("214_water_rels_ye_vdwm_lig2t_l040")); }
+TEST_CASE("MUTATE-215_water_ast_ne_mcut_l05", "[ff][mutate][mpole4]") { runFixture(fx("215_water_ast_ne_mcut_l05")); }
+TEST_CASE("MUTATE-217_g3_rels_lig1_l085", "[ff][mutate][mpole4]") { runFixture(fx("217_g3_rels_lig1_l085")); }
+TEST_CASE("MUTATE-218_g3_rels_lig2_l015", "[ff][mutate][mpole4]") { runFixture(fx("218_g3_rels_lig2_l015")); }
+TEST_CASE("MUTATE-219_water_rels_ne_lig2_l015", "[ff][mutate][mpole4]") { runFixture(fx("219_water_rels_ne_lig2_l015")); }
+TEST_CASE("MUTATE-220_frames_ast_ye_l05", "[ff][mutate][frames]") { runFixture(fx("220_frames_ast_ye_l05")); }
+TEST_CASE("MUTATE-221_frames_ast_nobox_l05", "[ff][mutate][frames]") { runFixture(fx("221_frames_ast_nobox_l05")); }
+TEST_CASE("MUTATE-222_chig_ast_nobox_l05", "[ff][mutate][mirror]") { runFixture(fx("222_chig_ast_nobox_l05")); }
+TEST_CASE("MUTATE-223_chigm_ast_nobox_l05", "[ff][mutate][mirror]") { runFixture(fx("223_chigm_ast_nobox_l05")); }
+TEST_CASE("MUTATE-224_chig_ast_ye_l05", "[ff][mutate][mirror]") { runFixture(fx("224_chig_ast_ye_l05")); }
+TEST_CASE("MUTATE-225_chigm_ast_ye_l05", "[ff][mutate][mirror]") { runFixture(fx("225_chigm_ast_ye_l05")); }
+TEST_CASE("MUTATE-226_water_ast_ne_mcut_d1_l05", "[ff][mutate][polst][astpol][emplar]") { runEmplarAstFixture(fx("226_water_ast_ne_mcut_d1_l05")); }
+TEST_CASE("MUTATE-227_g3_ast_d1_l05", "[ff][mutate][polst][astpol][emplar]") { runEmplarAstFixture(fx("227_g3_ast_d1_l05")); }
+TEST_CASE("MUTATE-228_g3_ast_d1_l00", "[ff][mutate][polst][astpol][emplar]") { runEmplarAstFixture(fx("228_g3_ast_d1_l00")); }
+TEST_CASE("MUTATE-230_g3_rels_lig1_d1_l085", "[ff][mutate][polst][astpol][emplar]") { runEmplarAstFixture(fx("230_g3_rels_lig1_d1_l085")); }
+TEST_CASE("MUTATE-231_g3_rels_lig2_d1_l015", "[ff][mutate][polst][astpol][emplar]") { runEmplarAstFixture(fx("231_g3_rels_lig2_d1_l015")); }
 
 TEST_CASE("MUTATE-TI-076_water_qnt_ast_l05", "[ff][mutate][ti][ast]") { runThermIntgFixture(fx("076_water_qnt_ast_l05")); }
 TEST_CASE("MUTATE-TI-079_water_qnt_adt_l05", "[ff][mutate][ti][adt]") { runThermIntgFixture(fx("079_water_qnt_adt_l05")); }

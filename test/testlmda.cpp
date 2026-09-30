@@ -20,8 +20,8 @@ namespace {
 struct Fixture
 {
    const char* name;
-   double eps;   ///< Finite difference stepsize, in lambda.
-   double ntol;  ///< Scale on the tolerances of the numerical derivatives.
+   double eps = 1.0e-2; ///< Finite difference stepsize, in lambda.
+   double ntol = 1.0;   ///< Scale on the tolerances of the numerical derivatives.
 };
 
 // The default stepsize is 1e-2: smaller steps sharpen the first derivatives but
@@ -35,16 +35,16 @@ struct Fixture
 // truncation throws the first ones off by a few tenths, so they step by 4e-3
 // and triple the numerical tolerances.
 const Fixture kFixtures[] = {
-   {"01_water_adt_l05", 1.0e-2, 1.0},
-   {"02_water_ast_l05", 1.0e-2, 1.0},
-   {"03_water_adt_l06exp", 1.0e-2, 1.0},
-   {"04_water_ast_l06exp", 1.0e-2, 1.0},
-   {"05_water_ast_nodl_l05", 1.0e-2, 1.0},
-   {"06_water_ast_vonly_l05", 1.0e-2, 1.0},
-   {"10_water_ast_vcorr_l05", 1.0e-2, 1.0},
-   {"11_water_ast_vcorr_annih_l05", 1.0e-2, 1.0},
-   {"12_water_ast_vcorr_l06exp", 1.0e-2, 1.0},
-   {"14_water_rels_vdwm_vcorr_annih_l05", 1.0e-2, 1.0},
+   {"01_water_adt_l05"},
+   {"02_water_ast_l05"},
+   {"03_water_adt_l06exp"},
+   {"04_water_ast_l06exp"},
+   {"05_water_ast_nodl_l05"},
+   {"06_water_ast_vonly_l05"},
+   {"10_water_ast_vcorr_l05"},
+   {"11_water_ast_vcorr_annih_l05"},
+   {"12_water_ast_vcorr_l06exp"},
+   {"14_water_rels_vdwm_vcorr_annih_l05"},
    {"17_water_rels_vdwm_vcorr_l050", 2.0e-3, 2.0},
    {"18_water_rels_lig1_l085", 4.0e-3, 3.0},
    {"19_water_rels_lig2_l015", 4.0e-3, 3.0},
