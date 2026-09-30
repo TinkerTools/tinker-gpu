@@ -37,7 +37,6 @@ nblist.cpp
 nh.cpp
 nn.cpp
 opbend.cpp
-osrw.cpp
 partialcharge.cpp
 pitors.cpp
 polpair.cpp

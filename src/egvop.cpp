@@ -73,17 +73,6 @@ void sumVirialBuffer(size_t size, VirialBuffer dst, const VirialBuffer src)
 }
 
 namespace tinker {
-TINKER_FVOID2(acc1, cu0, scaleGradient, double, grad_prec*, grad_prec*, grad_prec*);
-void scaleGradient(double scale, grad_prec* g0x, grad_prec* g0y, grad_prec* g0z)
-{
-   if (scale == 1)
-      return;
-   else if (scale == 0) {
-      darray::zero(g::q0, n, g0x, g0y, g0z);
-   } else
-      TINKER_FCALL2(acc1, cu0, scaleGradient, scale, g0x, g0y, g0z);
-}
-
 TINKER_FVOID2(acc1, cu1, sumGradientV1, grad_prec*, grad_prec*, grad_prec*, const grad_prec*, const grad_prec*,
    const grad_prec*);
 void sumGradient(grad_prec* g0x, grad_prec* g0y, grad_prec* g0z, const grad_prec* g1x, const grad_prec* g1y,

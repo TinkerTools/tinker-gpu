@@ -30,20 +30,15 @@
 
 namespace tinker {
 // The net charge of the partial charges, for the Ewald uniform background
-// charge correction, split into the unmutated and the mutated atoms, as pchg is
-// copied in.
-static double pchg_net[2];
+// charge correction, as pchg is copied in.
+static double pchg_net;
 
 // The net multipole charge of each lambda group, for the same correction. When
 // the multipoles are rescaled from poleorig, these are the unscaled group sums
-// and the scale is applied per evaluation; otherwise they are the unmutated and
-// mutated sums of pole as it is copied in, already scaled.
+// and the scale is applied per evaluation; otherwise pole_net[0] is the sum of
+// pole as it is copied in, already scaled.
 static double pole_net[3];
 static bool pole_net_orig;
-
-// What the mutated charges carry relative to their copied-in values, once OSRW
-// has rewritten them in place (osrw_altele).
-static double net_mut_scale;
 
 static void pchgData(RcOp op)
 {
@@ -66,9 +61,9 @@ static void pchgData(RcOp op)
          pchgbuf[i] = kchrge::chg[itype] * esc.s[mutant::mutg[i]];
       }
       // In double precision, so that a neutral cell sums to zero.
-      pchg_net[0] = pchg_net[1] = 0;
+      pchg_net = 0;
       for (int i = 0; i < n; ++i)
-         pchg_net[mutant::mutg[i] != 0 ? 1 : 0] += kchrge::chg[atoms::type[i] - 1] * esc.s[mutant::mutg[i]];
+         pchg_net += kchrge::chg[atoms::type[i] - 1] * esc.s[mutant::mutg[i]];
       darray::copyin(g::q0, n, pchg, pchgbuf.data());
       waitFor(g::q0);
    }
@@ -185,17 +180,18 @@ static void mpoleData(RcOp op)
       waitFor(g::q0);
       mpoleStateReset();
 
-      // Group the charges the way emGroup() does: the ternary relative labels
-      // when relative, the 0/1 mutation flags otherwise.
+      // From poleorig, group the charges the way emGroup() does: the ternary
+      // relative labels when relative, the 0/1 mutation flags otherwise.
       pole_net_orig = usePoleorig();
       pole_net[0] = pole_net[1] = pole_net[2] = 0;
       for (int i = 0; i < n; ++i) {
          int b2 = mpole::maxpole * i;
-         int g = use_rel ? mutant::mutg[i] : (mutant::mutg[i] != 0 ? 1 : 0);
-         if (pole_net_orig)
+         if (pole_net_orig) {
+            int g = use_rel ? mutant::mutg[i] : (mutant::mutg[i] != 0 ? 1 : 0);
             pole_net[g] += dlmda::poleorig[b2];
-         else
-            pole_net[g != 0 ? 1 : 0] += mpole::pole[b2];
+         } else {
+            pole_net[0] += mpole::pole[b2];
+         }
       }
 
       if (usePoleorig()) {
@@ -885,7 +881,6 @@ void elecData(RcOp op)
       dielec = chgpot::dielec;
       elam = mutant::elambda;
       plam = mutant::plambda;
-      net_mut_scale = 1;
    }
    RcMan pchg42{pchgData, op};
    RcMan pole42{mpoleData, op};
@@ -926,14 +921,9 @@ static void ewaldBackground(int vers, int dlvers, double q, double dq, double de
       do_dl2 ? dl2b : nullptr, do_v ? vb : nullptr, do_dv ? dvb : nullptr, count, e, dl1, dl2);
 }
 
-void ewaldBackgroundScale(double el)
-{
-   net_mut_scale = el;
-}
-
 void empoleEwaldBackground(int vers, int dlvers)
 {
-   double q = pole_net[0] + net_mut_scale * pole_net[1], dq = 0;
+   double q = pole_net[0], dq = 0;
    if (pole_net_orig) {
       const GrpScale esc = grpScale(elam);
       q = 0;
@@ -948,7 +938,7 @@ void empoleEwaldBackground(int vers, int dlvers)
 
 void echargeEwaldBackground(int vers)
 {
-   double q = pchg_net[0] + net_mut_scale * pchg_net[1];
+   double q = pchg_net;
    ewaldBackground(vers, 0, q, 0, 0, 0, epme_unit->aewald, nec, ec, nullptr, nullptr, nullptr, nullptr);
 }
 

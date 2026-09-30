@@ -60,7 +60,6 @@ mathtrimatexp.cpp
 md/barostat.cpp
 md/integrator.cpp
 md/lflpiston.cpp
-md/osrw.cpp
 md/propagator.cpp
 md/stochastic.cpp
 md/thermostat.cpp

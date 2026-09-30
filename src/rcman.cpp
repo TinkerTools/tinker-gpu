@@ -41,7 +41,6 @@ void finish()
 #include "ff/molecule.h"
 #include "ff/nblist.h"
 #include "md/misc.h"
-#include "md/osrw.h"
 #include "md/pq.h"
 #include "md/rattle.h"
 #include "nn/nn.h"
@@ -70,7 +69,6 @@ void deviceData(RcOp op)
 
    RcMan energy42{energyData, op};
    RcMan wiggle42{induceWiggleData, op};
-   RcMan osrw42{osrwData, op};
 
    // Neighbor lists must be initialized after potential initialization.
    // xred, yred, and zred need to be initialized in vdw (Halgren 14-7)

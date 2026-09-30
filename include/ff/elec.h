@@ -85,9 +85,6 @@ void empoleEwaldBackground(int vers,  ///< Energy version.
 );
 /// \copydoc empoleEwaldBackground
 void echargeEwaldBackground(int vers);
-/// Records that the charges of the mutated atoms now carry \c el times their
-/// copied-in values, as OSRW leaves them, for the Ewald background correction.
-void ewaldBackgroundScale(double el);
 
 //====================================================================//
 //                                                                    //

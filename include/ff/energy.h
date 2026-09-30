@@ -10,14 +10,6 @@ namespace tinker {
 /// \addtogroup egv
 /// \{
 
-/// Evaluates potential energy.
-/// \param vers      Flag to select the version of energy routines.
-/// \param tsflag    Time scale flag, a 32-bit encrypted integer.
-/// \param tsconfig  Constant reference to a TimeScaleConfig object.
-///
-/// \see TimeScaleConfig
-void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig);
-
 /// First, energy buffers, virial buffers, gradient arrays, and count buffers are set to 0.
 /// Then, evaluate energies, gradients, virials, and count interactions.
 /// Last, update the global energy and virial tensor variables.

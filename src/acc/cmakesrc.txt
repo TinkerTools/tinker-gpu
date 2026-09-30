@@ -52,7 +52,6 @@ mdpq.cpp
 mdpt.cpp
 minimize.cpp
 nblist.cpp
-osrw.cpp
 pme.cpp
 rattle.cpp
 stochastic.cpp

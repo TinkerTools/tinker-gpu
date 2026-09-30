@@ -46,7 +46,6 @@ modifiers, and usage examples.
 
    constraints-restraints
    external-electric-field
-   free-energy
    hippo-force-field
    mathematical-algorithms
    molecular-dynamics-ensembles

@@ -16,9 +16,6 @@ void sumEnergyBuffer(size_t size, EnergyBuffer dst, const EnergyBufferTraits::ty
 /// `dst += src` for `size` flattened virial-buffer elements.
 void sumVirialBuffer(size_t size, VirialBuffer dst, const VirialBuffer src);
 
-/// `g0 *= scale`.
-void scaleGradient(double scale, grad_prec* g0x, grad_prec* g0y, grad_prec* g0z);
-
 /// `g0 += g1`.
 void sumGradient(grad_prec* g0x,
                  grad_prec* g0y,

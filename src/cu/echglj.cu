@@ -4,7 +4,6 @@
 #include "ff/potent.h"
 #include "ff/spatial.h"
 #include "ff/switch.h"
-#include "md/osrw.h"
 #include "seq/add.h"
 #include "seq/launch.h"
 #include "seq/pair_charge.h"
@@ -72,7 +71,7 @@ void echgljData_cu(RcOp op)
 }
 
 namespace tinker {
-template <class Ver, class IMG, class ETYP, class RADRULE, class EPSRULE, bool SOFTCORE, bool VOUT>
+template <class Ver, class IMG, class ETYP, class RADRULE, class EPSRULE, bool SOFTCORE>
 __global__
 void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_prec* restrict gx, grad_prec* restrict gy,
    grad_prec* restrict gz, TINKER_IMAGE_PARAMS, //
@@ -86,9 +85,7 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
    real eccut, real ecoff, real f, real aewald, const real* restrict chg,
    const unsigned int* restrict cvinfo, //
    real evcut, real evoff, const real2* restrict radeps, const int* restrict mut, real vlam,
-   Vdw vcouple, //
-   EnergyBuffer restrict ev, VirialBuffer restrict vev, grad_prec* restrict devx, grad_prec* restrict devy,
-   grad_prec* restrict devz)
+   Vdw vcouple)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_g = Ver::g;
@@ -113,25 +110,11 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
       vctlzy = 0;
       vctlzz = 0;
    }
-   ebuf_prec evtl;
-   if CONSTEXPR (do_e and VOUT) {
-      evtl = 0;
-   }
-   vbuf_prec vvtlxx, vvtlyx, vvtlzx, vvtlyy, vvtlzy, vvtlzz;
-   if CONSTEXPR (do_v and VOUT) {
-      vvtlxx = 0;
-      vvtlyx = 0;
-      vvtlzx = 0;
-      vvtlyy = 0;
-      vvtlzy = 0;
-      vvtlzz = 0;
-   }
 
    int imut, kmut;
    real xi, yi, zi, chgi, radi, epsi;
    real xk, yk, zk, chgk, radk, epsk;
    real fix, fiy, fiz, fkx, fky, fkz;
-   real ivfx, ivfy, ivfz, kvfx, kvfy, kvfz;
 
    //* /
    for (int ii = ithread; ii < nexclude; ii += blockDim.x * gridDim.x) {
@@ -174,13 +157,10 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
          vlambda = pair_vlambda(vlam, vcouple, imut, kmut);
       pair_lj_v2<do_g, SOFTCORE, RADRULE, EPSRULE, 0>( //
          r, invr, vlambda, vscale, radi, epsi, radk, epsk, evcut, evoff, evik, devik);
-      if CONSTEXPR (do_e and not VOUT) {
+      if CONSTEXPR (do_e) {
          ectl += floatTo<ebuf_prec>(ecik + evik);
-      } else if CONSTEXPR (do_e and VOUT) {
-         ectl += floatTo<ebuf_prec>(ecik);
-         evtl += floatTo<ebuf_prec>(evik);
       }
-      if CONSTEXPR (do_g and not VOUT) {
+      if CONSTEXPR (do_g) {
          real dedx, dedy, dedz;
          decik += devik;
          decik *= invr;
@@ -201,44 +181,6 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
             vctlzy += floatTo<vbuf_prec>(zr * dedy);
             vctlzz += floatTo<vbuf_prec>(zr * dedz);
          }
-      } else if CONSTEXPR (do_g and VOUT) {
-         real dedx, dedy, dedz;
-         decik *= invr;
-         dedx = decik * xr;
-         dedy = decik * yr;
-         dedz = decik * zr;
-         atomic_add(dedx, gx, i);
-         atomic_add(dedy, gy, i);
-         atomic_add(dedz, gz, i);
-         atomic_add(-dedx, gx, k);
-         atomic_add(-dedy, gy, k);
-         atomic_add(-dedz, gz, k);
-         if CONSTEXPR (do_v) {
-            vctlxx += floatTo<vbuf_prec>(xr * dedx);
-            vctlyx += floatTo<vbuf_prec>(yr * dedx);
-            vctlzx += floatTo<vbuf_prec>(zr * dedx);
-            vctlyy += floatTo<vbuf_prec>(yr * dedy);
-            vctlzy += floatTo<vbuf_prec>(zr * dedy);
-            vctlzz += floatTo<vbuf_prec>(zr * dedz);
-         }
-         devik *= invr;
-         dedx = devik * xr;
-         dedy = devik * yr;
-         dedz = devik * zr;
-         atomic_add(dedx, devx, i);
-         atomic_add(dedy, devy, i);
-         atomic_add(dedz, devz, i);
-         atomic_add(-dedx, devx, k);
-         atomic_add(-dedy, devy, k);
-         atomic_add(-dedz, devz, k);
-         if CONSTEXPR (do_v) {
-            vvtlxx += floatTo<vbuf_prec>(xr * dedx);
-            vvtlyx += floatTo<vbuf_prec>(yr * dedx);
-            vvtlzx += floatTo<vbuf_prec>(zr * dedx);
-            vvtlyy += floatTo<vbuf_prec>(yr * dedy);
-            vvtlzy += floatTo<vbuf_prec>(zr * dedy);
-            vvtlzz += floatTo<vbuf_prec>(zr * dedz);
-         }
       }
    }
    // */
@@ -251,14 +193,6 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
          fkx = 0;
          fky = 0;
          fkz = 0;
-      }
-      if CONSTEXPR (do_g and VOUT) {
-         ivfx = 0;
-         ivfy = 0;
-         ivfz = 0;
-         kvfx = 0;
-         kvfy = 0;
-         kvfz = 0;
       }
 
       int tri, tx, ty;
@@ -333,13 +267,10 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
                vlambda = pair_vlambda(vlam, vcouple, imut, kmut);
             pair_lj_v2<do_g, SOFTCORE, RADRULE, EPSRULE, 1>( //
                r, invr, vlambda, 1, radi, epsi, radk, epsk, evcut, evoff, evik, devik);
-            if CONSTEXPR (do_e and not VOUT) {
+            if CONSTEXPR (do_e) {
                ectl += incl ? floatTo<ebuf_prec>(ecik + evik) : 0;
-            } else if CONSTEXPR (do_e and VOUT) {
-               ectl += incl ? floatTo<ebuf_prec>(ecik) : 0;
-               evtl += incl ? floatTo<ebuf_prec>(evik) : 0;
             }
-            if CONSTEXPR (do_g and not VOUT) {
+            if CONSTEXPR (do_g) {
                real dedx, dedy, dedz;
                decik = incl ? (decik + devik) * invr : 0;
                dedx = decik * xr;
@@ -359,44 +290,6 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
                fkx -= dedx;
                fky -= dedy;
                fkz -= dedz;
-            } else if CONSTEXPR (do_g and VOUT) {
-               real dedx, dedy, dedz;
-               decik = incl ? decik * invr : 0;
-               dedx = decik * xr;
-               dedy = decik * yr;
-               dedz = decik * zr;
-               // if CONSTEXPR (do_v) {
-               //    vctlxx += floatTo<vbuf_prec>(xr * dedx);
-               //    vctlyx += floatTo<vbuf_prec>(yr * dedx);
-               //    vctlzx += floatTo<vbuf_prec>(zr * dedx);
-               //    vctlyy += floatTo<vbuf_prec>(yr * dedy);
-               //    vctlzy += floatTo<vbuf_prec>(zr * dedy);
-               //    vctlzz += floatTo<vbuf_prec>(zr * dedz);
-               // }
-               fix += dedx;
-               fiy += dedy;
-               fiz += dedz;
-               fkx -= dedx;
-               fky -= dedy;
-               fkz -= dedz;
-               devik = incl ? devik * invr : 0;
-               dedx = decik * xr;
-               dedy = decik * yr;
-               dedz = decik * zr;
-               // if CONSTEXPR (do_v) {
-               //    vvtlyx += floatTo<vbuf_prec>(yr * dedx);
-               //    vvtlxx += floatTo<vbuf_prec>(xr * dedx);
-               //    vvtlzx += floatTo<vbuf_prec>(zr * dedx);
-               //    vvtlyy += floatTo<vbuf_prec>(yr * dedy);
-               //    vvtlzy += floatTo<vbuf_prec>(zr * dedy);
-               //    vvtlzz += floatTo<vbuf_prec>(zr * dedz);
-               // }
-               ivfx += dedx;
-               ivfy += dedy;
-               ivfz += dedz;
-               kvfx -= dedx;
-               kvfy -= dedy;
-               kvfz -= dedz;
             }
 
             iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
@@ -411,11 +304,6 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
             fix = __shfl_sync(ALL_LANES, fix, ilane + 1);
             fiy = __shfl_sync(ALL_LANES, fiy, ilane + 1);
             fiz = __shfl_sync(ALL_LANES, fiz, ilane + 1);
-            if CONSTEXPR (VOUT) {
-               ivfx = __shfl_sync(ALL_LANES, ivfx, ilane + 1);
-               ivfy = __shfl_sync(ALL_LANES, ivfy, ilane + 1);
-               ivfz = __shfl_sync(ALL_LANES, ivfz, ilane + 1);
-            }
          }
 
          if CONSTEXPR (do_v) {
@@ -425,14 +313,6 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
             vctlyy += floatTo<vbuf_prec>(yi * fiy + yk * fky);
             vctlzy += floatTo<vbuf_prec>(zi * fiy + zk * fky);
             vctlzz += floatTo<vbuf_prec>(zi * fiz + zk * fkz);
-            if CONSTEXPR (VOUT) {
-               vvtlyx += floatTo<vbuf_prec>(yi * ivfx + yk * kvfy);
-               vvtlxx += floatTo<vbuf_prec>(xi * ivfx + xk * kvfx);
-               vvtlzx += floatTo<vbuf_prec>(zi * ivfx + zk * kvfz);
-               vvtlyy += floatTo<vbuf_prec>(yi * ivfy + yk * kvfy);
-               vvtlzy += floatTo<vbuf_prec>(zi * ivfy + zk * kvfz);
-               vvtlzz += floatTo<vbuf_prec>(zi * ivfz + zk * kvfz);
-            }
          }
       } else {
          for (int j = 0; j < WARP_SIZE; ++j) {
@@ -455,13 +335,10 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
                vlambda = pair_vlambda(vlam, vcouple, imut, kmut);
             pair_lj_v2<do_g, SOFTCORE, RADRULE, EPSRULE, 1>( //
                r, invr, vlambda, 1, radi, epsi, radk, epsk, evcut, evoff, evik, devik);
-            if CONSTEXPR (do_e and not VOUT) {
+            if CONSTEXPR (do_e) {
                ectl += incl ? floatTo<ebuf_prec>(ecik + evik) : 0;
-            } else if CONSTEXPR (do_e and VOUT) {
-               ectl += incl ? floatTo<ebuf_prec>(ecik) : 0;
-               evtl += incl ? floatTo<ebuf_prec>(evik) : 0;
             }
-            if CONSTEXPR (do_g and not VOUT) {
+            if CONSTEXPR (do_g) {
                real dedx, dedy, dedz;
                decik = incl ? (decik + devik) * invr : 0;
                dedx = decik * xr;
@@ -481,44 +358,6 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
                fkx -= dedx;
                fky -= dedy;
                fkz -= dedz;
-            } else if CONSTEXPR (do_g and VOUT) {
-               real dedx, dedy, dedz;
-               decik = incl ? decik * invr : 0;
-               dedx = decik * xr;
-               dedy = decik * yr;
-               dedz = decik * zr;
-               if CONSTEXPR (do_v) {
-                  vctlxx += floatTo<vbuf_prec>(xr * dedx);
-                  vctlyx += floatTo<vbuf_prec>(yr * dedx);
-                  vctlzx += floatTo<vbuf_prec>(zr * dedx);
-                  vctlyy += floatTo<vbuf_prec>(yr * dedy);
-                  vctlzy += floatTo<vbuf_prec>(zr * dedy);
-                  vctlzz += floatTo<vbuf_prec>(zr * dedz);
-               }
-               fix += dedx;
-               fiy += dedy;
-               fiz += dedz;
-               fkx -= dedx;
-               fky -= dedy;
-               fkz -= dedz;
-               devik = incl ? devik * invr : 0;
-               dedx = decik * xr;
-               dedy = decik * yr;
-               dedz = decik * zr;
-               if CONSTEXPR (do_v) {
-                  vvtlyx += floatTo<vbuf_prec>(yr * dedx);
-                  vvtlxx += floatTo<vbuf_prec>(xr * dedx);
-                  vvtlzx += floatTo<vbuf_prec>(zr * dedx);
-                  vvtlyy += floatTo<vbuf_prec>(yr * dedy);
-                  vvtlzy += floatTo<vbuf_prec>(zr * dedy);
-                  vvtlzz += floatTo<vbuf_prec>(zr * dedz);
-               }
-               ivfx += dedx;
-               ivfy += dedy;
-               ivfz += dedz;
-               kvfx -= dedx;
-               kvfy -= dedy;
-               kvfz -= dedz;
             }
 
             iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
@@ -533,11 +372,6 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
             fix = __shfl_sync(ALL_LANES, fix, ilane + 1);
             fiy = __shfl_sync(ALL_LANES, fiy, ilane + 1);
             fiz = __shfl_sync(ALL_LANES, fiz, ilane + 1);
-            if CONSTEXPR (VOUT) {
-               ivfx = __shfl_sync(ALL_LANES, ivfx, ilane + 1);
-               ivfy = __shfl_sync(ALL_LANES, ivfy, ilane + 1);
-               ivfz = __shfl_sync(ALL_LANES, ivfz, ilane + 1);
-            }
          }
       } // end if ilocal
 
@@ -549,14 +383,6 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
          atomic_add(fky, gy, k);
          atomic_add(fkz, gz, k);
       }
-      if CONSTEXPR (do_g and VOUT) {
-         atomic_add(ivfx, devx, i);
-         atomic_add(ivfy, devy, i);
-         atomic_add(ivfz, devz, i);
-         atomic_add(kvfx, devx, k);
-         atomic_add(kvfy, devy, k);
-         atomic_add(kvfz, devz, k);
-      }
    }
 
    for (int iw = iwarp; iw < niak; iw += nwarp) {
@@ -567,14 +393,6 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
          fkx = 0;
          fky = 0;
          fkz = 0;
-      }
-      if CONSTEXPR (do_g and VOUT) {
-         ivfx = 0;
-         ivfy = 0;
-         ivfz = 0;
-         kvfx = 0;
-         kvfy = 0;
-         kvfz = 0;
       }
 
       int ty = iak[iw];
@@ -640,13 +458,10 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
                vlambda = pair_vlambda(vlam, vcouple, imut, kmut);
             pair_lj_v2<do_g, SOFTCORE, RADRULE, EPSRULE, 1>( //
                r, invr, vlambda, 1, radi, epsi, radk, epsk, evcut, evoff, evik, devik);
-            if CONSTEXPR (do_e and not VOUT) {
+            if CONSTEXPR (do_e) {
                ectl += incl ? floatTo<ebuf_prec>(ecik + evik) : 0;
-            } else if CONSTEXPR (do_e and VOUT) {
-               ectl += incl ? floatTo<ebuf_prec>(ecik) : 0;
-               evtl += incl ? floatTo<ebuf_prec>(evik) : 0;
             }
-            if CONSTEXPR (do_g and not VOUT) {
+            if CONSTEXPR (do_g) {
                real dedx, dedy, dedz;
                decik = incl ? (decik + devik) * invr : 0;
                dedx = decik * xr;
@@ -666,44 +481,6 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
                fkx -= dedx;
                fky -= dedy;
                fkz -= dedz;
-            } else if CONSTEXPR (do_g and VOUT) {
-               real dedx, dedy, dedz;
-               decik = incl ? decik * invr : 0;
-               dedx = decik * xr;
-               dedy = decik * yr;
-               dedz = decik * zr;
-               // if CONSTEXPR (do_v) {
-               //    vctlxx += floatTo<vbuf_prec>(xr * dedx);
-               //    vctlyx += floatTo<vbuf_prec>(yr * dedx);
-               //    vctlzx += floatTo<vbuf_prec>(zr * dedx);
-               //    vctlyy += floatTo<vbuf_prec>(yr * dedy);
-               //    vctlzy += floatTo<vbuf_prec>(zr * dedy);
-               //    vctlzz += floatTo<vbuf_prec>(zr * dedz);
-               // }
-               fix += dedx;
-               fiy += dedy;
-               fiz += dedz;
-               fkx -= dedx;
-               fky -= dedy;
-               fkz -= dedz;
-               devik = incl ? devik * invr : 0;
-               dedx = decik * xr;
-               dedy = decik * yr;
-               dedz = decik * zr;
-               // if CONSTEXPR (do_v) {
-               //    vvtlyx += floatTo<vbuf_prec>(yr * dedx);
-               //    vvtlxx += floatTo<vbuf_prec>(xr * dedx);
-               //    vvtlzx += floatTo<vbuf_prec>(zr * dedx);
-               //    vvtlyy += floatTo<vbuf_prec>(yr * dedy);
-               //    vvtlzy += floatTo<vbuf_prec>(zr * dedy);
-               //    vvtlzz += floatTo<vbuf_prec>(zr * dedz);
-               // }
-               ivfx += dedx;
-               ivfy += dedy;
-               ivfz += dedz;
-               kvfx -= dedx;
-               kvfy -= dedy;
-               kvfz -= dedz;
             }
 
             chgi = __shfl_sync(ALL_LANES, chgi, ilane + 1);
@@ -717,11 +494,6 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
             fix = __shfl_sync(ALL_LANES, fix, ilane + 1);
             fiy = __shfl_sync(ALL_LANES, fiy, ilane + 1);
             fiz = __shfl_sync(ALL_LANES, fiz, ilane + 1);
-            if CONSTEXPR (VOUT) {
-               ivfx = __shfl_sync(ALL_LANES, ivfx, ilane + 1);
-               ivfy = __shfl_sync(ALL_LANES, ivfy, ilane + 1);
-               ivfz = __shfl_sync(ALL_LANES, ivfz, ilane + 1);
-            }
          }
 
          if CONSTEXPR (do_v) {
@@ -731,14 +503,6 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
             vctlyy += floatTo<vbuf_prec>(yi * fiy + yk * fky);
             vctlzy += floatTo<vbuf_prec>(zi * fiy + zk * fky);
             vctlzz += floatTo<vbuf_prec>(zi * fiz + zk * fkz);
-            if CONSTEXPR (VOUT) {
-               vvtlyx += floatTo<vbuf_prec>(yi * ivfx + yk * kvfy);
-               vvtlxx += floatTo<vbuf_prec>(xi * ivfx + xk * kvfx);
-               vvtlzx += floatTo<vbuf_prec>(zi * ivfx + zk * kvfz);
-               vvtlyy += floatTo<vbuf_prec>(yi * ivfy + yk * kvfy);
-               vvtlzy += floatTo<vbuf_prec>(zi * ivfy + zk * kvfz);
-               vvtlzz += floatTo<vbuf_prec>(zi * ivfz + zk * kvfz);
-            }
          }
       } else {
          for (int j = 0; j < WARP_SIZE; ++j) {
@@ -758,13 +522,10 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
                vlambda = pair_vlambda(vlam, vcouple, imut, kmut);
             pair_lj_v2<do_g, SOFTCORE, RADRULE, EPSRULE, 1>( //
                r, invr, vlambda, 1, radi, epsi, radk, epsk, evcut, evoff, evik, devik);
-            if CONSTEXPR (do_e and not VOUT) {
+            if CONSTEXPR (do_e) {
                ectl += incl ? floatTo<ebuf_prec>(ecik + evik) : 0;
-            } else if CONSTEXPR (do_e and VOUT) {
-               ectl += incl ? floatTo<ebuf_prec>(ecik) : 0;
-               evtl += incl ? floatTo<ebuf_prec>(evik) : 0;
             }
-            if CONSTEXPR (do_g and not VOUT) {
+            if CONSTEXPR (do_g) {
                real dedx, dedy, dedz;
                decik = incl ? (decik + devik) * invr : 0;
                dedx = decik * xr;
@@ -784,44 +545,6 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
                fkx -= dedx;
                fky -= dedy;
                fkz -= dedz;
-            } else if CONSTEXPR (do_g and VOUT) {
-               real dedx, dedy, dedz;
-               decik = incl ? decik * invr : 0;
-               dedx = decik * xr;
-               dedy = decik * yr;
-               dedz = decik * zr;
-               if CONSTEXPR (do_v) {
-                  vctlxx += floatTo<vbuf_prec>(xr * dedx);
-                  vctlyx += floatTo<vbuf_prec>(yr * dedx);
-                  vctlzx += floatTo<vbuf_prec>(zr * dedx);
-                  vctlyy += floatTo<vbuf_prec>(yr * dedy);
-                  vctlzy += floatTo<vbuf_prec>(zr * dedy);
-                  vctlzz += floatTo<vbuf_prec>(zr * dedz);
-               }
-               fix += dedx;
-               fiy += dedy;
-               fiz += dedz;
-               fkx -= dedx;
-               fky -= dedy;
-               fkz -= dedz;
-               devik = incl ? devik * invr : 0;
-               dedx = decik * xr;
-               dedy = decik * yr;
-               dedz = decik * zr;
-               if CONSTEXPR (do_v) {
-                  vvtlyx += floatTo<vbuf_prec>(yr * dedx);
-                  vvtlxx += floatTo<vbuf_prec>(xr * dedx);
-                  vvtlzx += floatTo<vbuf_prec>(zr * dedx);
-                  vvtlyy += floatTo<vbuf_prec>(yr * dedy);
-                  vvtlzy += floatTo<vbuf_prec>(zr * dedy);
-                  vvtlzz += floatTo<vbuf_prec>(zr * dedz);
-               }
-               ivfx += dedx;
-               ivfy += dedy;
-               ivfz += dedz;
-               kvfx -= dedx;
-               kvfy -= dedy;
-               kvfz -= dedz;
             }
 
             chgi = __shfl_sync(ALL_LANES, chgi, ilane + 1);
@@ -835,11 +558,6 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
             fix = __shfl_sync(ALL_LANES, fix, ilane + 1);
             fiy = __shfl_sync(ALL_LANES, fiy, ilane + 1);
             fiz = __shfl_sync(ALL_LANES, fiz, ilane + 1);
-            if CONSTEXPR (VOUT) {
-               ivfx = __shfl_sync(ALL_LANES, ivfx, ilane + 1);
-               ivfy = __shfl_sync(ALL_LANES, ivfy, ilane + 1);
-               ivfz = __shfl_sync(ALL_LANES, ivfz, ilane + 1);
-            }
          }
       } // end if ilocal
 
@@ -851,14 +569,6 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
          atomic_add(fky, gy, k);
          atomic_add(fkz, gz, k);
       }
-      if CONSTEXPR (do_g and VOUT) {
-         atomic_add(ivfx, devx, i);
-         atomic_add(ivfy, devy, i);
-         atomic_add(ivfz, devz, i);
-         atomic_add(kvfx, devx, k);
-         atomic_add(kvfy, devy, k);
-         atomic_add(kvfz, devz, k);
-      }
    }
 
    if CONSTEXPR (do_e) {
@@ -866,12 +576,6 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
    }
    if CONSTEXPR (do_v) {
       atomic_add(vctlxx, vctlyx, vctlzx, vctlyy, vctlzy, vctlzz, vbuf, ithread);
-   }
-   if CONSTEXPR (do_e and VOUT) {
-      atomic_add(evtl, ev, ithread);
-   }
-   if CONSTEXPR (do_v and VOUT) {
-      atomic_add(vvtlxx, vvtlyx, vvtlzx, vvtlyy, vvtlzy, vvtlzz, vev, ithread);
    }
 }
 
@@ -897,7 +601,7 @@ void echgljCoalesce(int n, int use_mutate, int* restrict smut, real* restrict sc
    }
 }
 
-template <class Ver, class ETYP, class RADRULE, class EPSRULE, bool SOFTCORE, bool VOUT>
+template <class Ver, class ETYP, class RADRULE, class EPSRULE, bool SOFTCORE>
 static void echglj_cu3()
 {
    auto& st = *cspatial_v2_unit;
@@ -933,23 +637,23 @@ static void echglj_cu3()
 #define ECHGLJ_CU3_V2_ARGS                                                                                          \
    ec, vir_ec, decx, decy, decz, TINKER_IMAGE_ARGS, st.n, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst,   \
       st.bnum, st.akc, ncvexclude, cvexclude, cvexclude_scale, eccut, ecoff, f, aewald, chg_coalesced, st.si3.bit0, \
-      evcut, evoff, (const real2*)radeps_coalesced, mut_coalesced, vlam, vcouple, ev, vir_ev, devx, devy, devz
+      evcut, evoff, (const real2*)radeps_coalesced, mut_coalesced, vlam, vcouple
 
    int ngrid = gpuGridSize(BLOCK_DIM);
    if (box_shape == BoxShape::ORTHO) {
-      auto ker1 = echglj_cu5<Ver, PbcOrtho, ETYP, RADRULE, EPSRULE, SOFTCORE, VOUT>;
+      auto ker1 = echglj_cu5<Ver, PbcOrtho, ETYP, RADRULE, EPSRULE, SOFTCORE>;
       ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(ECHGLJ_CU3_V2_ARGS);
    } else if (box_shape == BoxShape::MONO) {
-      auto ker1 = echglj_cu5<Ver, PbcMono, ETYP, RADRULE, EPSRULE, SOFTCORE, VOUT>;
+      auto ker1 = echglj_cu5<Ver, PbcMono, ETYP, RADRULE, EPSRULE, SOFTCORE>;
       ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(ECHGLJ_CU3_V2_ARGS);
    } else if (box_shape == BoxShape::TRI) {
-      auto ker1 = echglj_cu5<Ver, PbcTri, ETYP, RADRULE, EPSRULE, SOFTCORE, VOUT>;
+      auto ker1 = echglj_cu5<Ver, PbcTri, ETYP, RADRULE, EPSRULE, SOFTCORE>;
       ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(ECHGLJ_CU3_V2_ARGS);
    } else if (box_shape == BoxShape::OCT) {
-      auto ker1 = echglj_cu5<Ver, PbcOct, ETYP, RADRULE, EPSRULE, SOFTCORE, VOUT>;
+      auto ker1 = echglj_cu5<Ver, PbcOct, ETYP, RADRULE, EPSRULE, SOFTCORE>;
       ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(ECHGLJ_CU3_V2_ARGS);
    } else if (box_shape == BoxShape::UNBOUND) {
-      auto ker1 = echglj_cu5<Ver, PbcUnbound, ETYP, RADRULE, EPSRULE, SOFTCORE, VOUT>;
+      auto ker1 = echglj_cu5<Ver, PbcUnbound, ETYP, RADRULE, EPSRULE, SOFTCORE>;
       ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(ECHGLJ_CU3_V2_ARGS);
    } else {
       assert(false);
@@ -959,51 +663,34 @@ static void echglj_cu3()
 
 void echgljRadArithEpsGeomNonEwald_cu(int vers)
 {
-   if (use_osrw) {
-      constexpr bool VOUT = true;
+   if (use(Potent::MUTATE)) {
+      constexpr bool SOFTCORE = true;
       if (vers == calc::v0)
-         echglj_cu3<calc::V0, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, true, VOUT>();
+         echglj_cu3<calc::V0, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
       else if (vers == calc::v1)
-         echglj_cu3<calc::V1, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, true, VOUT>();
+         echglj_cu3<calc::V1, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
       else if (vers == calc::v3)
-         echglj_cu3<calc::V3, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, true, VOUT>();
+         echglj_cu3<calc::V3, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
       else if (vers == calc::v4)
-         echglj_cu3<calc::V4, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, true, VOUT>();
+         echglj_cu3<calc::V4, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
       else if (vers == calc::v5)
-         echglj_cu3<calc::V5, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, true, VOUT>();
+         echglj_cu3<calc::V5, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
       else if (vers == calc::v6)
-         echglj_cu3<calc::V6, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, true, VOUT>();
+         echglj_cu3<calc::V6, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
    } else {
-      constexpr bool VOUT = false;
-      if (use(Potent::MUTATE)) {
-         constexpr bool SOFTCORE = true;
-         if (vers == calc::v0)
-            echglj_cu3<calc::V0, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-         else if (vers == calc::v1)
-            echglj_cu3<calc::V1, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-         else if (vers == calc::v3)
-            echglj_cu3<calc::V3, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-         else if (vers == calc::v4)
-            echglj_cu3<calc::V4, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-         else if (vers == calc::v5)
-            echglj_cu3<calc::V5, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-         else if (vers == calc::v6)
-            echglj_cu3<calc::V6, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-      } else {
-         constexpr bool SOFTCORE = false;
-         if (vers == calc::v0)
-            echglj_cu3<calc::V0, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-         else if (vers == calc::v1)
-            echglj_cu3<calc::V1, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-         else if (vers == calc::v3)
-            echglj_cu3<calc::V3, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-         else if (vers == calc::v4)
-            echglj_cu3<calc::V4, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-         else if (vers == calc::v5)
-            echglj_cu3<calc::V5, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-         else if (vers == calc::v6)
-            echglj_cu3<calc::V6, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-      }
+      constexpr bool SOFTCORE = false;
+      if (vers == calc::v0)
+         echglj_cu3<calc::V0, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
+      else if (vers == calc::v1)
+         echglj_cu3<calc::V1, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
+      else if (vers == calc::v3)
+         echglj_cu3<calc::V3, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
+      else if (vers == calc::v4)
+         echglj_cu3<calc::V4, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
+      else if (vers == calc::v5)
+         echglj_cu3<calc::V5, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
+      else if (vers == calc::v6)
+         echglj_cu3<calc::V6, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
    }
 
    elj14(vers);
@@ -1011,51 +698,34 @@ void echgljRadArithEpsGeomNonEwald_cu(int vers)
 
 void echgljRadArithEpsGeomEwaldReal_cu(int vers)
 {
-   if (use_osrw) {
-      constexpr bool VOUT = true;
+   if (use(Potent::MUTATE)) {
+      constexpr bool SOFTCORE = true;
       if (vers == calc::v0)
-         echglj_cu3<calc::V0, EWALD, RAD_ARITH, EPS_GEOM, true, VOUT>();
+         echglj_cu3<calc::V0, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
       else if (vers == calc::v1)
-         echglj_cu3<calc::V1, EWALD, RAD_ARITH, EPS_GEOM, true, VOUT>();
+         echglj_cu3<calc::V1, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
       else if (vers == calc::v3)
-         echglj_cu3<calc::V3, EWALD, RAD_ARITH, EPS_GEOM, true, VOUT>();
+         echglj_cu3<calc::V3, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
       else if (vers == calc::v4)
-         echglj_cu3<calc::V4, EWALD, RAD_ARITH, EPS_GEOM, true, VOUT>();
+         echglj_cu3<calc::V4, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
       else if (vers == calc::v5)
-         echglj_cu3<calc::V5, EWALD, RAD_ARITH, EPS_GEOM, true, VOUT>();
+         echglj_cu3<calc::V5, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
       else if (vers == calc::v6)
-         echglj_cu3<calc::V6, EWALD, RAD_ARITH, EPS_GEOM, true, VOUT>();
+         echglj_cu3<calc::V6, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
    } else {
-      constexpr bool VOUT = false;
-      if (use(Potent::MUTATE)) {
-         constexpr bool SOFTCORE = true;
-         if (vers == calc::v0)
-            echglj_cu3<calc::V0, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-         else if (vers == calc::v1)
-            echglj_cu3<calc::V1, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-         else if (vers == calc::v3)
-            echglj_cu3<calc::V3, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-         else if (vers == calc::v4)
-            echglj_cu3<calc::V4, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-         else if (vers == calc::v5)
-            echglj_cu3<calc::V5, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-         else if (vers == calc::v6)
-            echglj_cu3<calc::V6, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-      } else {
-         constexpr bool SOFTCORE = false;
-         if (vers == calc::v0)
-            echglj_cu3<calc::V0, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-         else if (vers == calc::v1)
-            echglj_cu3<calc::V1, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-         else if (vers == calc::v3)
-            echglj_cu3<calc::V3, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-         else if (vers == calc::v4)
-            echglj_cu3<calc::V4, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-         else if (vers == calc::v5)
-            echglj_cu3<calc::V5, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-         else if (vers == calc::v6)
-            echglj_cu3<calc::V6, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE, VOUT>();
-      }
+      constexpr bool SOFTCORE = false;
+      if (vers == calc::v0)
+         echglj_cu3<calc::V0, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
+      else if (vers == calc::v1)
+         echglj_cu3<calc::V1, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
+      else if (vers == calc::v3)
+         echglj_cu3<calc::V3, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
+      else if (vers == calc::v4)
+         echglj_cu3<calc::V4, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
+      else if (vers == calc::v5)
+         echglj_cu3<calc::V5, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
+      else if (vers == calc::v6)
+         echglj_cu3<calc::V6, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
    }
 
    elj14(vers);

@@ -178,7 +178,9 @@ static bool ennintermol(int vers)
    return false;
 }
 
-void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
+// Evaluates the energy terms selected by tsflag and tsconfig, without zeroing or
+// reducing the buffers.
+static void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
 {
 #define tscfg(x, f) fts(x, f, tsflag, tsconfig)
 

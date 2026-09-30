@@ -48,8 +48,6 @@ void mpoleEnsurePhysical();
 
 /// Forgets everything recorded, after pole and the local frames are copied in.
 void mpoleStateReset();
-/// Reports that pole was rewritten outside mpoleScale(), e.g. by OSRW.
-void mpolePoleWritten();
 /// Reports that cmp, fmp or cphi was overwritten in place.
 void mpoleCmpClobbered();
 /// Reports that alterchg() added the charge flux to the monopoles of pole.

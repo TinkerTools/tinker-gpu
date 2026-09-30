@@ -23,7 +23,6 @@
 
 #include "md/lflpiston.h"
 #include "md/misc.h"
-#include "md/osrw.h"
 #include "md/pq.h"
 #include "md/rattle.h"
 

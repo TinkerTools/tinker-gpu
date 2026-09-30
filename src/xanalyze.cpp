@@ -12,7 +12,6 @@
 #include "ff/nblist.h"
 #include "ff/potent.h"
 #include "ff/rwcrd.h"
-#include "md/osrw.h"
 #include "tool/argkey.h"
 #include "tool/iofortstr.h"
 #include "tool/ioprint.h"
@@ -36,10 +35,7 @@
 namespace tinker {
 static void xAnalyzeE()
 {
-   if (use_osrw)
-      osrw_energy(calc::energy + calc::analyz);
-   else
-      energy(calc::energy + calc::analyz);
+   energy(calc::energy + calc::analyz);
 
    auto& out = stdout;
    print(out, "\n Total Potential Energy :        %16.4f Kcal/mole\n", esum);
@@ -384,10 +380,7 @@ static void xAnalyzeM()
 namespace tinker {
 static void xAnalyzeV()
 {
-   if (use_osrw)
-      osrw_energy(calc::grad + calc::virial);
-   else
-      energy(calc::grad + calc::virial);
+   energy(calc::grad + calc::virial);
    auto& out = stdout;
 
    const char* fmt = " %-36s%12.3f %12.3f %12.3f\n";

@@ -10,7 +10,6 @@
 #include "ff/potent.h"
 #include "math/const.h"
 #include "math/random.h"
-#include "md/osrw.h"
 #include "seq/ost.h"
 #include "tool/darray.h"
 #include "tool/error.h"
@@ -274,7 +273,7 @@ void dlmda_mech()
    use_dlmda = dlmda::use_dlmda;
    use_d2lmda = dlmda::use_d2lmda;
    use_epdt = dlmda::use_epdt;
-   use_prst = dlmda::use_prst and not use_osrw;
+   use_prst = dlmda::use_prst;
    use_mainlmda = dlmda::use_mainlmda;
    use_rel = mutant::use_rel;
 

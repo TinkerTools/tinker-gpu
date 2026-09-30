@@ -118,11 +118,6 @@ void mpoleStateReset()
    spline_key.clear();
 }
 
-void mpolePoleWritten()
-{
-   ++pole_serial;
-}
-
 void mpoleCmpClobbered()
 {
    cmp_key.valid = false;
