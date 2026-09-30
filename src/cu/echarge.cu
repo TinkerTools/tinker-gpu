@@ -294,7 +294,8 @@ void exfieldCharge_cu(int vers)
 // evaluated on the host, into the first slot of the term's buffers.
 __global__
 static void ewaldBackgroundAdd_cu1(CountBuffer restrict nc, EnergyBuffer restrict eb, EnergyBuffer restrict dl1b,
-   EnergyBuffer restrict dl2b, int count, real e, real dl1, real dl2)
+   EnergyBuffer restrict dl2b, VirialBuffer restrict vb, VirialBuffer restrict dvb, int count, real e, real dl1,
+   real dl2)
 {
    if (nc)
       atomic_add(count, nc, 0);
@@ -304,11 +305,15 @@ static void ewaldBackgroundAdd_cu1(CountBuffer restrict nc, EnergyBuffer restric
       atomic_add(dl1, dl1b, 0);
    if (dl2b)
       atomic_add(dl2, dl2b, 0);
+   if (vb)
+      atomic_add(-e, (real)0, (real)0, -e, (real)0, -e, vb, 0);
+   if (dvb)
+      atomic_add(-dl1, (real)0, (real)0, -dl1, (real)0, -dl1, dvb, 0);
 }
 
-void ewaldBackgroundAdd_cu(CountBuffer nc, EnergyBuffer eb, EnergyBuffer dl1b, EnergyBuffer dl2b, int count, real e,
-   real dl1, real dl2)
+void ewaldBackgroundAdd_cu(CountBuffer nc, EnergyBuffer eb, EnergyBuffer dl1b, EnergyBuffer dl2b, VirialBuffer vb,
+   VirialBuffer dvb, int count, real e, real dl1, real dl2)
 {
-   ewaldBackgroundAdd_cu1<<<1, 1, 0, g::s0>>>(nc, eb, dl1b, dl2b, count, e, dl1, dl2);
+   ewaldBackgroundAdd_cu1<<<1, 1, 0, g::s0>>>(nc, eb, dl1b, dl2b, vb, dvb, count, e, dl1, dl2);
 }
 }

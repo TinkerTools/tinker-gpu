@@ -434,10 +434,10 @@ void exfieldCharge_acc(int vers)
 
 // Adds the Ewald uniform background charge correction, already evaluated on
 // the host, into the first slot of the term's buffers.
-void ewaldBackgroundAdd_acc(CountBuffer nc, EnergyBuffer eb, EnergyBuffer dl1b, EnergyBuffer dl2b, int count, real e,
-   real dl1, real dl2)
+void ewaldBackgroundAdd_acc(CountBuffer nc, EnergyBuffer eb, EnergyBuffer dl1b, EnergyBuffer dl2b, VirialBuffer vb,
+   VirialBuffer dvb, int count, real e, real dl1, real dl2)
 {
-   #pragma acc serial async deviceptr(nc,eb,dl1b,dl2b)
+   #pragma acc serial async deviceptr(nc,eb,dl1b,dl2b,vb,dvb)
    {
       if (nc)
          atomic_add(count, nc, 0);
@@ -447,6 +447,10 @@ void ewaldBackgroundAdd_acc(CountBuffer nc, EnergyBuffer eb, EnergyBuffer dl1b, 
          atomic_add(dl1, dl1b, 0);
       if (dl2b)
          atomic_add(dl2, dl2b, 0);
+      if (vb)
+         atomic_add(-e, (real)0, (real)0, -e, (real)0, -e, vb, 0);
+      if (dvb)
+         atomic_add(-dl1, (real)0, (real)0, -dl1, (real)0, -dl1, dvb, 0);
    }
 }
 }

@@ -893,22 +893,26 @@ void elecData(RcOp op)
    RcMan chgpen42{chgpenData, op};
 }
 
-TINKER_FVOID2(acc1, cu1, ewaldBackgroundAdd, CountBuffer, EnergyBuffer, EnergyBuffer, EnergyBuffer, int, real, real,
-   real);
+TINKER_FVOID2(acc1, cu1, ewaldBackgroundAdd, CountBuffer, EnergyBuffer, EnergyBuffer, EnergyBuffer, VirialBuffer,
+   VirialBuffer, int, real, real, real);
 
 // Adds -f pi Q^2 / (2 V aewald^2) and its lambda derivatives, given Q and dQ/dl,
 // into one thread's slot of the term's buffers. Tinker counts the correction as
-// an interaction whenever the cell is charged (empole3.f, echarge3.f).
+// an interaction whenever the cell is charged (empole3.f, echarge3.f). The term
+// scales as 1/V, so its virial is -e on the diagonal, and the lambda derivative
+// of that virial is -dE/dl on the diagonal (empole1.f, empole4.f). A null
+// virial buffer leaves the virial out, as echarge1.f still does.
 static void ewaldBackground(int vers, int dlvers, double q, double dq, double deldl, double d2eldl2, real aewald,
-   CountBuffer nc, EnergyBuffer eb, EnergyBuffer dl1b, EnergyBuffer dl2b)
+   CountBuffer nc, EnergyBuffer eb, EnergyBuffer dl1b, EnergyBuffer dl2b, VirialBuffer vb, VirialBuffer dvb)
 {
-   if (not(vers & calc::energy))
-      return;
-
    const bool charged = std::abs(q) > 1.0e-10;
-   const bool do_dl1 = (dlvers & calc::energy_dlmda1) and dl1b and dq != 0;
-   const bool do_dl2 = (dlvers & calc::energy_dlmda2) and dl2b and dq != 0;
-   if (not charged and not do_dl1 and not do_dl2)
+   const bool do_e = vers & calc::energy;
+   const bool do_v = (vers & calc::virial) and vb and charged;
+   const bool has_dq = dq != 0;
+   const bool do_dl1 = do_e and (dlvers & calc::energy_dlmda1) and dl1b and has_dq;
+   const bool do_dl2 = do_e and (dlvers & calc::energy_dlmda2) and dl2b and has_dq;
+   const bool do_dv = (dlvers & calc::virial_dlmda) and dvb and has_dq;
+   if (not(do_e and charged) and not do_v and not do_dl1 and not do_dl2 and not do_dv)
       return;
 
    const double f = electric / dielec;
@@ -918,8 +922,8 @@ static void ewaldBackground(int vers, int dlvers, double q, double dq, double de
    const double dl2 = 2 * fterm * (dq * dq * deldl * deldl + q * dq * d2eldl2);
    const int count = (vers & calc::analyz) and charged ? 1 : 0;
 
-   TINKER_FCALL2(acc1, cu1, ewaldBackgroundAdd, count ? nc : nullptr, eb, do_dl1 ? dl1b : nullptr,
-      do_dl2 ? dl2b : nullptr, count, e, dl1, dl2);
+   TINKER_FCALL2(acc1, cu1, ewaldBackgroundAdd, count ? nc : nullptr, do_e ? eb : nullptr, do_dl1 ? dl1b : nullptr,
+      do_dl2 ? dl2b : nullptr, do_v ? vb : nullptr, do_dv ? dvb : nullptr, count, e, dl1, dl2);
 }
 
 void ewaldBackgroundScale(double el)
@@ -938,13 +942,14 @@ void empoleEwaldBackground(int vers, int dlvers)
          dq += esc.ds[g] * pole_net[g];
       }
    }
-   ewaldBackground(vers, dlvers, q, dq, deldlmda, d2eldlmda2, epme_unit->aewald, nem, em, demdl_buf, d2emdl2_buf);
+   ewaldBackground(
+      vers, dlvers, q, dq, deldlmda, d2eldlmda2, epme_unit->aewald, nem, em, demdl_buf, d2emdl2_buf, vir_em, dvirdl_buf);
 }
 
 void echargeEwaldBackground(int vers)
 {
    double q = pchg_net[0] + net_mut_scale * pchg_net[1];
-   ewaldBackground(vers, 0, q, 0, 0, 0, epme_unit->aewald, nec, ec, nullptr, nullptr);
+   ewaldBackground(vers, 0, q, 0, 0, 0, epme_unit->aewald, nec, ec, nullptr, nullptr, nullptr, nullptr);
 }
 
 TINKER_FVOID2(acc1, cu1, exfieldCharge, int);
