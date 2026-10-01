@@ -75,8 +75,7 @@ void extfieldModifyDField(real (*field)[3], ///< Permanent field.
 
 /// The Ewald uniform background charge correction, -f pi Q^2 / (2 V aewald^2),
 /// for a periodic cell of net charge Q (empole1.f, echarge1.f). It is constant in
-/// the coordinates, and scales as 1/V, so the multipole version adds -e to the
-/// virial diagonal; the charge version adds no virial, as echarge1.f does not.
+/// the coordinates, and scales as 1/V, so it adds -e to the virial diagonal.
 /// Under single topology the charges follow the electrostatic lambda, and so do
 /// Q and its derivatives, including the virial's (empole4.f). A neutral cell with
 /// no lambda derivative adds nothing.

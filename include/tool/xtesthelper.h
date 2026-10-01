@@ -191,5 +191,29 @@ TestlmdaResult testlmdaEvaluate(const FdTestOptions& opts);
 
 /// Prints one frame of \c xtestlmda results.
 void testlmdaPrint(FILE* out, const FdTestOptions& opts, const TestlmdaResult& r, int digits);
+
+/// \c xtestvir results. The 3x3 matrices are row-major, as printed; the
+/// numerical ones are left at zero without periodic boundaries.
+struct TestvirResult
+{
+   double vanlyt[9] = {};
+   double lvec[9] = {};
+   double dedl[9] = {};
+   double vnumer[9] = {};
+   bool numer = false;
+};
+
+/// The \c rc_flag mask \c xtestvir needs.
+int testvirFlags();
+
+/// Computes the analytical virial, then, for a periodic system, the numerical
+/// virial from central differences of the energy over each lattice vector
+/// element, with the fractional coordinates fixed (testvir.f). The box is left
+/// triclinic unless it is a nonprism, as testvir.f leaves it.
+TestvirResult testvirEvaluate(double eps = 0.02 ///< Finite difference stepsize, in Angstroms.
+);
+
+/// Prints \c xtestvir results.
+void testvirPrint(FILE* out, const TestvirResult& r);
 /// \}
 }

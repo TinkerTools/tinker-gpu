@@ -50,6 +50,7 @@ strtor.cpp
 testgrad.cpp
 testlmda.cpp
 testrt.cpp
+testvir.cpp
 text.cpp
 thermint.cpp
 tinkernist.cpp

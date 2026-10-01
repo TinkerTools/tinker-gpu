@@ -10,8 +10,10 @@
 #include "math/maxmin.h"
 #include "tool/error.h"
 #include "tool/externfunc.h"
+#include "tool/iofortstr.h"
 #include <tinker/detail/bound.hh>
 #include <tinker/detail/ewald.hh>
+#include <tinker/detail/limits.hh>
 #include <tinker/detail/pme.hh>
 #include <tinker/routines.h>
 
@@ -124,10 +126,23 @@ static void pmeOpCopyin(PMEUnit unit)
    waitFor(g::q0);
 }
 
+// Throws for EWALD-BOUNDARY rather than run with the tinfoil boundary instead.
+// Tinker adds a cell dipole term, with its gradient and virial, for the vacuum
+// boundary (echarge1.f, empole1.f), which tinker9 does not implement.
+static void pmeCheckBoundary()
+{
+   FstrView boundary = ewald::boundary;
+   if (limits::use_ewald and boundary == "VACUUM")
+      TINKER_THROW("EWALD-BOUNDARY (the vacuum cell dipole term) is not supported.");
+}
+
 void pmeData(RcOp op)
 {
    if (not useEwald() && not useDEwald())
       return;
+
+   if (op & RcOp::ALLOC)
+      pmeCheckBoundary();
 
    if (op & RcOp::DEALLOC) {
       PMEUnit::clear();

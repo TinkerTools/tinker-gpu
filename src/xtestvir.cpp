@@ -18,8 +18,6 @@
 #include "tinker9.h"
 
 namespace tinker {
-static constexpr double finite_difference_eps = 0.02;
-
 static double& lvec(int row, int col)
 {
    return boxes::lvec[col][row];
@@ -82,7 +80,7 @@ static std::array<std::vector<double>, 3> fractionalCoordinates()
    return frac;
 }
 
-static void finiteDifferenceLvec(double (&dedl)[3][3], const std::array<std::vector<double>, 3>& frac)
+static void finiteDifferenceLvec(double (&dedl)[3][3], const std::array<std::vector<double>, 3>& frac, double eps)
 {
    for (int i = 0; i < 3; ++i)
       for (int j = i; j < 3; ++j)
@@ -91,17 +89,17 @@ static void finiteDifferenceLvec(double (&dedl)[3][3], const std::array<std::vec
    for (int i = 0; i < 3; ++i) {
       for (int j = i; j < 3; ++j) {
          double old = lvec(j, i);
-         lvec(j, i) = old - finite_difference_eps;
+         lvec(j, i) = old - eps;
          cellang(frac[0], frac[1], frac[2]);
          energy_prec eneg = numericalEnergy();
 
-         lvec(j, i) = old + finite_difference_eps;
+         lvec(j, i) = old + eps;
          cellang(frac[0], frac[1], frac[2]);
          energy_prec epos = numericalEnergy();
 
          lvec(j, i) = old;
          cellang(frac[0], frac[1], frac[2]);
-         dedl[j][i] = 0.5 * (epos - eneg) / finite_difference_eps;
+         dedl[j][i] = 0.5 * (epos - eneg) / eps;
       }
    }
 }
@@ -118,52 +116,73 @@ static void numericalVirial(double (&virn)[3][3], const double (&dedl)[3][3])
    }
 }
 
-static void ptest(FILE* out)
+int testvirFlags()
 {
-   if (!bound::use_bounds)
-      return;
+   return calc::xyz + calc::energy + calc::grad + calc::virial;
+}
 
+TestvirResult testvirEvaluate(double eps)
+{
+   TestvirResult r;
+
+   energy(rc_flag);
+   for (int k = 0; k < 9; ++k)
+      r.vanlyt[k] = vir[k];
+
+   if (!bound::use_bounds)
+      return r;
+
+   // Let every lattice vector element vary on its own, as testvir.f does.
    if (!boxes::nonprism) {
       boxes::orthogonal = 0;
       boxes::monoclinic = 0;
       boxes::triclinic = 1;
    }
 
-   double lmat[3][3] = {
-      {lvec(0, 0), lvec(1, 0), lvec(2, 0)},
-      {lvec(0, 1), lvec(1, 1), lvec(2, 1)},
-      {lvec(0, 2), lvec(1, 2), lvec(2, 2)},
-   };
-   printMatrix(out, "Lattice Vectors (Lvec)", 11, lmat);
+   for (int i = 0; i < 3; ++i)
+      for (int j = 0; j < 3; ++j)
+         r.lvec[3 * i + j] = lvec(j, i);
 
    auto frac = fractionalCoordinates();
-
    double dedl[3][3] = {};
-   finiteDifferenceLvec(dedl, frac);
-   double dedl_print[3][3] = {
-      {dedl[0][0], dedl[1][0], dedl[2][0]},
-      {dedl[0][1], dedl[1][1], dedl[2][1]},
-      {dedl[0][2], dedl[1][2], dedl[2][2]},
-   };
-   printMatrix(out, "dE/dLvec Derivatives", 13, dedl_print);
-
+   finiteDifferenceLvec(dedl, frac, eps);
    double virn[3][3] = {};
    numericalVirial(virn, dedl);
+   for (int i = 0; i < 3; ++i) {
+      for (int j = 0; j < 3; ++j) {
+         r.dedl[3 * i + j] = dedl[j][i];
+         r.vnumer[3 * i + j] = virn[j][i];
+      }
+   }
+   r.numer = true;
+
+   // The last step restored the host box and coordinates; bring the device back
+   // in line with them.
+   syncBoxAndXyz();
+   return r;
+}
+
+void testvirPrint(FILE* out, const TestvirResult& r)
+{
+   printMatrix(out, "Analytical Virial Tensor", 9, r.vanlyt);
+   if (!r.numer)
+      return;
+
+   printMatrix(out, "Lattice Vectors (Lvec)", 11, r.lvec);
+   printMatrix(out, "dE/dLvec Derivatives", 13, r.dedl);
+
+   const double* virn = r.vnumer;
    if (boxes::dodecadron) {
-      print(out, "\n Numerical Mean Diagonal :%10s%13.3f\n", "", (virn[0][0] + virn[1][1] + virn[2][2]) / 3.0);
+      print(out, "\n Numerical Mean Diagonal :%10s%13.3f\n", "", (virn[0] + virn[4] + virn[8]) / 3.0);
    } else if (boxes::octahedron) {
-      print(out, "\n Numerical Virial Diagonal :%8s%13.3f%13.3f%13.3f\n", "", virn[0][0], virn[1][1], virn[2][2]);
+      print(out, "\n Numerical Virial Diagonal :%8s%13.3f%13.3f%13.3f\n", "", virn[0], virn[4], virn[8]);
    } else {
-      double virn_print[3][3] = {
-         {virn[0][0], virn[1][0], virn[2][0]},
-         {virn[0][1], virn[1][1], virn[2][1]},
-         {virn[0][2], virn[1][2], virn[2][2]},
-      };
-      printMatrix(out, "Numerical Virial Tensor", 10, virn_print);
+      printMatrix(out, "Numerical Virial Tensor", 10, virn);
    }
 
-   double dedv_vir = (vir[0] + vir[4] + vir[8]) / (3.0 * boxes::volbox);
-   double dedv_num = (virn[0][0] + virn[1][1] + virn[2][2]) / (3.0 * boxes::volbox);
+   const double* vira = r.vanlyt;
+   double dedv_vir = (vira[0] + vira[4] + vira[8]) / (3.0 * boxes::volbox);
+   double dedv_num = (virn[0] + virn[4] + virn[8]) / (3.0 * boxes::volbox);
    double temp = bath::kelvin;
    if (temp == 0)
       temp = 298;
@@ -182,18 +201,10 @@ void xTestvir(int, char**)
    mechanic2();
 
    inform::debug = 0;
-   rc_flag = calc::xyz + calc::energy + calc::grad + calc::virial;
+   rc_flag = testvirFlags();
    initialize();
 
-   energy(rc_flag);
-   double analytic[3][3] = {
-      {vir[0], vir[1], vir[2]},
-      {vir[3], vir[4], vir[5]},
-      {vir[6], vir[7], vir[8]},
-   };
-   printMatrix(stdout, "Analytical Virial Tensor", 9, analytic);
-
-   ptest(stdout);
+   testvirPrint(stdout, testvirEvaluate());
 
    finish();
    tinker_f_final();

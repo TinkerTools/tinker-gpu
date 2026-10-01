@@ -61,8 +61,6 @@ private:
    bool m_ended = false;
 };
 
-/// \brief The lambda-derivative sections of a reference file.
-///
 /// \brief Restores the lambda method flags and the interval convergence gate in
 /// its destructor, so that a failed check cannot leave them set for the cases
 /// that run after it.
@@ -78,6 +76,8 @@ struct TestLmdaFlagGuard
    }
 };
 
+/// \brief The lambda-derivative sections of a reference file.
+///
 /// Filled from the \c "Analytical Lambda Derivatives", \c "Analytical 2nd Lambda
 /// Derivatives", \c "Lambda Gradient Breakdown" (rows tagged \c Lambda), and
 /// \c "Analytical dV/dL" blocks. Sections absent from the file stay zeroed, so a
@@ -102,11 +102,12 @@ public:
    TestReference(std::string pathToRefFile);
    int getCount() const;
    double getEnergy() const;
-   const double (*getVirial() const)[3];
-   const double (*getGradient() const)[3];       ///< Per-atom rows tagged \c Anlyt.
-   const double (*getNumerGradient() const)[3];  ///< Per-atom rows tagged \c Numer.
-   int getGradientCount() const;                 ///< Number of atoms read from the \c Anlyt rows.
-   int getNumerGradientCount() const;            ///< Number of atoms read from the \c Numer rows.
+   const double (*getVirial() const)[3];        ///< \c Internal or \c Analytical \c Virial \c Tensor.
+   const double (*getNumerVirial() const)[3];   ///< \c Numerical \c Virial \c Tensor.
+   const double (*getGradient() const)[3];      ///< Per-atom rows tagged \c Anlyt.
+   const double (*getNumerGradient() const)[3]; ///< Per-atom rows tagged \c Numer.
+   int getGradientCount() const;                ///< Number of atoms read from the \c Anlyt rows.
+   int getNumerGradientCount() const;           ///< Number of atoms read from the \c Numer rows.
    void getEnergyCountByName(std::string name, double& energy, int& count);
 
    /// \brief The lambda-derivative blocks, all zero if the file has none.
@@ -123,6 +124,25 @@ void testBeginWithArgs(int argc, const char** argv);
 
 /// \brief Ends the test.
 void testEnd();
+
+/// \brief Switches the lambda derivative machinery, the lambda methods and the
+/// relative mutation flag back off, in both the Fortran modules and tinker9, so
+/// that a lambda fixture cannot leave them set for the cases that run after it.
+void testResetLmdaFlags();
+
+/// \brief Calls testResetLmdaFlags() in its destructor. Declared before the
+/// TestSession of a case, it runs after the session ends, including when a
+/// failed check unwinds the case.
+struct TestLmdaFlagReset
+{
+   ~TestLmdaFlagReset()
+   {
+      testResetLmdaFlags();
+   }
+};
+
+/// \brief Returns the file name part of a path.
+std::string testBaseName(const std::string& path);
 
 /// \brief Initializes MD in the test.
 void testMdInit(double t = 0,  ///< Temperature in Kelvin.

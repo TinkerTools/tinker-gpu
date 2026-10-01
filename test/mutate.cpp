@@ -240,8 +240,8 @@ const Fixture kFixtures[] = {
    {"214_water_rels_ye_vdwm_lig2t_l040", "water2", true, true, true, true, "hal"},
    // Multipole lambda paths (test_mutate_mpole4): the no-Ewald list path with a
    // 6.5 multipole cutoff, and the charged relative legs, whose uniform background
-   // carries a lambda derivative. 216 needs the vacuum Ewald boundary, which
-   // tinker9 lacks, so it is left out.
+   // carries a lambda derivative. Tinker retired 216, the vacuum Ewald boundary
+   // case (1bff247a); tinker9 refuses EWALD-BOUNDARY.
    {"215_water_ast_ne_mcut_l05", "water2", true, true, true, true, "mpole4"},
    // dF/dL reaches about 87 here. Single precision leaves up to 8e-4 of it in a
    // --use_fast_math build and 1.1e-3 without, as in Debug. The POLAR-EPS 1e-5
@@ -266,7 +266,7 @@ const Fixture kFixtures[] = {
    {"224_chig_ast_ye_l05", "chig", true, true, true, true, "mirror", nullptr, Tols().grad(1.0e-3, 5.0e-4)},
    {"225_chigm_ast_ye_l05", "chigm", true, true, true, true, "mirror", nullptr, Tols().grad(1.0e-3, 5.0e-4)},
    // Earlier cases with LAMBDA-DERIV alone, so polarization takes the single
-   // topology dE/dL path (test_mutate_polst). 229 is left out with 216.
+   // topology dE/dL path (test_mutate_polst). 229 was retired with 216.
    {"226_water_ast_ne_mcut_d1_l05", "water2", true, true, true, true, "polst"},
    {"227_g3_ast_d1_l05", "g3", true, true, true, true, "polst"},
    {"228_g3_ast_d1_l00", "g3", true, true, true, true, "polst"},

@@ -7,9 +7,6 @@
 #include "testrt.h"
 #include "tinker9.h"
 
-#include <tinker/detail/dlmda.hh>
-#include <tinker/detail/mutant.hh>
-
 #include <string>
 
 using namespace tinker;
@@ -23,6 +20,8 @@ struct Fixture
    double eps = 1.0e-2;  ///< Finite difference stepsize, in lambda.
    double ntol = 1.0;    ///< Scale on the tolerances of the numerical derivatives.
    double dtol = 1.0e-4; ///< Tolerance of the analytical derivatives in double precision.
+   const char* xyz = "testlmda/water2.xyz";         ///< Coordinates, under test/file.
+   const char* prm = "commit_6fe8e913/water03.prm"; ///< Parameters, under test/file.
 };
 
 // The default stepsize is 1e-2: smaller steps sharpen the first derivatives but
@@ -61,6 +60,10 @@ const Fixture kFixtures[] = {
    {"27_water_rels_lig1_st_prng_l088", 4.0e-3, 3.0},
    {"28_water_rels_lig1_dt_prng_l088", 4.0e-3, 3.0},
    {"29_water_rels_lig2_st_pmap_l015", 4.0e-3, 3.0},
+   // A +1 ion cluster with a water under Ewald; decoupling the chloride carries
+   // a lambda-scaled net charge into the uniform background term's dV/dL.
+   {"30_ionwat_ewald_l05", 1.0e-2, 1.0, 1.0e-4, "testlmda/ionwat.xyz", "commit_ebe3611e/amoeba09.prm"},
+   {"31_ionwat_ewald_nlist_l05", 1.0e-2, 1.0, 1.0e-4, "testlmda/ionwat.xyz", "commit_ebe3611e/amoeba09.prm"},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
@@ -76,15 +79,19 @@ const Fixture& fx(const char* name)
 
 void runFixture(const Fixture& fx)
 {
-   std::string dir = TINKER9_DIRSTR "/test/file/testlmda/";
-   const char* xyzname = "water2.xyz";
+   // The lambda fixtures leave the derivative machinery switched on; clear it
+   // once the case ends, however it ends.
+   TestLmdaFlagReset lmdaReset;
 
-   TestFile fxyz(dir + xyzname, xyzname);
+   const std::string files = TINKER9_DIRSTR "/test/file/";
+   const std::string xyzname = testBaseName(fx.xyz);
+
+   TestFile fxyz(files + fx.xyz, xyzname);
    std::string keyname = std::string(fx.name) + ".key";
-   TestFile fkey(dir + keyname, keyname);
-   TestFile fprm(TINKER9_DIRSTR "/test/file/commit_6fe8e913/water03.prm");
+   TestFile fkey(files + "testlmda/" + keyname, keyname);
+   TestFile fprm(files + fx.prm);
 
-   const char* argv[] = {"dummy", xyzname, "-k", keyname.c_str()};
+   const char* argv[] = {"dummy", xyzname.c_str(), "-k", keyname.c_str()};
    int argc = 4;
 
    TestSession session(argc, argv);
@@ -128,24 +135,6 @@ void runFixture(const Fixture& fx)
    COMPARE_VIR9(r.ndvirdl, ref.dvdl, eps_nf);
 
    session.end();
-
-   // Avoid contaminating later randomized tests.
-   dlmda::use_dlmda = 0;
-   dlmda::use_d2lmda = 0;
-   dlmda::use_edlmda = 0;
-   dlmda::use_pdlmda = 0;
-   dlmda::use_vdlmda = 0;
-   use_dlmda = false;
-   use_d2lmda = false;
-   use_edlmda = false;
-   use_pdlmda = false;
-   use_vdlmda = false;
-   use_ost = false;
-   use_meta = false;
-   use_ti = false;
-   use_mainlmda = false;
-   mutant::use_rel = 0;
-   use_rel = false;
 }
 }
 
@@ -172,4 +161,6 @@ TEST_CASE("TESTLMDA-26_water_rels_lig1_dt_polonly_l078", "[ff][testlmda][rdt]") 
 TEST_CASE("TESTLMDA-27_water_rels_lig1_st_prng_l088", "[ff][testlmda][rdt]") { runFixture(fx("27_water_rels_lig1_st_prng_l088")); }
 TEST_CASE("TESTLMDA-28_water_rels_lig1_dt_prng_l088", "[ff][testlmda][rdt]") { runFixture(fx("28_water_rels_lig1_dt_prng_l088")); }
 TEST_CASE("TESTLMDA-29_water_rels_lig2_st_pmap_l015", "[ff][testlmda][rdt]") { runFixture(fx("29_water_rels_lig2_st_pmap_l015")); }
+TEST_CASE("TESTLMDA-30_ionwat_ewald_l05", "[ff][testlmda]") { runFixture(fx("30_ionwat_ewald_l05")); }
+TEST_CASE("TESTLMDA-31_ionwat_ewald_nlist_l05", "[ff][testlmda]") { runFixture(fx("31_ionwat_ewald_nlist_l05")); }
 #endif

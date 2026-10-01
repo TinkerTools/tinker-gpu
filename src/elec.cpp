@@ -895,8 +895,7 @@ TINKER_FVOID2(acc1, cu1, ewaldBackgroundAdd, CountBuffer, EnergyBuffer, EnergyBu
 // into one thread's slot of the term's buffers. Tinker counts the correction as
 // an interaction whenever the cell is charged (empole3.f, echarge3.f). The term
 // scales as 1/V, so its virial is -e on the diagonal, and the lambda derivative
-// of that virial is -dE/dl on the diagonal (empole1.f, empole4.f). A null
-// virial buffer leaves the virial out, as echarge1.f still does.
+// of that virial is -dE/dl on the diagonal (echarge1.f, empole1.f, empole4.f).
 static void ewaldBackground(int vers, int dlvers, double q, double dq, double deldl, double d2eldl2, real aewald,
    CountBuffer nc, EnergyBuffer eb, EnergyBuffer dl1b, EnergyBuffer dl2b, VirialBuffer vb, VirialBuffer dvb)
 {
@@ -939,7 +938,7 @@ void empoleEwaldBackground(int vers, int dlvers)
 void echargeEwaldBackground(int vers)
 {
    double q = pchg_net;
-   ewaldBackground(vers, 0, q, 0, 0, 0, epme_unit->aewald, nec, ec, nullptr, nullptr, nullptr, nullptr);
+   ewaldBackground(vers, 0, q, 0, 0, 0, epme_unit->aewald, nec, ec, nullptr, nullptr, vir_ec, nullptr);
 }
 
 TINKER_FVOID2(acc1, cu1, exfieldCharge, int);
