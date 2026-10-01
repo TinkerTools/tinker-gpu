@@ -288,6 +288,10 @@ const Fixture kFixtures[] = {
    {"235_water_vsoft_n1_d1_l00", "water2", true, true, true, true, "deriv1"},
    {"236_water_vsoft_n1_d1_l005", "water2", true, true, true, true, "deriv1"},
    {"237_water_rels_vdwm_n1_d1_l10", "water2", true, true, true, true, "deriv1"},
+   // Fixture 235 with a soft core exponent of 1.5 under TI (test_mutate_scexp),
+   // which mutate_check allows because TI asks for dE/dL alone. Its energy,
+   // gradient and virial at lambda 0 are those of 235, whose reference it uses.
+   {"238_water_vsoft_n15_ti_l00", "water2", true, true, true, true, "scexp", "235_water_vsoft_n1_d1_l00"},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
@@ -635,10 +639,34 @@ void runLegSkipFixture(const Fixture& fx, bool expect0, bool expect1)
    REQUIRE(need1 == expect1);
 }
 
+// Sum of |dF/dL| over every atom, zero if the force lambda derivative has no
+// storage.
+static double sumAbsDfdl()
+{
+   if (not dfdlx)
+      return 0;
+   std::vector<double> lx(n), ly(n), lz(n);
+   copyGradient(calc::grad, lx.data(), ly.data(), lz.data(), dfdlx, dfdly, dfdlz);
+   double s = 0;
+   for (int i = 0; i < n; ++i)
+      s += std::fabs(lx[i]) + std::fabs(ly[i]) + std::fabs(lz[i]);
+   return s;
+}
+
+// Sum of |dV/dL| over the nine tensor components.
+static double sumAbsDvirdl()
+{
+   double s = 0;
+   for (int i = 0; i < 9; ++i)
+      s += std::fabs(dvirdl[i]);
+   return s;
+}
+
 // Runs a fixture whose multipole second lambda derivative is nonzero with and
 // without the second, force and virial lambda derivatives (test_mutate_gate).
-// Turning them off must leave the energy, the gradient and the first lambda
-// derivatives unchanged, and leave the second lambda derivatives at zero.
+// Turning them off must leave the energy, the gradient, the virial and the
+// first lambda derivatives unchanged, and clear the second, force and virial
+// lambda derivatives that the full run left behind.
 void runGateFixture(const Fixture& fx)
 {
    const double eps = testGetEps(1.0e-4, 1.0e-8);
@@ -647,16 +675,22 @@ void runGateFixture(const Fixture& fx)
 
    // Full lambda derivatives, as the LAMBDA-DERIV keyword requests.
    REQUIRE(use_d2lmda);
-   energy(calc::v4);
+   energy(calc::v1);
    const double e1 = esum, dedl1 = dedl, demdl1 = demdl;
    std::vector<double> gx1(n), gy1(n), gz1(n);
    copyGradient(calc::grad, gx1.data(), gy1.data(), gz1.data());
+   double vir1[9];
+   for (int i = 0; i < 9; ++i)
+      vir1[i] = vir[i];
    REQUIRE(d2emdl2 != 0);
+   REQUIRE(dfdlx);
+   REQUIRE(sumAbsDfdl() != 0);
+   REQUIRE(sumAbsDvirdl() != 0);
 
    // Only the first lambda derivative, as TI, META and ABF request.
    use_d2lmda = false;
-   REQUIRE(lmdaDerivVers(calc::v4, true) == calc::v8);
-   energy(calc::v4);
+   REQUIRE(lmdaDerivVers(calc::v1, true) == calc::v7);
+   energy(calc::v1);
    COMPARE_REALS(esum, e1, eps);
    COMPARE_REALS(dedl, dedl1, eps);
    COMPARE_REALS(demdl, demdl1, eps);
@@ -667,9 +701,60 @@ void runGateFixture(const Fixture& fx)
       COMPARE_REALS(gy[i], gy1[i], eps);
       COMPARE_REALS(gz[i], gz1[i], eps);
    }
+   for (int i = 0; i < 9; ++i)
+      COMPARE_REALS(vir[i], vir1[i], eps);
    REQUIRE(d2emdl2 == 0);
    REQUIRE(d2edl2 == 0);
+   REQUIRE(sumAbsDfdl() == 0);
+   REQUIRE(sumAbsDvirdl() == 0);
    use_d2lmda = true;
+
+   s.session.end();
+}
+
+// Runs a soft core exponent below two under TI at lambda 0, the endpoint where
+// the second lambda derivative factor v^(n-2) diverges (test_mutate_scexp).
+// TI asks for dE/dL alone, so the run must stay finite. At a van der Waals
+// lambda of zero the coupled terms vanish whatever the exponent, so the energy,
+// gradient and virial are those of the borrowed n = 1 reference, while dE/dL,
+// which carries a factor of lambda^(n-1), drops to zero.
+void runScexpTiFixture(const Fixture& fx)
+{
+   TestLmdaFlagReset lmdaReset;
+
+   const double eps_e = testGetEps(1.0e-3, 1.0e-4);
+   const double eps_g = testGetEps(1.0e-3, 1.0e-4);
+   const double eps_v = testGetEps(2.0e-3, 1.0e-3);
+
+   // TI would start at its default first window, lambda 1.
+   Setup s(fx, calc::xyz | calc::mass | calc::vmask, "\nti-window 0.0\n");
+   REQUIRE(use_ti);
+   REQUIRE_FALSE(use_d2lmda);
+   REQUIRE(lambda == 0);
+
+   energy(calc::v1);
+   REQUIRE(std::isfinite(esum));
+   REQUIRE(std::isfinite(dedl));
+   std::vector<double> gx(n), gy(n), gz(n);
+   copyGradient(calc::grad, gx.data(), gy.data(), gz.data());
+   for (int i = 0; i < n; ++i)
+      REQUIRE((std::isfinite(gx[i]) and std::isfinite(gy[i]) and std::isfinite(gz[i])));
+   for (int i = 0; i < 9; ++i)
+      REQUIRE(std::isfinite(vir[i]));
+
+   TestReference ref(std::string(TINKER9_DIRSTR "/test/ref/mutate/") + fx.ref + ".txt");
+   auto ref_g = ref.getGradient();
+   auto ref_v = ref.getVirial();
+   COMPARE_REALS(esum, ref.getEnergy(), eps_e);
+   COMPARE_GRADIENT(ref_g, eps_g);
+   for (int i = 0; i < 3; ++i)
+      for (int j = 0; j < 3; ++j)
+         COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
+
+   REQUIRE(std::fabs(dedl) <= 1.0e-8);
+   REQUIRE(d2edl2 == 0);
+   REQUIRE(sumAbsDfdl() == 0);
+   REQUIRE(sumAbsDvirdl() == 0);
 
    s.session.end();
 }
@@ -743,18 +828,8 @@ void runFlatFixture(const Fixture& fx, bool fused)
       REQUIRE(demdl == 0);
       REQUIRE(depdl == 0);
    }
-   if (dfdlx) {
-      std::vector<double> lx(n), ly(n), lz(n);
-      copyGradient(calc::grad, lx.data(), ly.data(), lz.data(), dfdlx, dfdly, dfdlz);
-      double dfdl = 0;
-      for (int i = 0; i < n; ++i)
-         dfdl += std::fabs(lx[i]) + std::fabs(ly[i]) + std::fabs(lz[i]);
-      REQUIRE(dfdl == 0);
-   }
-   double dvdl = 0;
-   for (int i = 0; i < 9; ++i)
-      dvdl += std::fabs(dvirdl[i]);
-   REQUIRE(dvdl == 0);
+   REQUIRE(sumAbsDfdl() == 0);
+   REQUIRE(sumAbsDvirdl() == 0);
 
    // A slope only scales the lambda derivative channels, so it must leave the
    // energy, gradient and virial as the plain versions left them, which is what
@@ -1100,6 +1175,7 @@ TEST_CASE("MUTATE-234_water_rels_ye_vdwm_d1_l040", "[ff][mutate][deriv1]") { run
 TEST_CASE("MUTATE-235_water_vsoft_n1_d1_l00", "[ff][mutate][deriv1]") { runFixture(fx("235_water_vsoft_n1_d1_l00")); }
 TEST_CASE("MUTATE-236_water_vsoft_n1_d1_l005", "[ff][mutate][deriv1]") { runFixture(fx("236_water_vsoft_n1_d1_l005")); }
 TEST_CASE("MUTATE-237_water_rels_vdwm_n1_d1_l10", "[ff][mutate][deriv1]") { runFixture(fx("237_water_rels_vdwm_n1_d1_l10")); }
+TEST_CASE("MUTATE-238_water_vsoft_n15_ti_l00", "[ff][mutate][scexp]") { runScexpTiFixture(fx("238_water_vsoft_n15_ti_l00")); }
 
 TEST_CASE("MUTATE-TI-076_water_qnt_ast_l05", "[ff][mutate][ti][ast]") { runThermIntgFixture(fx("076_water_qnt_ast_l05")); }
 TEST_CASE("MUTATE-TI-079_water_qnt_adt_l05", "[ff][mutate][ti][adt]") { runThermIntgFixture(fx("079_water_qnt_adt_l05")); }

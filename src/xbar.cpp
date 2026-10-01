@@ -44,6 +44,7 @@ static void xBarMake()
    tinker_f_getarc(&iarc);
    tinker_f_close(&iarc);
    tinker_f_mechanic();
+   mechanic2();
 
    // store the filename for trajectory A
    std::memcpy(filea, files::filename, MAX_NCHAR);
@@ -72,6 +73,7 @@ static void xBarMake()
    tinker_f_getarc(&iarc);
    tinker_f_close(&iarc);
    tinker_f_mechanic();
+   mechanic2();
    inform::silent = 1;
 
    // store the filename for trajectory B
@@ -158,6 +160,7 @@ static void xBarMake()
       for (int i = 0; i < keys::nkey; ++i)
          std::memcpy(keys::keyline[i], keys0[i].data(), MAX_NCHAR);
       tinker_f_mechanic();
+      mechanic2();
 
       // find potential energies for trajectory A in state 0
       initialize();
@@ -192,6 +195,7 @@ static void xBarMake()
    for (int i = 0; i < keys::nkey; ++i)
       std::memcpy(keys::keyline[i], keys1[i].data(), MAX_NCHAR);
    tinker_f_mechanic();
+   mechanic2();
 
    // find potential energies for trajectory A in state 1
    if (inform::verbose)
@@ -274,6 +278,7 @@ static void xBarMake()
       for (int i = 0; i < keys::nkey; ++i)
          std::memcpy(keys::keyline[i], keys1[i].data(), MAX_NCHAR);
       tinker_f_mechanic();
+      mechanic2();
 
       // find potential energies for trajectory B in state 1
       initialize();
@@ -308,6 +313,7 @@ static void xBarMake()
    for (int i = 0; i < keys::nkey; ++i)
       std::memcpy(keys::keyline[i], keys0[i].data(), MAX_NCHAR);
    tinker_f_mechanic();
+   mechanic2();
 
    // find potential energies for trajectory B in state 0
    if (inform::verbose)

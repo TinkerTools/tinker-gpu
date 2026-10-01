@@ -5,6 +5,7 @@ aplusgas.cpp
 aplusliquid.cpp
 argkey.cpp
 async.cpp
+bar.cpp
 barostat.cpp
 bond.cpp
 bounds.cpp

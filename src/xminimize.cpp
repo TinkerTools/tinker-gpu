@@ -62,6 +62,7 @@ void xMinimize(int, char**)
    initial();
    tinker_f_getxyz();
    tinker_f_mechanic();
+   mechanic2();
 
    // perform the setup functions needed for optimization
    tinker_f_optinit();

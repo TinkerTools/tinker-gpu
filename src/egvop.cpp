@@ -51,7 +51,10 @@ void zeroEGV(int vers)
          zeroOnDevice3Async(n, gx_nnintermol, gy_nnintermol, gz_nnintermol);
       }
 
-      if (dvers & (calc::grad_dlmda | calc::virial_dlmda)) {
+      // Also clear dF/dL once no channel keeps it, so that switching the
+      // second lambda derivatives off does not leave a stale one behind.
+      constexpr int fdl = calc::grad_dlmda | calc::virial_dlmda;
+      if ((dvers & fdl) or (dfdlx and not(dlkeep & fdl))) {
          zeroOnDevice3Async(n, dfdlx, dfdly, dfdlz);
       }
    }
