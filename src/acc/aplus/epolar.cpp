@@ -109,7 +109,7 @@ static void epolarAplus_acc1(const real (*uind)[3])
 
             pair_polar_aplus<do_e, do_a, do_g, ETYP, CFLX>( //
                r2, xr, yr, zr, 1, 1, ci, dix, diy, diz, pdi, pga, pgd, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy,
-               uiz, ck, dkx, dky, dkz, pdk, pga, pgd, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, f, aewald, e,
+               uiz, ck, dkx, dky, dkz, pdk, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, f, aewald, e,
                edamp, pota, potb, pgrad);
 
             if CONSTEXPR (do_a)
@@ -233,7 +233,7 @@ static void epolarAplus_acc1(const real (*uind)[3])
             r2, xr, yr, zr, pscale, uscale,                    //
             ci, dix, diy, diz, pdi, pga, pgd,                  //
             qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy, uiz, //
-            rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], pdk, pga, pgd,
+            rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], pdk,
             rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY],
             rpole[k][MPL_PME_YZ], rpole[k][MPL_PME_ZZ], uind[k][0], uind[k][1], uind[k][2], f, 0, e, edamp, pota, potb,
             pgrad);

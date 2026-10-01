@@ -72,7 +72,7 @@ FULL_PAIRWISE_INTERACTION: |
     real pga = thlval[njpolar * jpi[klane] + jpk];
     pair_ufield_v2<ETYP>(r2, xr, yr, zr, scalea, aewald,
       @uidx@, @uidy@, @uidz@, @uipx@, @uipy@, @uipz@, @pdi@, pga,
-      @ukdx@, @ukdy@, @ukdz@, @ukpx@, @ukpy@, @ukpz@, @pdk@, pga,
+      @ukdx@, @ukdy@, @ukdz@, @ukpx@, @ukpy@, @ukpz@, @pdk@,
       @fidx@, @fidy@, @fidz@, @fipx@, @fipy@, @fipz@,
       @fkdx@, @fkdy@, @fkdz@, @fkpx@, @fkpy@, @fkpz@);
   } // end if (include)

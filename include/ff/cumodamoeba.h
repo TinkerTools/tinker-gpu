@@ -27,8 +27,6 @@ const real* restrict thdval;
 TINKER_EXTERN __device__
 const real* restrict polarity;
 TINKER_EXTERN __device__
-const real* restrict thole;
-TINKER_EXTERN __device__
 const real* restrict pdamp;
 
 TINKER_EXTERN __device__

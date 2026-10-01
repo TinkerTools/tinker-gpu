@@ -149,7 +149,7 @@ void epolarAplus_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, Energ
             ck[threadIdx.x], dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x],        //
             qkxx[threadIdx.x], qkxy[threadIdx.x], qkxz[threadIdx.x], qkyy[threadIdx.x], qkyz[threadIdx.x],
             qkzz[threadIdx.x],                                    //
-            ukx, uky, ukz, pdk, pga, pgd,                         //
+            ukx, uky, ukz, pdk,                                   //
             f, aewald,                                            //
             frcxi, frcyi, frczi, frcxk, frcyk, frczk,             //
             ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k,       //
@@ -164,7 +164,7 @@ void epolarAplus_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, Energ
             ck[threadIdx.x], dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x],        //
             qkxx[threadIdx.x], qkxy[threadIdx.x], qkxz[threadIdx.x], qkyy[threadIdx.x], qkyz[threadIdx.x],
             qkzz[threadIdx.x],                                    //
-            ukx, uky, ukz, pdk, pga, pgd,                         //
+            ukx, uky, ukz, pdk,                                   //
             f, aewald,                                            //
             frcxi, frcyi, frczi, frcxk, frcyk, frczk,             //
             ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k,       //
@@ -330,7 +330,7 @@ void epolarAplus_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, Energ
                ck[threadIdx.x], dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x],        //
                qkxx[threadIdx.x], qkxy[threadIdx.x], qkxz[threadIdx.x], qkyy[threadIdx.x], qkyz[threadIdx.x],
                qkzz[threadIdx.x],                                    //
-               ukx, uky, ukz, pdk, pga, pgd,                         //
+               ukx, uky, ukz, pdk,                                   //
                f, aewald,                                            //
                frcxi, frcyi, frczi, frcxk, frcyk, frczk,             //
                ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k,       //
@@ -505,7 +505,7 @@ void epolarAplus_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, Energ
                ck[threadIdx.x], dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x],        //
                qkxx[threadIdx.x], qkxy[threadIdx.x], qkxz[threadIdx.x], qkyy[threadIdx.x], qkyz[threadIdx.x],
                qkzz[threadIdx.x],                                    //
-               ukx, uky, ukz, pdk, pga, pgd,                         //
+               ukx, uky, ukz, pdk,                                   //
                f, aewald,                                            //
                frcxi, frcyi, frczi, frcxk, frcyk, frczk,             //
                ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k,       //

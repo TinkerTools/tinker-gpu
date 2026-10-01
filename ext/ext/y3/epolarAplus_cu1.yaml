@@ -124,7 +124,7 @@ SCALED_PAIRWISE_INTERACTION: |
       @uix@, @uiy@, @uiz@, @pdi@, pga, pgd, //
       @ck@, @dkx@, @dky@, @dkz@, //
       @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@, //
-      @ukx@, @uky@, @ukz@, @pdk@, pga, pgd, //
+      @ukx@, @uky@, @ukz@, @pdk@,           //
       f, aewald, //
       @frcxi@, @frcyi@, @frczi@, @frcxk@, @frcyk@, @frczk@, //
       @ufld0i@, @ufld1i@, @ufld2i@, @ufld0k@, @ufld1k@, @ufld2k@, //
@@ -138,7 +138,7 @@ SCALED_PAIRWISE_INTERACTION: |
       @uix@, @uiy@, @uiz@, @pdi@, pga, pgd, //
       @ck@, @dkx@, @dky@, @dkz@, //
       @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@, //
-      @ukx@, @uky@, @ukz@, @pdk@, pga, pgd, //
+      @ukx@, @uky@, @ukz@, @pdk@,           //
       f, aewald, //
       @frcxi@, @frcyi@, @frczi@, @frcxk@, @frcyk@, @frczk@, //
       @ufld0i@, @ufld1i@, @ufld2i@, @ufld0k@, @ufld1k@, @ufld2k@, //
@@ -183,7 +183,7 @@ FULL_PAIRWISE_INTERACTION: |
       @uix@, @uiy@, @uiz@, @pdi@, pga, pgd, //
       @ck@, @dkx@, @dky@, @dkz@, //
       @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@, //
-      @ukx@, @uky@, @ukz@, @pdk@, pga, pgd, //
+      @ukx@, @uky@, @ukz@, @pdk@,           //
       f, aewald, //
       @frcxi@, @frcyi@, @frczi@, @frcxk@, @frcyk@, @frczk@, //
       @ufld0i@, @ufld1i@, @ufld2i@, @ufld0k@, @ufld1k@, @ufld2k@, //

@@ -53,7 +53,7 @@ void sparsePrecondApply3_acc(const real (*rsd)[3], real (*zrsd)[3])
          real r = REAL_SQRT(r2);
 
          real scale3, scale5;
-         damp_thole2(r, pdi, pga, pdk, pga, scale3, scale5);
+         dmpthole2_a(r, pga, pdi, pdk, scale3, scale5);
 
          real polik = poli * polarity[k];
          real rr3 = scale3 * polik * REAL_RECIP(r * r2);
@@ -103,7 +103,7 @@ void sparsePrecondApply3_acc(const real (*rsd)[3], real (*zrsd)[3])
       real r = REAL_SQRT(r2);
 
       real scale3, scale5;
-      damp_thole2(r, pdi, pga, pdamp[k], pga, scale3, scale5);
+      dmpthole2_a(r, pga, pdi, pdamp[k], scale3, scale5);
       scale3 *= uscale;
       scale5 *= uscale;
 

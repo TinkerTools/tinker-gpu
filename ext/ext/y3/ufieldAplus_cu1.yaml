@@ -61,6 +61,6 @@ FULL_PAIRWISE_INTERACTION: |
     real pga = thlval[njpolar * jpi[klane] + jpk];
     pair_ufield_aplus_v2<ETYP>(
       r2, xr, yr, zr, scalea, @uidx@, @uidy@, @uidz@, @pdi@, pga,
-      @ukdx@, @ukdy@, @ukdz@, @pdk@, pga, aewald,
+      @ukdx@, @ukdy@, @ukdz@, @pdk@, aewald,
       @fidx@, @fidy@, @fidz@, @fkdx@, @fkdy@, @fkdz@);
   } // end if (include)

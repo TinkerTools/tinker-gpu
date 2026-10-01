@@ -76,7 +76,7 @@ FULL_PAIRWISE_INTERACTION: |
     pair_dfield_aplus_v2<ETYP>(
       r2, xr, yr, zr, scaleb, @ci@, @dix@, @diy@, @diz@, @pdi@, pgd,
       @qixx@, @qixy@, @qixz@, @qiyy@, @qiyz@, @qizz@,
-      @ck@, @dkx@, @dky@, @dkz@, @pdk@, pgd,
+      @ck@, @dkx@, @dky@, @dkz@, @pdk@,
       @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@, aewald,
       @fidx@, @fidy@, @fidz@, @fkdx@, @fkdy@, @fkdz@);
   } // end if (include)

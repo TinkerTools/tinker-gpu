@@ -1,4 +1,4 @@
-// ck.py Version 3.0.2
+// ck.py Version 3.1.0
 template <class Ver, class ETYP>
 __global__
 void emplar_cu1c(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_prec* restrict gx,
@@ -123,7 +123,7 @@ void emplar_cu1c(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, VirialBuffer r
             qiyy[klane], qiyz[klane], qizz[klane], make_real3(uidx[klane], uidy[klane], uidz[klane]),
             make_real3(uipx[klane], uipy[klane], uipz[klane]), pdi[klane], pga, ck,
             make_real3(dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x]), qkxx, qkxy, qkxz, qkyy, qkyz, qkzz,
-            make_real3(ukdx, ukdy, ukdz), make_real3(ukpx, ukpy, ukpz), pdk, pga, f, aewald, frcxi, frcyi, frczi, frcxk,
+            make_real3(ukdx, ukdy, ukdz), make_real3(ukpx, ukpy, ukpz), pdk, f, aewald, frcxi, frcyi, frczi, frcxk,
             frcyk, frczk, trqxi, trqyi, trqzi, trqxk, trqyk, trqzk, e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1);
          if CONSTEXPR (do_e) {
             ebuftl += floatTo<ebuf_prec>(e1);
@@ -295,8 +295,8 @@ void emplar_cu1b(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, VirialBuffer r
                qiyz[klane], qizz[klane], make_real3(uidx[klane], uidy[klane], uidz[klane]),
                make_real3(uipx[klane], uipy[klane], uipz[klane]), pdi[klane], pga, ck,
                make_real3(dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x]), qkxx, qkxy, qkxz, qkyy, qkyz, qkzz,
-               make_real3(ukdx, ukdy, ukdz), make_real3(ukpx, ukpy, ukpz), pdk, pga, f, aewald, frcxi, frcyi, frczi,
-               frcxk, frcyk, frczk, trqxi, trqyi, trqzi, trqxk, trqyk, trqzk, e, vxx, vyx, vzx, vyy, vzy, vzz);
+               make_real3(ukdx, ukdy, ukdz), make_real3(ukpx, ukpy, ukpz), pdk, f, aewald, frcxi, frcyi, frczi, frcxk,
+               frcyk, frczk, trqxi, trqyi, trqzi, trqxk, trqyk, trqzk, e, vxx, vyx, vzx, vyy, vzy, vzz);
             if CONSTEXPR (do_e) {
                ebuftl += floatTo<ebuf_prec>(e);
             }
@@ -475,8 +475,8 @@ void emplar_cu1a(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, VirialBuffer r
                qiyz[klane], qizz[klane], make_real3(uidx[klane], uidy[klane], uidz[klane]),
                make_real3(uipx[klane], uipy[klane], uipz[klane]), pdi[klane], pga, ck,
                make_real3(dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x]), qkxx, qkxy, qkxz, qkyy, qkyz, qkzz,
-               make_real3(ukdx, ukdy, ukdz), make_real3(ukpx, ukpy, ukpz), pdk, pga, f, aewald, frcxi, frcyi, frczi,
-               frcxk, frcyk, frczk, trqxi, trqyi, trqzi, trqxk, trqyk, trqzk, e, vxx, vyx, vzx, vyy, vzy, vzz);
+               make_real3(ukdx, ukdy, ukdz), make_real3(ukpx, ukpy, ukpz), pdk, f, aewald, frcxi, frcyi, frczi, frcxk,
+               frcyk, frczk, trqxi, trqyi, trqzi, trqxk, trqyk, trqzk, e, vxx, vyx, vzx, vyy, vzy, vzz);
             if CONSTEXPR (do_e) {
                ebuftl += floatTo<ebuf_prec>(e);
             }

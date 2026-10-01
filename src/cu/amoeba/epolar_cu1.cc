@@ -147,8 +147,8 @@ void epolar_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBuff
             pdi[klane], pga, //
             ck, dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x], qkxx, qkxy, qkxz, qkyy, qkyz, qkzz,
             ukdx[threadIdx.x], ukdy[threadIdx.x], ukdz[threadIdx.x], ukpx[threadIdx.x], ukpy[threadIdx.x],
-            ukpz[threadIdx.x], pdk, pga, //
-            f, aewald,                   //
+            ukpz[threadIdx.x], pdk, //
+            f, aewald,              //
             frcxi, frcyi, frczi, frcxk, frcyk, frczk, ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k, dufld0i, dufld1i,
             dufld2i, dufld3i, dufld4i, dufld5i, dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, //
             e1, edamp, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1);
@@ -158,8 +158,8 @@ void epolar_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBuff
             pdi[klane], pga, //
             ck, dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x], qkxx, qkxy, qkxz, qkyy, qkyz, qkzz,
             ukdx[threadIdx.x], ukdy[threadIdx.x], ukdz[threadIdx.x], ukpx[threadIdx.x], ukpy[threadIdx.x],
-            ukpz[threadIdx.x], pdk, pga, //
-            f, aewald,                   //
+            ukpz[threadIdx.x], pdk, //
+            f, aewald,              //
             frcxi, frcyi, frczi, frcxk, frcyk, frczk, ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k, dufld0i, dufld1i,
             dufld2i, dufld3i, dufld4i, dufld5i, dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, //
             e, edamp, vxx, vyx, vzx, vyy, vzy, vzz);
@@ -312,8 +312,8 @@ void epolar_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBuff
                pdi[klane], pga, //
                ck, dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x], qkxx, qkxy, qkxz, qkyy, qkyz, qkzz,
                ukdx[threadIdx.x], ukdy[threadIdx.x], ukdz[threadIdx.x], ukpx[threadIdx.x], ukpy[threadIdx.x],
-               ukpz[threadIdx.x], pdk, pga, //
-               f, aewald,                   //
+               ukpz[threadIdx.x], pdk, //
+               f, aewald,              //
                frcxi, frcyi, frczi, frcxk, frcyk, frczk, ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k, dufld0i,
                dufld1i, dufld2i, dufld3i, dufld4i, dufld5i, dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, //
                e, edamp, vxx, vyx, vzx, vyy, vzy, vzz);
@@ -474,8 +474,8 @@ void epolar_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBuff
                pdi[klane], pga, //
                ck, dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x], qkxx, qkxy, qkxz, qkyy, qkyz, qkzz,
                ukdx[threadIdx.x], ukdy[threadIdx.x], ukdz[threadIdx.x], ukpx[threadIdx.x], ukpy[threadIdx.x],
-               ukpz[threadIdx.x], pdk, pga, //
-               f, aewald,                   //
+               ukpz[threadIdx.x], pdk, //
+               f, aewald,              //
                frcxi, frcyi, frczi, frcxk, frcyk, frczk, ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k, dufld0i,
                dufld1i, dufld2i, dufld3i, dufld4i, dufld5i, dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, //
                e, edamp, vxx, vyx, vzx, vyy, vzy, vzz);

@@ -128,7 +128,7 @@ SCALED_PAIRWISE_INTERACTION: |
       @ci@, @dix@, @diy@, @diz@, @qixx@, @qixy@, @qixz@, @qiyy@, @qiyz@, @qizz@,
       @uidx@, @uidy@, @uidz@, @uipx@, @uipy@, @uipz@, @pdi@, pga, //
       @ck@, @dkx@, @dky@, @dkz@, @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@,
-      @ukdx@, @ukdy@, @ukdz@, @ukpx@, @ukpy@, @ukpz@, @pdk@, pga, //
+      @ukdx@, @ukdy@, @ukdz@, @ukpx@, @ukpy@, @ukpz@, @pdk@,      //
       f, aewald, //
       @frcxi@, @frcyi@, @frczi@, @frcxk@, @frcyk@, @frczk@,
       @ufld0i@, @ufld1i@, @ufld2i@, @ufld0k@, @ufld1k@, @ufld2k@,
@@ -140,7 +140,7 @@ SCALED_PAIRWISE_INTERACTION: |
       @ci@, @dix@, @diy@, @diz@, @qixx@, @qixy@, @qixz@, @qiyy@, @qiyz@, @qizz@,
       @uidx@, @uidy@, @uidz@, @uipx@, @uipy@, @uipz@, @pdi@, pga, //
       @ck@, @dkx@, @dky@, @dkz@, @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@,
-      @ukdx@, @ukdy@, @ukdz@, @ukpx@, @ukpy@, @ukpz@, @pdk@, pga, //
+      @ukdx@, @ukdy@, @ukdz@, @ukpx@, @ukpy@, @ukpz@, @pdk@,      //
       f, aewald, //
       @frcxi@, @frcyi@, @frczi@, @frcxk@, @frcyk@, @frczk@,
       @ufld0i@, @ufld1i@, @ufld2i@, @ufld0k@, @ufld1k@, @ufld2k@,
@@ -191,7 +191,7 @@ FULL_PAIRWISE_INTERACTION: |
       @ci@, @dix@, @diy@, @diz@, @qixx@, @qixy@, @qixz@, @qiyy@, @qiyz@, @qizz@,
       @uidx@, @uidy@, @uidz@, @uipx@, @uipy@, @uipz@, @pdi@, pga, //
       @ck@, @dkx@, @dky@, @dkz@, @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@,
-      @ukdx@, @ukdy@, @ukdz@, @ukpx@, @ukpy@, @ukpz@, @pdk@, pga, //
+      @ukdx@, @ukdy@, @ukdz@, @ukpx@, @ukpy@, @ukpz@, @pdk@,      //
       f, aewald, //
       @frcxi@, @frcyi@, @frczi@, @frcxk@, @frcyk@, @frczk@,
       @ufld0i@, @ufld1i@, @ufld2i@, @ufld0k@, @ufld1k@, @ufld2k@,

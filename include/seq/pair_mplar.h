@@ -72,9 +72,9 @@ template <class Ver, class ETYP, bool DO_AST = false>
 __device__
 void pairMplar(real r2, real3 dR, real mscale, real dscale, real pscale, real uscale,   //
    real ci, real3 Id, real Iqxx, real Iqxy, real Iqxz, real Iqyy, real Iqyz, real Iqzz, //
-   real3 Iud, real3 Iup, real pdi, real pti,                                            //
+   real3 Iud, real3 Iup, real pdi, real pga,                                            //
    real ck, real3 Kd, real Kqxx, real Kqxy, real Kqxz, real Kqyy, real Kqyz, real Kqzz, //
-   real3 Kud, real3 Kup, real pdk, real ptk, real f, real aewald,                       //
+   real3 Kud, real3 Kup, real pdk, real f, real aewald,                                 //
    real& restrict frcxi, real& restrict frcyi, real& restrict frczi, real& restrict frcxk, real& restrict frcyk,
    real& restrict frczk, real& restrict trqxi, real& restrict trqyi, real& restrict trqzi, real& restrict trqxk,
    real& restrict trqyk, real& restrict trqzk, real& restrict eo, real& restrict voxx, real& restrict voxy,
@@ -133,7 +133,7 @@ void pairMplar(real r2, real3 dR, real mscale, real dscale, real pscale, real us
 
    // if use_thole
    real ex3, ex5, ex7, ex9;
-   damp_thole4(r, pdi, pti, pdk, ptk, ex3, ex5, ex7, ex9);
+   dmpthole4_a(r, pga, pdi, pdk, ex3, ex5, ex7, ex9);
    sr3 = bn[1] - ex3 * rr3;
    sr5 = bn[2] - ex5 * rr5;
    sr7 = bn[3] - ex7 * rr7;

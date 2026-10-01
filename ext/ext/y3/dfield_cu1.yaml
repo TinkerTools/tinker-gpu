@@ -82,7 +82,7 @@ FULL_PAIRWISE_INTERACTION: |
       @ci@, @dix@, @diy@, @diz@,
       @qixx@, @qixy@, @qixz@, @qiyy@, @qiyz@, @qizz@, @pdi@, pga,
       @ck@, @dkx@, @dky@, @dkz@,
-      @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@, @pdk@, pga,
+      @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@, @pdk@,
       @fidx@, @fidy@, @fidz@, @fipx@, @fipy@, @fipz@,
       @fkdx@, @fkdy@, @fkdz@, @fkpx@, @fkpy@, @fkpz@);
   } // end if (include)

@@ -78,7 +78,7 @@ void dfieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
          real pgd = thdval[njpolar * jpi[klane] + jpk];
          pair_dfield_aplus_v2<ETYP>(r2, xr, yr, zr, scaleb, ci[klane], dix[klane], diy[klane], diz[klane], pdi[klane],
             pgd, qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], ck, dkx, dky, dkz, pdk,
-            pgd, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
+            qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
       } // end if (include)
 
       atomic_add(fidx, &field[i][0]);
@@ -156,7 +156,7 @@ void dfieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
             real pgd = thdval[njpolar * jpi[klane] + jpk];
             pair_dfield_aplus_v2<ETYP>(r2, xr, yr, zr, scaleb, ci[klane], dix[klane], diy[klane], diz[klane],
                pdi[klane], pgd, qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], ck, dkx,
-               dky, dkz, pdk, pgd, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
+               dky, dkz, pdk, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
          } // end if (include)
 
          iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
@@ -235,7 +235,7 @@ void dfieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
             real pgd = thdval[njpolar * jpi[klane] + jpk];
             pair_dfield_aplus_v2<ETYP>(r2, xr, yr, zr, scaleb, ci[klane], dix[klane], diy[klane], diz[klane],
                pdi[klane], pgd, qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], ck, dkx,
-               dky, dkz, pdk, pgd, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
+               dky, dkz, pdk, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
          } // end if (include)
 
          xi = __shfl_sync(ALL_LANES, xi, ilane + 1);

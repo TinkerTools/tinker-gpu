@@ -1,4 +1,4 @@
-// ck.py Version 3.0.2
+// ck.py Version 3.1.0
 __global__
 void sparsePrecond_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict uinfo, int nexclude,
    const int (*restrict exclude)[2], const real* restrict exclude_scale, const real* restrict x, const real* restrict y,
@@ -78,7 +78,7 @@ void sparsePrecond_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* res
          real r = REAL_SQRT(r2);
          real scale3, scale5;
          real pga = thlval[njpolar * jpi[klane] + jpk];
-         damp_thole2(r, pdi[klane], pga, pdk, pga, scale3, scale5);
+         dmpthole2_a(r, pga, pdi[klane], pdk, scale3, scale5);
          scale3 *= scalea;
          scale5 *= scalea;
          real polik = poli[klane] * polk;
@@ -188,7 +188,7 @@ void sparsePrecond_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* res
             real r = REAL_SQRT(r2);
             real scale3, scale5;
             real pga = thlval[njpolar * jpi[klane] + jpk];
-            damp_thole2(r, pdi[klane], pga, pdk, pga, scale3, scale5);
+            dmpthole2_a(r, pga, pdi[klane], pdk, scale3, scale5);
             scale3 *= scalea;
             scale5 *= scalea;
             real polik = poli[klane] * polk;
@@ -302,7 +302,7 @@ void sparsePrecond_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* res
             real r = REAL_SQRT(r2);
             real scale3, scale5;
             real pga = thlval[njpolar * jpi[klane] + jpk];
-            damp_thole2(r, pdi[klane], pga, pdk, pga, scale3, scale5);
+            dmpthole2_a(r, pga, pdi[klane], pdk, scale3, scale5);
             scale3 *= scalea;
             scale5 *= scalea;
             real polik = poli[klane] * polk;

@@ -63,7 +63,7 @@ void pair_polar( //
    real uiyp,
    real uizp,
    real pdi,
-   real pti, //
+   real pga, //
    real ck,
    real dkx,
    real dky,
@@ -80,8 +80,7 @@ void pair_polar( //
    real ukxp,
    real ukyp,
    real ukzp,
-   real pdk,
-   real ptk, //
+   real pdk, //
    real f,
    real aewald,
    real& restrict e,
@@ -136,15 +135,15 @@ void pair_polar( //
    real ex3, ex5, ex7;
    MAYBE_UNUSED real rc31, rc32, rc33, rc51, rc52, rc53, rc71, rc72, rc73;
    if CONSTEXPR (!do_g) {
-      damp_thole3(r, pdi, pti, pdk, ptk, //
+      dmpthole3_a(r, pga, pdi, pdk, //
                   ex3, ex5, ex7);
       ex3 = 1 - ex3;
       ex5 = 1 - ex5;
       ex7 = 1 - ex7;
    } else {
-      damp_thole3g(          //
+      dmpthole3g_a(          //
          r, rr2, xr, yr, zr, //
-         pdi, pti, pdk, ptk, //
+         pga, pdi, pdk,      //
          ex3, ex5, ex7,      //
          rc31, rc32, rc33,   //
          rc51, rc52, rc53,   //
@@ -397,7 +396,7 @@ void pair_polar_v2( //
    real uiyp,
    real uizp,
    real pdi,
-   real pti, //
+   real pga, //
    real ck,
    real dkx,
    real dky,
@@ -414,8 +413,7 @@ void pair_polar_v2( //
    real ukxp,
    real ukyp,
    real ukzp,
-   real pdk,
-   real ptk, //
+   real pdk, //
    real f,
    real aewald, //
    real& restrict frcxi,
@@ -504,15 +502,15 @@ void pair_polar_v2( //
    real ex3, ex5, ex7;
    MAYBE_UNUSED real rc31, rc32, rc33, rc51, rc52, rc53, rc71, rc72, rc73;
    if CONSTEXPR (!do_g) {
-      damp_thole3(r, pdi, pti, pdk, ptk, //
+      dmpthole3_a(r, pga, pdi, pdk, //
                   ex3, ex5, ex7);
       ex3 = 1 - ex3;
       ex5 = 1 - ex5;
       ex7 = 1 - ex7;
    } else {
-      damp_thole3g(          //
+      dmpthole3g_a(          //
          r, rr2, xr, yr, zr, //
-         pdi, pti, pdk, ptk, //
+         pga, pdi, pdk,      //
          ex3, ex5, ex7,      //
          rc31, rc32, rc33,   //
          rc51, rc52, rc53,   //

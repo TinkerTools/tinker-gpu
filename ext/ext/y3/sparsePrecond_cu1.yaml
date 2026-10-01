@@ -74,7 +74,7 @@ FULL_PAIRWISE_INTERACTION: |
     real r = REAL_SQRT(r2);
     real scale3, scale5;
     real pga = thlval[njpolar * jpi[klane] + jpk];
-    damp_thole2(r, @pdi@, pga, @pdk@, pga, scale3, scale5);
+    dmpthole2_a(r, pga, @pdi@, @pdk@, scale3, scale5);
     scale3 *= scalea;
     scale5 *= scalea;
     real polik = @poli@ * @polk@;

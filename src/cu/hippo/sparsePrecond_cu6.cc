@@ -64,7 +64,7 @@ void sparsePrecond_cu6(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* res
          real r = REAL_SQRT(r2);
          real scale3, scale5;
          real pga = thlval[njpolar * jpi[klane] + jpk];
-         damp_thole2(r, pdi[klane], pga, pdk, pga, scale3, scale5);
+         dmpthole2_a(r, pga, pdi[klane], pdk, scale3, scale5);
          scale3 *= scalea;
          scale5 *= scalea;
 
@@ -147,7 +147,7 @@ void sparsePrecond_cu6(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* res
             real r = REAL_SQRT(r2);
             real scale3, scale5;
             real pga = thlval[njpolar * jpi[klane] + jpk];
-            damp_thole2(r, pdi[klane], pga, pdk, pga, scale3, scale5);
+            dmpthole2_a(r, pga, pdi[klane], pdk, scale3, scale5);
             scale3 *= scalea;
             scale5 *= scalea;
 
@@ -231,7 +231,7 @@ void sparsePrecond_cu6(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* res
             real r = REAL_SQRT(r2);
             real scale3, scale5;
             real pga = thlval[njpolar * jpi[klane] + jpk];
-            damp_thole2(r, pdi[klane], pga, pdk, pga, scale3, scale5);
+            dmpthole2_a(r, pga, pdi[klane], pdk, scale3, scale5);
             scale3 *= scalea;
             scale5 *= scalea;
 

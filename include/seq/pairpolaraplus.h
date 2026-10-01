@@ -18,8 +18,8 @@ void pair_polar_aplus(real r2,
                       real diy,
                       real diz,
                       real pdi,
-                      real pti,
-                      real ddi,
+                      real pga,
+                      real pgd,
                       real qixx,
                       real qixy,
                       real qixz,
@@ -34,8 +34,6 @@ void pair_polar_aplus(real r2,
                       real dky,
                       real dkz,
                       real pdk,
-                      real ptk,
-                      real ddk,
                       real qkxx,
                       real qkxy,
                       real qkxz,
@@ -95,15 +93,15 @@ void pair_polar_aplus(real r2,
    real ex3, ex5, ex7;
    MAYBE_UNUSED real rc31, rc32, rc33, rc51, rc52, rc53, rc71, rc72, rc73;
    if CONSTEXPR (!do_g) {
-      damp_aplus3(r, pdi, ddi, pdk, ddk, //
+      dmpaplus3_a(r, pgd, pdi, pdk, //
                   ex3, ex5, ex7);
       ex3 = 1 - ex3;
       ex5 = 1 - ex5;
       ex7 = 1 - ex7;
    } else {
-      damp_aplus3g(          //
+      dmpaplus3g_a(          //
          r, rr2, xr, yr, zr, //
-         pdi, ddi, pdk, ddk, //
+         pgd, pdi, pdk,      //
          ex3, ex5, ex7,      //
          rc31, rc32, rc33,   //
          rc51, rc52, rc53,   //
@@ -262,9 +260,9 @@ void pair_polar_aplus(real r2,
       }
 
       // get the dtau/dr terms used for mutual polarization force
-      damp_thole3g(          //
+      dmpthole3g_a(          //
          r, rr2, xr, yr, zr, //
-         pdi, pti, pdk, ptk, //
+         pga, pdi, pdk,      //
          ex3, ex5, ex7,      //
          rc31, rc32, rc33,   //
          rc51, rc52, rc53,   //
@@ -355,8 +353,8 @@ void pair_polar_aplus_v2(real r2,
                          real uiy,
                          real uiz,
                          real pdi,
-                         real pti,
-                         real ddi,
+                         real pga,
+                         real pgd,
                          real ck,
                          real dkx,
                          real dky,
@@ -371,8 +369,6 @@ void pair_polar_aplus_v2(real r2,
                          real uky,
                          real ukz,
                          real pdk,
-                         real ptk,
-                         real ddk,
                          real f,
                          real aewald,
                          real& restrict frcxi,
@@ -463,15 +459,15 @@ void pair_polar_aplus_v2(real r2,
    real ex3, ex5, ex7;
    MAYBE_UNUSED real rc31, rc32, rc33, rc51, rc52, rc53, rc71, rc72, rc73;
    if CONSTEXPR (!do_g) {
-      damp_aplus3(r, pdi, ddi, pdk, ddk, //
+      dmpaplus3_a(r, pgd, pdi, pdk, //
                   ex3, ex5, ex7);
       ex3 = 1 - ex3;
       ex5 = 1 - ex5;
       ex7 = 1 - ex7;
    } else {
-      damp_aplus3g(          //
+      dmpaplus3g_a(          //
          r, rr2, xr, yr, zr, //
-         pdi, ddi, pdk, ddk, //
+         pgd, pdi, pdk,      //
          ex3, ex5, ex7,      //
          rc31, rc32, rc33,   //
          rc51, rc52, rc53,   //
@@ -632,9 +628,9 @@ void pair_polar_aplus_v2(real r2,
       }
 
       // get the dtau/dr terms used for mutual polarization force
-      damp_thole3g(          //
+      dmpthole3g_a(          //
          r, rr2, xr, yr, zr, //
-         pdi, pti, pdk, ptk, //
+         pga, pdi, pdk,      //
          ex3, ex5, ex7,      //
          rc31, rc32, rc33,   //
          rc51, rc52, rc53,   //

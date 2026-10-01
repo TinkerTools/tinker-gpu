@@ -9,11 +9,9 @@
 #include "seq/pair_polar.h"
 #include "tool/gpucard.h"
 
-#define TINKER9_POLPAIR 2
-
 namespace tinker {
 #define POLAR_DPTRS \
-   x, y, z, depx, depy, depz, rpole, thole, pdamp, uind, uinp, nep, ep, vir_ep, ufld, dufld, jpolar, thlval
+   x, y, z, depx, depy, depz, rpole, pdamp, uind, uinp, nep, ep, vir_ep, ufld, dufld, jpolar, thlval
 template <class Ver>
 static void epolarEwaldReal_acc1(const real (*uind)[3], const real (*uinp)[3])
 {
@@ -61,11 +59,7 @@ static void epolarEwaldReal_acc1(const real (*uind)[3], const real (*uinp)[3])
       real uiy = uind[i][1];
       real uiz = uind[i][2];
       real pdi = pdamp[i];
-#if TINKER9_POLPAIR == 2
       int jpi = jpolar[i];
-#else
-      real pti = thole[i];
-#endif
       real uixp = 0, uiyp = 0, uizp = 0;
       if CONSTEXPR (do_g) {
          uixp = uinp[i][0];
@@ -110,22 +104,13 @@ static void epolarEwaldReal_acc1(const real (*uind)[3], const real (*uinp)[3])
             }
 
             MAYBE_UNUSED real e, edamp;
-#if TINKER9_POLPAIR == 2
             int jpk = jpolar[k];
             real pga = thlval[njpolar * jpi + jpk];
             pair_polar<do_e, do_a, do_g, EWALD>(                                                                      //
                r2, xr, yr, zr, 1, 1, 1,                                                                               //
                ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy, uiz, uixp, uiyp, uizp, pdi, pga,      //
-               ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, ukxp, ukyp, ukzp, pdamp[k], pga, //
+               ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, ukxp, ukyp, ukzp, pdamp[k],      //
                f, aewald, e, edamp, pgrad);
-#else
-            pair_polar<do_e, do_a, do_g, EWALD>(                                                                 //
-               r2, xr, yr, zr, 1, 1, 1,                                                                          //
-               ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy, uiz, uixp, uiyp, uizp, pdi, pti, //
-               ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, ukxp, ukyp, ukzp, pdamp[k],
-               thole[k], //
-               f, aewald, e, edamp, pgrad);
-#endif
 
             if CONSTEXPR (do_a)
                if (edamp != 0)
@@ -223,11 +208,7 @@ static void epolarEwaldReal_acc1(const real (*uind)[3], const real (*uinp)[3])
       real uiy = uind[i][1];
       real uiz = uind[i][2];
       real pdi = pdamp[i];
-#if TINKER9_POLPAIR == 2
       int jpi = jpolar[i];
-#else
-      real pti = thole[i];
-#endif
       real uixp = 0, uiyp = 0, uizp = 0;
       if CONSTEXPR (do_g) {
          uixp = uinp[i][0];
@@ -262,22 +243,13 @@ static void epolarEwaldReal_acc1(const real (*uind)[3], const real (*uinp)[3])
          }
 
          MAYBE_UNUSED real e, edamp;
-#if TINKER9_POLPAIR == 2
          int jpk = jpolar[k];
          real pga = thlval[njpolar * jpi + jpk];
          pair_polar<do_e, do_a, do_g, NON_EWALD>(                                                                  //
             r2, xr, yr, zr, dscale, pscale, uscale,                                                                //
             ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy, uiz, uixp, uiyp, uizp, pdi, pga,      //
-            ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, ukxp, ukyp, ukzp, pdamp[k], pga, //
+            ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, ukxp, ukyp, ukzp, pdamp[k],      //
             f, 0, e, edamp, pgrad);
-#else
-         pair_polar<do_e, do_a, do_g, NON_EWALD>(                                                             //
-            r2, xr, yr, zr, dscale, pscale, uscale,                                                           //
-            ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy, uiz, uixp, uiyp, uizp, pdi, pti, //
-            ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, ukxp, ukyp, ukzp, pdamp[k],
-            thole[k], //
-            f, 0, e, edamp, pgrad);
-#endif
 
          if CONSTEXPR (do_a)
             if (pscale == -1 and edamp != 0)

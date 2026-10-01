@@ -1,4 +1,4 @@
-// ck.py Version 3.0.2
+// ck.py Version 3.1.0
 template <class ETYP>
 __global__
 void dfield_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict dpinfo, int nexclude,
@@ -87,8 +87,8 @@ void dfield_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict d
          real pga = thlval[njpolar * jpi[klane] + jpk];
          pair_dfield_v2<ETYP>(r2, xr, yr, zr, scalea, scaleb, aewald, ci[klane], dix[klane], diy[klane], diz[klane],
             qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], pdi[klane], pga, ck, dkx, dky,
-            dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, pdk, pga, fidx, fidy, fidz, fipx, fipy, fipz, fkdx, fkdy, fkdz,
-            fkpx, fkpy, fkpz);
+            dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, pdk, fidx, fidy, fidz, fipx, fipy, fipz, fkdx, fkdy, fkdz, fkpx,
+            fkpy, fkpz);
       } // end if (include)
 
       atomic_add(fidx, &field[i][0]);
@@ -179,8 +179,8 @@ void dfield_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict d
             real pga = thlval[njpolar * jpi[klane] + jpk];
             pair_dfield_v2<ETYP>(r2, xr, yr, zr, scalea, scaleb, aewald, ci[klane], dix[klane], diy[klane], diz[klane],
                qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], pdi[klane], pga, ck, dkx,
-               dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, pdk, pga, fidx, fidy, fidz, fipx, fipy, fipz, fkdx, fkdy,
-               fkdz, fkpx, fkpy, fkpz);
+               dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, pdk, fidx, fidy, fidz, fipx, fipy, fipz, fkdx, fkdy, fkdz,
+               fkpx, fkpy, fkpz);
          } // end if (include)
 
          iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
@@ -275,8 +275,8 @@ void dfield_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict d
             real pga = thlval[njpolar * jpi[klane] + jpk];
             pair_dfield_v2<ETYP>(r2, xr, yr, zr, scalea, scaleb, aewald, ci[klane], dix[klane], diy[klane], diz[klane],
                qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], pdi[klane], pga, ck, dkx,
-               dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, pdk, pga, fidx, fidy, fidz, fipx, fipy, fipz, fkdx, fkdy,
-               fkdz, fkpx, fkpy, fkpz);
+               dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, pdk, fidx, fidy, fidz, fipx, fipy, fipz, fkdx, fkdy, fkdz,
+               fkpx, fkpy, fkpz);
          } // end if (include)
 
          xi = __shfl_sync(ALL_LANES, xi, ilane + 1);

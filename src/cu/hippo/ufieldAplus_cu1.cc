@@ -62,7 +62,7 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
       if (r2 <= off * off and incl) {
          real pga = thlval[njpolar * jpi[klane] + jpk];
          pair_ufield_aplus_v2<ETYP>(r2, xr, yr, zr, scalea, uidx[klane], uidy[klane], uidz[klane], pdi[klane], pga,
-            ukdx, ukdy, ukdz, pdk, pga, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
+            ukdx, ukdy, ukdz, pdk, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
       } // end if (include)
 
       atomic_add(fidx, &field[i][0]);
@@ -125,7 +125,7 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
          if (r2 <= off * off and incl) {
             real pga = thlval[njpolar * jpi[klane] + jpk];
             pair_ufield_aplus_v2<ETYP>(r2, xr, yr, zr, scalea, uidx[klane], uidy[klane], uidz[klane], pdi[klane], pga,
-               ukdx, ukdy, ukdz, pdk, pga, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
+               ukdx, ukdy, ukdz, pdk, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
          } // end if (include)
 
          iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
@@ -189,7 +189,7 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
          if (r2 <= off * off and incl) {
             real pga = thlval[njpolar * jpi[klane] + jpk];
             pair_ufield_aplus_v2<ETYP>(r2, xr, yr, zr, scalea, uidx[klane], uidy[klane], uidz[klane], pdi[klane], pga,
-               ukdx, ukdy, ukdz, pdk, pga, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
+               ukdx, ukdy, ukdz, pdk, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
          } // end if (include)
 
          xi = __shfl_sync(ALL_LANES, xi, ilane + 1);

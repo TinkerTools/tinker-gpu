@@ -19,7 +19,7 @@ void pair_dfield_aplus(real r2,
                        real diy,
                        real diz,
                        real pdi,
-                       real ddi,
+                       real pgd,
                        real qixx,
                        real qixy,
                        real qixz,
@@ -31,7 +31,6 @@ void pair_dfield_aplus(real r2,
                        real dky,
                        real dkz,
                        real pdk,
-                       real ddk,
                        real qkxx,
                        real qkxy,
                        real qkxz,
@@ -51,7 +50,7 @@ void pair_dfield_aplus(real r2,
    real rr2 = invr1 * invr1;
 
    real scale3, scale5, scale7;
-   damp_aplus3(r, pdi, ddi, pdk, ddk, scale3, scale5, scale7);
+   dmpaplus3_a(r, pgd, pdi, pdk, scale3, scale5, scale7);
 
    real bn[4];
    if CONSTEXPR (eq<ETYP, EWALD>())
@@ -118,7 +117,7 @@ void pair_dfield_aplus_v2(real r2,
                           real diy,
                           real diz,
                           real pdi,
-                          real ddi,
+                          real pgd,
                           real qixx,
                           real qixy,
                           real qixz,
@@ -130,7 +129,6 @@ void pair_dfield_aplus_v2(real r2,
                           real dky,
                           real dkz,
                           real pdk,
-                          real ddk,
                           real qkxx,
                           real qkxy,
                           real qkxz,
@@ -150,7 +148,7 @@ void pair_dfield_aplus_v2(real r2,
    real rr2 = invr1 * invr1;
 
    real scale3, scale5, scale7;
-   damp_aplus3(r, pdi, ddi, pdk, ddk, scale3, scale5, scale7);
+   dmpaplus3_a(r, pgd, pdi, pdk, scale3, scale5, scale7);
 
    real bn[4];
    if CONSTEXPR (eq<ETYP, EWALD>())
@@ -215,12 +213,11 @@ void pair_ufield_aplus(real r2,
                        real uindi1,
                        real uindi2, //
                        real pdi,
-                       real pti, //
+                       real pga, //
                        real uindk0,
                        real uindk1,
                        real uindk2, //
-                       real pdk,
-                       real ptk, //
+                       real pdk, //
                        real aewald,
                        real& restrict fidx,
                        real& restrict fidy,
@@ -234,7 +231,7 @@ void pair_ufield_aplus(real r2,
    real rr2 = invr1 * invr1;
 
    real scale3, scale5;
-   damp_thole2(r, pdi, pti, pdk, ptk, scale3, scale5);
+   dmpthole2_a(r, pga, pdi, pdk, scale3, scale5);
 
    real bn[3];
    if CONSTEXPR (eq<ETYP, EWALD>())
@@ -282,12 +279,11 @@ void pair_ufield_aplus_v2(real r2,
                           real uindi1,
                           real uindi2, //
                           real pdi,
-                          real pti, //
+                          real pga, //
                           real uindk0,
                           real uindk1,
                           real uindk2, //
-                          real pdk,
-                          real ptk, //
+                          real pdk, //
                           real aewald,
                           real& restrict fidx,
                           real& restrict fidy,
@@ -301,7 +297,7 @@ void pair_ufield_aplus_v2(real r2,
    real rr2 = invr1 * invr1;
 
    real scale3, scale5;
-   damp_thole2(r, pdi, pti, pdk, ptk, scale3, scale5);
+   dmpthole2_a(r, pga, pdi, pdk, scale3, scale5);
 
    real bn[3];
    if CONSTEXPR (eq<ETYP, EWALD>())

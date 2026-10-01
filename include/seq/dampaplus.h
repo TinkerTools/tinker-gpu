@@ -108,9 +108,8 @@ inline void damp_gordon2(real* restrict dmpik, real* restrict dmpi, real* restri
 
 // dfield aplus
 SEQ_ROUTINE
-inline void damp_aplus3(real r, real pdi, real ddi, real pdk, real ddk, real& restrict scale3, real& restrict scale5, real& restrict scale7)
+inline void dmpaplus3_a(real r, real pgamma, real pdi, real pdk, real& restrict scale3, real& restrict scale5, real& restrict scale7)
 {
-   real pgamma = REAL_MIN(ddi, ddk);
    real damp = pdi * pdk;
    real ratio = r * REAL_RECIP(damp);
    // A pair with no damping width or no direct damping pair value (thdval) is
@@ -125,15 +124,14 @@ inline void damp_aplus3(real r, real pdi, real ddi, real pdk, real ddk, real& re
 }
 
 SEQ_ROUTINE
-inline void damp_aplus3g(real r,
+inline void dmpaplus3g_a(real r,
                          real rr2,
                          real xr,
                          real yr,
                          real zr,
+                         real pgamma,
                          real pdi,
-                         real ddi,
                          real pdk,
-                         real ddk,
                          real& restrict scale31,
                          real& restrict scale51,
                          real& restrict scale71,
@@ -147,7 +145,6 @@ inline void damp_aplus3g(real r,
                          real& restrict rc72,
                          real& restrict rc73)
 {
-   real pgamma = REAL_MIN(ddi, ddk);
    real damp = pdi * pdk;
    real ratio = r * REAL_RECIP(damp);
    // A pair with no damping width or no direct damping pair value (thdval) is

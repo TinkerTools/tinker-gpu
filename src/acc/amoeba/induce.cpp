@@ -16,8 +16,6 @@
 #include <tinker/detail/polpot.hh>
 #include <tinker/detail/units.hh>
 
-#define TINKER9_POLPAIR 2
-
 namespace tinker {
 // PCG
 //
@@ -316,7 +314,7 @@ void diagPrecond_acc(const real (*rsd)[3], const real (*rsdp)[3], real (*zrsd)[3
    }
 }
 
-#define APPLY_DPTRS rsd, rsdp, zrsd, zrsdp, x, y, z, polarity, pdamp, thole, jpolar, thlval
+#define APPLY_DPTRS rsd, rsdp, zrsd, zrsdp, x, y, z, polarity, pdamp, jpolar, thlval
 void sparsePrecondApply_acc(const real (*rsd)[3], const real (*rsdp)[3], real (*zrsd)[3], real (*zrsdp)[3])
 {
    #pragma acc parallel loop independent async\
@@ -343,11 +341,7 @@ void sparsePrecondApply_acc(const real (*rsd)[3], const real (*rsdp)[3], real (*
       real yi = y[i];
       real zi = z[i];
       real pdi = pdamp[i];
-#if TINKER9_POLPAIR == 2
       int jpi = jpolar[i];
-#else
-      real pti = thole[i];
-#endif
       real poli = polarity[i];
 
       int nulsti = ulst->nlst[i];
@@ -366,13 +360,9 @@ void sparsePrecondApply_acc(const real (*rsd)[3], const real (*rsdp)[3], real (*
          real r = REAL_SQRT(r2);
 
          real scale3, scale5;
-#if TINKER9_POLPAIR == 2
          int jpk = jpolar[k];
          real pga = thlval[njpolar * jpi + jpk];
-         damp_thole2(r, pdi, pga, pdamp[k], pga, scale3, scale5);
-#else
-         damp_thole2(r, pdi, pti, pdamp[k], thole[k], scale3, scale5);
-#endif
+         dmpthole2_a(r, pga, pdi, pdamp[k], scale3, scale5);
 
          real polik = poli * polarity[k];
          real rr3 = scale3 * polik * REAL_RECIP(r * r2);
@@ -423,11 +413,7 @@ void sparsePrecondApply_acc(const real (*rsd)[3], const real (*rsdp)[3], real (*
       real yi = y[i];
       real zi = z[i];
       real pdi = pdamp[i];
-#if TINKER9_POLPAIR == 2
       int jpi = jpolar[i];
-#else
-      real pti = thole[i];
-#endif
       real poli = polarity[i];
 
       real xr = x[k] - xi;
@@ -438,13 +424,9 @@ void sparsePrecondApply_acc(const real (*rsd)[3], const real (*rsdp)[3], real (*
       real r = REAL_SQRT(r2);
 
       real scale3, scale5;
-#if TINKER9_POLPAIR == 2
       int jpk = jpolar[k];
       real pga = thlval[njpolar * jpi + jpk];
-      damp_thole2(r, pdi, pga, pdamp[k], pga, scale3, scale5);
-#else
-      damp_thole2(r, pdi, pti, pdamp[k], thole[k], scale3, scale5);
-#endif
+      dmpthole2_a(r, pga, pdi, pdamp[k], scale3, scale5);
       scale3 *= uscale;
       scale5 *= uscale;
 

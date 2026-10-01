@@ -57,7 +57,7 @@ void epolarData(RcOp op)
       ndpuexclude = 0;
       darray::deallocate(dpuexclude, dpuexclude_scale);
 
-      darray::deallocate(polarity, thole, pdamp, polarity_inv, polarityorig);
+      darray::deallocate(polarity, pdamp, polarity_inv, polarityorig);
       if (polpot::use_tholed)
          darray::deallocate(thdval);
 
@@ -408,7 +408,7 @@ void epolarData(RcOp op)
       darray::allocate(n, &jpolar);
       darray::allocate(njpolar * njpolar, &thlval);
 
-      darray::allocate(n, &polarity, &thole, &pdamp, &polarity_inv);
+      darray::allocate(n, &polarity, &pdamp, &polarity_inv);
       if (use_epdt || use_prst)
          darray::allocate(n, &polarityorig);
       else
@@ -566,7 +566,6 @@ void epolarData(RcOp op)
          pinvbuf[i] = 1.0 / std::max(polbuf[i], polmin);
       }
       darray::copyin(g::q0, n, polarity, polbuf.data());
-      darray::copyin(g::q0, n, thole, polar::thole);
       darray::copyin(g::q0, n, pdamp, polar::pdamp);
       darray::copyin(g::q0, n, polarity_inv, pinvbuf.data());
       if (use_epdt || use_prst)
