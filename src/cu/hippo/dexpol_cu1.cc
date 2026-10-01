@@ -1,4 +1,4 @@
-// ck.py Version 3.0.2
+// ck.py Version 3.1.0
 template <class Ver>
 __global__
 void dexpol_cu1(int n, TINKER_IMAGE_PARAMS, VirialBuffer restrict vep, grad_prec* restrict gx, grad_prec* restrict gy,
@@ -81,9 +81,11 @@ void dexpol_cu1(int n, TINKER_IMAGE_PARAMS, VirialBuffer restrict vep, grad_prec
       real r2 = image2(xr, yr, zr);
       if ((eplk or epli[klane]) and r2 <= off * off and incl) {
          real r = REAL_SQRT(r2);
+         real ski = (poli[klane] != 0 ? springi[klane] / poli[klane] : 0);
+         real skk = (polk != 0 ? springk / polk : 0);
          real frc[3];
-         pair_dexpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, uix[klane], uiy[klane], uiz[klane], ukx, uky, ukz,
-            springi[klane] / poli[klane], sizi[klane], alphai[klane], springk / polk, sizk, alphak, f, frc);
+         pair_dexpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, uix[klane], uiy[klane], uiz[klane], ukx, uky, ukz, ski,
+            sizi[klane], alphai[klane], skk, sizk, alphak, f, frc);
          frcxi += frc[0];
          frcyi += frc[1];
          frczi += frc[2];
@@ -176,9 +178,11 @@ void dexpol_cu1(int n, TINKER_IMAGE_PARAMS, VirialBuffer restrict vep, grad_prec
          real r2 = image2(xr, yr, zr);
          if ((eplk or epli[klane]) and r2 <= off * off and incl) {
             real r = REAL_SQRT(r2);
+            real ski = (poli[klane] != 0 ? springi[klane] / poli[klane] : 0);
+            real skk = (polk != 0 ? springk / polk : 0);
             real frc[3];
-            pair_dexpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, uix[klane], uiy[klane], uiz[klane], ukx, uky, ukz,
-               springi[klane] / poli[klane], sizi[klane], alphai[klane], springk / polk, sizk, alphak, f, frc);
+            pair_dexpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, uix[klane], uiy[klane], uiz[klane], ukx, uky, ukz, ski,
+               sizi[klane], alphai[klane], skk, sizk, alphak, f, frc);
             frcxi += frc[0];
             frcyi += frc[1];
             frczi += frc[2];
@@ -271,9 +275,11 @@ void dexpol_cu1(int n, TINKER_IMAGE_PARAMS, VirialBuffer restrict vep, grad_prec
          real r2 = image2(xr, yr, zr);
          if ((eplk or epli[klane]) and r2 <= off * off and incl) {
             real r = REAL_SQRT(r2);
+            real ski = (poli[klane] != 0 ? springi[klane] / poli[klane] : 0);
+            real skk = (polk != 0 ? springk / polk : 0);
             real frc[3];
-            pair_dexpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, uix[klane], uiy[klane], uiz[klane], ukx, uky, ukz,
-               springi[klane] / poli[klane], sizi[klane], alphai[klane], springk / polk, sizk, alphak, f, frc);
+            pair_dexpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, uix[klane], uiy[klane], uiz[klane], ukx, uky, ukz, ski,
+               sizi[klane], alphai[klane], skk, sizk, alphak, f, frc);
             frcxi += frc[0];
             frcyi += frc[1];
             frczi += frc[2];

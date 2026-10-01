@@ -113,7 +113,8 @@ static void epolarChgpen_acc1(const real (*uind)[3])
                aewald, e, pota, potb, pgrad);
 
             if CONSTEXPR (do_a)
-               atomic_add(1, nep, offset);
+               if (e != 0)
+                  atomic_add(1, nep, offset);
             if CONSTEXPR (do_e)
                atomic_add(e, ep, offset);
             if CONSTEXPR (do_g) {

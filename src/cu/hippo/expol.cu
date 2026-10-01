@@ -59,7 +59,7 @@ void alterpol_cu(real (*polscale)[3][3], real (*polinv)[3][3])
       n, polscale);
 
    int ngrid = gpuGridSize(BLOCK_DIM);
-   alterpol_cu1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(n, TINKER_IMAGE_ARGS, cut, off, st.si2.bit0, nmdwexclude, mdwexclude,
+   alterpol_cu1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(n, TINKER_IMAGE_ARGS, cut, off, st.si1.bit0, nmdwexclude, mdwexclude,
       mdwexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst,
       reinterpret_cast<real(*)[9]>(polscale), kpep, prepep, dmppep, lpep, scrtyp);
 
@@ -79,7 +79,7 @@ void dexpol_cu(int vers, const real (*uind)[3], grad_prec* depx, grad_prec* depy
    int ngrid = gpuGridSize(BLOCK_DIM);
 
 #define DEXPOL_CU1_ARGS                                                                                               \
-   n, TINKER_IMAGE_ARGS, vir_ep, depx, depy, depz, cut, off, st.si2.bit0, nmdwexclude, mdwexclude, mdwexclude_scale,  \
+   n, TINKER_IMAGE_ARGS, vir_ep, depx, depy, depz, cut, off, st.si1.bit0, nmdwexclude, mdwexclude, mdwexclude_scale,  \
       st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, polarity, uind, kpep, prepep, dmppep, \
       lpep, scrtyp, f
 

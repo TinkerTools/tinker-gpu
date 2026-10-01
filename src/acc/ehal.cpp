@@ -3,7 +3,6 @@
 #include "ff/image.h"
 #include "ff/nblist.h"
 #include "ff/switch.h"
-#include "math/switch.h"
 #include "seq/add.h"
 #include "seq/pair_hal.h"
 #include "tool/gpucard.h"
@@ -60,10 +59,12 @@ static void ehal_acc1()
 
    const real cut = switchCut(Switch::VDW);
    const real off = switchOff(Switch::VDW);
-   const real cut2 = cut * cut;
    const real off2 = off * off;
    const int maxnlst = vlist_unit->maxnlst;
    const auto* vlst = vlist_unit.deviceptr();
+   // The soft core power of vlam, taken once here instead of per pair. Without
+   // lambda derivatives pair_hal_v2 reads only PairHalLambdaPow::p0.
+   const real vlamexp = std::pow(vlam, scexp);
 
    auto bufsize = bufferSize();
 
@@ -101,6 +102,7 @@ static void ehal_acc1()
          if (vcouple == Vdw::ANNIHILATE) {
             vlambda = (mut1 || mut2 ? vlam : 1);
          }
+         PairHalLambdaPow lp = {vlambda == 1 ? 1 : vlamexp, 0, 0};
 
          real rik2 = image2(xr, yr, zr);
          if (rik2 <= off2) {
@@ -109,23 +111,14 @@ static void ehal_acc1()
             real eps = epsilon[it * njvdw + kt];
 
             MAYBE_UNUSED real e, de;
-            pair_hal<do_g>(rik, rv, eps, 1, vlambda, //
-               ghal, dhal, scexp, scalphav,           //
-               e, de);
+            pair_hal_v2<do_g, 1>(rik, 1, rv, eps, cut, off, vlambda, lp, ghal, dhal, scexp, scalphav, e, de);
 
-            if (rik2 > cut2) {
-               real taper, dtaper;
-               switchTaper5<do_g>(rik, cut, off, taper, dtaper);
-               if CONSTEXPR (do_g)
-                  de = e * dtaper + de * taper;
-               if CONSTEXPR (do_e)
-                  e = e * taper;
-            }
-
-            // Increment the energy, gradient, and virial.
+            // Increment the energy, gradient, and virial. Only a pair with a
+            // nonzero energy counts as an interaction, as in ehal3.f.
 
             if CONSTEXPR (do_a)
-               atomic_add(1, nev, offset);
+               if (e != 0)
+                  atomic_add(1, nev, offset);
             if CONSTEXPR (do_e)
                atomic_add(e, ev, offset);
             if CONSTEXPR (do_g) {
@@ -191,6 +184,7 @@ static void ehal_acc1()
       if (vcouple == Vdw::ANNIHILATE) {
          vlambda = (mut1 || mut2 ? vlam : 1);
       }
+      PairHalLambdaPow lp = {vlambda == 1 ? 1 : vlamexp, 0, 0};
 
       real rik2 = image2(xr, yr, zr);
       if (rik2 <= off2) {
@@ -202,32 +196,23 @@ static void ehal_acc1()
          // A 1-4 pair with vdw14 values takes them instead: remove the whole
          // pair the neighbor loop added, and add it back scaled with them.
          bool v14 = vexclude14 and vexclude14[ii];
-         pair_hal<do_g>(rik, rv, eps, (v14 ? -1 : vscale), vlambda, //
-            ghal, dhal, scexp, scalphav,                             //
+         pair_hal_v2<do_g, 0>(rik, (v14 ? -1 : vscale), rv, eps, cut, off, vlambda, lp, ghal, dhal, scexp, scalphav,
             e, de);
+         // The neighbor loop counted this pair only if its energy was nonzero.
+         MAYBE_UNUSED bool counted = (e != 0);
          if (v14) {
             MAYBE_UNUSED real e4, de4;
             real rv4 = radmin4[it * njvdw + kt];
             real eps4 = epsilon4[it * njvdw + kt];
-            pair_hal<do_g>(rik, rv4, eps4, vscale + 1, vlambda, //
-               ghal, dhal, scexp, scalphav,                      //
-               e4, de4);
+            pair_hal_v2<do_g, 0>(rik, vscale + 1, rv4, eps4, cut, off, vlambda, lp, ghal, dhal, scexp, scalphav, e4,
+               de4);
             e += e4;
             if CONSTEXPR (do_g)
                de += de4;
          }
 
-         if (rik2 > cut2) {
-            real taper, dtaper;
-            switchTaper5<do_g>(rik, cut, off, taper, dtaper);
-            if CONSTEXPR (do_g)
-               de = e * dtaper + de * taper;
-            if CONSTEXPR (do_e)
-               e = e * taper;
-         }
-
          if CONSTEXPR (do_a)
-            if (vscale == -1)
+            if (vscale == -1 and counted)
                atomic_add(-1, nev, offset);
          if CONSTEXPR (do_e)
             atomic_add(e, ev, offset);

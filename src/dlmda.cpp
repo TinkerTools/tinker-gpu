@@ -311,7 +311,6 @@ void dlmda_mech()
    wlmda2 = dlmda::wlmda2;
    lmdaparatio = dlmda::lmdaparatio;
    lmdapbratio = dlmda::lmdapbratio;
-   lmdapcratio = dlmda::lmdapcratio;
    lmdatheta = dlmda::lmdatheta;
    lmdavtheta = dlmda::lmdavtheta;
    lmdathmap = lmdaThMapFrom(dlmda::lmdathmap);
@@ -422,16 +421,14 @@ int lmdaBin(double lambda)
 
 // Divides the lambda sample interval into the phase that propagates the lambda
 // particle, the phase that equilibrates at the frozen lambda and the phase that
-// averages dU/dlambda at that same fixed lambda; the phase counts are the
-// authoritative split, while lmdapcratio is only the nominal fraction left over
-// before truncation to whole samples (dlambda.f:setlmdaphase).
+// averages dU/dlambda at that same fixed lambda, the averaging phase taking
+// whatever the other two leave (dlambda.f:setlmdaphase).
 void setLmdaPhase()
 {
    // divide the interval, keeping at least one propagation step and at least
    // two samples to average
    if (lmdaintv < 1)
       lmdaintv = 1;
-   lmdapcratio = 1.0 - (lmdaparatio + lmdapbratio);
    lmdanpa = (int)(lmdaparatio * (double)lmdaintv);
    lmdanpb = (int)(lmdapbratio * (double)lmdaintv);
    lmdanpa = std::max(1, std::min(lmdanpa, lmdaintv - 1));

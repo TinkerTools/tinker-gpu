@@ -161,7 +161,7 @@ void dexpol_acc(int vers, const real (*uind)[3], grad_prec* depx, grad_prec* dep
       real xi = x[i];
       real yi = y[i];
       real zi = z[i];
-      real springi = kpep[i] / polarity[i];
+      real springi = (polarity[i] != 0 ? kpep[i] / polarity[i] : 0);
       real sizi = prepep[i];
       real alphai = dmppep[i];
       int epli = lpep[i];
@@ -185,7 +185,7 @@ void dexpol_acc(int vers, const real (*uind)[3], grad_prec* depx, grad_prec* dep
          bool incl = (epli || eplk);
          if (r2 <= off2 and incl) {
             real r = REAL_SQRT(r2);
-            real springk = kpep[k] / polarity[k];
+            real springk = (polarity[k] != 0 ? kpep[k] / polarity[k] : 0);
             real sizk = prepep[k];
             real alphak = dmppep[k];
             real ukx = uind[k][0];
@@ -230,14 +230,14 @@ void dexpol_acc(int vers, const real (*uind)[3], grad_prec* depx, grad_prec* dep
       real xr = x[k] - x[i];
       real yr = y[k] - y[i];
       real zr = z[k] - z[i];
-      real springi = kpep[i];
+      real springi = (polarity[i] != 0 ? kpep[i] / polarity[i] : 0);
       real sizi = prepep[i];
       real alphai = dmppep[i];
       int epli = lpep[i];
       real uix = uind[i][0];
       real uiy = uind[i][1];
       real uiz = uind[i][2];
-      real springk = kpep[k];
+      real springk = (polarity[k] != 0 ? kpep[k] / polarity[k] : 0);
       real sizk = prepep[k];
       real alphak = dmppep[k];
       int eplk = lpep[k];

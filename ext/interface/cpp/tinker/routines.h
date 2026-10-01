@@ -805,6 +805,16 @@ void ehal4b_();
 void ehal4c_();
 #define tinker_f_ehal4c ehal4c_
 
+// ehalsc.f
+void halsc_(double* vlsc, double* vscal);
+#define tinker_f_halsc halsc_
+void halsc4_(double* vlsc, double* vscal, double* vlsc1, double* vlsc2, double* dvscal);
+#define tinker_f_halsc4 halsc4_
+void ehalsc_(double* rik, double* rv, double* eps, int* ig, double* vlsc, double* vscal, double* e, double* de);
+#define tinker_f_ehalsc ehalsc_
+void ehalsc4_(double* rik, double* rv, double* eps, int* ig, double* vlsc, double* vlsc1, double* vlsc2, double* vscal, double* dvscal, double* e, double* de, double* dlambda, double* dlambda2, double* dlde);
+#define tinker_f_ehalsc4 ehalsc4_
+
 // eimprop.f
 void eimprop_();
 #define tinker_f_eimprop eimprop_
@@ -1274,6 +1284,8 @@ void epolar1f_();
 #define tinker_f_epolar1f epolar1f_
 void epolar1calc_();
 #define tinker_f_epolar1calc epolar1calc_
+void epolar1dt_(int* need0, int* need1, double* ep0, double* dep0, double* epvir0);
+#define tinker_f_epolar1dt epolar1dt_
 void epolar1p_();
 #define tinker_f_epolar1p epolar1p_
 
@@ -1314,8 +1326,6 @@ void epolar4_();
 #define tinker_f_epolar4 epolar4_
 void epolar4s_();
 #define tinker_f_epolar4s epolar4s_
-void epolar4d_(double* plmda);
-#define tinker_f_epolar4d epolar4d_
 void epolar4f_();
 #define tinker_f_epolar4f epolar4f_
 

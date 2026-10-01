@@ -858,12 +858,14 @@ static void epolarState(int vers, RdtMask mask, const int* group, bool first_sta
 }
 
 // Whether one subsystem's interactions are the ones analysis reports.
-// Polarization reports whichever endpoint ran rather than always the coupled
-// one (epolar3.f:2559), so there is never a count-only pass -- but only that
-// endpoint may count, or the two endpoints would be summed together.
-static bool epolarCounts(const DtPass& p, bool need1)
+// Polarization reports an endpoint that carries weight rather than always the
+// coupled one (epolar3.f:2450), so there is never a count-only pass -- but only
+// that endpoint may count, or the two endpoints would be summed together. When
+// both carry weight, epolar3.f reports the larger count and this the lambda = 1
+// one.
+static bool epolarCounts(const DtPass& p, double w)
 {
-   return need1 ? p.in1 : p.in0;
+   return w != 0 ? p.in1 : p.in0;
 }
 
 void epolar_dt(int vers)
@@ -874,8 +876,7 @@ void epolar_dt(int vers)
    auto do_a = vers & calc::analyz;
 
    double w, dw, d2w;
-   bool need0, need1;
-   dtWeightNeed(plam, epdtexp, dpldlmda, d2pldlmda2, w, dw, d2w, need0, need1);
+   dtWeight(plam, epdtexp, w, dw, d2w);
 
    epolarBegin(vers);
 
@@ -889,7 +890,7 @@ void epolar_dt(int vers)
    for (int k = 0; k < npass; ++k) {
       real wa, wb, wc;
       dtPassWeights(c, pass[k], wa, wb, wc);
-      const bool counts = do_a and epolarCounts(pass[k], need1);
+      const bool counts = do_a and epolarCounts(pass[k], w);
       if (dtPassIsIdle(dvers, wa, wb, wc, counts))
          continue;
       epolarState(counts ? dvers : dvers & ~calc::analyz, pass[k].mask, group, first, wa, wb, wc);
@@ -919,7 +920,7 @@ void epolarPhysicalInduced()
    if (use_epdt)
       TINKER_THROW("Induced dipoles cannot be reported with dual topology polarization");
 
-   if (use_prst and (pltfm_config & Platform::CUDA)) {
+   if (use_prst and TINKER_CUDART) {
       mpoleScale(plam);
       polarState(coupledMask(), emGroup(), plam);
       if (use(Potent::CHGFLX))

@@ -8,49 +8,6 @@ namespace tinker {
 /**
  * \ingroup vdw
  */
-#pragma acc routine seq
-template <bool DO_G>
-SEQ_CUDA
-void pair_hal(real rik,
-              real rv,
-              real eps,
-              real vscalek,
-              real vlambda, //
-              real ghal,
-              real dhal,
-              real scexp,
-              real scalphav, //
-              real& restrict e,
-              real& restrict de)
-{
-   eps *= vscalek;
-   real invrv = REAL_RECIP(rv);
-   real rho = rik * invrv;
-   real rho2 = rho * rho;
-   real rho6 = rho2 * rho2 * rho2;
-   real rho7 = rho6 * rho;
-   real rhod = rho + dhal;
-   real rhod2 = rhod * rhod;
-   real rhod6 = rhod2 * rhod2 * rhod2;
-   real dhal7 = REAL_POW(1 + dhal, 7); // folded when dhal is a constant
-   eps *= REAL_POW(vlambda, scexp);
-   real one_minus_lambda = 1 - vlambda;
-   real scal = scalphav * one_minus_lambda * one_minus_lambda;
-   real s1 = REAL_RECIP(scal + rhod6 * rhod);
-   real s2 = REAL_RECIP(scal + rho7 + ghal);
-   real t1 = dhal7 * s1;
-   real t2 = (1 + ghal) * s2;
-   e = eps * t1 * (t2 - 2);
-   if CONSTEXPR (DO_G) {
-      real dt1drho = -7 * rhod6 * t1 * s1;
-      real dt2drho = -7 * rho6 * t2 * s2;
-      de = eps * (dt1drho * (t2 - 2) + t1 * dt2drho) * invrv;
-   }
-}
-
-/**
- * \ingroup vdw
- */
 struct PairHalLambda
 {
    real dedl;
@@ -130,9 +87,7 @@ void pair_hal(real r,
       dl->dedl = dt0dl * t1 * (t2 - 2) + eps * dt1dl * (t2 - 2) + eps * t1 * dt2dl;
 
       if CONSTEXPR (DO_DL2) {
-         real d2t0dl2 = 0;
-         if (scexp >= 2)
-            d2t0dl2 = eps0 * scexp * (scexp - 1) * lp.p2;
+         real d2t0dl2 = eps0 * scexp * (scexp - 1) * lp.p2;
          real d2t1dl2 = dhal7 * (-2 * scalphav * s1 * s1 + 2 * dscaldl * s1 * ds1dl);
          real d2t2dl2 = (1 + ghal) * (-2 * scalphav * s2 * s2 + 2 * dscaldl * s2 * ds2dl);
          dl->d2edl2 = d2t0dl2 * t1 * (t2 - 2) + eps * d2t1dl2 * (t2 - 2) + eps * t1 * d2t2dl2

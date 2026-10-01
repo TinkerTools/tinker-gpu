@@ -179,8 +179,9 @@ static void edisp_acc1()
                atomic_add(e, edsp, offset);
             }
          }
+         // The neighbor loop counted this pair only if its energy was nonzero.
          if CONSTEXPR (do_a) {
-            if (scalea == 0) {
+            if (scalea == 0 and e1 != 0) {
                atomic_add(-1, ndisp, offset);
             }
          }

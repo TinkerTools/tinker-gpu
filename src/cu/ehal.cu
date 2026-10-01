@@ -116,7 +116,9 @@ static PairHalLambdaPow ehalLambdaPow(double v)
    PairHalLambdaPow lp;
    lp.p0 = std::pow(v, scexp);
    lp.p1 = std::pow(v, scexp - 1);
-   lp.p2 = (scexp >= 2 ? std::pow(v, scexp - 2) : 0);
+   // The second derivative factor diverges at v = 0 for exponents below two,
+   // which mutate_check only allows without use_d2lmda (ehalsc.f:halsc4).
+   lp.p2 = (use_d2lmda ? std::pow(v, scexp - 2) : 0);
    return lp;
 }
 

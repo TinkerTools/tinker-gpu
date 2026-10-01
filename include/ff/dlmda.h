@@ -144,9 +144,9 @@ void dtPassWeights(const DtCoef& c, const DtPass& p, real& wa, real& wb, real& w
 /// is dead work at, say, calc::v0 even while its wb is nonzero.
 ///
 /// \c counts must be true for a pass whose interactions are the ones analysis
-/// reports: dtNeed() picks the reported endpoint from the chain rule rather
-/// than from the weight, so that endpoint can have wa == 0 and still owe a
-/// count.
+/// reports. Polarization picks that endpoint by its weight (epolar3.f), so the
+/// pass also has wa != 0 today, but a pass that owes a count must never be
+/// skipped whatever its weights.
 inline bool dtPassIsIdle(int vers, real wa, real wb, real wc, bool counts)
 {
    if (wa != 0 or counts)
@@ -283,7 +283,6 @@ TINKER_EXTERN double wlmda;       ///< width of lambda bins.
 TINKER_EXTERN double wlmda2;      ///< half width of lambda bins.
 TINKER_EXTERN double lmdaparatio; ///< interval fraction propagating the lambda particle.
 TINKER_EXTERN double lmdapbratio; ///< interval fraction equilibrating at fixed lambda.
-TINKER_EXTERN double lmdapcratio; ///< interval fraction averaging at fixed lambda.
 
 // convergence gate for accepting the interval samples of OST and ABF.
 TINKER_EXTERN bool use_lmdacv;    ///< gate the interval samples by convergence.

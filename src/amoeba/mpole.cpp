@@ -346,9 +346,10 @@ void mpoleRotateScaled()
 
 void mpoleEnsureElec()
 {
-   // Without mpoleScale(), which is CUDA only, pole stays as copied in: at the
-   // electrostatic lambda, which the lambda-dynamics methods it lacks would move.
-   if (usePoleorig() and (pltfm_config & Platform::CUDA))
+   // A polarization state at plam leaves pole scaled there, on the ACC platform
+   // too, since mpoleScale() needs only the CUDA runtime. Without the runtime,
+   // pole never leaves the electrostatic lambda it was copied in at.
+   if (usePoleorig() and TINKER_CUDART)
       mpoleScale(elam);
 }
 

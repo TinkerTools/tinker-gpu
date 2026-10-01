@@ -72,7 +72,8 @@ void empoleNonEwald_acc1()
                f, 0, e, pgrad);
 
             if CONSTEXPR (do_a)
-               atomic_add(1, nem, offset);
+               if (e != 0)
+                  atomic_add(1, nem, offset);
             if CONSTEXPR (do_e)
                atomic_add(e, em, offset);
             if CONSTEXPR (do_g) {
@@ -157,7 +158,7 @@ void empoleNonEwald_acc1()
             f, 0, e, pgrad);
 
          if CONSTEXPR (do_a)
-            if (mscale == -1)
+            if (mscale == -1 and e != 0)
                atomic_add(-1, nem, offset);
          if CONSTEXPR (do_e)
             atomic_add(e, em, offset);

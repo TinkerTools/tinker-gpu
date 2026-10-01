@@ -113,7 +113,9 @@ inline void damp_aplus3(real r, real pdi, real ddi, real pdk, real ddk, real& re
    real pgamma = REAL_MIN(ddi, ddk);
    real damp = pdi * pdk;
    real ratio = r * REAL_RECIP(damp);
-   damp = (damp == 0 ? 0 : pgamma * REAL_SQRT(ratio * ratio * ratio));
+   // Without a damping width or strength the pair is undamped, as in damptholed
+   // (damping.f); a zero damp would instead switch its direct field off.
+   damp = (damp == 0 or pgamma == 0 ? ((real)1.0e16) : pgamma * REAL_SQRT(ratio * ratio * ratio));
    real damp2 = damp * damp;
    real expdamp = REAL_EXP(-damp);
    scale3 = 1 - expdamp;
@@ -147,7 +149,9 @@ inline void damp_aplus3g(real r,
    real pgamma = REAL_MIN(ddi, ddk);
    real damp = pdi * pdk;
    real ratio = r * REAL_RECIP(damp);
-   damp = (damp == 0 ? 0 : pgamma * REAL_SQRT(ratio * ratio * ratio));
+   // Without a damping width or strength the pair is undamped, as in damptholed
+   // (damping.f); a zero damp would instead switch its direct field off.
+   damp = (damp == 0 or pgamma == 0 ? ((real)1.0e16) : pgamma * REAL_SQRT(ratio * ratio * ratio));
    real damp2 = damp * damp;
    scale31 = REAL_EXP(-damp);
    scale51 = scale31 * (1 + (real)0.5 * damp);

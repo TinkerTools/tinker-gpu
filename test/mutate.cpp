@@ -13,6 +13,7 @@
 #include "test.h"
 #include "testrt.h"
 #include "tinker9.h"
+#include "tool/platform.h"
 
 #include <tinker/detail/atoms.hh>
 #include <tinker/detail/dlmda.hh>
@@ -30,7 +31,10 @@
 
 using namespace tinker;
 
-#if TINKER_GPULANG_CUDA
+// The fixtures that need neither lambda derivatives nor dual topology (001-029
+// and most of 146-160) run on the OpenACC build's own kernels too; the rest of
+// this file is CUDA only.
+#if TINKER_GPULANG_CUDA || TINKER_GPULANG_OPENACC
 
 namespace {
 /// Tolerances a fixture overrides. Each check left unset keeps the default in
@@ -276,6 +280,14 @@ const Fixture kFixtures[] = {
    {"232_water_adt_d1_x2_l06", "water2", false, true, false, true, "deriv1"},
    {"233_water_ast_vcorr_annih_d1_l05", "water2", true, true, true, true, "deriv1"},
    {"234_water_rels_ye_vdwm_d1_l040", "water2", true, true, true, true, "deriv1"},
+   // A soft core exponent of one, allowed with the first lambda derivative
+   // alone (test_mutate_vsoft1): annihilated ligand van der Waals at lambda 0.0
+   // and 0.05, and a staged relative vdW leg at 1.0 with ligand 2 at its
+   // decoupled endpoint. dE/dL stays finite where the second derivative factor
+   // diverges, and the second, force and virial lambda derivatives stay zero.
+   {"235_water_vsoft_n1_d1_l00", "water2", true, true, true, true, "deriv1"},
+   {"236_water_vsoft_n1_d1_l005", "water2", true, true, true, true, "deriv1"},
+   {"237_water_rels_vdwm_n1_d1_l10", "water2", true, true, true, true, "deriv1"},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
@@ -319,6 +331,18 @@ std::vector<std::unique_ptr<TestFile>> copyParams(const std::string& base)
    return files;
 }
 
+// The extra key lines of a fixture. The OpenACC build names its own package, so
+// that a run there exercises the OpenACC kernels; runFixture checks that it did,
+// since a GPU_PACKAGE environment variable overrides the key.
+std::string platformKey(const char* keyextra)
+{
+#if TINKER_GPULANG_OPENACC
+   return std::string(keyextra) + "\ngpu-package openacc\n";
+#else
+   return keyextra;
+#endif
+}
+
 // Copies a fixture's coordinates, its key file with \c keyextra appended, and
 // its parameters into the working directory, and begins a session on them with
 // \c rc as rc_flag. The session is declared after the files, so it ends before
@@ -336,7 +360,7 @@ struct Setup
       , key(std::string(fx.name) + ".key")
       , argv{"dummy", xyz.c_str(), "-k", key.c_str()}
       , fxyz(systemDir(fx.base) + xyz, xyz)
-      , fkey(TINKER9_DIRSTR "/test/file/mutate/" + key, key, keyextra)
+      , fkey(TINKER9_DIRSTR "/test/file/mutate/" + key, key, platformKey(keyextra))
       , fprm(copyParams(fx.base))
       , session(4, argv)
    {
@@ -386,6 +410,9 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
    // These key files enable the lambda-derivative machinery through the
    // "lambda-deriv" keyword, so the Fortran-side use_dlmda needs no nudging here.
    Setup s(fx, rc, keyextra);
+#if TINKER_GPULANG_OPENACC
+   REQUIRE(pltfm_config & Platform::ACC);
+#endif
 
    // The fixtures carry LAMBDA-DERIV, which asks for every derivative channel
    // whatever the sampling mode; without it TI, META and ABF would ask for the
@@ -546,6 +573,7 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
    s.session.end();
 }
 
+#if TINKER_GPULANG_CUDA
 // Runs a fixture twice: once the ordinary way, which asks for interaction
 // counts and so goes through the separate empole and epolar kernels, and once
 // without counts, where emplar fuses the two. Both are
@@ -890,6 +918,7 @@ void runChiralFixture(const Fixture& fx)
 
    session.end();
 }
+#endif
 } // namespace
 
 TEST_CASE("MUTATE-001_water_ye_m10", "[ff][mutate][mv]") { runFixture(fx("001_water_ye_m10")); }
@@ -921,6 +950,23 @@ TEST_CASE("MUTATE-026_water_ye_m05p00", "[ff][mutate][mp]") { runFixture(fx("026
 TEST_CASE("MUTATE-027_water_ne_m05p00", "[ff][mutate][mp]") { runFixture(fx("027_water_ne_m05p00")); }
 TEST_CASE("MUTATE-028_water_ye_m00p05", "[ff][mutate][mp]") { runFixture(fx("028_water_ye_m00p05")); }
 TEST_CASE("MUTATE-029_water_ne_m00p05", "[ff][mutate][mp]") { runFixture(fx("029_water_ne_m00p05")); }
+
+// Main lambda through the maps, without lambda derivatives. The fixtures that
+// take polarization off its map (155, 157, 159, 160) need dual topology, so
+// they stay with the CUDA ones.
+TEST_CASE("MUTATE-146_water_lmda_ast_l05", "[ff][mutate][lmda]") { runFixture(fx("146_water_lmda_ast_l05")); }
+TEST_CASE("MUTATE-147_water_lmda_ast_e05", "[ff][mutate][lmda]") { runFixture(fx("147_water_lmda_ast_e05")); }
+TEST_CASE("MUTATE-148_water_lmda_ast_l10", "[ff][mutate][lmda]") { runFixture(fx("148_water_lmda_ast_l10")); }
+TEST_CASE("MUTATE-149_water_lmda_ast_none", "[ff][mutate][lmda]") { runFixture(fx("149_water_lmda_ast_none")); }
+TEST_CASE("MUTATE-150_water_lmda_qnt_l05", "[ff][mutate][lmda]") { runFixture(fx("150_water_lmda_qnt_l05")); }
+TEST_CASE("MUTATE-151_water_lmda_vexp_l05", "[ff][mutate][lmda]") { runFixture(fx("151_water_lmda_vexp_l05")); }
+TEST_CASE("MUTATE-152_water_lmda_mp05", "[ff][mutate][lmda]") { runFixture(fx("152_water_lmda_mp05")); }
+TEST_CASE("MUTATE-153_water_lmda_mp05_expl", "[ff][mutate][lmda]") { runFixture(fx("153_water_lmda_mp05_expl")); }
+TEST_CASE("MUTATE-154_water_lmda_e_l06", "[ff][mutate][lmdadrv]") { runFixture(fx("154_water_lmda_e_l06")); }
+TEST_CASE("MUTATE-156_water_lmda_v_l06", "[ff][mutate][lmdadrv]") { runFixture(fx("156_water_lmda_v_l06")); }
+TEST_CASE("MUTATE-158_water_lmda_ev_l06", "[ff][mutate][lmdadrv]") { runFixture(fx("158_water_lmda_ev_l06")); }
+
+#if TINKER_GPULANG_CUDA
 TEST_CASE("MUTATE-030_water_ast_ye_m10", "[ff][mutate][ast]") { runFixture(fx("030_water_ast_ye_m10")); }
 TEST_CASE("MUTATE-031_water_ast_ne_m10", "[ff][mutate][ast]") { runFixture(fx("031_water_ast_ne_m10")); }
 TEST_CASE("MUTATE-032_water_ast_ye_m05", "[ff][mutate][ast]") { runFixture(fx("032_water_ast_ye_m05")); }
@@ -980,19 +1026,8 @@ TEST_CASE("MUTATE-138_water_rels_ye_l050", "[ff][mutate][rels]") { runFixture(fx
 TEST_CASE("MUTATE-139_water_rels_ye_l030", "[ff][mutate][rels]") { runFixture(fx("139_water_rels_ye_l030")); }
 TEST_CASE("MUTATE-140_water_rels_ye_l015", "[ff][mutate][rels]") { runFixture(fx("140_water_rels_ye_l015")); }
 TEST_CASE("MUTATE-141_water_rels_ye_l000", "[ff][mutate][rels]") { runFixture(fx("141_water_rels_ye_l000")); }
-TEST_CASE("MUTATE-146_water_lmda_ast_l05", "[ff][mutate][lmda]") { runFixture(fx("146_water_lmda_ast_l05")); }
-TEST_CASE("MUTATE-147_water_lmda_ast_e05", "[ff][mutate][lmda]") { runFixture(fx("147_water_lmda_ast_e05")); }
-TEST_CASE("MUTATE-148_water_lmda_ast_l10", "[ff][mutate][lmda]") { runFixture(fx("148_water_lmda_ast_l10")); }
-TEST_CASE("MUTATE-149_water_lmda_ast_none", "[ff][mutate][lmda]") { runFixture(fx("149_water_lmda_ast_none")); }
-TEST_CASE("MUTATE-150_water_lmda_qnt_l05", "[ff][mutate][lmda]") { runFixture(fx("150_water_lmda_qnt_l05")); }
-TEST_CASE("MUTATE-151_water_lmda_vexp_l05", "[ff][mutate][lmda]") { runFixture(fx("151_water_lmda_vexp_l05")); }
-TEST_CASE("MUTATE-152_water_lmda_mp05", "[ff][mutate][lmda]") { runFixture(fx("152_water_lmda_mp05")); }
-TEST_CASE("MUTATE-153_water_lmda_mp05_expl", "[ff][mutate][lmda]") { runFixture(fx("153_water_lmda_mp05_expl")); }
-TEST_CASE("MUTATE-154_water_lmda_e_l06", "[ff][mutate][lmdadrv]") { runFixture(fx("154_water_lmda_e_l06")); }
 TEST_CASE("MUTATE-155_water_lmda_p_l06", "[ff][mutate][lmdadrv]") { runFixture(fx("155_water_lmda_p_l06")); }
-TEST_CASE("MUTATE-156_water_lmda_v_l06", "[ff][mutate][lmdadrv]") { runFixture(fx("156_water_lmda_v_l06")); }
 TEST_CASE("MUTATE-157_water_lmda_ep_l06", "[ff][mutate][lmdadrv]") { runFixture(fx("157_water_lmda_ep_l06")); }
-TEST_CASE("MUTATE-158_water_lmda_ev_l06", "[ff][mutate][lmdadrv]") { runFixture(fx("158_water_lmda_ev_l06")); }
 TEST_CASE("MUTATE-159_water_lmda_pv_l06", "[ff][mutate][lmdadrv]") { runFixture(fx("159_water_lmda_pv_l06")); }
 TEST_CASE("MUTATE-160_water_lmda_epv_l06", "[ff][mutate][lmdadrv]") { runFixture(fx("160_water_lmda_epv_l06")); }
 TEST_CASE("MUTATE-161_water_dlmda_e_l06", "[ff][mutate][lmdadrv]") { runFixture(fx("161_water_dlmda_e_l06")); }
@@ -1062,6 +1097,9 @@ TEST_CASE("MUTATE-231_g3_rels_lig2_d1_l015", "[ff][mutate][polst][astpol][emplar
 TEST_CASE("MUTATE-232_water_adt_d1_x2_l06", "[ff][mutate][deriv1]") { runFixture(fx("232_water_adt_d1_x2_l06")); }
 TEST_CASE("MUTATE-233_water_ast_vcorr_annih_d1_l05", "[ff][mutate][deriv1]") { runFixture(fx("233_water_ast_vcorr_annih_d1_l05")); }
 TEST_CASE("MUTATE-234_water_rels_ye_vdwm_d1_l040", "[ff][mutate][deriv1]") { runFixture(fx("234_water_rels_ye_vdwm_d1_l040")); }
+TEST_CASE("MUTATE-235_water_vsoft_n1_d1_l00", "[ff][mutate][deriv1]") { runFixture(fx("235_water_vsoft_n1_d1_l00")); }
+TEST_CASE("MUTATE-236_water_vsoft_n1_d1_l005", "[ff][mutate][deriv1]") { runFixture(fx("236_water_vsoft_n1_d1_l005")); }
+TEST_CASE("MUTATE-237_water_rels_vdwm_n1_d1_l10", "[ff][mutate][deriv1]") { runFixture(fx("237_water_rels_vdwm_n1_d1_l10")); }
 
 TEST_CASE("MUTATE-TI-076_water_qnt_ast_l05", "[ff][mutate][ti][ast]") { runThermIntgFixture(fx("076_water_qnt_ast_l05")); }
 TEST_CASE("MUTATE-TI-079_water_qnt_adt_l05", "[ff][mutate][ti][adt]") { runThermIntgFixture(fx("079_water_qnt_adt_l05")); }
@@ -1088,5 +1126,6 @@ TEST_CASE("MUTATE-flags", "[ff][mutate][rels]")
    runFlagsFixture(fx("203_water_rels_st_l085"), "", false, false, true);
    runFlagsFixture(fx("136_water_rels_ye_l085"), "", true, true, true);
 }
+#endif
 
 #endif

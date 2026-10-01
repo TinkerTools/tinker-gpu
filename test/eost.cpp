@@ -75,7 +75,6 @@ void resetost(int nl, int nf, int nhist)
    vlmdainveps = 0.0;
    lmdaparatio = 0.3;
    lmdapbratio = 0.3;
-   lmdapcratio = 0.4;
    hbias = 0.0;
    lmdadeltag = 0.0;
    oststdev = 1.0;
@@ -1083,7 +1082,6 @@ TEST_CASE("EOST-ostphase", "[ff][eost]")
    COMPARE_INTS(lmdanpa, 3);
    COMPARE_INTS(lmdanpb, 3);
    COMPARE_INTS(lmdanpc, 4);
-   COMPARE_REALS(lmdapcratio, 0.4, 1.0e-12);
    COMPARE_INTS(lmdanpa + lmdanpb + lmdanpc, lmdaintv);
 
    // a zero propagation ratio still keeps one propagation step
