@@ -4,7 +4,7 @@
 
 namespace tinker {
 #pragma acc routine seq
-template <int DirOrder, int MutOrder>
+template <int DirOrder, int MutOrder, bool Compl = false>
 SEQ_CUDA
 inline void damp_gordon1(real* restrict dmpij, real* restrict dmpi, real* restrict dmpj, real r, real ai, real aj)
 {
@@ -15,6 +15,11 @@ inline void damp_gordon1(real* restrict dmpij, real* restrict dmpi, real* restri
    const real div105 = 1 / ((real)105);
    const real div945 = 1 / ((real)945);
 
+   // With Compl, return the complements 1 - dmp, the penetration terms that
+   // decay like exp(-alpha*r), rather than recovering them from dmp, which in
+   // float loses them next to 1.
+#define TINKER_GORDON1_D(X) (Compl ? (X) : 1 - (X))
+
    real a, expi, b, expk;
    a = ai * r, b = aj * r;
    expi = REAL_EXP(-a), expk = REAL_EXP(-b);
@@ -23,28 +28,28 @@ inline void damp_gordon1(real* restrict dmpij, real* restrict dmpi, real* restri
    real a2, a3, a4, a5, b2, b3, b4, b5;
 
    if CONSTEXPR (DirOrder >= 1) {
-      dmpi[0] = 1 - (1 + 0.5f * a) * expi;
-      dmpj[0] = 1 - (1 + 0.5f * b) * expk;
+      dmpi[0] = TINKER_GORDON1_D((1 + 0.5f * a) * expi);
+      dmpj[0] = TINKER_GORDON1_D((1 + 0.5f * b) * expk);
    }
    if CONSTEXPR (DirOrder >= 3) {
       a2 = a * a, b2 = b * b;
-      dmpi[1] = 1 - (1 + a + 0.5f * a2) * expi;
-      dmpj[1] = 1 - (1 + b + 0.5f * b2) * expk;
+      dmpi[1] = TINKER_GORDON1_D((1 + a + 0.5f * a2) * expi);
+      dmpj[1] = TINKER_GORDON1_D((1 + b + 0.5f * b2) * expk);
    }
    if CONSTEXPR (DirOrder >= 5) {
       a3 = a * a2, b3 = b * b2;
-      dmpi[2] = 1 - (1 + a + 0.5f * a2 + a3 * div6) * expi;
-      dmpj[2] = 1 - (1 + b + 0.5f * b2 + b3 * div6) * expk;
+      dmpi[2] = TINKER_GORDON1_D((1 + a + 0.5f * a2 + a3 * div6) * expi);
+      dmpj[2] = TINKER_GORDON1_D((1 + b + 0.5f * b2 + b3 * div6) * expk);
    }
    if CONSTEXPR (DirOrder >= 7) {
       a4 = a2 * a2, b4 = b2 * b2;
-      dmpi[3] = 1 - (1 + a + 0.5f * a2 + a3 * div6 + a4 * div30) * expi;
-      dmpj[3] = 1 - (1 + b + 0.5f * b2 + b3 * div6 + b4 * div30) * expk;
+      dmpi[3] = TINKER_GORDON1_D((1 + a + 0.5f * a2 + a3 * div6 + a4 * div30) * expi);
+      dmpj[3] = TINKER_GORDON1_D((1 + b + 0.5f * b2 + b3 * div6 + b4 * div30) * expk);
    }
    if CONSTEXPR (DirOrder >= 9) {
       a5 = a2 * a3, b5 = b2 * b3;
-      dmpi[4] = 1 - (1 + a + 0.5f * a2 + a3 * div6 + (4 * a4 + 0.5f * a5) * div105) * expi;
-      dmpj[4] = 1 - (1 + b + 0.5f * b2 + b3 * div6 + (4 * b4 + 0.5f * b5) * div105) * expk;
+      dmpi[4] = TINKER_GORDON1_D((1 + a + 0.5f * a2 + a3 * div6 + (4 * a4 + 0.5f * a5) * div105) * expi);
+      dmpj[4] = TINKER_GORDON1_D((1 + b + 0.5f * b2 + b3 * div6 + (4 * b4 + 0.5f * b5) * div105) * expk);
    }
 
    // dmpij
@@ -90,7 +95,7 @@ inline void damp_gordon1(real* restrict dmpij, real* restrict dmpi, real* restri
          k02 = c3;
          l00x = TINKER_GORDON1_L00(x), l01x = TINKER_GORDON1_L01(x) * t;
          l00y = TINKER_GORDON1_L00(y), l01y = TINKER_GORDON1_L01(y) * t;
-         dmpij[0] = 1 - ((k01 * f1d + k02 * f2d) * ec + (l00x + l01x) * ea + (l00y + l01y) * eb);
+         dmpij[0] = TINKER_GORDON1_D(((k01 * f1d + k02 * f2d) * ec + (l00x + l01x) * ea + (l00y + l01y) * eb));
       }
       if CONSTEXPR (MutOrder >= 3) {
          real k11, k12, k13, l10x, l11x, l10y, l11y;
@@ -99,7 +104,7 @@ inline void damp_gordon1(real* restrict dmpij, real* restrict dmpi, real* restri
          k13 = -c3 * d2;
          l10x = TINKER_GORDON1_M1(a) * l00x, l11x = a * TINKER_GORDON1_M0(a) * l01x;
          l10y = TINKER_GORDON1_M1(b) * l00y, l11y = b * TINKER_GORDON1_M0(b) * l01y;
-         dmpij[1] = 1 - ((k11 * f1d + k12 * f2d + k13 * f3d) * ec + (l10x + l11x) * ea + (l10y + l11y) * eb);
+         dmpij[1] = TINKER_GORDON1_D(((k11 * f1d + k12 * f2d + k13 * f3d) * ec + (l10x + l11x) * ea + (l10y + l11y) * eb));
       }
       if CONSTEXPR (MutOrder >= 5) {
          real k21, k22, k23, k24, l20x, l21x, l20y, l21y;
@@ -109,7 +114,7 @@ inline void damp_gordon1(real* restrict dmpij, real* restrict dmpi, real* restri
          k24 = c2d2;
          l20x = TINKER_GORDON1_M2(a) * l00x, l21x = a * TINKER_GORDON1_M1(a) * l01x;
          l20y = TINKER_GORDON1_M2(b) * l00y, l21y = b * TINKER_GORDON1_M1(b) * l01y;
-         dmpij[2] = 1 - div3 * ((k21 * f1d + k22 * f2d + c * d2 * (k23 * f3d + k24 * f4d)) * ec + (l20x + l21x) * ea + (l20y + l21y) * eb);
+         dmpij[2] = TINKER_GORDON1_D(div3 * ((k21 * f1d + k22 * f2d + c * d2 * (k23 * f3d + k24 * f4d)) * ec + (l20x + l21x) * ea + (l20y + l21y) * eb));
       }
       if CONSTEXPR (MutOrder >= 7) {
          real k31, k32, k33, k34, k35, l30x, l31x, l30y, l31y;
@@ -120,7 +125,7 @@ inline void damp_gordon1(real* restrict dmpij, real* restrict dmpi, real* restri
          k35 = -c3 * d2;
          l30x = TINKER_GORDON1_M3(a) * l00x, l31x = a * TINKER_GORDON1_M2(a) * l01x;
          l30y = TINKER_GORDON1_M3(b) * l00y, l31y = b * TINKER_GORDON1_M2(b) * l01y;
-         dmpij[3] = 1 - div15 * ((k31 * f1d + k32 * f2d + d2 * (k33 * f3d + d2 * (k34 * f4d + k35 * f5d))) * ec + (l30x + l31x) * ea + (l30y + l31y) * eb);
+         dmpij[3] = TINKER_GORDON1_D(div15 * ((k31 * f1d + k32 * f2d + d2 * (k33 * f3d + d2 * (k34 * f4d + k35 * f5d))) * ec + (l30x + l31x) * ea + (l30y + l31y) * eb));
       }
       if CONSTEXPR (MutOrder >= 9) {
          real k41, k42, k43, k44, k45, k46, l40x, l41x, l40y, l41y;
@@ -132,9 +137,9 @@ inline void damp_gordon1(real* restrict dmpij, real* restrict dmpi, real* restri
          k46 = c3 * d2;
          l40x = TINKER_GORDON1_M4(a) * l00x, l41x = a * TINKER_GORDON1_M3(a) * l01x;
          l40y = TINKER_GORDON1_M4(b) * l00y, l41y = b * TINKER_GORDON1_M3(b) * l01y;
-         dmpij[4] = 1
-            - div105
-               * ((k41 * f1d + k42 * f2d + d2 * (k43 * f3d + d2 * (k44 * f4d + d2 * (k45 * f5d + k46 * f6d)))) * ec + (l40x + l41x) * ea + (l40y + l41y) * eb);
+         dmpij[4] = TINKER_GORDON1_D(
+            div105
+               * ((k41 * f1d + k42 * f2d + d2 * (k43 * f3d + d2 * (k44 * f4d + d2 * (k45 * f5d + k46 * f6d)))) * ec + (l40x + l41x) * ea + (l40y + l41y) * eb));
       }
       if CONSTEXPR (MutOrder >= 11) {
          real k51, k52, k53, k54, k55, k56, k57, l50x, l51x, l50y, l51y;
@@ -147,10 +152,10 @@ inline void damp_gordon1(real* restrict dmpij, real* restrict dmpi, real* restri
          k57 = -c3 * d2;
          l50x = TINKER_GORDON1_M5(a) * l00x, l51x = a * TINKER_GORDON1_M4(a) * l01x;
          l50y = TINKER_GORDON1_M5(b) * l00y, l51y = b * TINKER_GORDON1_M4(b) * l01y;
-         dmpij[5] = 1
-            - div945
+         dmpij[5] = TINKER_GORDON1_D(
+            div945
                * ((k51 * f1d + k52 * f2d + d2 * (k53 * f3d + d2 * (k54 * f4d + d2 * (k55 * f5d + d2 * (k56 * f6d + k57 * f7d))))) * ec + (l50x + l51x) * ea
-                  + (l50y + l51y) * eb);
+                  + (l50y + l51y) * eb));
       }
 
 #undef TINKER_GORDON1_L00
@@ -162,6 +167,7 @@ inline void damp_gordon1(real* restrict dmpij, real* restrict dmpi, real* restri
 #undef TINKER_GORDON1_M4
 #undef TINKER_GORDON1_M5
    }
+#undef TINKER_GORDON1_D
 }
 
 /// deprecated
@@ -297,6 +303,15 @@ SEQ_CUDA
 inline void damp_pole_v2(real* restrict dmpij, real* restrict dmpi, real* restrict dmpj, real r, real ai, real aj)
 {
    damp_gordon1<9, order>(dmpij, dmpi, dmpj, r, ai, aj);
+}
+
+/// damp_pole_v2, returning the penetration terms 1 - dmp.
+#pragma acc routine seq
+template <int order>
+SEQ_CUDA
+inline void damp_pole_v2c(real* restrict dmpij, real* restrict dmpi, real* restrict dmpj, real r, real ai, real aj)
+{
+   damp_gordon1<9, order, true>(dmpij, dmpi, dmpj, r, ai, aj);
 }
 
 SEQ_ROUTINE

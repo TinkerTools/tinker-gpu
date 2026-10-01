@@ -38,15 +38,9 @@ const Fixture kFixtures[] = {
    // AMOEBA+ with a zero Thole value on one type, which the Thole pair table
    // replaces by the larger of the two, and with a POLPAIR Thole that differs
    // from the combining rule; the mutual polarization gradient must take the
-   // pair value, as in epolar1.f. The analytical gradient is what these pin.
-   // In mixed precision the charge penetration multipole energy is up to 2e-3
-   // kcal/mol off: its core-core, core-valence and valence-valence terms are
-   // each thousands of kcal/mol and cancel in float. So the numerical gradient
-   // lands up to 0.33 from the reference at this stepsize, and further at
-   // smaller ones; a double precision build is within 1.2e-3. Lower ntol once
-   // pair_mpole_chgpen_aplus regroups those terms around the total charges.
-   {"11_aplus_thole0", "aplus2022/tetramer.xyz", "aplus2022/AMOEBAplus_Org.prm", 5.0e-1},
-   {"12_aplus_polpair", "aplus2022/tetramer.xyz", "aplus2022/AMOEBAplus_Org.prm", 5.0e-1},
+   // pair value, as in epolar1.f.
+   {"11_aplus_thole0", "aplus2022/tetramer.xyz", "aplus2022/AMOEBAplus_Org.prm"},
+   {"12_aplus_polpair", "aplus2022/tetramer.xyz", "aplus2022/AMOEBAplus_Org.prm"},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that

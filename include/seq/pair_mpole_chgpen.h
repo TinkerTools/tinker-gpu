@@ -81,26 +81,15 @@ void pair_mpole_chgpen( //
    real qiqk = 2 * (qixy * qkxy + qixz * qkxz + qiyz * qkyz) + qixx * qkxx + qiyy * qkyy + qizz * qkzz;
 
    // chgpen terms
-   real term1 = corei * corek;
-   real term1i = corek * vali;
-   real term2i = corek * dir;
-   real term3i = corek * qir;
-   real term1k = corei * valk;
-   real term2k = -corei * dkr;
-   real term3k = corei * qkr;
-   real term1ik = vali * valk;
-   real term2ik = valk * dir - vali * dkr + dik;
-   real term3ik = vali * qkr + valk * qir - dir * dkr + 2 * (dkqi - diqk + qiqk);
    real term4ik = dir * qkr - dkr * qir - 4 * qik;
    real term5ik = qir * qkr;
+   real term6ik = 2 * (dkqi - diqk + qiqk) - dir * dkr;
 
-   real rr1i, rr3i, rr5i, rr7i, rr1k, rr3k, rr5k, rr7k, rr1ik, rr3ik, rr5ik, rr7ik, rr9ik, rr11ik;
-
-   // Compute damping factors
+   // Compute the penetration terms, 1 - damping factors
    if CONSTEXPR (do_g) {
-      damp_pole_v2<11>(dmpik, dmpi, dmpk, r, alphai, alphak);
+      damp_pole_v2c<11>(dmpik, dmpi, dmpk, r, alphai, alphak);
    } else {
-      damp_pole_v2<9>(dmpik, dmpi, dmpk, r, alphai, alphak);
+      damp_pole_v2c<9>(dmpik, dmpi, dmpk, r, alphai, alphak);
    }
    //
 
@@ -128,28 +117,37 @@ void pair_mpole_chgpen( //
          bn[5] = rr11;
    } // endif NON_EWALD
 
-   rr1i = bn[0] - (1 - mscale * dmpi[0]) * rr1;
-   rr3i = bn[1] - (1 - mscale * dmpi[1]) * rr3;
-   rr5i = bn[2] - (1 - mscale * dmpi[2]) * rr5;
-   rr7i = bn[3] - (1 - mscale * dmpi[3]) * rr7;
-   rr1k = bn[0] - (1 - mscale * dmpk[0]) * rr1;
-   rr3k = bn[1] - (1 - mscale * dmpk[1]) * rr3;
-   rr5k = bn[2] - (1 - mscale * dmpk[2]) * rr5;
-   rr7k = bn[3] - (1 - mscale * dmpk[3]) * rr7;
-   rr1ik = bn[0] - (1 - mscale * dmpik[0]) * rr1;
-   rr3ik = bn[1] - (1 - mscale * dmpik[1]) * rr3;
-   rr5ik = bn[2] - (1 - mscale * dmpik[2]) * rr5;
-   rr7ik = bn[3] - (1 - mscale * dmpik[3]) * rr7;
-   rr9ik = bn[4] - (1 - mscale * dmpik[4]) * rr9;
-   if CONSTEXPR (do_g)
-      rr11ik = bn[5] - (1 - mscale * dmpik[5]) * rr11;
-   rr1 = bn[0] - (1 - mscale) * rr1;
-   rr3 = bn[1] - (1 - mscale) * rr3;
+   // A damped factor is the scaled undamped factor rrNs less mscale*p*rrN, where
+   // the penetration terms p (dmpi, dmpk, dmpik) decay like exp(-alpha*r). The
+   // core-core, core-valence and valence-valence products are each thousands of
+   // kcal/mol and cancel down to the total-charge interaction, so summed apart
+   // they lose ~1e-3 kcal/mol in float. Grouped around the total charges, only
+   // the small p terms are left to add.
+   real m = 1 - mscale;
+   real rr1s = bn[0] - m * rr1, w1 = mscale * rr1;
+   real rr3s = bn[1] - m * rr3, w3 = mscale * rr3;
+   real rr5s = bn[2] - m * rr5, w5 = mscale * rr5;
+   real rr7s = bn[3] - m * rr7, w7 = mscale * rr7;
+   real rr9s = bn[4] - m * rr9, w9 = mscale * rr9;
+   real rr3ik = rr3s - dmpik[1] * w3;
+   real rr5ik = rr5s - dmpik[2] * w5;
+   real rr7ik = rr7s - dmpik[3] * w7;
+   real rr9ik = rr9s - dmpik[4] * w9;
 
-   if CONSTEXPR (do_e)
-      e = term1 * rr1 + term4ik * rr7ik + term5ik * rr9ik + term1i * rr1i + term1k * rr1k + term1ik * rr1ik + term2i * rr3i + term2k * rr3k + term2ik * rr3ik
-         + term3i * rr5i + term3k * rr5k + term3ik * rr5ik;
-   // end if (do_e)
+   // Total charges; corei + vali is what the separate products add up to.
+   real qi = corei + vali;
+   real qk = corek + valk;
+   // Charge of k seen at i (fk), and of i seen at k (fi), through the damping
+   // of the other site: fkN = corek*rrNi + valk*rrNik, fiN = corei*rrNk + vali*rrNik.
+   real fk3 = qk * rr3s - w3 * (corek * dmpi[1] + valk * dmpik[1]);
+   real fi3 = qi * rr3s - w3 * (corei * dmpk[1] + vali * dmpik[1]);
+   real fk5 = qk * rr5s - w5 * (corek * dmpi[2] + valk * dmpik[2]);
+   real fi5 = qi * rr5s - w5 * (corei * dmpk[2] + vali * dmpik[2]);
+
+   if CONSTEXPR (do_e) {
+      real cc1 = qi * qk * rr1s - w1 * (corek * vali * dmpi[0] + corei * valk * dmpk[0] + vali * valk * dmpik[0]);
+      e = cc1 + dir * fk3 - dkr * fi3 + dik * rr3ik + qir * fk5 + qkr * fi5 + term6ik * rr5ik + term4ik * rr7ik + term5ik * rr9ik;
+   }
 
    if CONSTEXPR (do_g) {
       // gradient
@@ -167,19 +165,22 @@ void pair_mpole_chgpen( //
       real dkqiy = dkx * qixy + dky * qiyy + dkz * qiyz;
       real dkqiz = dkx * qixz + dky * qiyz + dkz * qizz;
 
-      real de = term1 * rr3 + term4ik * rr9ik + term5ik * rr11ik + term1i * rr3i + term1k * rr3k + term1ik * rr3ik + term2i * rr5i + term2k * rr5k
-         + term2ik * rr5ik + term3i * rr7i + term3k * rr7k + term3ik * rr7ik;
+      real rr11ik = bn[5] - m * rr11 - dmpik[5] * mscale * rr11;
+      real fk7 = qk * rr7s - w7 * (corek * dmpi[3] + valk * dmpik[3]);
+      real fi7 = qi * rr7s - w7 * (corei * dmpk[3] + vali * dmpik[3]);
+      real cc3 = qi * qk * rr3s - w3 * (corek * vali * dmpi[1] + corei * valk * dmpk[1] + vali * valk * dmpik[1]);
+      real de = cc3 + dir * fk5 - dkr * fi5 + dik * rr5ik + qir * fk7 + qkr * fi7 + term6ik * rr7ik + term4ik * rr9ik + term5ik * rr11ik;
 
-      term1 = -corek * rr3i - valk * rr3ik + dkr * rr5ik - qkr * rr7ik;
-      real term2 = corei * rr3k + vali * rr3ik + dir * rr5ik + qir * rr7ik;
+      real term1 = -fk3 + dkr * rr5ik - qkr * rr7ik;
+      real term2 = fi3 + dir * rr5ik + qir * rr7ik;
       real term3 = 2 * rr5ik;
-      real term4 = -2 * (corek * rr5i + valk * rr5ik - dkr * rr7ik + qkr * rr9ik);
-      real term5 = -2 * (corei * rr5k + vali * rr5ik + dir * rr7ik + qir * rr9ik);
+      real term4 = -2 * (fk5 - dkr * rr7ik + qkr * rr9ik);
+      real term5 = -2 * (fi5 + dir * rr7ik + qir * rr9ik);
       real term6 = 4 * rr7ik;
 
       if CONSTEXPR (CFLX) {
-         real t1i = corek * rr1i + valk * rr1ik;
-         real t1k = corei * rr1k + vali * rr1ik;
+         real t1i = qk * rr1s - w1 * (corek * dmpi[0] + valk * dmpik[0]);
+         real t1k = qi * rr1s - w1 * (corei * dmpk[0] + vali * dmpik[0]);
          real t2i = -dkr * rr3ik;
          real t2k = dir * rr3ik;
          real t3i = qkr * rr5ik;
