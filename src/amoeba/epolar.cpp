@@ -59,7 +59,7 @@ void epolarData(RcOp op)
 
       darray::deallocate(polarity, thole, pdamp, polarity_inv, polarityorig);
       if (polpot::use_tholed)
-         darray::deallocate(dirdamp);
+         darray::deallocate(thdval);
 
       if (rc_a)
          bufferDeallocate(rc_flag, nep);
@@ -414,7 +414,9 @@ void epolarData(RcOp op)
       else
          polarityorig = nullptr;
       if (polpot::use_tholed)
-         darray::allocate(n, &dirdamp);
+         darray::allocate(njpolar * njpolar, &thdval);
+      else
+         thdval = nullptr;
 
       nep = nullptr;
       ep_buf.manage(op, rc_flag, {&ep, &vir_ep, &depx, &depy, &depz},
@@ -544,6 +546,8 @@ void epolarData(RcOp op)
          jpolarvec[i] = polar::jpolar[i] - 1;
       darray::copyin(g::q0, n, jpolar, jpolarvec.data());
       darray::copyin(g::q0, njpolar * njpolar, thlval, polar::thlval);
+      if (polpot::use_tholed)
+         darray::copyin(g::q0, njpolar * njpolar, thdval, polar::thdval);
 
       // TODO: rename udiag to uaccel
       udiag = polpot::uaccel;
@@ -567,8 +571,6 @@ void epolarData(RcOp op)
       darray::copyin(g::q0, n, polarity_inv, pinvbuf.data());
       if (use_epdt || use_prst)
          darray::copyin(g::q0, n, polarityorig, dlmda::polarityorig);
-      if (polpot::use_tholed)
-         darray::copyin(g::q0, n, dirdamp, polar::tholed);
       waitFor(g::q0);
 
       polar_active_mask = 0;

@@ -5,7 +5,7 @@
 
 namespace tinker {
 #pragma acc routine seq
-template <bool do_e, bool do_g, class ETYP, int CFLX>
+template <bool do_e, bool do_a, bool do_g, class ETYP, int CFLX>
 SEQ_CUDA
 void pair_polar_aplus(real r2,
                       real xr,
@@ -48,6 +48,7 @@ void pair_polar_aplus(real r2,
                       real f,
                       real aewald,
                       real& restrict e,
+                      real& restrict edamp,
                       real& restrict poti,
                       real& restrict potk,
                       PairPolarGrad& restrict pgrad)
@@ -132,6 +133,11 @@ void pair_polar_aplus(real r2,
       real term2 = 2 * (qiu - qku) - uir * dkr - dir * ukr;
       real term3 = uir * qkr - ukr * qir;
       e = dscale * f * (term1 * sr3 + term2 * sr5 + term3 * sr7);
+      // The damped pair energy without Ewald screening or scaling. Tinker counts
+      // the pair as an interaction when this and its scale are nonzero (epolar3.f).
+      // Only counting reads it, so it is left unset unless do_a.
+      if CONSTEXPR (do_a)
+         edamp = f * (term1 * (rr3 - ex3 * rr3) + term2 * (rr5 - ex5 * rr5) + term3 * (rr7 - ex7 * rr7));
    }
 
    if CONSTEXPR (do_g) {
@@ -394,6 +400,7 @@ void pair_polar_aplus_v2(real r2,
                          real& restrict duf4k,
                          real& restrict duf5k,
                          real& restrict e,
+                         real& restrict edamp,
                          real& restrict vxx,
                          real& restrict vxy,
                          real& restrict vxz,
@@ -404,6 +411,7 @@ void pair_polar_aplus_v2(real r2,
                          real& restrict potk)
 {
    constexpr bool do_e = Ver::e;
+   constexpr bool do_a = Ver::a;
    constexpr bool do_g = Ver::g;
    constexpr bool do_v = Ver::v;
 
@@ -493,6 +501,11 @@ void pair_polar_aplus_v2(real r2,
       real term2 = 2 * (qiu - qku) - uir * dkr - dir * ukr;
       real term3 = uir * qkr - ukr * qir;
       e = dscale * f * (term1 * sr3 + term2 * sr5 + term3 * sr7);
+      // The damped pair energy without Ewald screening or scaling. Tinker counts
+      // the pair as an interaction when this and its scale are nonzero (epolar3.f).
+      // Only counting reads it, so it is left unset unless do_a.
+      if CONSTEXPR (do_a)
+         edamp = f * (term1 * (rr3 - ex3 * rr3) + term2 * (rr5 - ex5 * rr5) + term3 * (rr7 - ex7 * rr7));
    }
 
    if CONSTEXPR (CFLX) {

@@ -21,6 +21,8 @@ TINKER_EXTERN __device__
 const int* restrict jpolar;
 TINKER_EXTERN __device__
 const real* restrict thlval;
+TINKER_EXTERN __device__
+const real* restrict thdval;
 
 TINKER_EXTERN __device__
 const real* restrict polarity;

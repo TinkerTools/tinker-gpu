@@ -7,7 +7,7 @@
 #include "tool/gpucard.h"
 
 namespace tinker {
-#define APPLY_DPTRS rsd, zrsd, x, y, z, polarity, pdamp, thole
+#define APPLY_DPTRS rsd, zrsd, x, y, z, polarity, pdamp, jpolar, thlval
 void sparsePrecondApply3_acc(const real (*rsd)[3], real (*zrsd)[3])
 {
    #pragma acc parallel loop independent async\
@@ -32,7 +32,7 @@ void sparsePrecondApply3_acc(const real (*rsd)[3], real (*zrsd)[3])
       real yi = y[i];
       real zi = z[i];
       real pdi = pdamp[i];
-      real pti = thole[i];
+      int jpi = jpolar[i];
       real poli = polarity[i];
 
       int nulsti = ulst->nlst[i];
@@ -44,7 +44,7 @@ void sparsePrecondApply3_acc(const real (*rsd)[3], real (*zrsd)[3])
          int k = ulst->lst[base + kk];
 
          real pdk = pdamp[k];
-         real ptk = thole[k];
+         real pga = thlval[njpolar * jpi + jpolar[k]];
          real xr = x[k] - xi;
          real yr = y[k] - yi;
          real zr = z[k] - zi;
@@ -53,7 +53,7 @@ void sparsePrecondApply3_acc(const real (*rsd)[3], real (*zrsd)[3])
          real r = REAL_SQRT(r2);
 
          real scale3, scale5;
-         damp_thole2(r, pdi, pti, pdk, ptk, scale3, scale5);
+         damp_thole2(r, pdi, pga, pdk, pga, scale3, scale5);
 
          real polik = poli * polarity[k];
          real rr3 = scale3 * polik * REAL_RECIP(r * r2);
@@ -92,7 +92,7 @@ void sparsePrecondApply3_acc(const real (*rsd)[3], real (*zrsd)[3])
       real yi = y[i];
       real zi = z[i];
       real pdi = pdamp[i];
-      real pti = thole[i];
+      real pga = thlval[njpolar * jpolar[i] + jpolar[k]];
       real poli = polarity[i];
 
       real xr = x[k] - xi;
@@ -103,7 +103,7 @@ void sparsePrecondApply3_acc(const real (*rsd)[3], real (*zrsd)[3])
       real r = REAL_SQRT(r2);
 
       real scale3, scale5;
-      damp_thole2(r, pdi, pti, pdamp[k], thole[k], scale3, scale5);
+      damp_thole2(r, pdi, pga, pdamp[k], pga, scale3, scale5);
       scale3 *= uscale;
       scale5 *= uscale;
 

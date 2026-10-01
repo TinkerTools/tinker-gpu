@@ -9,7 +9,8 @@
 #include "tool/gpucard.h"
 
 namespace tinker {
-#define POLAR_DPTRS x, y, z, depx, depy, depz, rpole, thole, dirdamp, pdamp, pot, uind, nep, ep, vir_ep, ufld, dufld
+#define POLAR_DPTRS \
+   x, y, z, depx, depy, depz, rpole, jpolar, thlval, thdval, pdamp, pot, uind, nep, ep, vir_ep, ufld, dufld
 template <class Ver, class ETYP, bool CFLX>
 static void epolarAplus_acc1(const real (*uind)[3])
 {
@@ -63,8 +64,7 @@ static void epolarAplus_acc1(const real (*uind)[3])
       real uiy = uind[i][1];
       real uiz = uind[i][2];
       real pdi = pdamp[i];
-      real pti = thole[i];
-      real ddi = dirdamp[i];
+      int jpi = jpolar[i];
 
       MAYBE_UNUSED real gxi = 0, gyi = 0, gzi = 0;
       MAYBE_UNUSED real txi = 0, tyi = 0, tzi = 0;
@@ -86,7 +86,7 @@ static void epolarAplus_acc1(const real (*uind)[3])
          zero(pgrad);
          real r2 = image2(xr, yr, zr);
          if (r2 <= off2) {
-            MAYBE_UNUSED real e;
+            MAYBE_UNUSED real e, edamp;
             MAYBE_UNUSED real pota, potb;
 
             real ck = rpole[k][MPL_PME_0];
@@ -102,17 +102,18 @@ static void epolarAplus_acc1(const real (*uind)[3])
             real ukx = uind[k][0];
             real uky = uind[k][1];
             real ukz = uind[k][2];
-            real ptk = thole[k];
             real pdk = pdamp[k];
-            real ddk = dirdamp[k];
+            int jpk = jpolar[k];
+            real pga = thlval[njpolar * jpi + jpk];
+            real pgd = thdval[njpolar * jpi + jpk];
 
-            pair_polar_aplus<do_e, do_g, ETYP, CFLX>( //
-               r2, xr, yr, zr, 1, 1, ci, dix, diy, diz, pdi, pti, ddi, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy,
-               uiz, ck, dkx, dky, dkz, pdk, ptk, ddk, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, f, aewald, e,
-               pota, potb, pgrad);
+            pair_polar_aplus<do_e, do_a, do_g, ETYP, CFLX>( //
+               r2, xr, yr, zr, 1, 1, ci, dix, diy, diz, pdi, pga, pgd, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy,
+               uiz, ck, dkx, dky, dkz, pdk, pga, pgd, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, f, aewald, e,
+               edamp, pota, potb, pgrad);
 
             if CONSTEXPR (do_a)
-               if (e != 0)
+               if (edamp != 0)
                   atomic_add(1, nep, offset);
             if CONSTEXPR (do_e)
                atomic_add(e, ep, offset);
@@ -210,36 +211,35 @@ static void epolarAplus_acc1(const real (*uind)[3])
       real uix = uind[i][0];
       real uiy = uind[i][1];
       real uiz = uind[i][2];
-      real pti = thole[i];
       real pdi = pdamp[i];
-      real ddi = dirdamp[i];
 
       real xr = x[k] - xi;
       real yr = y[k] - yi;
       real zr = z[k] - zi;
 
-      real ptk = thole[k];
       real pdk = pdamp[k];
-      real ddk = dirdamp[k];
+      real pga = thlval[njpolar * jpolar[i] + jpolar[k]];
+      real pgd = thdval[njpolar * jpolar[i] + jpolar[k]];
 
       bool incl = pscale != 0 or uscale != 0;
 
       real r2 = image2(xr, yr, zr);
       if (r2 <= off2 and incl) {
 
-         MAYBE_UNUSED real e;
+         MAYBE_UNUSED real e, edamp;
          MAYBE_UNUSED real pota, potb;
 
-         pair_polar_aplus<do_e, do_g, NON_EWALD, CFLX>(        //
+         pair_polar_aplus<do_e, do_a, do_g, NON_EWALD, CFLX>(  //
             r2, xr, yr, zr, pscale, uscale,                    //
-            ci, dix, diy, diz, pdi, pti, ddi,                  //
+            ci, dix, diy, diz, pdi, pga, pgd,                  //
             qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy, uiz, //
-            rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], pdk, ptk, ddk,
+            rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], pdk, pga, pgd,
             rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY],
-            rpole[k][MPL_PME_YZ], rpole[k][MPL_PME_ZZ], uind[k][0], uind[k][1], uind[k][2], f, 0, e, pota, potb, pgrad);
+            rpole[k][MPL_PME_YZ], rpole[k][MPL_PME_ZZ], uind[k][0], uind[k][1], uind[k][2], f, 0, e, edamp, pota, potb,
+            pgrad);
 
          if CONSTEXPR (do_a)
-            if (pscale == -1 and e != 0)
+            if (pscale == -1 and edamp != 0)
                atomic_add(-1, nep, offset);
 
          if CONSTEXPR (do_e)

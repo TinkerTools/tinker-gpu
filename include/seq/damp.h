@@ -4,13 +4,17 @@
 #include "seq/seq.h"
 
 namespace tinker {
+// A pair with no damping width (pdi * pdk == 0) or no Thole value (pgamma == 0)
+// is undamped, as in dampthole (damping.f). A Thole value of 0 is Tinker's way
+// of specifying no damping; it is not the a -> 0 limit, which damps fully.
+
 // ufield, PCG
 SEQ_ROUTINE
 inline void dmpthole2_a(real r, real pgamma, real pdi, real pdk, real& restrict scale3, real& restrict scale5)
 {
    real damp = pdi * pdk;
    real ratio = r * REAL_RECIP(damp);
-   damp = (damp == 0 ? ((real)-1.0e16) : -pgamma * ratio * ratio * ratio);
+   damp = (damp == 0 or pgamma == 0 ? ((real)-1.0e16) : -pgamma * ratio * ratio * ratio);
    real expdamp = REAL_EXP(damp);
    scale3 = 1 - expdamp;
    scale5 = 1 - expdamp * (1 - damp);
@@ -29,7 +33,7 @@ inline void dmpthole3_a(real r, real pgamma, real pdi, real pdk, real& restrict 
 {
    real damp = pdi * pdk;
    real ratio = r * REAL_RECIP(damp);
-   damp = (damp == 0 ? ((real)-1.0e16) : -pgamma * ratio * ratio * ratio);
+   damp = (damp == 0 or pgamma == 0 ? ((real)-1.0e16) : -pgamma * ratio * ratio * ratio);
    real expdamp = REAL_EXP(damp);
    scale3 = 1 - expdamp;
    scale5 = 1 - expdamp * (1 - damp);
@@ -67,7 +71,7 @@ inline void dmpthole3g_a(real r,
 {
    real damp = pdi * pdk;
    real ratio = r * REAL_RECIP(damp);
-   damp = (damp == 0 ? ((real)1.0e16) : pgamma * ratio * ratio * ratio);
+   damp = (damp == 0 or pgamma == 0 ? ((real)1.0e16) : pgamma * ratio * ratio * ratio);
    scale31 = REAL_EXP(-damp);
    scale51 = scale31 * (1 + damp);
    scale71 = scale31 * (1 + damp + (real)0.6 * damp * damp);
@@ -116,8 +120,17 @@ SEQ_ROUTINE
 inline void dmpthole4_a(real r, real pgamma, real pdi, real pdk, real& restrict ex3, real& restrict ex5, real& restrict ex7, real& restrict ex9)
 {
    real damp = pdi * pdk;
+   // Undamped. The 1e16 stand-in used elsewhere would overflow ex9 in single
+   // precision and give 0 * inf.
+   if (damp == 0 or pgamma == 0) {
+      ex3 = 0;
+      ex5 = 0;
+      ex7 = 0;
+      ex9 = 0;
+      return;
+   }
    real ratio = r * REAL_RECIP(damp);
-   damp = (damp == 0 ? ((real)1.0e16) : pgamma * ratio * ratio * ratio);
+   damp = pgamma * ratio * ratio * ratio;
    ex3 = REAL_EXP(-damp);
    ex5 = ex3 * (1 + damp);
    ex7 = ex3 * (1 + damp + (real)0.6 * damp * damp);

@@ -18,9 +18,11 @@ EXTRA_PARAMS: |
   , const real (*restrict rsd)[3]
   , real (*restrict zrsd)[3]
   , const real* restrict pdamp
-  , const real* restrict thole
   , const real* restrict polarity
-# IMPLICIT_PARAMS:
+IMPLICIT_PARAMS:
+  - d::jpolar
+  - d::njpolar
+  - d::thlval
 
 I_VARIABLES:
   - register real xi     from:x
@@ -30,7 +32,7 @@ I_VARIABLES:
   - shared   real uidy   from:rsd,1
   - shared   real uidz   from:rsd,2
   - shared   real pdi    from:pdamp
-  - shared   real pti    from:thole
+  - shared   int  jpi    from:jpolar
   - shared   real poli   from:polarity
 K_VARIABLES:
   - register real xk     from:x
@@ -40,7 +42,7 @@ K_VARIABLES:
   - register real ukdy   from:rsd,1
   - register real ukdz   from:rsd,2
   - register real pdk    from:pdamp
-  - register real ptk    from:thole
+  - register int  jpk    from:jpolar
   - register real polk   from:polarity
 I_FORCE:
   - register real fidx addto:zrsd,0
@@ -60,7 +62,8 @@ FULL_PAIRWISE_INTERACTION: |
   if (r2 <= off * off and incl) {
     real r = REAL_SQRT(r2);
     real scale3, scale5;
-    damp_thole2(r, @pdi@, @pti@, @pdk@, @ptk@, scale3, scale5);
+    real pga = thlval[njpolar * jpi[klane] + jpk];
+    damp_thole2(r, @pdi@, pga, @pdk@, pga, scale3, scale5);
     scale3 *= scalea;
     scale5 *= scalea;
 

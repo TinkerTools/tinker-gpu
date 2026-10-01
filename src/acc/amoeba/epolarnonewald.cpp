@@ -142,26 +142,26 @@ static void epolarNonEwald_acc1(const real (*uind)[3], const real (*uinp)[3])
                ukzp = uinp[k][2];
             }
 
-            MAYBE_UNUSED real e;
+            MAYBE_UNUSED real e, edamp;
 #if TINKER9_POLPAIR == 2
             int jpk = jpolar[k];
             real pga = thlval[njpolar * jpi + jpk];
-            pair_polar<do_e, do_g, NON_EWALD>(                                                                        //
+            pair_polar<do_e, do_a, do_g, NON_EWALD>(                                                                  //
                r2, xr, yr, zr, 1, 1, 1,                                                                               //
                ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy, uiz, uixp, uiyp, uizp, pdi, pga,      //
                ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, ukxp, ukyp, ukzp, pdamp[k], pga, //
-               f, 0, e, pgrad);
+               f, 0, e, edamp, pgrad);
 #else
-            pair_polar<do_e, do_g, NON_EWALD>(                                                                   //
+            pair_polar<do_e, do_a, do_g, NON_EWALD>(                                                             //
                r2, xr, yr, zr, 1, 1, 1,                                                                          //
                ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy, uiz, uixp, uiyp, uizp, pdi, pti, //
                ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, ukxp, ukyp, ukzp, pdamp[k],
                thole[k], //
-               f, 0, e, pgrad);
+               f, 0, e, edamp, pgrad);
 #endif
 
             if CONSTEXPR (do_a)
-               if (e != 0)
+               if (edamp != 0)
                   atomic_add(1, nep, offset);
             if CONSTEXPR (do_e)
                atomic_add(e, ep, offset);
@@ -291,26 +291,26 @@ static void epolarNonEwald_acc1(const real (*uind)[3], const real (*uinp)[3])
             ukzp = uinp[k][2];
          }
 
-         MAYBE_UNUSED real e;
+         MAYBE_UNUSED real e, edamp;
 #if TINKER9_POLPAIR == 2
          int jpk = jpolar[k];
          real pga = thlval[njpolar * jpi + jpk];
-         pair_polar<do_e, do_g, NON_EWALD>(                                                                        //
+         pair_polar<do_e, do_a, do_g, NON_EWALD>(                                                                  //
             r2, xr, yr, zr, dscale, pscale, uscale,                                                                //
             ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy, uiz, uixp, uiyp, uizp, pdi, pga,      //
             ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, ukxp, ukyp, ukzp, pdamp[k], pga, //
-            f, 0, e, pgrad);
+            f, 0, e, edamp, pgrad);
 #else
-         pair_polar<do_e, do_g, NON_EWALD>(                                                                   //
+         pair_polar<do_e, do_a, do_g, NON_EWALD>(                                                             //
             r2, xr, yr, zr, dscale, pscale, uscale,                                                           //
             ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy, uiz, uixp, uiyp, uizp, pdi, pti, //
             ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, ukxp, ukyp, ukzp, pdamp[k],
             thole[k], //
-            f, 0, e, pgrad);
+            f, 0, e, edamp, pgrad);
 #endif
 
          if CONSTEXPR (do_a)
-            if (pscale == -1 and e != 0)
+            if (pscale == -1 and edamp != 0)
                atomic_add(-1, nep, offset);
          if CONSTEXPR (do_e)
             atomic_add(e, ep, offset);

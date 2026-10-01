@@ -34,6 +34,10 @@ void epolarDataBinding_cu(RcOp op)
       check_rt(cudaMemcpyAsync(p2, &jpolar, sizeof(void*), h2d, g::s0));
       check_rt(cudaMemcpyAsync(p3, &thlval, sizeof(void*), h2d, g::s0));
 
+      void* p8;
+      check_rt(cudaGetSymbolAddress(&p8, (const void*)&d::thdval));
+      check_rt(cudaMemcpyAsync(p8, &thdval, sizeof(void*), h2d, g::s0));
+
       void *p4, *p5, *p6;
       check_rt(cudaGetSymbolAddress(&p4, (const void*)&d::polarity));
       check_rt(cudaGetSymbolAddress(&p5, (const void*)&d::thole));

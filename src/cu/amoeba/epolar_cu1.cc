@@ -1,4 +1,4 @@
-// ck.py Version 3.0.2
+// ck.py Version 3.1.0
 template <class Ver, class ETYP>
 __global__
 void epolar_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBuffer restrict ep,
@@ -139,7 +139,7 @@ void epolar_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBuff
       real r2 = image2(xr, yr, zr);
       if (r2 <= off * off and incl) {
          real pga = thlval[njpolar * jpi[klane] + jpk];
-         real e, vxx, vyx, vzx, vyy, vzy, vzz;
+         real e, edamp, vxx, vyx, vzx, vyy, vzy, vzz;
          real e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1;
          pair_polar_v2<Ver, ETYP>(r2, xr, yr, zr, 1, 1, 1, //
             ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane], qixy[klane], qixz[klane], qiyy[klane],
@@ -151,7 +151,7 @@ void epolar_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBuff
             f, aewald,                   //
             frcxi, frcyi, frczi, frcxk, frcyk, frczk, ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k, dufld0i, dufld1i,
             dufld2i, dufld3i, dufld4i, dufld5i, dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, //
-            e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1);
+            e1, edamp, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1);
          pair_polar_v2<Ver, NON_EWALD>(r2, xr, yr, zr, scaleb - 1, scalec - 1, scaled - 1, //
             ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane], qixy[klane], qixz[klane], qiyy[klane],
             qiyz[klane], qizz[klane], uidx[klane], uidy[klane], uidz[klane], uipx[klane], uipy[klane], uipz[klane],
@@ -162,12 +162,12 @@ void epolar_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBuff
             f, aewald,                   //
             frcxi, frcyi, frczi, frcxk, frcyk, frczk, ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k, dufld0i, dufld1i,
             dufld2i, dufld3i, dufld4i, dufld5i, dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, //
-            e, vxx, vyx, vzx, vyy, vzy, vzz);
+            e, edamp, vxx, vyx, vzx, vyy, vzy, vzz);
          if CONSTEXPR (do_e) {
             e = e + e1;
             eptl += floatTo<ebuf_prec>(e);
             if CONSTEXPR (do_a) {
-               if (scalec != 0 and e != 0) // pscale != 0
+               if (scalec != 0 and edamp != 0) // pscale != 0
                   neptl += 1;
             }
          }
@@ -305,7 +305,7 @@ void epolar_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBuff
          real r2 = image2(xr, yr, zr);
          if (r2 <= off * off and incl) {
             real pga = thlval[njpolar * jpi[klane] + jpk];
-            real e, vxx, vyx, vzx, vyy, vzy, vzz;
+            real e, edamp, vxx, vyx, vzx, vyy, vzy, vzz;
             pair_polar_v2<Ver, ETYP>(r2, xr, yr, zr, 1, 1, 1, //
                ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane], qixy[klane], qixz[klane], qiyy[klane],
                qiyz[klane], qizz[klane], uidx[klane], uidy[klane], uidz[klane], uipx[klane], uipy[klane], uipz[klane],
@@ -316,11 +316,11 @@ void epolar_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBuff
                f, aewald,                   //
                frcxi, frcyi, frczi, frcxk, frcyk, frczk, ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k, dufld0i,
                dufld1i, dufld2i, dufld3i, dufld4i, dufld5i, dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, //
-               e, vxx, vyx, vzx, vyy, vzy, vzz);
+               e, edamp, vxx, vyx, vzx, vyy, vzy, vzz);
             if CONSTEXPR (do_e) {
                eptl += floatTo<ebuf_prec>(e);
                if CONSTEXPR (do_a) {
-                  if (e != 0)
+                  if (edamp != 0)
                      neptl += 1;
                }
             }
@@ -467,7 +467,7 @@ void epolar_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBuff
          real r2 = image2(xr, yr, zr);
          if (r2 <= off * off and incl) {
             real pga = thlval[njpolar * jpi[klane] + jpk];
-            real e, vxx, vyx, vzx, vyy, vzy, vzz;
+            real e, edamp, vxx, vyx, vzx, vyy, vzy, vzz;
             pair_polar_v2<Ver, ETYP>(r2, xr, yr, zr, 1, 1, 1, //
                ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane], qixy[klane], qixz[klane], qiyy[klane],
                qiyz[klane], qizz[klane], uidx[klane], uidy[klane], uidz[klane], uipx[klane], uipy[klane], uipz[klane],
@@ -478,11 +478,11 @@ void epolar_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, EnergyBuff
                f, aewald,                   //
                frcxi, frcyi, frczi, frcxk, frcyk, frczk, ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k, dufld0i,
                dufld1i, dufld2i, dufld3i, dufld4i, dufld5i, dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, //
-               e, vxx, vyx, vzx, vyy, vzy, vzz);
+               e, edamp, vxx, vyx, vzx, vyy, vzy, vzz);
             if CONSTEXPR (do_e) {
                eptl += floatTo<ebuf_prec>(e);
                if CONSTEXPR (do_a) {
-                  if (e != 0)
+                  if (edamp != 0)
                      neptl += 1;
                }
             }

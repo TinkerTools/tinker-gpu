@@ -167,5 +167,6 @@ TINKER_EXTERN real* upalt_lsqr_b;
 
 // aplus
 namespace tinker {
-TINKER_EXTERN real* dirdamp;
+/// \brief Direct damping pair values, indexed like #thlval.
+TINKER_EXTERN real* thdval;
 }

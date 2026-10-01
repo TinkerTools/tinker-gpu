@@ -1,20 +1,25 @@
-// ck.py Version 3.0.2
+// ck.py Version 3.1.0
 template <class ETYP>
 __global__
 void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict uinfo, int nexclude,
    const int (*restrict exclude)[2], const real* restrict exclude_scale, const real* restrict x, const real* restrict y,
    const real* restrict z, const Spatial::SortedAtom* restrict sorted, int nakpl, const int* restrict iakpl, int niak,
    const int* restrict iak, const int* restrict lst, const real (*restrict uind)[3], real (*restrict field)[3],
-   const real* restrict pdamp, const real* restrict thole, real aewald)
+   const real* restrict pdamp, real aewald)
 {
+   using d::jpolar;
+   using d::njpolar;
+   using d::thlval;
    const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
    const int iwarp = ithread / WARP_SIZE;
    const int nwarp = blockDim.x * gridDim.x / WARP_SIZE;
    const int ilane = threadIdx.x & (WARP_SIZE - 1);
 
-   __shared__ real uidx[BLOCK_DIM], uidy[BLOCK_DIM], uidz[BLOCK_DIM], pdi[BLOCK_DIM], pti[BLOCK_DIM];
+   __shared__ real uidx[BLOCK_DIM], uidy[BLOCK_DIM], uidz[BLOCK_DIM], pdi[BLOCK_DIM];
+   __shared__ int jpi[BLOCK_DIM];
    real xi, yi, zi;
-   real xk, yk, zk, ukdx, ukdy, ukdz, pdk, ptk;
+   real xk, yk, zk, ukdx, ukdy, ukdz, pdk;
+   int jpk;
    real fidx, fidy, fidz;
    real fkdx, fkdy, fkdz;
 
@@ -36,7 +41,7 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
       uidy[klane] = uind[i][1];
       uidz[klane] = uind[i][2];
       pdi[klane] = pdamp[i];
-      pti[klane] = thole[i];
+      jpi[klane] = jpolar[i];
       xi = x[i];
       yi = y[i];
       zi = z[i];
@@ -47,7 +52,7 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
       ukdy = uind[k][1];
       ukdz = uind[k][2];
       pdk = pdamp[k];
-      ptk = thole[k];
+      jpk = jpolar[k];
 
       constexpr bool incl = true;
       real xr = xk - xi;
@@ -55,8 +60,9 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
       real zr = zk - zi;
       real r2 = image2(xr, yr, zr);
       if (r2 <= off * off and incl) {
-         pair_ufield_aplus_v2<ETYP>(r2, xr, yr, zr, scalea, uidx[klane], uidy[klane], uidz[klane], pdi[klane],
-            pti[klane], ukdx, ukdy, ukdz, pdk, ptk, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
+         real pga = thlval[njpolar * jpi[klane] + jpk];
+         pair_ufield_aplus_v2<ETYP>(r2, xr, yr, zr, scalea, uidx[klane], uidy[klane], uidz[klane], pdi[klane], pga,
+            ukdx, ukdy, ukdz, pdk, pga, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
       } // end if (include)
 
       atomic_add(fidx, &field[i][0]);
@@ -90,7 +96,7 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
       uidy[threadIdx.x] = uind[i][1];
       uidz[threadIdx.x] = uind[i][2];
       pdi[threadIdx.x] = pdamp[i];
-      pti[threadIdx.x] = thole[i];
+      jpi[threadIdx.x] = jpolar[i];
       xi = sorted[atomi].x;
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
@@ -101,7 +107,7 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
       ukdy = uind[k][1];
       ukdz = uind[k][2];
       pdk = pdamp[k];
-      ptk = thole[k];
+      jpk = jpolar[k];
       __syncwarp();
 
       unsigned int uinfo0 = uinfo[iw * WARP_SIZE + ilane];
@@ -117,8 +123,9 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
          real zr = zk - zi;
          real r2 = image2(xr, yr, zr);
          if (r2 <= off * off and incl) {
-            pair_ufield_aplus_v2<ETYP>(r2, xr, yr, zr, scalea, uidx[klane], uidy[klane], uidz[klane], pdi[klane],
-               pti[klane], ukdx, ukdy, ukdz, pdk, ptk, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
+            real pga = thlval[njpolar * jpi[klane] + jpk];
+            pair_ufield_aplus_v2<ETYP>(r2, xr, yr, zr, scalea, uidx[klane], uidy[klane], uidz[klane], pdi[klane], pga,
+               ukdx, ukdy, ukdz, pdk, pga, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
          } // end if (include)
 
          iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
@@ -156,7 +163,7 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
       uidy[threadIdx.x] = uind[i][1];
       uidz[threadIdx.x] = uind[i][2];
       pdi[threadIdx.x] = pdamp[i];
-      pti[threadIdx.x] = thole[i];
+      jpi[threadIdx.x] = jpolar[i];
       xi = sorted[atomi].x;
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
@@ -167,7 +174,7 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
       ukdy = uind[k][1];
       ukdz = uind[k][2];
       pdk = pdamp[k];
-      ptk = thole[k];
+      jpk = jpolar[k];
       __syncwarp();
 
       for (int j = 0; j < WARP_SIZE; ++j) {
@@ -180,8 +187,9 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
          real zr = zk - zi;
          real r2 = image2(xr, yr, zr);
          if (r2 <= off * off and incl) {
-            pair_ufield_aplus_v2<ETYP>(r2, xr, yr, zr, scalea, uidx[klane], uidy[klane], uidz[klane], pdi[klane],
-               pti[klane], ukdx, ukdy, ukdz, pdk, ptk, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
+            real pga = thlval[njpolar * jpi[klane] + jpk];
+            pair_ufield_aplus_v2<ETYP>(r2, xr, yr, zr, scalea, uidx[klane], uidy[klane], uidz[klane], pdi[klane], pga,
+               ukdx, ukdy, ukdz, pdk, pga, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
          } // end if (include)
 
          xi = __shfl_sync(ALL_LANES, xi, ilane + 1);
