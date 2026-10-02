@@ -74,237 +74,190 @@ struct Fixture
    const char* name;
    const char* base;
    bool checkm, checkp, checkv, dolmda;
-   const char* cat;
    const char* ref = nullptr; ///< Reference borrowed from another fixture, if any.
    Tols tol = {};             ///< Tolerances that differ from the defaults.
 };
 
 const Fixture kFixtures[] = {
-   {"001_water_ye_m10", "water", true, true, false, false, "mv"},
-   {"002_water_ne_m10", "water", true, true, false, false, "mv"},
-   {"003_water_ye_m05", "water", true, true, false, false, "mv"},
-   {"004_water_ne_m05", "water", true, true, false, false, "mv"},
-   {"005_water_ye_m00", "water", true, true, false, false, "mv"},
-   {"006_water_ne_m00", "water", true, true, false, false, "mv"},
-   {"007_water_v10", "water", false, false, true, false, "mv"},
-   {"008_water_v05", "water", false, false, true, false, "mv"},
-   {"009_water_v00", "water", false, false, true, false, "mv"},
-   {"010_water_ye_m10", "water", true, false, false, false, "mp"},
-   {"011_water_ne_m10", "water", true, false, false, false, "mp"},
-   {"012_water_ye_m05", "water", true, false, false, false, "mp"},
-   {"013_water_ne_m05", "water", true, false, false, false, "mp"},
-   {"014_water_ye_m00", "water", true, false, false, false, "mp"},
-   {"015_water_ne_m00", "water", true, false, false, false, "mp"},
-   {"016_water_ye_p10", "water", false, true, false, false, "mp"},
-   {"017_water_ne_p10", "water", false, true, false, false, "mp"},
-   {"018_water_ye_p05", "water", false, true, false, false, "mp"},
-   {"019_water_ne_p05", "water", false, true, false, false, "mp"},
-   {"020_water_ye_p00", "water", false, true, false, false, "mp"},
-   {"021_water_ne_p00", "water", false, true, false, false, "mp"},
-   {"022_water_ye_m10p05", "water", true, true, false, false, "mp"},
-   {"023_water_ne_m10p05", "water", true, true, false, false, "mp"},
-   {"024_water_ye_m05p10", "water", true, true, false, false, "mp"},
-   {"025_water_ne_m05p10", "water", true, true, false, false, "mp"},
-   {"026_water_ye_m05p00", "water", true, true, false, false, "mp"},
-   {"027_water_ne_m05p00", "water", true, true, false, false, "mp"},
-   {"028_water_ye_m00p05", "water", true, true, false, false, "mp"},
-   {"029_water_ne_m00p05", "water", true, true, false, false, "mp"},
-   {"030_water_ast_ye_m10", "water2", true, false, false, true, "ast"},
-   {"031_water_ast_ne_m10", "water2", true, false, false, true, "ast"},
-   {"032_water_ast_ye_m05", "water2", true, false, false, true, "ast"},
-   {"033_water_ast_ne_m05", "water2", true, false, false, true, "ast"},
-   {"034_water_ast_ye_m00", "water2", true, false, false, true, "ast"},
-   {"035_water_ast_ne_m00", "water2", true, false, false, true, "ast"},
-   {"036_water_ast_v10", "water2", false, false, true, true, "ast"},
-   {"037_water_ast_v05", "water2", false, false, true, true, "ast"},
-   {"038_water_ast_v00", "water2", false, false, true, true, "ast"},
-   {"039_water_ast_ye_mp05", "water2", true, true, false, true, "ast"},
-   {"040_water_ast_ne_mp05", "water2", true, true, false, true, "ast"},
-   {"047_water_adt_ye_p10", "water2", false, true, false, true, "adt"},
-   {"048_water_adt_ne_p10", "water2", false, true, false, true, "adt"},
-   {"049_water_adt_ye_p05", "water2", false, true, false, true, "adt"},
-   {"050_water_adt_ne_p05", "water2", false, true, false, true, "adt"},
-   {"051_water_adt_ye_p00", "water2", false, true, false, true, "adt"},
-   {"052_water_adt_ne_p00", "water2", false, true, false, true, "adt"},
-   {"056_water_adt_ye_mp05", "water2", true, true, false, true, "adt"},
-   {"057_water_adt_ne_mp05", "water2", true, true, false, true, "adt"},
-   {"075_water_qnt_ast_l10", "water2", true, true, true, true, "qnt"},
-   {"076_water_qnt_ast_l05", "water2", true, true, true, true, "qnt"},
-   {"077_water_qnt_ast_l00", "water2", true, true, true, true, "qnt"},
-   {"078_water_qnt_adt_l10", "water2", true, true, false, true, "qnt"},
-   {"079_water_qnt_adt_l05", "water2", true, true, false, true, "qnt"},
-   {"080_water_qnt_adt_l00", "water2", true, true, false, true, "qnt"},
-   {"084_water_exp_ast_l10", "water2", true, true, true, true, "exp"},
-   {"085_water_exp_ast_l05", "water2", true, true, true, true, "exp"},
-   {"086_water_exp_ast_l00", "water2", true, true, true, true, "exp"},
-   {"087_water_exp_adt_l10", "water2", true, true, false, true, "exp"},
-   {"088_water_exp_adt_l05", "water2", true, true, false, true, "exp"},
-   {"089_water_exp_adt_l00", "water2", true, true, false, true, "exp"},
-   {"093_water_inv_ast_l10", "water2", true, true, true, true, "inv"},
-   {"094_water_inv_ast_l05", "water2", true, true, true, true, "inv"},
-   {"095_water_inv_ast_l00", "water2", true, true, true, true, "inv"},
-   {"096_water_inv_adt_l10", "water2", true, true, false, true, "inv"},
-   {"097_water_inv_adt_l05", "water2", true, true, false, true, "inv"},
-   {"098_water_inv_adt_l00", "water2", true, true, false, true, "inv"},
-   {"102_water_exf_ast_m10", "water2", true, false, false, true, "exf"},
-   {"103_water_exf_ast_m05", "water2", true, false, false, true, "exf"},
-   {"104_water_exf_ast_m00", "water2", true, false, false, true, "exf"},
-   {"111_water_exf_adt_p10", "water2", false, true, false, true, "exf"},
-   {"112_water_exf_adt_p05", "water2", false, true, false, true, "exf"},
-   {"113_water_exf_adt_p00", "water2", false, true, false, true, "exf"},
-   {"117_water_exf_adt_mp05", "water2", true, true, false, true, "exf"},
-   {"119_water_adt_ye_l10", "water2", true, true, false, true, "adt"},
-   {"120_water_adt_ne_l10", "water2", true, true, false, true, "adt"},
-   {"121_water_adt_ye_l05", "water2", true, true, false, true, "adt"},
-   {"122_water_adt_ne_l05", "water2", true, true, false, true, "adt"},
-   {"123_water_adt_ye_l00", "water2", true, true, false, true, "adt"},
-   {"124_water_adt_ne_l00", "water2", true, true, false, true, "adt"},
-   {"131_water_qnt_adt_l10", "water2", true, true, false, true, "legskip"},
-   {"132_water_qnt_adt_l00", "water2", true, true, false, true, "legskip"},
-   {"135_water_rels_ye_l100", "water2", true, true, true, true, "rels"},
-   {"136_water_rels_ye_l085", "water2", true, true, true, true, "rels"},
-   {"137_water_rels_ye_l070", "water2", true, true, true, true, "rels"},
-   {"138_water_rels_ye_l050", "water2", true, true, true, true, "rels"},
-   {"139_water_rels_ye_l030", "water2", true, true, true, true, "rels"},
-   // The references solve the induced dipoles only to POLAR-EPS 1e-5, so even
-   // a double precision build lands about 1.3e-4 from their dF/dL.
-   {"140_water_rels_ye_l015", "water2", true, true, true, true, "rels", nullptr, Tols().grad(1.0e-3, 5.0e-4)},
-   {"141_water_rels_ye_l000", "water2", true, true, true, true, "rels"},
-   {"146_water_lmda_ast_l05", "water2", true, true, true, false, "lmda"},
-   {"147_water_lmda_ast_e05", "water2", true, true, true, false, "lmda"},
-   {"148_water_lmda_ast_l10", "water2", true, true, true, false, "lmda"},
-   {"149_water_lmda_ast_none", "water2", true, true, true, false, "lmda"},
-   {"150_water_lmda_qnt_l05", "water2", true, true, true, false, "lmda"},
-   {"151_water_lmda_vexp_l05", "water2", true, true, true, false, "lmda"},
-   {"152_water_lmda_mp05", "water2", true, true, true, false, "lmda"},
-   {"153_water_lmda_mp05_expl", "water2", true, true, true, false, "lmda"},
-   {"154_water_lmda_e_l06", "water2", true, true, true, false, "lmdadrv"},
-   {"155_water_lmda_p_l06", "water2", true, true, true, false, "lmdadrv"},
-   {"156_water_lmda_v_l06", "water2", true, true, true, false, "lmdadrv"},
-   {"157_water_lmda_ep_l06", "water2", true, true, true, false, "lmdadrv"},
-   {"158_water_lmda_ev_l06", "water2", true, true, true, false, "lmdadrv"},
-   {"159_water_lmda_pv_l06", "water2", true, true, true, false, "lmdadrv"},
-   {"160_water_lmda_epv_l06", "water2", true, true, true, false, "lmdadrv"},
-   {"161_water_dlmda_e_l06", "water2", true, true, true, true, "lmdadrv"},
-   {"162_water_dlmda_p_l06", "water2", true, true, true, true, "lmdadrv"},
-   {"163_water_dlmda_v_l06", "water2", true, true, true, true, "lmdadrv"},
-   {"164_water_dlmda_ep_l06", "water2", true, true, true, true, "lmdadrv"},
-   {"165_water_dlmda_ev_l06", "water2", true, true, true, true, "lmdadrv"},
-   {"166_water_dlmda_pv_l06", "water2", true, true, true, true, "lmdadrv"},
-   {"167_water_dlmda_epv_l06", "water2", true, true, true, true, "lmdadrv"},
-   {"168_water_rels_ye_vdwm_l030", "water2", true, true, true, true, "rels"},
-   {"169_water_rels_ye_lig1_l070", "water2", true, true, true, true, "rels"},
-   {"170_water_lmda_ast_epin_l05", "water2", true, true, true, true, "pin"},
-   {"171_water_lmda_ast_vpin_l05", "water2", true, true, true, true, "pin"},
-   {"173_water_lmda_adt_vpin_l06", "water2", true, true, true, true, "pin"},
-   {"176_water_rels_ye_vdwm_exp_l050", "water2", true, true, true, true, "rels"},
-   {"177_water_rels_ye_lig2_exp_l030", "water2", true, true, true, true, "rels"},
-   {"178_water_rels_ye_lig1_inv_l070", "water2", true, true, true, true, "rels"},
-   {"179_water_rels_ye_vdwm_vx3_l050", "water2", true, true, true, true, "rels"},
-   {"180_water_rels_ye_lig1_ex3_l085", "water2", true, true, true, true, "rels"},
-   {"181_water_rels_ye_lig2_ix2_l015", "water2", true, true, true, true, "rels"},
-   {"182_water_ast_v05_annihilate", "water2", true, true, true, true, "ast"},
-   {"184_water_exf_adt_l10", "water2", true, true, false, true, "adt"},
-   {"185_water_exf_adt_l05", "water2", true, true, false, true, "adt"},
-   {"186_water_exf_adt_l00", "water2", true, true, false, true, "adt"},
-   {"187_water_ast_ye_l10", "water2", true, true, true, true, "astpol"},
-   {"188_water_ast_ne_l10", "water2", true, true, true, true, "astpol"},
-   {"189_water_ast_ye_l05", "water2", true, true, true, true, "astpol"},
-   {"190_water_ast_ne_l05", "water2", true, true, true, true, "astpol"},
-   {"191_water_ast_ye_l00", "water2", true, true, true, true, "astpol"},
-   {"192_water_ast_ne_l00", "water2", true, true, true, true, "astpol"},
-   {"193_water_exf_ast_l10", "water2", true, true, true, true, "astpol"},
-   {"194_water_exf_ast_l05", "water2", true, true, true, true, "astpol"},
-   {"195_water_exf_ast_l00", "water2", true, true, true, true, "astpol"},
-   {"196_water_apm_ast_vpin_l05", "water2", true, true, true, true, "apm"},
-   {"197_water_apm_ast_epin_l00", "water2", true, true, true, true, "apm"},
-   {"198_water_apm_ast_epin_l05", "water2", true, true, true, true, "apm"},
-   {"199_water_apm_ast_epin_l10", "water2", true, true, true, true, "apm"},
-   {"200_water_vsoft_l10", "water2", true, true, true, true, "vsoft"},
-   {"201_water_vsoft_l05", "water2", true, true, true, true, "vsoft"},
-   {"202_water_vsoft_l00", "water2", true, true, true, true, "vsoft"},
-   {"203_water_rels_st_l085", "water2", true, true, true, true, "rels"},
-   {"204_water_rels_st_lig2_exp_l030", "water2", true, true, true, true, "rels"},
-   // 135 without the LAMBDA keyword: REL-STAGE must default the main lambda to
-   // one, so it reproduces the 135 reference.
-   {"205_water_rels_nolmda", "water2", true, true, true, true, "rels", "135_water_rels_ye_l100"},
-   {"206_trpcage_chiral_m05", "trpcage", false, false, false, false, "chiral"},
-   {"207_g3_ast_ye_l10", "g3", true, true, true, true, "g3"},
-   {"208_g3_ast_ye_l05", "g3", true, true, true, true, "g3"},
-   {"209_g3_ast_annih_l05", "g3", true, true, true, true, "g3"},
-   {"210_g3_ast_nobox_l05", "g3", true, true, true, true, "g3"},
-   // The long-range van der Waals correction adds a large diagonal virial.
-   {"211_water_ast_vcorr_annih_l05", "water2", true, true, true, true, "hal", nullptr, Tols().virial(1.0e-2, 1.0e-2)},
-   {"212_water_ast_mono_l05", "water2", true, true, true, true, "hal"},
-   {"213_water_ast_tric_l05", "water2", true, true, true, true, "hal"},
-   {"214_water_rels_ye_vdwm_lig2t_l040", "water2", true, true, true, true, "hal"},
-   // Multipole lambda paths (test_mutate_mpole4): the no-Ewald list path with a
-   // 6.5 multipole cutoff, and the charged relative legs, whose uniform background
-   // carries a lambda derivative. Tinker retired 216, the vacuum Ewald boundary
-   // case (1bff247a); tinker9 refuses EWALD-BOUNDARY.
-   {"215_water_ast_ne_mcut_l05", "water2", true, true, true, true, "mpole4"},
-   // dF/dL reaches about 87 here. Single precision leaves up to 8e-4 of it in a
-   // --use_fast_math build and 1.1e-3 without, as in Debug. The POLAR-EPS 1e-5
-   // reference is itself up to 4e-4 from converged, and double precision lands
-   // up to 2.5e-4 from it.
-   {"217_g3_rels_lig1_l085", "g3", true, true, true, true, "mpole4", nullptr, Tols().grad(2.0e-3, 5.0e-4)},
-   // Only the water is scaled in this lig2 leg, so d2E/dL2 is what is left of its
-   // interaction with itself and its images after the Ewald terms cancel. The
-   // single precision reciprocal sum leaves about 1.3e-3 of it behind, which the
-   // relative slack of the larger second derivatives elsewhere absorbs; the
-   // double precision build reproduces the reference exactly.
-   {"218_g3_rels_lig2_l015", "g3", true, true, true, true, "mpole4", nullptr, Tols().lmda2(2.0e-3, 1.0e-4)},
-   {"219_water_rels_ne_lig2_l015", "water2", true, true, true, true, "mpole4"},
-   // The z-only, 3-fold and z-bisector local frames, with and without Ewald.
-   {"220_frames_ast_ye_l05", "frames", true, true, true, true, "frames"},
-   {"221_frames_ast_nobox_l05", "frames", true, true, true, true, "frames"},
-   // Chignolin and its mirror image, whose chiral frames are inverted under lambda.
-   // As for 140, a double precision build lands about 1.3e-4 from the POLAR-EPS
-   // 1e-5 references' dF/dL.
-   {"222_chig_ast_nobox_l05", "chig", true, true, true, true, "mirror", nullptr, Tols().grad(1.0e-3, 5.0e-4)},
-   {"223_chigm_ast_nobox_l05", "chigm", true, true, true, true, "mirror", nullptr, Tols().grad(1.0e-3, 5.0e-4)},
-   {"224_chig_ast_ye_l05", "chig", true, true, true, true, "mirror", nullptr, Tols().grad(1.0e-3, 5.0e-4)},
-   {"225_chigm_ast_ye_l05", "chigm", true, true, true, true, "mirror", nullptr, Tols().grad(1.0e-3, 5.0e-4)},
-   // Earlier cases with LAMBDA-DERIV alone, so polarization takes the single
-   // topology dE/dL path (test_mutate_polst). 229 was retired with 216.
-   {"226_water_ast_ne_mcut_d1_l05", "water2", true, true, true, true, "polst"},
-   {"227_g3_ast_d1_l05", "g3", true, true, true, true, "polst"},
-   {"228_g3_ast_d1_l00", "g3", true, true, true, true, "polst"},
-   {"230_g3_rels_lig1_d1_l085", "g3", true, true, true, true, "polst"},
-   {"231_g3_rels_lig2_d1_l015", "g3", true, true, true, true, "polst"},
-   // LAMBDA-DERIV alone on paths otherwise only run with second derivatives
-   // (test_mutate_deriv1): squared-weight dual topology polarization, whose
-   // nonzero weight curvature must not reach d2E/dL2, the annihilated van der
-   // Waals with its long range correction, and a staged relative vdW leg. The
-   // second, force and virial lambda derivatives must all stay zero.
-   {"232_water_adt_d1_x2_l06", "water2", false, true, false, true, "deriv1"},
-   {"233_water_ast_vcorr_annih_d1_l05", "water2", true, true, true, true, "deriv1"},
-   {"234_water_rels_ye_vdwm_d1_l040", "water2", true, true, true, true, "deriv1"},
-   // A soft core exponent of one, allowed with the first lambda derivative
-   // alone (test_mutate_vsoft1): annihilated ligand van der Waals at lambda 0.0
-   // and 0.05, and a staged relative vdW leg at 1.0 with ligand 2 at its
-   // decoupled endpoint. dE/dL stays finite where the second derivative factor
-   // diverges, and the second, force and virial lambda derivatives stay zero.
-   {"235_water_vsoft_n1_d1_l00", "water2", true, true, true, true, "deriv1"},
-   {"236_water_vsoft_n1_d1_l005", "water2", true, true, true, true, "deriv1"},
-   {"237_water_rels_vdwm_n1_d1_l10", "water2", true, true, true, true, "deriv1"},
-   // Fixture 235 with a soft core exponent of 1.5 under TI (test_mutate_scexp),
-   // which mutate_check allows because TI asks for dE/dL alone. Its energy,
-   // gradient and virial at lambda 0 are those of 235, whose reference it uses.
-   {"238_water_vsoft_n15_ti_l00", "water2", true, true, true, true, "scexp", "235_water_vsoft_n1_d1_l00"},
-   // Ewald fixtures repeated with a 6.5 multipole cutoff (test_mutate_noewald):
-   // the staged ligand 1 leg of 203 with single topology polarization and of 136
-   // with dual topology, and the first derivative only dual topology
-   // polarization of 232. They reach the non-Ewald kernel versions that the Ewald
-   // fixtures leave unlaunched.
-   {"239_water_rels_st_ne_l085", "water2", true, true, true, true, "noewald"},
-   {"240_water_rels_ne_l085", "water2", true, true, true, true, "noewald"},
-   {"241_water_adt_d1_ne_l06", "water2", false, true, false, true, "noewald"},
-   // Decoupling the chloride of two sodium ions, a chloride and a water under
-   // Ewald with single topology multipoles and polarization (test_mutate_ion),
-   // so the uniform background carries a lambda-scaled net charge alongside
-   // polarization, fused in emplarAst.
-   {"242_ionwat_ast_l05", "ionwat", true, true, true, true, "ion"},
+   {"001_water_ye_m10", "water", true, true, false, false},
+   {"002_water_ne_m10", "water", true, true, false, false},
+   {"003_water_ye_m05", "water", true, true, false, false},
+   {"004_water_ne_m05", "water", true, true, false, false},
+   {"005_water_ye_m00", "water", true, true, false, false},
+   {"006_water_ne_m00", "water", true, true, false, false},
+   {"007_water_v10", "water", false, false, true, false},
+   {"008_water_v05", "water", false, false, true, false},
+   {"009_water_v00", "water", false, false, true, false},
+   {"010_water_ye_m10", "water", true, false, false, false},
+   {"011_water_ne_m10", "water", true, false, false, false},
+   {"012_water_ye_m05", "water", true, false, false, false},
+   {"013_water_ne_m05", "water", true, false, false, false},
+   {"014_water_ye_m00", "water", true, false, false, false},
+   {"015_water_ne_m00", "water", true, false, false, false},
+   {"016_water_ye_p10", "water", false, true, false, false},
+   {"017_water_ne_p10", "water", false, true, false, false},
+   {"018_water_ye_p05", "water", false, true, false, false},
+   {"019_water_ne_p05", "water", false, true, false, false},
+   {"020_water_ye_p00", "water", false, true, false, false},
+   {"021_water_ne_p00", "water", false, true, false, false},
+   {"022_water_ye_m10p05", "water", true, true, false, false},
+   {"023_water_ne_m10p05", "water", true, true, false, false},
+   {"024_water_ye_m05p10", "water", true, true, false, false},
+   {"025_water_ne_m05p10", "water", true, true, false, false},
+   {"026_water_ye_m05p00", "water", true, true, false, false},
+   {"027_water_ne_m05p00", "water", true, true, false, false},
+   {"028_water_ye_m00p05", "water", true, true, false, false},
+   {"029_water_ne_m00p05", "water", true, true, false, false},
+   {"030_water_ast_ye_m10", "water2", true, false, false, true},
+   {"031_water_ast_ne_m10", "water2", true, false, false, true},
+   {"032_water_ast_ye_m05", "water2", true, false, false, true},
+   {"033_water_ast_ne_m05", "water2", true, false, false, true},
+   {"034_water_ast_ye_m00", "water2", true, false, false, true},
+   {"035_water_ast_ne_m00", "water2", true, false, false, true},
+   {"036_water_ast_v10", "water2", false, false, true, true},
+   {"037_water_ast_v05", "water2", false, false, true, true},
+   {"038_water_ast_v00", "water2", false, false, true, true},
+   {"039_water_ast_ye_mp05", "water2", true, true, false, true},
+   {"040_water_ast_ne_mp05", "water2", true, true, false, true},
+   {"047_water_adt_ye_p10", "water2", false, true, false, true},
+   {"048_water_adt_ne_p10", "water2", false, true, false, true},
+   {"049_water_adt_ye_p05", "water2", false, true, false, true},
+   {"050_water_adt_ne_p05", "water2", false, true, false, true},
+   {"051_water_adt_ye_p00", "water2", false, true, false, true},
+   {"052_water_adt_ne_p00", "water2", false, true, false, true},
+   {"056_water_adt_ye_mp05", "water2", true, true, false, true},
+   {"057_water_adt_ne_mp05", "water2", true, true, false, true},
+   {"075_water_qnt_ast_l10", "water2", true, true, true, true},
+   {"076_water_qnt_ast_l05", "water2", true, true, true, true},
+   {"077_water_qnt_ast_l00", "water2", true, true, true, true},
+   {"078_water_qnt_adt_l10", "water2", true, true, false, true},
+   {"079_water_qnt_adt_l05", "water2", true, true, false, true},
+   {"080_water_qnt_adt_l00", "water2", true, true, false, true},
+   {"084_water_exp_ast_l10", "water2", true, true, true, true},
+   {"085_water_exp_ast_l05", "water2", true, true, true, true},
+   {"086_water_exp_ast_l00", "water2", true, true, true, true},
+   {"087_water_exp_adt_l10", "water2", true, true, false, true},
+   {"088_water_exp_adt_l05", "water2", true, true, false, true},
+   {"089_water_exp_adt_l00", "water2", true, true, false, true},
+   {"093_water_inv_ast_l10", "water2", true, true, true, true},
+   {"094_water_inv_ast_l05", "water2", true, true, true, true},
+   {"095_water_inv_ast_l00", "water2", true, true, true, true},
+   {"096_water_inv_adt_l10", "water2", true, true, false, true},
+   {"097_water_inv_adt_l05", "water2", true, true, false, true},
+   {"098_water_inv_adt_l00", "water2", true, true, false, true},
+   {"102_water_exf_ast_m10", "water2", true, false, false, true},
+   {"103_water_exf_ast_m05", "water2", true, false, false, true},
+   {"104_water_exf_ast_m00", "water2", true, false, false, true},
+   {"111_water_exf_adt_p10", "water2", false, true, false, true},
+   {"112_water_exf_adt_p05", "water2", false, true, false, true},
+   {"113_water_exf_adt_p00", "water2", false, true, false, true},
+   {"117_water_exf_adt_mp05", "water2", true, true, false, true},
+   {"119_water_adt_ye_l10", "water2", true, true, false, true},
+   {"120_water_adt_ne_l10", "water2", true, true, false, true},
+   {"121_water_adt_ye_l05", "water2", true, true, false, true},
+   {"122_water_adt_ne_l05", "water2", true, true, false, true},
+   {"123_water_adt_ye_l00", "water2", true, true, false, true},
+   {"124_water_adt_ne_l00", "water2", true, true, false, true},
+   {"131_water_qnt_adt_l10", "water2", true, true, false, true},
+   {"132_water_qnt_adt_l00", "water2", true, true, false, true},
+   {"135_water_rels_ye_l100", "water2", true, true, true, true},
+   {"136_water_rels_ye_l085", "water2", true, true, true, true},
+   {"137_water_rels_ye_l070", "water2", true, true, true, true},
+   {"138_water_rels_ye_l050", "water2", true, true, true, true},
+   {"139_water_rels_ye_l030", "water2", true, true, true, true},
+   {"140_water_rels_ye_l015", "water2", true, true, true, true, nullptr, Tols().grad(1.0e-3, 5.0e-4)},
+   {"141_water_rels_ye_l000", "water2", true, true, true, true},
+   {"146_water_lmda_ast_l05", "water2", true, true, true, false},
+   {"147_water_lmda_ast_e05", "water2", true, true, true, false},
+   {"148_water_lmda_ast_l10", "water2", true, true, true, false},
+   {"149_water_lmda_ast_none", "water2", true, true, true, false},
+   {"150_water_lmda_qnt_l05", "water2", true, true, true, false},
+   {"151_water_lmda_vexp_l05", "water2", true, true, true, false},
+   {"152_water_lmda_mp05", "water2", true, true, true, false},
+   {"153_water_lmda_mp05_expl", "water2", true, true, true, false},
+   {"154_water_lmda_e_l06", "water2", true, true, true, false},
+   {"155_water_lmda_p_l06", "water2", true, true, true, false},
+   {"156_water_lmda_v_l06", "water2", true, true, true, false},
+   {"157_water_lmda_ep_l06", "water2", true, true, true, false},
+   {"158_water_lmda_ev_l06", "water2", true, true, true, false},
+   {"159_water_lmda_pv_l06", "water2", true, true, true, false},
+   {"160_water_lmda_epv_l06", "water2", true, true, true, false},
+   {"161_water_dlmda_e_l06", "water2", true, true, true, true},
+   {"162_water_dlmda_p_l06", "water2", true, true, true, true},
+   {"163_water_dlmda_v_l06", "water2", true, true, true, true},
+   {"164_water_dlmda_ep_l06", "water2", true, true, true, true},
+   {"165_water_dlmda_ev_l06", "water2", true, true, true, true},
+   {"166_water_dlmda_pv_l06", "water2", true, true, true, true},
+   {"167_water_dlmda_epv_l06", "water2", true, true, true, true},
+   {"168_water_rels_ye_vdwm_l030", "water2", true, true, true, true},
+   {"169_water_rels_ye_lig1_l070", "water2", true, true, true, true},
+   {"170_water_lmda_ast_epin_l05", "water2", true, true, true, true},
+   {"171_water_lmda_ast_vpin_l05", "water2", true, true, true, true},
+   {"173_water_lmda_adt_vpin_l06", "water2", true, true, true, true},
+   {"176_water_rels_ye_vdwm_exp_l050", "water2", true, true, true, true},
+   {"177_water_rels_ye_lig2_exp_l030", "water2", true, true, true, true},
+   {"178_water_rels_ye_lig1_inv_l070", "water2", true, true, true, true},
+   {"179_water_rels_ye_vdwm_vx3_l050", "water2", true, true, true, true},
+   {"180_water_rels_ye_lig1_ex3_l085", "water2", true, true, true, true},
+   {"181_water_rels_ye_lig2_ix2_l015", "water2", true, true, true, true},
+   {"182_water_ast_v05_annihilate", "water2", true, true, true, true},
+   {"184_water_exf_adt_l10", "water2", true, true, false, true},
+   {"185_water_exf_adt_l05", "water2", true, true, false, true},
+   {"186_water_exf_adt_l00", "water2", true, true, false, true},
+   {"187_water_ast_ye_l10", "water2", true, true, true, true},
+   {"188_water_ast_ne_l10", "water2", true, true, true, true},
+   {"189_water_ast_ye_l05", "water2", true, true, true, true},
+   {"190_water_ast_ne_l05", "water2", true, true, true, true},
+   {"191_water_ast_ye_l00", "water2", true, true, true, true},
+   {"192_water_ast_ne_l00", "water2", true, true, true, true},
+   {"193_water_exf_ast_l10", "water2", true, true, true, true},
+   {"194_water_exf_ast_l05", "water2", true, true, true, true},
+   {"195_water_exf_ast_l00", "water2", true, true, true, true},
+   {"196_water_apm_ast_vpin_l05", "water2", true, true, true, true},
+   {"197_water_apm_ast_epin_l00", "water2", true, true, true, true},
+   {"198_water_apm_ast_epin_l05", "water2", true, true, true, true},
+   {"199_water_apm_ast_epin_l10", "water2", true, true, true, true},
+   {"200_water_vsoft_l10", "water2", true, true, true, true},
+   {"201_water_vsoft_l05", "water2", true, true, true, true},
+   {"202_water_vsoft_l00", "water2", true, true, true, true},
+   {"203_water_rels_st_l085", "water2", true, true, true, true},
+   {"204_water_rels_st_lig2_exp_l030", "water2", true, true, true, true},
+   {"205_water_rels_nolmda", "water2", true, true, true, true, "135_water_rels_ye_l100"},
+   {"206_trpcage_chiral_m05", "trpcage", false, false, false, false},
+   {"207_g3_ast_ye_l10", "g3", true, true, true, true},
+   {"208_g3_ast_ye_l05", "g3", true, true, true, true},
+   {"209_g3_ast_annih_l05", "g3", true, true, true, true},
+   {"210_g3_ast_nobox_l05", "g3", true, true, true, true},
+   {"211_water_ast_vcorr_annih_l05", "water2", true, true, true, true, nullptr, Tols().virial(1.0e-2, 1.0e-2)},
+   {"212_water_ast_mono_l05", "water2", true, true, true, true},
+   {"213_water_ast_tric_l05", "water2", true, true, true, true},
+   {"214_water_rels_ye_vdwm_lig2t_l040", "water2", true, true, true, true},
+   {"215_water_ast_ne_mcut_l05", "water2", true, true, true, true},
+   {"217_g3_rels_lig1_l085", "g3", true, true, true, true, nullptr, Tols().grad(2.0e-3, 5.0e-4)},
+   {"218_g3_rels_lig2_l015", "g3", true, true, true, true, nullptr, Tols().lmda2(2.0e-3, 1.0e-4)},
+   {"219_water_rels_ne_lig2_l015", "water2", true, true, true, true},
+   {"220_frames_ast_ye_l05", "frames", true, true, true, true},
+   {"221_frames_ast_nobox_l05", "frames", true, true, true, true},
+   {"222_chig_ast_nobox_l05", "chig", true, true, true, true, nullptr, Tols().grad(1.0e-3, 5.0e-4)},
+   {"223_chigm_ast_nobox_l05", "chigm", true, true, true, true, nullptr, Tols().grad(1.0e-3, 5.0e-4)},
+   {"224_chig_ast_ye_l05", "chig", true, true, true, true, nullptr, Tols().grad(1.0e-3, 5.0e-4)},
+   {"225_chigm_ast_ye_l05", "chigm", true, true, true, true, nullptr, Tols().grad(1.0e-3, 5.0e-4)},
+   {"226_water_ast_ne_mcut_d1_l05", "water2", true, true, true, true},
+   {"227_g3_ast_d1_l05", "g3", true, true, true, true},
+   {"228_g3_ast_d1_l00", "g3", true, true, true, true},
+   {"230_g3_rels_lig1_d1_l085", "g3", true, true, true, true},
+   {"231_g3_rels_lig2_d1_l015", "g3", true, true, true, true},
+   {"232_water_adt_d1_x2_l06", "water2", false, true, false, true},
+   {"233_water_ast_vcorr_annih_d1_l05", "water2", true, true, true, true},
+   {"234_water_rels_ye_vdwm_d1_l040", "water2", true, true, true, true},
+   {"235_water_vsoft_n1_d1_l00", "water2", true, true, true, true},
+   {"236_water_vsoft_n1_d1_l005", "water2", true, true, true, true},
+   {"237_water_rels_vdwm_n1_d1_l10", "water2", true, true, true, true},
+   {"238_water_vsoft_n15_ti_l00", "water2", true, true, true, true, "235_water_vsoft_n1_d1_l00"},
+   {"239_water_rels_st_ne_l085", "water2", true, true, true, true},
+   {"240_water_rels_ne_l085", "water2", true, true, true, true},
+   {"241_water_adt_d1_ne_l06", "water2", false, true, false, true},
+   {"242_ionwat_ast_l05", "ionwat", true, true, true, true},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
@@ -318,20 +271,23 @@ const Fixture& fx(const char* name)
    return kFixtures[0];
 }
 
-// The directory holding a base system's coordinates: the SAMPL8 guest 3 has a
-// directory of its own, and the water systems sit with the mutation fixtures.
+// The directory holding a base system's coordinates: the SAMPL8 guest 3 and
+// trp-cage have directories of their own, and the other systems sit with the
+// mutation fixtures.
 std::string systemDir(const std::string& base)
 {
    if (base == "g3")
       return TINKER9_DIRSTR "/test/file/g3/";
+   if (base == "trpcage")
+      return TINKER9_DIRSTR "/test/file/trpcage/";
    return TINKER9_DIRSTR "/test/file/mutate/";
 }
 
 // Copies the parameter files a base system loads into the working directory.
 // The water fixtures share water03; the SAMPL8 guest 3 carries its own force
 // field, plus the artificial vdw14 values fixture 209 loads as a second file.
-// The frames dimer and the ion cluster load amoeba09, and chignolin and its
-// mirror amoebabio09.
+// The frames dimer and the ion cluster load amoeba09, chignolin and its mirror
+// amoebabio09, and trp-cage amoebapro13.
 std::vector<std::unique_ptr<TestFile>> copyParams(const std::string& base)
 {
    std::vector<std::unique_ptr<TestFile>> files;
@@ -343,6 +299,8 @@ std::vector<std::unique_ptr<TestFile>> copyParams(const std::string& base)
       files.emplace_back(new TestFile(TINKER9_DIRSTR "/test/file/commit_ebe3611e/amoeba09.prm"));
    } else if (base == "chig" or base == "chigm") {
       files.emplace_back(new TestFile(TINKER9_DIRSTR "/test/file/commit_ebe3611e/amoebabio09.prm"));
+   } else if (base == "trpcage") {
+      files.emplace_back(new TestFile(TINKER9_DIRSTR "/test/file/commit_291a85c1/amoebapro13.prm"));
    } else {
       files.emplace_back(new TestFile(TINKER9_DIRSTR "/test/file/commit_6fe8e913/water03.prm"));
    }
@@ -364,16 +322,18 @@ std::string platformKey(const char* keyextra)
 // Copies a fixture's coordinates, its key file with \c keyextra appended, and
 // its parameters into the working directory, and begins a session on them with
 // \c rc as rc_flag. The session is declared after the files, so it ends before
-// they are removed.
+// they are removed, and the lambda flags are reset after it ends. With \c init
+// false the caller runs session.init() itself, after adjusting the Fortran side.
 struct Setup
 {
+   TestLmdaFlagReset lmdaReset;
    std::string xyz, key;
    const char* argv[4];
    TestFile fxyz, fkey;
    std::vector<std::unique_ptr<TestFile>> fprm;
    TestSession session;
 
-   Setup(const Fixture& fx, int rc, const char* keyextra = "")
+   Setup(const Fixture& fx, int rc, const char* keyextra = "", bool init = true)
       : xyz(std::string(fx.base) + ".xyz")
       , key(std::string(fx.name) + ".key")
       , argv{"dummy", xyz.c_str(), "-k", key.c_str()}
@@ -383,7 +343,8 @@ struct Setup
       , session(4, argv)
    {
       rc_flag = rc;
-      session.init();
+      if (init)
+         session.init();
    }
 };
 
@@ -405,6 +366,8 @@ enum class Fuse
 enum class LmdaMode
 {
    Default,
+   /// Appends LAMBDA-MODE TI to the key file. The fixture keeps LAMBDA-DERIV, so
+   /// the lambda-driven kernels still receive v9 for v1 and v10 for v4.
    ThermIntg,
 };
 
@@ -426,9 +389,9 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
    if (fuse != Fuse::Off)
       rc &= ~calc::analyz;
 
-   // TI owns the main lambda and starts at the first schedule window. These
-   // four fixtures all reference lambda 0.5, so keep that operating point
-   // instead of accepting TI's default first window at lambda 1.
+   // TI owns the main lambda and starts at the first schedule window. The TI
+   // fixtures all reference lambda 0.5, so keep that operating point instead of
+   // accepting TI's default first window at lambda 1.
    const char* keyextra = lmdaMode == LmdaMode::ThermIntg ? "\nlambda-mode ti\nti-window 0.5\n" : "";
    // These key files enable the lambda-derivative machinery through the
    // "lambda-deriv" keyword, so the Fortran-side use_dlmda needs no nudging here.
@@ -537,101 +500,73 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
       }
    };
 
-   // Repeat the full check battery twice against the built system.
-   for (int irun = 0; irun < 1; ++irun) {
-      // v0
-      energy(calc::v0);
-      COMPARE_REALS(esum, ref_e, eps_e);
+   // v0
+   energy(calc::v0);
+   COMPARE_REALS(esum, ref_e, eps_e);
 
-      // v1
-      energy(calc::v1);
-      COMPARE_REALS(esum, ref_e, eps_e);
-      COMPARE_GRADIENT(ref_g, eps_g);
-      for (int i = 0; i < 3; ++i)
-         for (int j = 0; j < 3; ++j)
-            COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
+   // v1
+   energy(calc::v1);
+   COMPARE_REALS(esum, ref_e, eps_e);
+   COMPARE_GRADIENT(ref_g, eps_g);
+   COMPARE_VIR9(vir, ref_v, eps_v);
 
-      if (fx.dolmda) {
-         checkLmdaFirstScalars();
-         if (not reducedLmda) {
-            checkLmdaSecondScalars();
-            checkLmdaGrad();
-            for (int i = 0; i < 3; ++i)
-               for (int j = 0; j < 3; ++j)
-                  COMPARE_REALS(dvirdl[i * 3 + j], lr.dvdl[i][j], eps_dv);
-         }
+   if (fx.dolmda) {
+      checkLmdaFirstScalars();
+      if (not reducedLmda) {
+         checkLmdaSecondScalars();
+         checkLmdaGrad();
+         COMPARE_VIR9(dvirdl, lr.dvdl, eps_dv);
       }
-
-      // v3 -- the count buffers are allocated only under calc::analyz.
-      if (fuse == Fuse::Off) {
-         energy(calc::v3);
-         COMPARE_REALS(esum, ref_e, eps_e);
-         double eng;
-         int cnt;
-         if (fx.checkm) {
-            ref.getEnergyCountByName("Atomic Multipoles", eng, cnt);
-            COMPARE_COUNT(nem, cnt);
-            COMPARE_ENERGY(em, eng, eps_e);
-         }
-         if (fx.checkp) {
-            ref.getEnergyCountByName("Polarization", eng, cnt);
-            COMPARE_COUNT(nep, cnt);
-            COMPARE_ENERGY(ep, eng, eps_e);
-         }
-         if (fx.checkv) {
-            ref.getEnergyCountByName("Van der Waals", eng, cnt);
-            COMPARE_COUNT(nev, cnt);
-            COMPARE_ENERGY(ev, eng, eps_e);
-         }
-      }
-
-      // v4
-      energy(calc::v4);
-      COMPARE_REALS(esum, ref_e, eps_e);
-      COMPARE_GRADIENT(ref_g, eps_g);
-      if (fx.dolmda) {
-         checkLmdaFirstScalars();
-         if (not reducedLmda) {
-            checkLmdaSecondScalars();
-            checkLmdaGrad();
-         }
-      }
-
-      // level 5 -- gradient only (no energy, no virial)
-      energy(calc::v5);
-      COMPARE_GRADIENT(ref_g, eps_g);
-
-      // level 6 -- gradient + virial (no energy)
-      energy(calc::v6);
-      COMPARE_GRADIENT(ref_g, eps_g);
-      for (int i = 0; i < 3; ++i)
-         for (int j = 0; j < 3; ++j)
-            COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
    }
+
+   // v3 -- the count buffers are allocated only under calc::analyz.
+   if (fuse == Fuse::Off) {
+      energy(calc::v3);
+      COMPARE_REALS(esum, ref_e, eps_e);
+      double eng;
+      int cnt;
+      if (fx.checkm) {
+         ref.getEnergyCountByName("Atomic Multipoles", eng, cnt);
+         COMPARE_COUNT(nem, cnt);
+         COMPARE_ENERGY(em, eng, eps_e);
+      }
+      if (fx.checkp) {
+         ref.getEnergyCountByName("Polarization", eng, cnt);
+         COMPARE_COUNT(nep, cnt);
+         COMPARE_ENERGY(ep, eng, eps_e);
+      }
+      if (fx.checkv) {
+         ref.getEnergyCountByName("Van der Waals", eng, cnt);
+         COMPARE_COUNT(nev, cnt);
+         COMPARE_ENERGY(ev, eng, eps_e);
+      }
+   }
+
+   // v4
+   energy(calc::v4);
+   COMPARE_REALS(esum, ref_e, eps_e);
+   COMPARE_GRADIENT(ref_g, eps_g);
+   if (fx.dolmda) {
+      checkLmdaFirstScalars();
+      if (not reducedLmda) {
+         checkLmdaSecondScalars();
+         checkLmdaGrad();
+      }
+   }
+
+   // level 5 -- gradient only (no energy, no virial)
+   energy(calc::v5);
+   COMPARE_GRADIENT(ref_g, eps_g);
+
+   // level 6 -- gradient + virial (no energy)
+   energy(calc::v6);
+   COMPARE_GRADIENT(ref_g, eps_g);
+   COMPARE_VIR9(vir, ref_v, eps_v);
 
    s.session.end();
 }
 
 #if TINKER_GPULANG_CUDA
-// Runs a fixture twice: once the ordinary way, which asks for interaction
-// counts and so goes through the separate empole and epolar kernels, and once
-// without counts, where emplar fuses the two. Both are
-// checked against the same reference, so the fused kernel has to agree with
-// the split one and with Tinker.
-void runEmplarFixture(const Fixture& fx)
-{
-   runFixture(fx);
-   runFixture(fx, Fuse::Require);
-}
-
-// Reuses a full lambda-scaled fixture with LAMBDA-MODE TI appended to its temporary
-// key file. runFixture still exercises v0, v1, v3, v4, v5 and v6; the key keeps
-// LAMBDA-DERIV, so the lambda-driven kernels still receive v9 for v1 and v10 for v4.
-void runThermIntgFixture(const Fixture& fx)
-{
-   runFixture(fx, Fuse::Off, LmdaMode::ThermIntg);
-}
-
 // Single topology electrostatics that the fused kernel still has to decline:
 // without single topology polarization alongside it, the dispatch is not the
 // reduced one emplarast is built for. Dropping the counts is what makes this
@@ -676,7 +611,7 @@ void runLegSkipFixture(const Fixture& fx, bool expect0, bool expect1)
 
 // Sum of |dF/dL| over every atom, zero if the force lambda derivative has no
 // storage.
-static double sumAbsDfdl()
+double sumAbsDfdl()
 {
    if (not dfdlx)
       return 0;
@@ -689,7 +624,7 @@ static double sumAbsDfdl()
 }
 
 // Sum of |dV/dL| over the nine tensor components.
-static double sumAbsDvirdl()
+double sumAbsDvirdl()
 {
    double s = 0;
    for (int i = 0; i < 9; ++i)
@@ -742,7 +677,6 @@ void runGateFixture(const Fixture& fx)
    REQUIRE(d2edl2 == 0);
    REQUIRE(sumAbsDfdl() == 0);
    REQUIRE(sumAbsDvirdl() == 0);
-   use_d2lmda = true;
 
    s.session.end();
 }
@@ -755,8 +689,6 @@ void runGateFixture(const Fixture& fx)
 // which carries a factor of lambda^(n-1), drops to zero.
 void runScexpTiFixture(const Fixture& fx)
 {
-   TestLmdaFlagReset lmdaReset;
-
    const double eps_e = testGetEps(1.0e-3, 1.0e-4);
    const double eps_g = testGetEps(1.0e-3, 1.0e-4);
    const double eps_v = testGetEps(2.0e-3, 1.0e-3);
@@ -782,9 +714,7 @@ void runScexpTiFixture(const Fixture& fx)
    auto ref_v = ref.getVirial();
    COMPARE_REALS(esum, ref.getEnergy(), eps_e);
    COMPARE_GRADIENT(ref_g, eps_g);
-   for (int i = 0; i < 3; ++i)
-      for (int j = 0; j < 3; ++j)
-         COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
+   COMPARE_VIR9(vir, ref_v, eps_v);
 
    REQUIRE(std::fabs(dedl) <= 1.0e-8);
    REQUIRE(d2edl2 == 0);
@@ -802,7 +732,7 @@ struct FlatTerm
    std::vector<double> gx, gy, gz;
 };
 
-static FlatTerm flatTerm(double e, const virial_prec* v, const grad_prec* gx, const grad_prec* gy, const grad_prec* gz)
+FlatTerm flatTerm(double e, const virial_prec* v, const grad_prec* gx, const grad_prec* gy, const grad_prec* gz)
 {
    FlatTerm t;
    t.e = e;
@@ -815,7 +745,7 @@ static FlatTerm flatTerm(double e, const virial_prec* v, const grad_prec* gx, co
    return t;
 }
 
-static void compareFlatTerm(const FlatTerm& got, const FlatTerm& ref, double eps)
+void compareFlatTerm(const FlatTerm& got, const FlatTerm& ref, double eps)
 {
    COMPARE_REALS(got.e, ref.e, eps * std::max(1.0, std::fabs(ref.e)));
    for (int i = 0; i < 9; ++i)
@@ -964,22 +894,10 @@ void runFlagsFixture(const Fixture& fx, const char* keyextra, bool d2, bool epdt
 // alone, which this fixture leaves off, so elambda stays pinned by its keyword.
 void runChiralFixture(const Fixture& fx)
 {
-   std::string keyname = std::string(fx.name) + ".key";
-   const char* xyzname = "trpcage.xyz";
-
-   TestFile fxyz(TINKER9_DIRSTR "/test/file/trpcage/trpcage.xyz", xyzname);
-   TestFile fkey(TINKER9_DIRSTR "/test/file/mutate/" + keyname, keyname,
-      "\nlambda-deriv\nlambda 0.5\nvdw-lmda-map exp\n");
-   TestFile fprm(TINKER9_DIRSTR "/test/file/commit_291a85c1/amoebapro13.prm");
-
-   const char* argv[] = {"dummy", xyzname, "-k", keyname.c_str()};
-   int argc = 4;
-
    const double eps_e = testGetEps(1.0e-3, 1.0e-8);
    const double eps_p = testGetEps(1.0e-6, 1.0e-12);
 
-   rc_flag = calc::xyz | calc::mass | calc::energy;
-   TestSession session(argc, argv);
+   Setup s(fx, calc::xyz | calc::mass | calc::energy, "\nlambda-deriv\nlambda 0.5\nvdw-lmda-map exp\n", false);
 
    // tinker9 sets n in initialize(); the Fortran side is already set up.
    std::vector<int> chiral;
@@ -992,7 +910,7 @@ void runChiralFixture(const Fixture& fx)
    REQUIRE(chiral.size() > 0);
    tinker_f_altelec();
 
-   session.init();
+   s.session.init();
    REQUIRE(poleorig != nullptr);
    REQUIRE_FALSE(use_emast);
 
@@ -1036,7 +954,7 @@ void runChiralFixture(const Fixture& fx)
       COMPARE_REALS(pole1[k], sc * orig1[k], eps_p);
    }
 
-   session.end();
+   s.session.end();
 }
 #endif
 } // namespace
@@ -1071,9 +989,6 @@ TEST_CASE("MUTATE-027_water_ne_m05p00", "[ff][mutate][mp]") { runFixture(fx("027
 TEST_CASE("MUTATE-028_water_ye_m00p05", "[ff][mutate][mp]") { runFixture(fx("028_water_ye_m00p05")); }
 TEST_CASE("MUTATE-029_water_ne_m00p05", "[ff][mutate][mp]") { runFixture(fx("029_water_ne_m00p05")); }
 
-// Main lambda through the maps, without lambda derivatives. The fixtures that
-// take polarization off its map (155, 157, 159, 160) need dual topology, so
-// they stay with the CUDA ones.
 TEST_CASE("MUTATE-146_water_lmda_ast_l05", "[ff][mutate][lmda]") { runFixture(fx("146_water_lmda_ast_l05")); }
 TEST_CASE("MUTATE-147_water_lmda_ast_e05", "[ff][mutate][lmda]") { runFixture(fx("147_water_lmda_ast_e05")); }
 TEST_CASE("MUTATE-148_water_lmda_ast_l10", "[ff][mutate][lmda]") { runFixture(fx("148_water_lmda_ast_l10")); }
@@ -1191,6 +1106,7 @@ TEST_CASE("MUTATE-202_water_vsoft_l00", "[ff][mutate][vsoft]") { runFixture(fx("
 TEST_CASE("MUTATE-203_water_rels_st_l085", "[ff][mutate][rels][astpol][emplar]") { runEmplarAstFixture(fx("203_water_rels_st_l085")); }
 TEST_CASE("MUTATE-204_water_rels_st_lig2_exp_l030", "[ff][mutate][rels][astpol][emplar]") { runEmplarAstFixture(fx("204_water_rels_st_lig2_exp_l030")); }
 TEST_CASE("MUTATE-205_water_rels_nolmda", "[ff][mutate][rels]") { runFixture(fx("205_water_rels_nolmda")); }
+TEST_CASE("MUTATE-206_trpcage_chiral_m05", "[ff][mutate][chiral]") { runChiralFixture(fx("206_trpcage_chiral_m05")); }
 TEST_CASE("MUTATE-207_g3_ast_ye_l10", "[ff][mutate][g3]") { runFixture(fx("207_g3_ast_ye_l10")); }
 TEST_CASE("MUTATE-208_g3_ast_ye_l05", "[ff][mutate][g3]") { runFixture(fx("208_g3_ast_ye_l05")); }
 TEST_CASE("MUTATE-209_g3_ast_annih_l05", "[ff][mutate][g3]") { runFixture(fx("209_g3_ast_annih_l05")); }
@@ -1221,32 +1137,24 @@ TEST_CASE("MUTATE-235_water_vsoft_n1_d1_l00", "[ff][mutate][deriv1]") { runFixtu
 TEST_CASE("MUTATE-236_water_vsoft_n1_d1_l005", "[ff][mutate][deriv1]") { runFixture(fx("236_water_vsoft_n1_d1_l005")); }
 TEST_CASE("MUTATE-237_water_rels_vdwm_n1_d1_l10", "[ff][mutate][deriv1]") { runFixture(fx("237_water_rels_vdwm_n1_d1_l10")); }
 TEST_CASE("MUTATE-238_water_vsoft_n15_ti_l00", "[ff][mutate][scexp]") { runScexpTiFixture(fx("238_water_vsoft_n15_ti_l00")); }
-
-TEST_CASE("MUTATE-TI-076_water_qnt_ast_l05", "[ff][mutate][ti][ast]") { runThermIntgFixture(fx("076_water_qnt_ast_l05")); }
-TEST_CASE("MUTATE-TI-079_water_qnt_adt_l05", "[ff][mutate][ti][adt]") { runThermIntgFixture(fx("079_water_qnt_adt_l05")); }
-TEST_CASE("MUTATE-TI-176_water_rels_ye_vdwm_exp_l050", "[ff][mutate][ti][rels]") {runThermIntgFixture(fx("176_water_rels_ye_vdwm_exp_l050"));}
-
-// The fused kernel on its own, for fixtures with no lambda derivative and one
-// lambda value for electrostatics and polarization, so plain emplar takes over.
-TEST_CASE("MUTATE-EMPLAR-001_water_ye_m10", "[ff][mutate][emplar]") { runFixture(fx("001_water_ye_m10"), Fuse::Require); }
-TEST_CASE("MUTATE-EMPLAR-003_water_ye_m05", "[ff][mutate][emplar]") { runFixture(fx("003_water_ye_m05"), Fuse::Require); }
-TEST_CASE("MUTATE-EMPLAR-147_water_lmda_ast_e05", "[ff][mutate][emplar]") { runFixture(fx("147_water_lmda_ast_e05"), Fuse::Require); }
-
-TEST_CASE("MUTATE-206_trpcage_chiral_m05", "[ff][mutate][chiral]") { runChiralFixture(fx("206_trpcage_chiral_m05")); }
-
-TEST_CASE("MUTATE-gate", "[ff][mutate][rels]") { runGateFixture(fx("136_water_rels_ye_l085")); }
-
-TEST_CASE("MUTATE-flat-single", "[ff][mutate][rels][flat]") { runFlatFixture(fx("203_water_rels_st_l085"), false); }
-TEST_CASE("MUTATE-flat-single-fused", "[ff][mutate][rels][flat][emplar]") { runFlatFixture(fx("203_water_rels_st_l085"), true); }
-TEST_CASE("MUTATE-flat-dual", "[ff][mutate][rels][flat]") { runFlatFixture(fx("136_water_rels_ye_l085"), false); }
-TEST_CASE("MUTATE-flat-single-ne", "[ff][mutate][rels][flat][noewald]") { runFlatFixture(fx("239_water_rels_st_ne_l085"), false); }
-TEST_CASE("MUTATE-flat-single-ne-fused", "[ff][mutate][rels][flat][noewald][emplar]") { runFlatFixture(fx("239_water_rels_st_ne_l085"), true); }
-TEST_CASE("MUTATE-flat-dual-ne", "[ff][mutate][rels][flat][noewald]") { runFlatFixture(fx("240_water_rels_ne_l085"), false); }
-
 TEST_CASE("MUTATE-239_water_rels_st_ne_l085", "[ff][mutate][noewald][astpol][emplar]") { runEmplarAstFixture(fx("239_water_rels_st_ne_l085")); }
 TEST_CASE("MUTATE-240_water_rels_ne_l085", "[ff][mutate][noewald]") { runFixture(fx("240_water_rels_ne_l085")); }
 TEST_CASE("MUTATE-241_water_adt_d1_ne_l06", "[ff][mutate][noewald]") { runFixture(fx("241_water_adt_d1_ne_l06")); }
 TEST_CASE("MUTATE-242_ionwat_ast_l05", "[ff][mutate][ion][astpol][emplar]") { runEmplarAstFixture(fx("242_ionwat_ast_l05")); }
+
+// The fused kernel on its own. The ordinary case of each fixture asks for
+// interaction counts and so goes through the separate empole and epolar
+// kernels; these drop the counts, where emplar fuses the two. Both are checked
+// against the same reference, so the fused kernel has to agree with the split
+// one and with Tinker. The fixtures have no lambda derivative and one lambda
+// value for electrostatics and polarization, so plain emplar takes over.
+TEST_CASE("MUTATE-EMPLAR-001_water_ye_m10", "[ff][mutate][emplar]") { runFixture(fx("001_water_ye_m10"), Fuse::Require); }
+TEST_CASE("MUTATE-EMPLAR-003_water_ye_m05", "[ff][mutate][emplar]") { runFixture(fx("003_water_ye_m05"), Fuse::Require); }
+TEST_CASE("MUTATE-EMPLAR-147_water_lmda_ast_e05", "[ff][mutate][emplar]") { runFixture(fx("147_water_lmda_ast_e05"), Fuse::Require); }
+
+TEST_CASE("MUTATE-TI-076_water_qnt_ast_l05", "[ff][mutate][ti][ast]") { runFixture(fx("076_water_qnt_ast_l05"), Fuse::Off, LmdaMode::ThermIntg); }
+TEST_CASE("MUTATE-TI-079_water_qnt_adt_l05", "[ff][mutate][ti][adt]") { runFixture(fx("079_water_qnt_adt_l05"), Fuse::Off, LmdaMode::ThermIntg); }
+TEST_CASE("MUTATE-TI-176_water_rels_ye_vdwm_exp_l050", "[ff][mutate][ti][rels]") { runFixture(fx("176_water_rels_ye_vdwm_exp_l050"), Fuse::Off, LmdaMode::ThermIntg); }
 
 // Every lambda derivative fixture once more without analysis, as dynamics runs
 // it: the terms add into the shared lambda derivative buffers, and only the
@@ -1369,13 +1277,22 @@ TEST_CASE("MUTATE-DYN-TI-076_water_qnt_ast_l05", "[ff][mutate][dyn][ti]") { runF
 TEST_CASE("MUTATE-DYN-TI-079_water_qnt_adt_l05", "[ff][mutate][dyn][ti]") { runFixture(fx("079_water_qnt_adt_l05"), Fuse::Auto, LmdaMode::ThermIntg); }
 TEST_CASE("MUTATE-DYN-TI-176_water_rels_ye_vdwm_exp_l050", "[ff][mutate][dyn][ti]") { runFixture(fx("176_water_rels_ye_vdwm_exp_l050"), Fuse::Auto, LmdaMode::ThermIntg); }
 
-TEST_CASE("MUTATE-flags", "[ff][mutate][rels]")
+TEST_CASE("MUTATE-gate", "[ff][mutate][gate]") { runGateFixture(fx("136_water_rels_ye_l085")); }
+
+TEST_CASE("MUTATE-flags", "[ff][mutate][flags]")
 {
    runFlagsFixture(fx("152_water_lmda_mp05"), "\nLAMBDA-DERIV\n", false, false, false);
    runFlagsFixture(fx("152_water_lmda_mp05"), "\nLAMBDA-DERIV2\n", true, true, false);
    runFlagsFixture(fx("203_water_rels_st_l085"), "", false, false, true);
    runFlagsFixture(fx("136_water_rels_ye_l085"), "", true, true, true);
 }
+
+TEST_CASE("MUTATE-flat-single", "[ff][mutate][rels][flat]") { runFlatFixture(fx("203_water_rels_st_l085"), false); }
+TEST_CASE("MUTATE-flat-single-fused", "[ff][mutate][rels][flat][emplar]") { runFlatFixture(fx("203_water_rels_st_l085"), true); }
+TEST_CASE("MUTATE-flat-dual", "[ff][mutate][rels][flat]") { runFlatFixture(fx("136_water_rels_ye_l085"), false); }
+TEST_CASE("MUTATE-flat-single-ne", "[ff][mutate][rels][flat][noewald]") { runFlatFixture(fx("239_water_rels_st_ne_l085"), false); }
+TEST_CASE("MUTATE-flat-single-ne-fused", "[ff][mutate][rels][flat][noewald][emplar]") { runFlatFixture(fx("239_water_rels_st_ne_l085"), true); }
+TEST_CASE("MUTATE-flat-dual-ne", "[ff][mutate][rels][flat][noewald]") { runFlatFixture(fx("240_water_rels_ne_l085"), false); }
 #endif
 
 #endif

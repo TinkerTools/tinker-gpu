@@ -28,17 +28,8 @@ const Fixture kFixtures[] = {
    {"04_water_ast_ye_l10"},
    {"05_water_ast_ye_l05"},
    {"06_water_ast_ye_l00"},
-   // Guest 3 under Ewald, with and without the neighbor list. The numerical
-   // gradient lands 1.3e-2 from the 1e-5 step reference in mixed precision. The
-   // reference solves the induced dipoles only to POLAR-EPS 1e-5, which leaves
-   // it 7e-5 from converged, and a double precision build lands up to 2e-4 from
-   // it; at POLAR-EPS 1e-9 every build and list path agrees to 1e-8.
    {"09_g3", "g3/g3.xyz", "g3/g3.prm", 2.0e-2, 5.0e-4},
    {"10_g3_nlist", "g3/g3.xyz", "g3/g3.prm", 2.0e-2, 5.0e-4},
-   // AMOEBA+ with a zero Thole value on one type, which the Thole pair table
-   // replaces by the larger of the two, and with a POLPAIR Thole that differs
-   // from the combining rule; the mutual polarization gradient must take the
-   // pair value, as in epolar1.f.
    {"11_aplus_thole0", "aplus2022/tetramer.xyz", "aplus2022/AMOEBAplus_Org.prm"},
    {"12_aplus_polpair", "aplus2022/tetramer.xyz", "aplus2022/AMOEBAplus_Org.prm"},
 };

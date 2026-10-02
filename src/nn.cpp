@@ -2,6 +2,8 @@
 #include "ff/atom.h"
 #include "ff/molecule.h"
 #include "math/parallelcu.h"
+#include "tool/error.h"
+#include "tool/externfunc.h"
 #include "tool/gpucard.h"
 #include <iostream>
 #include <sstream>
@@ -153,6 +155,10 @@ void nnData(RcOp op)
             printf(" Unrecognized nnterm: %s\n", nnterms[i][0].c_str());
          }
       }
+#if !TINKER_CUDART
+      if (use_nnvalence or use_nnmetal)
+         TINKER_THROW("Neural network terms (NNTERM) require a CUDA build");
+#endif
 
       // find maximum nn cutoff
       nncut = 0;
@@ -350,12 +356,12 @@ void AtomicEnvironmentVectorLayer::forward(int vers, const int ngrps_nn, const i
    darray::copyin(g::q0, nblist_init.size(), nblist_rad, nblist_init.data());
    darray::copyin(g::q0, nblist_init.size(), nblist_ang, nblist_init.data());
 
-   ref_nblist_cu(n, x, y, z, grp.grplist, atomic, (*nnspatial_v2_unit).nakpl, (*nnspatial_v2_unit).iakpl,
+   TINKER_FCALL2(acc0, cu1, ref_nblist, n, x, y, z, grp.grplist, atomic, (*nnspatial_v2_unit).nakpl, (*nnspatial_v2_unit).iakpl,
       (*nnspatial_v2_unit).niak, (*nnspatial_v2_unit).iak, (*nnspatial_v2_unit).lst, (*nnspatial_v2_unit).sorted,
       TINKER_IMAGE_ARGS_CU, ngrps_nn, grps_nn, naev, max_nb, atomid_global2local, R_m_c, R_q_c, nblist_rad, nblist_ang,
       nblist_rad_count, nblist_ang_count, topo_cutoff, topo_flags, atomic2species);
 
-   aev_cu(vers, n, x, y, z, grp.grplist, atomic, (*nnspatial_v2_unit).nakpl, (*nnspatial_v2_unit).iakpl,
+   TINKER_FCALL2(acc0, cu1, aev, vers, n, x, y, z, grp.grplist, atomic, (*nnspatial_v2_unit).nakpl, (*nnspatial_v2_unit).iakpl,
       (*nnspatial_v2_unit).niak, (*nnspatial_v2_unit).iak, (*nnspatial_v2_unit).lst, (*nnspatial_v2_unit).sorted,
       max_nb, TINKER_IMAGE_ARGS_CU, ngrps_nn, grps_nn, naev, iaev, laev, natomic_covered, atomic2species,
       atomid_global2local, R_m_c, R_m_d, R_m, eta_m, R_q_c, R_q_d, R_q, eta_q, theta_p_d, theta_p, zeta_p, nullptr,
@@ -365,7 +371,7 @@ void AtomicEnvironmentVectorLayer::forward(int vers, const int ngrps_nn, const i
 void AtomicEnvironmentVectorLayer::gradient(int vers, const int ngrps_nn, const int* restrict grps_nn,
    grad_prec* restrict denn_x, grad_prec* restrict denn_y, grad_prec* restrict denn_z, VirialBuffer restrict vir_enn)
 {
-   aev_cu(vers, n, x, y, z, grp.grplist, atomic, (*nnspatial_v2_unit).nakpl, (*nnspatial_v2_unit).iakpl,
+   TINKER_FCALL2(acc0, cu1, aev, vers, n, x, y, z, grp.grplist, atomic, (*nnspatial_v2_unit).nakpl, (*nnspatial_v2_unit).iakpl,
       (*nnspatial_v2_unit).niak, (*nnspatial_v2_unit).iak, (*nnspatial_v2_unit).lst, (*nnspatial_v2_unit).sorted,
       max_nb, TINKER_IMAGE_ARGS_CU, ngrps_nn, grps_nn, naev, iaev, laev, natomic_covered, atomic2species,
       atomid_global2local, R_m_c, R_m_d, R_m, eta_m, R_q_c, R_q_d, R_q, eta_q, theta_p_d, theta_p, zeta_p, dZp, denn_x,
@@ -423,13 +429,13 @@ void LinearLayer::forward(int vers, const real* restrict A)
       darray::copy(g::q0, out_dim1, Z + i * out_dim1, b);
    }
 
-   genMatMul_cu(Z, W, A, out_dim1, in_dim0, in_dim1, true, false, alpha, beta1, g::q0);
+   TINKER_FCALL2(acc0, cu1, genMatMul, Z, W, A, out_dim1, in_dim0, in_dim1, true, false, alpha, beta1, g::q0);
 }
 
 void LinearLayer::gradient(int vers, const real* restrict dZp)
 {
    // backward propagation
-   genMatMul_cu(dZ, W, dZp, in_dim1, in_dim0, out_dim1, false, false, alpha, beta0, g::q0);
+   TINKER_FCALL2(acc0, cu1, genMatMul, dZ, W, dZp, in_dim1, in_dim0, out_dim1, false, false, alpha, beta0, g::q0);
 }
 
 CELULayer::CELULayer(const std::vector<real>& prms)
@@ -463,13 +469,13 @@ void CELULayer::initialize() {}
 void CELULayer::forward(int vers, const real* restrict A)
 {
    // forward pass
-   celu_cu(vers, Z, dZ, A, alpha, in_dim0, out_dim1);
+   TINKER_FCALL2(acc0, cu1, celu, vers, Z, dZ, A, alpha, in_dim0, out_dim1);
 }
 
 void CELULayer::gradient(int vers, const real* restrict dZp)
 {
    // backward propagation
-   elem_mul_cu(dZ, dZp, in_dim0 * in_dim1);
+   TINKER_FCALL2(acc0, cu1, elem_mul, dZ, dZp, in_dim0 * in_dim1);
 }
 
 NeuralNetwork::NeuralNetwork(int atomic_number)
@@ -638,7 +644,7 @@ void NeuralNetworkPotential::forward(int vers, const int ngrps_nn, const int* re
       networks[i]->forward(vers, aev->iaev);
 
       if (vers & calc::energy) // forward is not always called for energy but also for when only gradient needed
-         addToEneBuf_cu(vers, enn, networks[i]->layers.back()->Z, networks[i]->layers.back()->in_dim0,
+         TINKER_FCALL2(acc0, cu1, addToEneBuf, vers, enn, networks[i]->layers.back()->Z, networks[i]->layers.back()->in_dim0,
             nnlambda); // any in_dim0 is ok, since all layers have the same in_dim0, which is number of atoms
    }
 }

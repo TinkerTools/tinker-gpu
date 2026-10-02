@@ -10,6 +10,7 @@
 #include "md/misc.h"
 #include "md/pq.h"
 #include "tool/cudalib.h"
+#include "tool/error.h"
 #include "tool/iofortstr.h"
 #include <condition_variable>
 #include <future>

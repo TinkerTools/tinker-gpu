@@ -594,10 +594,10 @@ void epolarData(RcOp op)
    TINKER_FCALL2(cpp0, cu1, epolarDataBinding, op);
 }
 
-TINKER_FVOID2(acc0, cu1, polarState, RdtMask, const int*, real);
+TINKER_FVOID2(acc1, cu1, polarState, RdtMask, const int*, real);
 void polarState(RdtMask mask, const int* group, real factor)
 {
-   TINKER_FCALL2(acc0, cu1, polarState, mask, group, factor);
+   TINKER_FCALL2(acc1, cu1, polarState, mask, group, factor);
 }
 }
 
@@ -921,7 +921,7 @@ void epolarPhysicalInduced()
    if (use_epdt)
       TINKER_THROW("Induced dipoles cannot be reported with dual topology polarization");
 
-   if (use_prst and TINKER_CUDART) {
+   if (use_prst) {
       mpoleScale(plam);
       polarState(coupledMask(), emGroup(), plam);
       if (use(Potent::CHGFLX))

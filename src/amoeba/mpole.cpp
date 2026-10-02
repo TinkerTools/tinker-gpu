@@ -180,12 +180,12 @@ void chkpole()
    rpole_key = RpoleKey();
 }
 
-TINKER_FVOID2(acc0, cu1, mpoleScale, const int*, GrpScale);
+TINKER_FVOID2(acc1, cu1, mpoleScale, const int*, GrpScale);
 void mpoleScale(double lmda)
 {
    if (lmda == pole_lmda and pole_serial == pole_lmda_serial)
       return;
-   TINKER_FCALL2(acc0, cu1, mpoleScale, emGroup(), grpScale(lmda));
+   TINKER_FCALL2(acc1, cu1, mpoleScale, emGroup(), grpScale(lmda));
    pole_lmda = lmda;
    pole_lmda_serial = ++pole_serial;
 }
@@ -218,14 +218,14 @@ static RpoleKey stateKey(RdtMask mask, const int* group)
 }
 
 TINKER_FVOID2(acc1, cu1, rotpole, bool);
-TINKER_FVOID2(acc0, cu1, rotpoleState, RdtMask, const int*);
+TINKER_FVOID2(acc1, cu1, rotpoleState, RdtMask, const int*);
 static void ensureRpole(const RpoleKey& k)
 {
    assert(k.src != RpoleSrc::NONE);
    if (k == rpole_key)
       return;
    if (k.src == RpoleSrc::MASKED)
-      TINKER_FCALL2(acc0, cu1, rotpoleState, k.mask, k.group);
+      TINKER_FCALL2(acc1, cu1, rotpoleState, k.mask, k.group);
    else
       TINKER_FCALL2(acc1, cu1, rotpole, k.src == RpoleSrc::ORIG);
    rpole_key = k;
@@ -346,10 +346,8 @@ void mpoleRotateScaled()
 
 void mpoleEnsureElec()
 {
-   // A polarization state at plam leaves pole scaled there, on the ACC platform
-   // too, since mpoleScale() needs only the CUDA runtime. Without the runtime,
-   // pole never leaves the electrostatic lambda it was copied in at.
-   if (usePoleorig() and TINKER_CUDART)
+   // A polarization state at plam leaves pole scaled there.
+   if (usePoleorig())
       mpoleScale(elam);
 }
 

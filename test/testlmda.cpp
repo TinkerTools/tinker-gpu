@@ -24,16 +24,6 @@ struct Fixture
    const char* prm = "commit_6fe8e913/water03.prm"; ///< Parameters, under test/file.
 };
 
-// The default stepsize is 1e-2: smaller steps sharpen the first derivatives but
-// wreck the second ones, which divide by eps squared. The staged morph leg
-// squeezes van der Waals into the 0.3-0.7 window, which steepens every lambda
-// derivative: 2e-3 balances truncation against round-off, and the numerical
-// second derivative still scatters from run to run, so its numerical tolerances
-// are doubled. The staged charging legs squeeze the
-// electrostatic map into a 0.3 wide window the same way, but their numerical
-// second derivatives scatter more: at 2e-3 round-off swamps them, and at 1e-2
-// truncation throws the first ones off by a few tenths, so they step by 4e-3
-// and triple the numerical tolerances.
 const Fixture kFixtures[] = {
    {"01_water_adt_l05"},
    {"02_water_ast_l05"},
@@ -47,8 +37,6 @@ const Fixture kFixtures[] = {
    {"14_water_rels_vdwm_vcorr_annih_l05"},
    {"17_water_rels_vdwm_vcorr_l050", 2.0e-3, 2.0},
    {"18_water_rels_lig1_l085", 4.0e-3, 3.0},
-   // The reference solves the induced dipoles only to POLAR-EPS 1e-5, so even a
-   // double precision build lands about 1.3e-4 from its dF/dL (mutate.cpp: 140).
    {"19_water_rels_lig2_l015", 4.0e-3, 3.0, 5.0e-4},
    {"20_water_rels_lig1_ne_l085", 4.0e-3, 3.0},
    {"21_water_rels_lig1_nlist_exf_l085", 4.0e-3, 3.0},
@@ -60,12 +48,8 @@ const Fixture kFixtures[] = {
    {"27_water_rels_lig1_st_prng_l088", 4.0e-3, 3.0},
    {"28_water_rels_lig1_dt_prng_l088", 4.0e-3, 3.0},
    {"29_water_rels_lig2_st_pmap_l015", 4.0e-3, 3.0},
-   // A +1 ion cluster with a water under Ewald; decoupling the chloride carries
-   // a lambda-scaled net charge into the uniform background term's dV/dL.
    {"30_ionwat_ewald_l05", 1.0e-2, 1.0, 1.0e-4, "testlmda/ionwat.xyz", "commit_ebe3611e/amoeba09.prm"},
    {"31_ionwat_ewald_nlist_l05", 1.0e-2, 1.0, 1.0e-4, "testlmda/ionwat.xyz", "commit_ebe3611e/amoeba09.prm"},
-   // The same decoupling with dual topology polarization alongside the charged
-   // background.
    {"32_ionwat_pol_ewald_l05", 1.0e-2, 1.0, 1.0e-4, "testlmda/ionwat.xyz", "commit_ebe3611e/amoeba09.prm"},
 };
 

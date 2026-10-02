@@ -11,11 +11,6 @@
 
 using namespace tinker;
 
-// The systems carry a net charge, so the Ewald uniform background correction
-// adds -e to each diagonal element of the virial. The lambda cases decouple the
-// chloride of a +2 environment on a quintic map, so the background term goes
-// through the multipole lambda path with a lambda-scaled net charge.
-
 namespace {
 struct Fixture
 {
@@ -26,7 +21,6 @@ struct Fixture
 
 const Fixture kFixtures[] = {
    {"01_charge_ewald", "ions.xyz", "commit_350df099/amber99sb.prm"},
-   // tinker9 ignores LIGHTS, so this is 01 again.
    {"02_charge_ewald_lights", "ions.xyz", "commit_350df099/amber99sb.prm"},
    {"03_charge_ewald_nlist", "ions.xyz", "commit_350df099/amber99sb.prm"},
    {"04_mpole_ewald", "ionwat.xyz", "commit_ebe3611e/amoeba09.prm"},

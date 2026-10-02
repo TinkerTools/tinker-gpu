@@ -1,4 +1,5 @@
 #include "ff/atom.h"
+#include "ff/dlmda.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/nblist.h"
@@ -8,6 +9,30 @@
 #include <tinker/detail/extfld.hh>
 
 namespace tinker {
+void polarState_acc(RdtMask mask, const int* group, real factor)
+{
+   constexpr real polmin = 1.0e-16;
+   unsigned active_mask = static_cast<unsigned>(mask);
+   unsigned env = static_cast<unsigned>(RdtMask::ENV);
+   unsigned liga = static_cast<unsigned>(RdtMask::LIGA);
+   unsigned ligb = static_cast<unsigned>(RdtMask::LIGB);
+   #pragma acc parallel loop independent async deviceptr(polarity,polarity_inv,polarityorig,group)
+   for (int i = 0; i < n; ++i) {
+      unsigned atom_mask = env;
+      if (group[i] == 1)
+         atom_mask = liga;
+      else if (group[i] == 2)
+         atom_mask = ligb;
+
+      real pol = (active_mask & atom_mask) ? polarityorig[i] : real(0);
+
+      if (atom_mask != env)
+         pol *= factor;
+      polarity[i] = pol;
+      polarity_inv[i] = real(1) / (pol > polmin ? pol : polmin);
+   }
+}
+
 void epolar0DotProd_acc(const real (*gpu_uind)[3], const real (*gpu_udirp)[3], EnergyBuffer eout)
 {
    const real f = -0.5 * electric / dielec;

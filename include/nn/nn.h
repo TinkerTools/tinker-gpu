@@ -10,8 +10,10 @@
 #include <memory>
 #include <vector>
 
+#if TINKER_CUDART
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
+#endif
 
 namespace tinker {
 
@@ -210,7 +212,9 @@ void nnData(RcOp);
 // int getNGrpsNN(const std::string &potential_type);
 
 // options to forcefully use float3 or double3 from cuda runtime
-#if TINKER_REAL_SIZE == 8
+#if !TINKER_CUDART
+using cuda_real3 = real3; // host builds have no cuda runtime types
+#elif TINKER_REAL_SIZE == 8
 using cuda_real3 = ::double3;
 #elif TINKER_REAL_SIZE == 4
 using cuda_real3 = ::float3;
