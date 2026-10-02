@@ -1,4 +1,5 @@
 set (__T9_TEST_SRC
+amoeba.cpp
 angle.cpp
 angtor.cpp
 aplusgas.cpp
