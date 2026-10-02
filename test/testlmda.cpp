@@ -64,6 +64,9 @@ const Fixture kFixtures[] = {
    // a lambda-scaled net charge into the uniform background term's dV/dL.
    {"30_ionwat_ewald_l05", 1.0e-2, 1.0, 1.0e-4, "testlmda/ionwat.xyz", "commit_ebe3611e/amoeba09.prm"},
    {"31_ionwat_ewald_nlist_l05", 1.0e-2, 1.0, 1.0e-4, "testlmda/ionwat.xyz", "commit_ebe3611e/amoeba09.prm"},
+   // The same decoupling with dual topology polarization alongside the charged
+   // background.
+   {"32_ionwat_pol_ewald_l05", 1.0e-2, 1.0, 1.0e-4, "testlmda/ionwat.xyz", "commit_ebe3611e/amoeba09.prm"},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
@@ -77,7 +80,10 @@ const Fixture& fx(const char* name)
    return kFixtures[0];
 }
 
-void runFixture(const Fixture& fx)
+// With analyz off the fixture runs as dynamics does: the terms keep no lambda
+// derivative buffers of their own and add into the shared ones, so only the
+// totals are reported and compared.
+void runFixture(const Fixture& fx, bool analyz = true)
 {
    // The lambda fixtures leave the derivative machinery switched on; clear it
    // once the case ends, however it ends.
@@ -102,7 +108,23 @@ void runFixture(const Fixture& fx)
    opts.eps = fx.eps;
 
    rc_flag = testlmdaFlags(opts);
+   if (not analyz)
+      rc_flag &= ~calc::analyz;
    session.init();
+   if (not analyz) {
+      auto shared = [](EnergyBuffer term, EnergyBuffer total) { return term == nullptr or term == total; };
+      if (use_dlmda)
+         REQUIRE(dedl_buf != nullptr);
+      REQUIRE(shared(demdl_buf, dedl_buf));
+      REQUIRE(shared(depdl_buf, dedl_buf));
+      REQUIRE(shared(devdl_buf, dedl_buf));
+      REQUIRE(shared(d2emdl2_buf, d2edl2_buf));
+      REQUIRE(shared(d2epdl2_buf, d2edl2_buf));
+      REQUIRE(shared(d2evdl2_buf, d2edl2_buf));
+   }
+   // The total and, under analysis, the van der Waals, multipole and
+   // polarization breakdown.
+   const int nterm = analyz ? 4 : 1;
 
    auto r = testlmdaEvaluate(opts);
    TestReference reffile(std::string(TINKER9_DIRSTR "/test/ref/testlmda/") + fx.name + ".txt");
@@ -114,7 +136,7 @@ void runFixture(const Fixture& fx)
    const double eps_v = 1.0e-2;
 
    // ---- Analytical values against the reference ----------------------------
-   for (int k = 0; k < 4; ++k) {
+   for (int k = 0; k < nterm; ++k) {
       COMPARE_REALS(r.dedl[k], ref.dedl[k], eps_d);
       COMPARE_REALS(r.d2edl2[k], ref.d2edl2[k], eps_d);
    }
@@ -127,7 +149,7 @@ void runFixture(const Fixture& fx)
    const double eps_n1 = 5.0e-2 * fx.ntol;
    const double eps_n2 = 2.0e-1 * fx.ntol;
    const double eps_nf = 1.0e-1 * fx.ntol;
-   for (int k = 0; k < 4; ++k) {
+   for (int k = 0; k < nterm; ++k) {
       COMPARE_REALS(r.ndedl[k], ref.dedl[k], eps_n1);
       COMPARE_REALS(r.nd2edl2[k], ref.d2edl2[k], eps_n2);
    }
@@ -163,4 +185,33 @@ TEST_CASE("TESTLMDA-28_water_rels_lig1_dt_prng_l088", "[ff][testlmda][rdt]") { r
 TEST_CASE("TESTLMDA-29_water_rels_lig2_st_pmap_l015", "[ff][testlmda][rdt]") { runFixture(fx("29_water_rels_lig2_st_pmap_l015")); }
 TEST_CASE("TESTLMDA-30_ionwat_ewald_l05", "[ff][testlmda]") { runFixture(fx("30_ionwat_ewald_l05")); }
 TEST_CASE("TESTLMDA-31_ionwat_ewald_nlist_l05", "[ff][testlmda]") { runFixture(fx("31_ionwat_ewald_nlist_l05")); }
+TEST_CASE("TESTLMDA-32_ionwat_pol_ewald_l05", "[ff][testlmda]") { runFixture(fx("32_ionwat_pol_ewald_l05")); }
+
+// Every fixture once more without analysis, as dynamics runs it.
+TEST_CASE("TESTLMDA-DYN-01_water_adt_l05", "[ff][testlmda][dyn]") { runFixture(fx("01_water_adt_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-02_water_ast_l05", "[ff][testlmda][dyn]") { runFixture(fx("02_water_ast_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-03_water_adt_l06exp", "[ff][testlmda][dyn]") { runFixture(fx("03_water_adt_l06exp"), false); }
+TEST_CASE("TESTLMDA-DYN-04_water_ast_l06exp", "[ff][testlmda][dyn]") { runFixture(fx("04_water_ast_l06exp"), false); }
+TEST_CASE("TESTLMDA-DYN-05_water_ast_nodl_l05", "[ff][testlmda][dyn]") { runFixture(fx("05_water_ast_nodl_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-06_water_ast_vonly_l05", "[ff][testlmda][dyn]") { runFixture(fx("06_water_ast_vonly_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-10_water_ast_vcorr_l05", "[ff][testlmda][dyn]") { runFixture(fx("10_water_ast_vcorr_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-11_water_ast_vcorr_annih_l05", "[ff][testlmda][dyn]") { runFixture(fx("11_water_ast_vcorr_annih_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-12_water_ast_vcorr_l06exp", "[ff][testlmda][dyn]") { runFixture(fx("12_water_ast_vcorr_l06exp"), false); }
+TEST_CASE("TESTLMDA-DYN-14_water_rels_vdwm_vcorr_annih_l05", "[ff][testlmda][dyn][rdt]") { runFixture(fx("14_water_rels_vdwm_vcorr_annih_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-17_water_rels_vdwm_vcorr_l050", "[ff][testlmda][dyn][rdt]") { runFixture(fx("17_water_rels_vdwm_vcorr_l050"), false); }
+TEST_CASE("TESTLMDA-DYN-18_water_rels_lig1_l085", "[ff][testlmda][dyn][rdt]") { runFixture(fx("18_water_rels_lig1_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-19_water_rels_lig2_l015", "[ff][testlmda][dyn][rdt]") { runFixture(fx("19_water_rels_lig2_l015"), false); }
+TEST_CASE("TESTLMDA-DYN-20_water_rels_lig1_ne_l085", "[ff][testlmda][dyn][rdt]") { runFixture(fx("20_water_rels_lig1_ne_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-21_water_rels_lig1_nlist_exf_l085", "[ff][testlmda][dyn][rdt]") { runFixture(fx("21_water_rels_lig1_nlist_exf_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-22_water_rels_lig1_st_l085", "[ff][testlmda][dyn][rdt]") { runFixture(fx("22_water_rels_lig1_st_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-23_water_rels_lig2_st_l015", "[ff][testlmda][dyn][rdt]") { runFixture(fx("23_water_rels_lig2_st_l015"), false); }
+TEST_CASE("TESTLMDA-DYN-24_water_rels_lig1_st_ne_l085", "[ff][testlmda][dyn][rdt]") { runFixture(fx("24_water_rels_lig1_st_ne_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-25_water_rels_lig1_st_polonly_l085", "[ff][testlmda][dyn][rdt]") { runFixture(fx("25_water_rels_lig1_st_polonly_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-26_water_rels_lig1_dt_polonly_l078", "[ff][testlmda][dyn][rdt]") { runFixture(fx("26_water_rels_lig1_dt_polonly_l078"), false); }
+TEST_CASE("TESTLMDA-DYN-27_water_rels_lig1_st_prng_l088", "[ff][testlmda][dyn][rdt]") { runFixture(fx("27_water_rels_lig1_st_prng_l088"), false); }
+TEST_CASE("TESTLMDA-DYN-28_water_rels_lig1_dt_prng_l088", "[ff][testlmda][dyn][rdt]") { runFixture(fx("28_water_rels_lig1_dt_prng_l088"), false); }
+TEST_CASE("TESTLMDA-DYN-29_water_rels_lig2_st_pmap_l015", "[ff][testlmda][dyn][rdt]") { runFixture(fx("29_water_rels_lig2_st_pmap_l015"), false); }
+TEST_CASE("TESTLMDA-DYN-30_ionwat_ewald_l05", "[ff][testlmda][dyn]") { runFixture(fx("30_ionwat_ewald_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-31_ionwat_ewald_nlist_l05", "[ff][testlmda][dyn]") { runFixture(fx("31_ionwat_ewald_nlist_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-32_ionwat_pol_ewald_l05", "[ff][testlmda][dyn]") { runFixture(fx("32_ionwat_pol_ewald_l05"), false); }
 #endif

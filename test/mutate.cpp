@@ -292,6 +292,19 @@ const Fixture kFixtures[] = {
    // which mutate_check allows because TI asks for dE/dL alone. Its energy,
    // gradient and virial at lambda 0 are those of 235, whose reference it uses.
    {"238_water_vsoft_n15_ti_l00", "water2", true, true, true, true, "scexp", "235_water_vsoft_n1_d1_l00"},
+   // Ewald fixtures repeated with a 6.5 multipole cutoff (test_mutate_noewald):
+   // the staged ligand 1 leg of 203 with single topology polarization and of 136
+   // with dual topology, and the first derivative only dual topology
+   // polarization of 232. They reach the non-Ewald kernel versions that the Ewald
+   // fixtures leave unlaunched.
+   {"239_water_rels_st_ne_l085", "water2", true, true, true, true, "noewald"},
+   {"240_water_rels_ne_l085", "water2", true, true, true, true, "noewald"},
+   {"241_water_adt_d1_ne_l06", "water2", false, true, false, true, "noewald"},
+   // Decoupling the chloride of two sodium ions, a chloride and a water under
+   // Ewald with single topology multipoles and polarization (test_mutate_ion),
+   // so the uniform background carries a lambda-scaled net charge alongside
+   // polarization, fused in emplarAst.
+   {"242_ionwat_ast_l05", "ionwat", true, true, true, true, "ion"},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
@@ -317,7 +330,8 @@ std::string systemDir(const std::string& base)
 // Copies the parameter files a base system loads into the working directory.
 // The water fixtures share water03; the SAMPL8 guest 3 carries its own force
 // field, plus the artificial vdw14 values fixture 209 loads as a second file.
-// The frames dimer loads amoeba09, and chignolin and its mirror amoebabio09.
+// The frames dimer and the ion cluster load amoeba09, and chignolin and its
+// mirror amoebabio09.
 std::vector<std::unique_ptr<TestFile>> copyParams(const std::string& base)
 {
    std::vector<std::unique_ptr<TestFile>> files;
@@ -325,7 +339,7 @@ std::vector<std::unique_ptr<TestFile>> copyParams(const std::string& base)
       std::string dir = systemDir(base);
       files.emplace_back(new TestFile(dir + "g3.prm"));
       files.emplace_back(new TestFile(dir + "g3_vdw14.prm"));
-   } else if (base == "frames") {
+   } else if (base == "frames" or base == "ionwat") {
       files.emplace_back(new TestFile(TINKER9_DIRSTR "/test/file/commit_ebe3611e/amoeba09.prm"));
    } else if (base == "chig" or base == "chigm") {
       files.emplace_back(new TestFile(TINKER9_DIRSTR "/test/file/commit_ebe3611e/amoebabio09.prm"));
@@ -376,11 +390,16 @@ struct Setup
 // How a run should treat the fused multipole/polarization kernel. emplar cannot
 // report interaction counts, so any evaluation that asks for them routes around
 // it -- which is why an ordinary run never exercises it at all.
+//
+// Dropping counts also drops analysis, which is how dynamics runs: the terms then
+// keep no lambda derivative buffers of their own and add straight into the
+// shared dedl_buf and d2edl2_buf (LmdaBuffer).
 enum class Fuse
 {
    Off,     ///< Ordinary run: counts are requested, so emplar is out of reach.
    Require, ///< Drop counts, and require that emplar took over.
-   Forbid   ///< Drop counts, and require that it still did not.
+   Forbid,  ///< Drop counts, and require that it still did not.
+   Auto     ///< Drop counts, as dynamics does, and take whichever kernel is chosen.
 };
 
 enum class LmdaMode
@@ -444,6 +463,22 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
       REQUIRE(useEmplar());
    else if (fuse == Fuse::Forbid)
       REQUIRE_FALSE(useEmplar());
+
+   // Without analysis every term must add into the shared lambda derivative
+   // buffers rather than keep its own, or the checks below would not be testing
+   // the dynamics layout at all.
+   if (fuse != Fuse::Off) {
+      REQUIRE_FALSE(rc_flag & calc::analyz);
+      auto shared = [](EnergyBuffer term, EnergyBuffer total) { return term == nullptr or term == total; };
+      REQUIRE(shared(demdl_buf, dedl_buf));
+      REQUIRE(shared(depdl_buf, dedl_buf));
+      REQUIRE(shared(devdl_buf, dedl_buf));
+      REQUIRE(shared(d2emdl2_buf, d2edl2_buf));
+      REQUIRE(shared(d2epdl2_buf, d2edl2_buf));
+      REQUIRE(shared(d2evdl2_buf, d2edl2_buf));
+      if (fx.dolmda)
+         REQUIRE(dedl_buf != nullptr);
+   }
 
    TestReference ref(refpath);
    double ref_e = ref.getEnergy();
@@ -837,41 +872,51 @@ void runFlatFixture(const Fixture& fx, bool fused)
    // may reuse the reciprocal multipole potential and cmp the multipole call
    // just before it left, so each polarization call follows one, and the mixed
    // pairs cover maps whose windows differ.
-   auto flatPair = [&](bool me, bool pe, FlatTerm& em_out, FlatTerm& ep_out) {
+   auto flatPair = [&](int vers, bool me, bool pe, FlatTerm& em_out, FlatTerm& ep_out) {
       deldlmda = me ? 1 : 0;
       dpldlmda = pe ? 1 : 0;
       REQUIRE(edlmdaActive() == me);
       REQUIRE(pdlmdaActive() == pe);
-      zeroEGV(calc::v1);
+      zeroEGV(vers);
+      // Without calc::virial nothing clears the virial, so compare zeros instead.
+      const bool do_v = vers & calc::virial;
+      const virial_prec zero9[9] = {0};
       if (fused) {
-         emplarAst(calc::v1);
-         virial_prec v[9];
-         virialReduce(v, vir_buf_elec);
-         for (int i = 0; i < 9; ++i)
-            v[i] += virial_elec[i];
+         emplarAst(vers);
+         virial_prec v[9] = {0};
+         if (do_v) {
+            virialReduce(v, vir_buf_elec);
+            for (int i = 0; i < 9; ++i)
+               v[i] += virial_elec[i];
+         }
          em_out = flatTerm(energyReduce(eng_buf_elec), v, gx_elec, gy_elec, gz_elec);
       } else {
-         empole(calc::v1);
+         empole(vers);
          if (use_epdt)
-            epolar_dt(calc::v1);
+            epolar_dt(vers);
          else
-            epolar(calc::v1);
-         em_out = flatTerm(energy_em, virial_em, demx, demy, demz);
-         ep_out = flatTerm(energy_ep, virial_ep, depx, depy, depz);
+            epolar(vers);
+         em_out = flatTerm(energy_em, do_v ? virial_em : zero9, demx, demy, demz);
+         ep_out = flatTerm(energy_ep, do_v ? virial_ep : zero9, depx, depy, depz);
       }
    };
 
-   FlatTerm em0, ep0, em1, ep1;
-   flatPair(false, false, em0, ep0);
-   for (auto mp : {std::make_pair(true, true), std::make_pair(true, false), std::make_pair(false, true)}) {
-      CAPTURE(mp.first, mp.second);
-      flatPair(mp.first, mp.second, em1, ep1);
-      compareFlatTerm(em1, em0, eps);
-      if (not fused) {
-         compareFlatTerm(ep1, ep0, eps);
-         // the slope did send each term down its lambda derivative version
-         REQUIRE((demdl != 0) == mp.first);
-         REQUIRE((depdl != 0) == mp.second);
+   // Both the energy-gradient-virial and the energy-gradient versions, each of
+   // which has a plain kernel version of its own.
+   for (int vers : {calc::v1, calc::v4}) {
+      CAPTURE(vers);
+      FlatTerm em0, ep0, em1, ep1;
+      flatPair(vers, false, false, em0, ep0);
+      for (auto mp : {std::make_pair(true, true), std::make_pair(true, false), std::make_pair(false, true)}) {
+         CAPTURE(mp.first, mp.second);
+         flatPair(vers, mp.first, mp.second, em1, ep1);
+         compareFlatTerm(em1, em0, eps);
+         if (not fused) {
+            compareFlatTerm(ep1, ep0, eps);
+            // the slope did send each term down its lambda derivative version
+            REQUIRE((demdl != 0) == mp.first);
+            REQUIRE((depdl != 0) == mp.second);
+         }
       }
    }
    deldlmda = 0;
@@ -1194,6 +1239,135 @@ TEST_CASE("MUTATE-gate", "[ff][mutate][rels]") { runGateFixture(fx("136_water_re
 TEST_CASE("MUTATE-flat-single", "[ff][mutate][rels][flat]") { runFlatFixture(fx("203_water_rels_st_l085"), false); }
 TEST_CASE("MUTATE-flat-single-fused", "[ff][mutate][rels][flat][emplar]") { runFlatFixture(fx("203_water_rels_st_l085"), true); }
 TEST_CASE("MUTATE-flat-dual", "[ff][mutate][rels][flat]") { runFlatFixture(fx("136_water_rels_ye_l085"), false); }
+TEST_CASE("MUTATE-flat-single-ne", "[ff][mutate][rels][flat][noewald]") { runFlatFixture(fx("239_water_rels_st_ne_l085"), false); }
+TEST_CASE("MUTATE-flat-single-ne-fused", "[ff][mutate][rels][flat][noewald][emplar]") { runFlatFixture(fx("239_water_rels_st_ne_l085"), true); }
+TEST_CASE("MUTATE-flat-dual-ne", "[ff][mutate][rels][flat][noewald]") { runFlatFixture(fx("240_water_rels_ne_l085"), false); }
+
+TEST_CASE("MUTATE-239_water_rels_st_ne_l085", "[ff][mutate][noewald][astpol][emplar]") { runEmplarAstFixture(fx("239_water_rels_st_ne_l085")); }
+TEST_CASE("MUTATE-240_water_rels_ne_l085", "[ff][mutate][noewald]") { runFixture(fx("240_water_rels_ne_l085")); }
+TEST_CASE("MUTATE-241_water_adt_d1_ne_l06", "[ff][mutate][noewald]") { runFixture(fx("241_water_adt_d1_ne_l06")); }
+TEST_CASE("MUTATE-242_ionwat_ast_l05", "[ff][mutate][ion][astpol][emplar]") { runEmplarAstFixture(fx("242_ionwat_ast_l05")); }
+
+// Every lambda derivative fixture once more without analysis, as dynamics runs
+// it: the terms add into the shared lambda derivative buffers, and only the
+// totals are there to compare. The fixtures run fused above already run this way.
+TEST_CASE("MUTATE-DYN-030_water_ast_ye_m10", "[ff][mutate][dyn]") { runFixture(fx("030_water_ast_ye_m10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-031_water_ast_ne_m10", "[ff][mutate][dyn]") { runFixture(fx("031_water_ast_ne_m10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-032_water_ast_ye_m05", "[ff][mutate][dyn]") { runFixture(fx("032_water_ast_ye_m05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-033_water_ast_ne_m05", "[ff][mutate][dyn]") { runFixture(fx("033_water_ast_ne_m05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-034_water_ast_ye_m00", "[ff][mutate][dyn]") { runFixture(fx("034_water_ast_ye_m00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-035_water_ast_ne_m00", "[ff][mutate][dyn]") { runFixture(fx("035_water_ast_ne_m00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-036_water_ast_v10", "[ff][mutate][dyn]") { runFixture(fx("036_water_ast_v10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-037_water_ast_v05", "[ff][mutate][dyn]") { runFixture(fx("037_water_ast_v05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-038_water_ast_v00", "[ff][mutate][dyn]") { runFixture(fx("038_water_ast_v00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-040_water_ast_ne_mp05", "[ff][mutate][dyn]") { runFixture(fx("040_water_ast_ne_mp05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-047_water_adt_ye_p10", "[ff][mutate][dyn]") { runFixture(fx("047_water_adt_ye_p10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-048_water_adt_ne_p10", "[ff][mutate][dyn]") { runFixture(fx("048_water_adt_ne_p10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-049_water_adt_ye_p05", "[ff][mutate][dyn]") { runFixture(fx("049_water_adt_ye_p05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-050_water_adt_ne_p05", "[ff][mutate][dyn]") { runFixture(fx("050_water_adt_ne_p05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-051_water_adt_ye_p00", "[ff][mutate][dyn]") { runFixture(fx("051_water_adt_ye_p00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-052_water_adt_ne_p00", "[ff][mutate][dyn]") { runFixture(fx("052_water_adt_ne_p00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-056_water_adt_ye_mp05", "[ff][mutate][dyn]") { runFixture(fx("056_water_adt_ye_mp05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-057_water_adt_ne_mp05", "[ff][mutate][dyn]") { runFixture(fx("057_water_adt_ne_mp05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-075_water_qnt_ast_l10", "[ff][mutate][dyn]") { runFixture(fx("075_water_qnt_ast_l10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-076_water_qnt_ast_l05", "[ff][mutate][dyn]") { runFixture(fx("076_water_qnt_ast_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-077_water_qnt_ast_l00", "[ff][mutate][dyn]") { runFixture(fx("077_water_qnt_ast_l00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-078_water_qnt_adt_l10", "[ff][mutate][dyn]") { runFixture(fx("078_water_qnt_adt_l10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-079_water_qnt_adt_l05", "[ff][mutate][dyn]") { runFixture(fx("079_water_qnt_adt_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-080_water_qnt_adt_l00", "[ff][mutate][dyn]") { runFixture(fx("080_water_qnt_adt_l00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-084_water_exp_ast_l10", "[ff][mutate][dyn]") { runFixture(fx("084_water_exp_ast_l10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-085_water_exp_ast_l05", "[ff][mutate][dyn]") { runFixture(fx("085_water_exp_ast_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-086_water_exp_ast_l00", "[ff][mutate][dyn]") { runFixture(fx("086_water_exp_ast_l00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-087_water_exp_adt_l10", "[ff][mutate][dyn]") { runFixture(fx("087_water_exp_adt_l10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-088_water_exp_adt_l05", "[ff][mutate][dyn]") { runFixture(fx("088_water_exp_adt_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-089_water_exp_adt_l00", "[ff][mutate][dyn]") { runFixture(fx("089_water_exp_adt_l00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-093_water_inv_ast_l10", "[ff][mutate][dyn]") { runFixture(fx("093_water_inv_ast_l10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-094_water_inv_ast_l05", "[ff][mutate][dyn]") { runFixture(fx("094_water_inv_ast_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-095_water_inv_ast_l00", "[ff][mutate][dyn]") { runFixture(fx("095_water_inv_ast_l00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-096_water_inv_adt_l10", "[ff][mutate][dyn]") { runFixture(fx("096_water_inv_adt_l10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-097_water_inv_adt_l05", "[ff][mutate][dyn]") { runFixture(fx("097_water_inv_adt_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-098_water_inv_adt_l00", "[ff][mutate][dyn]") { runFixture(fx("098_water_inv_adt_l00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-102_water_exf_ast_m10", "[ff][mutate][dyn]") { runFixture(fx("102_water_exf_ast_m10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-103_water_exf_ast_m05", "[ff][mutate][dyn]") { runFixture(fx("103_water_exf_ast_m05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-104_water_exf_ast_m00", "[ff][mutate][dyn]") { runFixture(fx("104_water_exf_ast_m00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-111_water_exf_adt_p10", "[ff][mutate][dyn]") { runFixture(fx("111_water_exf_adt_p10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-112_water_exf_adt_p05", "[ff][mutate][dyn]") { runFixture(fx("112_water_exf_adt_p05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-113_water_exf_adt_p00", "[ff][mutate][dyn]") { runFixture(fx("113_water_exf_adt_p00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-117_water_exf_adt_mp05", "[ff][mutate][dyn]") { runFixture(fx("117_water_exf_adt_mp05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-119_water_adt_ye_l10", "[ff][mutate][dyn]") { runFixture(fx("119_water_adt_ye_l10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-120_water_adt_ne_l10", "[ff][mutate][dyn]") { runFixture(fx("120_water_adt_ne_l10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-121_water_adt_ye_l05", "[ff][mutate][dyn]") { runFixture(fx("121_water_adt_ye_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-122_water_adt_ne_l05", "[ff][mutate][dyn]") { runFixture(fx("122_water_adt_ne_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-123_water_adt_ye_l00", "[ff][mutate][dyn]") { runFixture(fx("123_water_adt_ye_l00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-124_water_adt_ne_l00", "[ff][mutate][dyn]") { runFixture(fx("124_water_adt_ne_l00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-131_water_qnt_adt_l10", "[ff][mutate][dyn]") { runFixture(fx("131_water_qnt_adt_l10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-132_water_qnt_adt_l00", "[ff][mutate][dyn]") { runFixture(fx("132_water_qnt_adt_l00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-135_water_rels_ye_l100", "[ff][mutate][dyn]") { runFixture(fx("135_water_rels_ye_l100"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-136_water_rels_ye_l085", "[ff][mutate][dyn]") { runFixture(fx("136_water_rels_ye_l085"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-137_water_rels_ye_l070", "[ff][mutate][dyn]") { runFixture(fx("137_water_rels_ye_l070"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-138_water_rels_ye_l050", "[ff][mutate][dyn]") { runFixture(fx("138_water_rels_ye_l050"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-139_water_rels_ye_l030", "[ff][mutate][dyn]") { runFixture(fx("139_water_rels_ye_l030"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-140_water_rels_ye_l015", "[ff][mutate][dyn]") { runFixture(fx("140_water_rels_ye_l015"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-141_water_rels_ye_l000", "[ff][mutate][dyn]") { runFixture(fx("141_water_rels_ye_l000"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-161_water_dlmda_e_l06", "[ff][mutate][dyn]") { runFixture(fx("161_water_dlmda_e_l06"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-162_water_dlmda_p_l06", "[ff][mutate][dyn]") { runFixture(fx("162_water_dlmda_p_l06"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-163_water_dlmda_v_l06", "[ff][mutate][dyn]") { runFixture(fx("163_water_dlmda_v_l06"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-164_water_dlmda_ep_l06", "[ff][mutate][dyn]") { runFixture(fx("164_water_dlmda_ep_l06"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-165_water_dlmda_ev_l06", "[ff][mutate][dyn]") { runFixture(fx("165_water_dlmda_ev_l06"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-166_water_dlmda_pv_l06", "[ff][mutate][dyn]") { runFixture(fx("166_water_dlmda_pv_l06"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-167_water_dlmda_epv_l06", "[ff][mutate][dyn]") { runFixture(fx("167_water_dlmda_epv_l06"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-168_water_rels_ye_vdwm_l030", "[ff][mutate][dyn]") { runFixture(fx("168_water_rels_ye_vdwm_l030"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-169_water_rels_ye_lig1_l070", "[ff][mutate][dyn]") { runFixture(fx("169_water_rels_ye_lig1_l070"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-170_water_lmda_ast_epin_l05", "[ff][mutate][dyn]") { runFixture(fx("170_water_lmda_ast_epin_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-171_water_lmda_ast_vpin_l05", "[ff][mutate][dyn]") { runFixture(fx("171_water_lmda_ast_vpin_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-173_water_lmda_adt_vpin_l06", "[ff][mutate][dyn]") { runFixture(fx("173_water_lmda_adt_vpin_l06"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-176_water_rels_ye_vdwm_exp_l050", "[ff][mutate][dyn]") { runFixture(fx("176_water_rels_ye_vdwm_exp_l050"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-177_water_rels_ye_lig2_exp_l030", "[ff][mutate][dyn]") { runFixture(fx("177_water_rels_ye_lig2_exp_l030"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-178_water_rels_ye_lig1_inv_l070", "[ff][mutate][dyn]") { runFixture(fx("178_water_rels_ye_lig1_inv_l070"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-179_water_rels_ye_vdwm_vx3_l050", "[ff][mutate][dyn]") { runFixture(fx("179_water_rels_ye_vdwm_vx3_l050"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-180_water_rels_ye_lig1_ex3_l085", "[ff][mutate][dyn]") { runFixture(fx("180_water_rels_ye_lig1_ex3_l085"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-181_water_rels_ye_lig2_ix2_l015", "[ff][mutate][dyn]") { runFixture(fx("181_water_rels_ye_lig2_ix2_l015"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-182_water_ast_v05_annihilate", "[ff][mutate][dyn]") { runFixture(fx("182_water_ast_v05_annihilate"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-184_water_exf_adt_l10", "[ff][mutate][dyn]") { runFixture(fx("184_water_exf_adt_l10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-185_water_exf_adt_l05", "[ff][mutate][dyn]") { runFixture(fx("185_water_exf_adt_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-186_water_exf_adt_l00", "[ff][mutate][dyn]") { runFixture(fx("186_water_exf_adt_l00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-196_water_apm_ast_vpin_l05", "[ff][mutate][dyn]") { runFixture(fx("196_water_apm_ast_vpin_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-197_water_apm_ast_epin_l00", "[ff][mutate][dyn]") { runFixture(fx("197_water_apm_ast_epin_l00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-198_water_apm_ast_epin_l05", "[ff][mutate][dyn]") { runFixture(fx("198_water_apm_ast_epin_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-199_water_apm_ast_epin_l10", "[ff][mutate][dyn]") { runFixture(fx("199_water_apm_ast_epin_l10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-200_water_vsoft_l10", "[ff][mutate][dyn]") { runFixture(fx("200_water_vsoft_l10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-201_water_vsoft_l05", "[ff][mutate][dyn]") { runFixture(fx("201_water_vsoft_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-202_water_vsoft_l00", "[ff][mutate][dyn]") { runFixture(fx("202_water_vsoft_l00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-205_water_rels_nolmda", "[ff][mutate][dyn]") { runFixture(fx("205_water_rels_nolmda"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-207_g3_ast_ye_l10", "[ff][mutate][dyn]") { runFixture(fx("207_g3_ast_ye_l10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-208_g3_ast_ye_l05", "[ff][mutate][dyn]") { runFixture(fx("208_g3_ast_ye_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-209_g3_ast_annih_l05", "[ff][mutate][dyn]") { runFixture(fx("209_g3_ast_annih_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-210_g3_ast_nobox_l05", "[ff][mutate][dyn]") { runFixture(fx("210_g3_ast_nobox_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-211_water_ast_vcorr_annih_l05", "[ff][mutate][dyn]") { runFixture(fx("211_water_ast_vcorr_annih_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-212_water_ast_mono_l05", "[ff][mutate][dyn]") { runFixture(fx("212_water_ast_mono_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-213_water_ast_tric_l05", "[ff][mutate][dyn]") { runFixture(fx("213_water_ast_tric_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-214_water_rels_ye_vdwm_lig2t_l040", "[ff][mutate][dyn]") { runFixture(fx("214_water_rels_ye_vdwm_lig2t_l040"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-215_water_ast_ne_mcut_l05", "[ff][mutate][dyn]") { runFixture(fx("215_water_ast_ne_mcut_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-217_g3_rels_lig1_l085", "[ff][mutate][dyn]") { runFixture(fx("217_g3_rels_lig1_l085"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-218_g3_rels_lig2_l015", "[ff][mutate][dyn]") { runFixture(fx("218_g3_rels_lig2_l015"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-219_water_rels_ne_lig2_l015", "[ff][mutate][dyn]") { runFixture(fx("219_water_rels_ne_lig2_l015"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-220_frames_ast_ye_l05", "[ff][mutate][dyn]") { runFixture(fx("220_frames_ast_ye_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-221_frames_ast_nobox_l05", "[ff][mutate][dyn]") { runFixture(fx("221_frames_ast_nobox_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-222_chig_ast_nobox_l05", "[ff][mutate][dyn]") { runFixture(fx("222_chig_ast_nobox_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-223_chigm_ast_nobox_l05", "[ff][mutate][dyn]") { runFixture(fx("223_chigm_ast_nobox_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-224_chig_ast_ye_l05", "[ff][mutate][dyn]") { runFixture(fx("224_chig_ast_ye_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-225_chigm_ast_ye_l05", "[ff][mutate][dyn]") { runFixture(fx("225_chigm_ast_ye_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-232_water_adt_d1_x2_l06", "[ff][mutate][dyn]") { runFixture(fx("232_water_adt_d1_x2_l06"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-233_water_ast_vcorr_annih_d1_l05", "[ff][mutate][dyn]") { runFixture(fx("233_water_ast_vcorr_annih_d1_l05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-234_water_rels_ye_vdwm_d1_l040", "[ff][mutate][dyn]") { runFixture(fx("234_water_rels_ye_vdwm_d1_l040"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-235_water_vsoft_n1_d1_l00", "[ff][mutate][dyn]") { runFixture(fx("235_water_vsoft_n1_d1_l00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-236_water_vsoft_n1_d1_l005", "[ff][mutate][dyn]") { runFixture(fx("236_water_vsoft_n1_d1_l005"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-237_water_rels_vdwm_n1_d1_l10", "[ff][mutate][dyn]") { runFixture(fx("237_water_rels_vdwm_n1_d1_l10"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-240_water_rels_ne_l085", "[ff][mutate][dyn]") { runFixture(fx("240_water_rels_ne_l085"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-241_water_adt_d1_ne_l06", "[ff][mutate][dyn]") { runFixture(fx("241_water_adt_d1_ne_l06"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-TI-076_water_qnt_ast_l05", "[ff][mutate][dyn][ti]") { runFixture(fx("076_water_qnt_ast_l05"), Fuse::Auto, LmdaMode::ThermIntg); }
+TEST_CASE("MUTATE-DYN-TI-079_water_qnt_adt_l05", "[ff][mutate][dyn][ti]") { runFixture(fx("079_water_qnt_adt_l05"), Fuse::Auto, LmdaMode::ThermIntg); }
+TEST_CASE("MUTATE-DYN-TI-176_water_rels_ye_vdwm_exp_l050", "[ff][mutate][dyn][ti]") { runFixture(fx("176_water_rels_ye_vdwm_exp_l050"), Fuse::Auto, LmdaMode::ThermIntg); }
 
 TEST_CASE("MUTATE-flags", "[ff][mutate][rels]")
 {

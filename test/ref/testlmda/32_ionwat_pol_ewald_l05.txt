@@ -1,0 +1,20 @@
+ Analytical Lambda Derivatives :             dE/dL        dEV/dL        dEM/dL        dEP/dL
+                                        -64.234790      0.000000    -62.695608     -1.539182
+
+ Analytical 2nd Lambda Derivatives :       d2E/dL2      d2EV/dL2      d2EM/dL2      d2EP/dL2
+                                       -189.788296      0.000000   -184.016362     -5.771933
+
+ Lambda Gradient Breakdown over Individual Atoms :
+
+  Type      Atom           dFx/dL        dFy/dL        dFz/dL          Norm
+
+ Lambda        1       -11.816378     10.036818    -13.270594     20.407674
+ Lambda        2        -3.293122      3.556056     -0.624525      4.886739
+ Lambda        3        14.972873    -13.678606     14.606380     24.992749
+ Lambda        4         5.066105      1.593952      4.628562      7.044834
+ Lambda        5        -2.890627     -1.399467     -3.639056      4.853552
+ Lambda        6        -2.053092     -0.087483     -1.697092      2.665138
+
+ Analytical dV/dL :               53.494      -43.693       42.073
+                                 -43.693        7.784      -35.765
+                                  42.073      -35.765        7.689
