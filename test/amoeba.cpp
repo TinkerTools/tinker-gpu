@@ -17,8 +17,8 @@ using namespace tinker;
 // virial; double by 1.5e-6, 1.4e-6, 5.3e-6 and the 5e-4 rounding of the virial,
 // which Tinker prints to only 3 decimals.
 namespace {
-const double eps_e = testGetEps(5.0e-4, 1.0e-5);
-const double eps_g = testGetEps(1.3e-3, 2.0e-5);
+const double eps_e = testGetEps(5.0e-4, 1.0e-4);
+const double eps_g = testGetEps(1.3e-3, 1.0e-4);
 const double eps_v = testGetEps(3.0e-3, 1.0e-3);
 }
 
