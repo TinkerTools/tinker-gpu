@@ -5,6 +5,7 @@
 #include "ff/potent.h"
 #include "md/integrator.h"
 #include "md/misc.h"
+#include "tool/iofortstr.h"
 #include <tinker/detail/bath.hh>
 #include <tinker/detail/boxes.hh>
 #include <tinker/detail/inform.hh>
@@ -798,15 +799,16 @@ TEST_CASE("NPT-Monte-Aniso", "[ff][npt][Monte][aniso]")
 }
 
 namespace {
-// Loads water30 with the induced dipole predictor, and fills its history with
-// solves at nearby geometries, past maxualt so that the predictor is in use and
-// the next solve overwrites a real entry. The caller ends the returned session.
+// The shared Fortran/C++ rejection fixture uses 19 solves at the same perturbed
+// geometries. ASPC stores 17 slots in Fortran (the last coefficient is zero) and
+// 16 here; both histories are full and prediction is active before the trial.
+// The caller ends the returned session.
 std::unique_ptr<TestSession> loadWater30Predictor()
 {
    const char* k = "test_water30.key";
    const char* x = "test_water30.xyz";
-   TestFile fke(TINKER9_DIRSTR "/test/file/water30/water30.key", k, "\nintegrator verlet\n");
-   TestFile fx(TINKER9_DIRSTR "/test/file/water30/water30_iso.xyz", x);
+   TestFile fke(TINKER9_DIRSTR "/test/file/barostat/water30.key", k);
+   TestFile fx(TINKER9_DIRSTR "/test/file/barostat/water30.xyz", x);
    TestFile fp(TINKER9_DIRSTR "/test/file/commit_6fe8e913/water03.prm");
 
    const char* argv[] = {"dummy", x};
@@ -815,12 +817,18 @@ std::unique_ptr<TestSession> loadWater30Predictor()
    testMdInit(298., 1.);
    rc_flag = usage_;
    session->init();
+   REQUIRE(n == 2700);
    REQUIRE(use(Potent::POLAR));
-   REQUIRE(maxualt > 0);
+   REQUIRE(polpred == UPred::ASPC);
    REQUIRE_FALSE(polpot::use_tholed);
+   REQUIRE(bath::kelvin == 298.);
+   REQUIRE(bath::atmsph == 1.);
+   REQUIRE(bath::voltrial == 1);
+   REQUIRE(bath::volmove == 10.);
+   REQUIRE(FstrView(bath::volscale) == "MOLECULAR");
 
    std::vector<pos_prec> xb(n);
-   for (int step = 0; step < maxualt + 3; ++step) {
+   for (int step = 0; step < 19; ++step) {
       darray::copyout(g::q0, n, xb.data(), xpos);
       waitFor(g::q0);
       for (int i = 0; i < n; ++i)
@@ -861,21 +869,41 @@ void checkRejectKeepsInduced()
       pslots0.push_back(grab(pslots[i]));
    }
    const int nualt0 = nualt;
-   std::vector<pos_prec> xb(n);
+   std::vector<pos_prec> xb(n), yb(n), zb(n);
    darray::copyout(g::q0, n, xb.data(), xpos);
+   darray::copyout(g::q0, n, yb.data(), ypos);
+   darray::copyout(g::q0, n, zb.data(), zpos);
    waitFor(g::q0);
+   Box box0;
+   boxGetCurrent(box0);
+   constexpr energy_prec rejectEnergy = -1.0e30;
 
    {
       MonteCarloBarostat mc;
       InducedSnapshot snapshot;
       // an old energy far below any trial energy rejects the move for certain
-      monteCarloBarostat(-1.0e30, 298., false, false, &snapshot);
+      monteCarloBarostat(rejectEnergy, 298., false, false, &snapshot);
    }
 
-   std::vector<pos_prec> xa(n);
+   std::vector<pos_prec> xa(n), ya(n), za(n);
    darray::copyout(g::q0, n, xa.data(), xpos);
+   darray::copyout(g::q0, n, ya.data(), ypos);
+   darray::copyout(g::q0, n, za.data(), zpos);
    waitFor(g::q0);
    REQUIRE(xa == xb);
+   REQUIRE(ya == yb);
+   REQUIRE(za == zb);
+   REQUIRE(esum == rejectEnergy);
+   Box box1;
+   boxGetCurrent(box1);
+   REQUIRE(box1.box_shape == box0.box_shape);
+   const real3 vectors0[] = {box0.lvec1, box0.lvec2, box0.lvec3, box0.recipa, box0.recipb, box0.recipc};
+   const real3 vectors1[] = {box1.lvec1, box1.lvec2, box1.lvec3, box1.recipa, box1.recipb, box1.recipc};
+   for (int i = 0; i < 6; ++i) {
+      REQUIRE(vectors1[i].x == vectors0[i].x);
+      REQUIRE(vectors1[i].y == vectors0[i].y);
+      REQUIRE(vectors1[i].z == vectors0[i].z);
+   }
    REQUIRE(grab(uind) == uind0);
    REQUIRE(grab(uinp) == uinp0);
    REQUIRE(grab(udir) == udir0);
