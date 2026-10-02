@@ -14,7 +14,6 @@
 #include "ff/modamoeba.h"
 #include "ff/pme.h"
 #include "ff/potent.h"
-#include "md/misc.h"
 
 #include "test.h"
 #include "testrt.h"
@@ -23,7 +22,6 @@
 #include <tinker/detail/atoms.hh>
 #include <tinker/detail/mplpot.hh>
 #include <tinker/detail/mpole.hh>
-#include <tinker/detail/output.hh>
 #include <tinker/routines.h>
 
 #include <algorithm>
@@ -266,42 +264,6 @@ TEST_CASE("MPOLESTATE-induced-epdt", "[ff][mpolestate]")
 
    energy(calc::v4);
    REQUIRE_THROWS(epolarPhysicalInduced());
-}
-
-// Dual topology leaves only its last endpoint pass in uind and udir, so a run
-// that would save them stops in setup, whichever keyword asks for them; single
-// topology saves them.
-TEST_CASE("MPOLESTATE-epdt-dipole-save-error", "[ff][mpolestate]")
-{
-   int* flags[] = {&output::uindsave, &output::usyssave, &output::tefsave, &output::udirsave, &output::defsave};
-   int saved[5];
-   for (int k = 0; k < 5; ++k)
-      saved[k] = *flags[k];
-   auto only = [&](int on) {
-      for (int k = 0; k < 5; ++k)
-         *flags[k] = (k == on);
-   };
-
-   {
-      Setup s(fx("epdt"), kEnergyGrad);
-      REQUIRE(use_epdt);
-      only(-1);
-      REQUIRE_NOTHROW(mdsaveCheckInduced());
-      for (int k = 0; k < 5; ++k) {
-         CAPTURE(k);
-         only(k);
-         REQUIRE_THROWS(mdsaveCheckInduced());
-      }
-   }
-   {
-      Setup s(fx("rels-prng-dl"), kEnergyGrad);
-      REQUIRE_FALSE(use_epdt);
-      only(0);
-      REQUIRE_NOTHROW(mdsaveCheckInduced());
-   }
-
-   for (int k = 0; k < 5; ++k)
-      *flags[k] = saved[k];
 }
 
 namespace {

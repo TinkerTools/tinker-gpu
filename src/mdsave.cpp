@@ -10,7 +10,6 @@
 #include "md/misc.h"
 #include "md/pq.h"
 #include "tool/cudalib.h"
-#include "tool/error.h"
 #include "tool/iofortstr.h"
 #include <condition_variable>
 #include <future>
@@ -454,20 +453,6 @@ void mdsaveAsync(int istep, time_prec dt)
    std::unique_lock<std::mutex> lck_copy(mtx_dup);
    cv_dup.wait(lck_copy, [=]() { return idle_dup; });
    idle_dup = false;
-}
-
-bool mdsaveWritesInduced()
-{
-   return mdsaveUseUind() or mdsaveUseUdir();
-}
-
-void mdsaveCheckInduced()
-{
-   // Dual topology leaves only its last endpoint pass in uind and udir.
-   if (use_epdt and mdsaveWritesInduced())
-      TINKER_THROW("MDSAVE  --  Induced and direct dipoles cannot be saved with dual topology "
-                   "polarization; remove the SAVE-UINDUCE, SAVE-USYSTEM, SAVE-TEFIELD, "
-                   "SAVE-UDIRECT and SAVE-DEFIELD keywords");
 }
 
 void mdsaveSynchronize()
