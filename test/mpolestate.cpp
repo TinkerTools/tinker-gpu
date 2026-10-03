@@ -56,11 +56,11 @@ const Fixture kFixtures[] = {
    // single topology polarization at plambda != elambda, no lambda derivative
    {"rels-prng-nodl", "mutate/water2.xyz", "mpolestate/rels_prng_nodl.key", kWater03},
    // the same with the lambda derivative, whose last pass masks rpole
-   {"rels-prng-dl", "testlmda/water2.xyz", "testlmda/27_water_rels_lig1_st_prng_l088.key", kWater03},
+   {"rels-prng-dl", "testlmda/water2.xyz", "testlmda/21_water_rels_lig1_st_prng_l088.key", kWater03},
    // the fused multipole and polarization single topology
-   {"emplarast", "mutate/water2.xyz", "mutate/203_water_rels_st_l085.key", kWater03},
+   {"emplarast", "mutate/water2.xyz", "mutate/142_water_rels_st_l085.key", kWater03},
    // dual topology polarization, whose passes rotate poleorig
-   {"epdt", "mutate/water2.xyz", "mutate/136_water_rels_ye_l085.key", kWater03},
+   {"epdt", "mutate/water2.xyz", "mutate/083_water_rels_ye_l085.key", kWater03},
    // multipoles scaled on the fly from poleorig, no polarization
    {"emast-mponly", "mutate/water2.xyz", "mpolestate/emast_mponly.key", kWater03},
    // electrostatics driven by the main lambda, polarization pinned

@@ -28,10 +28,10 @@ const Fixture kFixtures[] = {
    {"04_water_ast_ye_l10"},
    {"05_water_ast_ye_l05"},
    {"06_water_ast_ye_l00"},
-   {"09_g3", "g3/g3.xyz", "g3/g3.prm", 2.0e-2, 5.0e-4},
-   {"10_g3_nlist", "g3/g3.xyz", "g3/g3.prm", 2.0e-2, 5.0e-4},
-   {"11_aplus_thole0", "aplus2022/tetramer.xyz", "aplus2022/AMOEBAplus_Org.prm"},
-   {"12_aplus_polpair", "aplus2022/tetramer.xyz", "aplus2022/AMOEBAplus_Org.prm"},
+   {"07_g3", "g3/g3.xyz", "g3/g3.prm", 2.0e-2, 5.0e-4},
+   {"08_g3_nlist", "g3/g3.xyz", "g3/g3.prm", 2.0e-2, 5.0e-4},
+   {"09_aplus_thole0", "aplus2022/tetramer.xyz", "aplus2022/AMOEBAplus_Org.prm"},
+   {"10_aplus_polpair", "aplus2022/tetramer.xyz", "aplus2022/AMOEBAplus_Org.prm"},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
@@ -99,10 +99,10 @@ void runFixture(const Fixture& fx)
 TEST_CASE("TESTGRAD-01_water_ye_m10v10", "[ff][testgrad]") { runFixture(fx("01_water_ye_m10v10")); }
 TEST_CASE("TESTGRAD-02_water_ye_m05v05", "[ff][testgrad]") { runFixture(fx("02_water_ye_m05v05")); }
 TEST_CASE("TESTGRAD-03_water_ye_m00v00", "[ff][testgrad]") { runFixture(fx("03_water_ye_m00v00")); }
-TEST_CASE("TESTGRAD-09_g3", "[ff][testgrad]") { runFixture(fx("09_g3")); }
-TEST_CASE("TESTGRAD-10_g3_nlist", "[ff][testgrad]") { runFixture(fx("10_g3_nlist")); }
-TEST_CASE("TESTGRAD-11_aplus_thole0", "[ff][testgrad][aplus]") { runFixture(fx("11_aplus_thole0")); }
-TEST_CASE("TESTGRAD-12_aplus_polpair", "[ff][testgrad][aplus]") { runFixture(fx("12_aplus_polpair")); }
+TEST_CASE("TESTGRAD-07_g3", "[ff][testgrad]") { runFixture(fx("07_g3")); }
+TEST_CASE("TESTGRAD-08_g3_nlist", "[ff][testgrad]") { runFixture(fx("08_g3_nlist")); }
+TEST_CASE("TESTGRAD-09_aplus_thole0", "[ff][testgrad][aplus]") { runFixture(fx("09_aplus_thole0")); }
+TEST_CASE("TESTGRAD-10_aplus_polpair", "[ff][testgrad][aplus]") { runFixture(fx("10_aplus_polpair")); }
 
 #if TINKER_GPULANG_CUDA
 TEST_CASE("TESTGRAD-04_water_ast_ye_l10", "[ff][testgrad][ast]") { runFixture(fx("04_water_ast_ye_l10")); }
