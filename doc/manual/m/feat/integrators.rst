@@ -76,8 +76,12 @@ deck that relies on the default will not reproduce those trajectories unless
 ``FRICTION`` is given explicitly.
 
 Since the friction and random forces act on each atom independently, the center
-of mass momentum is not conserved and is deliberately not removed.  All 3N
-degrees of freedom are thermostatted.
+of mass momentum is not conserved; it is thermalized like every other mode, and
+by default it is not removed and all 3N degrees of freedom are counted.
+``REMOVE-INERTIA N`` with a positive ``N`` removes the overall translation every
+``N`` steps, and the overall rotation as well if there are no periodic
+boundaries. The removed modes, 3 or 6, are then subtracted from the degrees of
+freedom used for the reported temperature, unless ``DEGREES-FREEDOM`` is given.
 
 The random terms come from a counter-based generator keyed on the step and atom
 indices, so a trajectory is reproducible and does not depend on the number of

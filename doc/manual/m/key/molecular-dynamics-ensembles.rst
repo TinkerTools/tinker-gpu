@@ -24,6 +24,20 @@ The default is 0.5, or 91.0 with an implicit solvent.
 
    :ref:`label-stochastic`
 
+**REMOVE-INERTIA [integer]**
+
+.. index:: REMOVE-INERTIA
+
+Number of steps between removals of the overall translation of the system,
+and of its overall rotation if there are no periodic boundaries. For the
+stochastic integrator, removal is off unless a positive value is given, and
+the removed modes are subtracted from the degrees of freedom unless
+``DEGREES-FREEDOM`` is set.
+
+.. seealso::
+
+   :ref:`label-stochastic`
+
 **THERMOSTAT [NOSE-HOOVER / LPISTON]**
 
 .. index:: THERMOSTAT

@@ -361,14 +361,6 @@ StochasticIntegrator::StochasticIntegrator()
 {
    sdInitialize();
 
-   // Stochastic dynamics does not conserve the center of mass momentum: the
-   // friction and random forces act on every atom independently. Removing the
-   // overall translation would fight the thermostat, so it is turned off here.
-   // Fortran mdinit leaves this to the caller (the STOCHASTIC branch that would
-   // clear dorest is commented out there).
-   mdstuf::dorest = 0;
-   mdstuf::irest = 0;
-
    print(stdout, "\n");
    print(stdout, " %-40s %12.4lf\n", "Friction Coefficient (1/ps)", stodyn::friction);
 
