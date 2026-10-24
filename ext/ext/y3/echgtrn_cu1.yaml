@@ -43,7 +43,7 @@ EXTRA_PARAMS: |
   , real *restrict dmpct
   , real f
   , const int* restrict grp
-  , CtScale ctsc
+  , GrpPairScale ctsc
 # IMPLICIT_PARAMS:
 
 I_VARIABLES:

@@ -133,18 +133,40 @@ TINKER_EXTERN Vdw radrule;
 TINKER_EXTERN Vdw epsrule;
 
 /// \ingroup vdw
-/// \brief Long-range energy correction (lrc), used as `e += lrc/volume`.
-/// \note Must be 0 if system is unbound.
-TINKER_EXTERN energy_prec elrc_vol;
-/// The long-range energy and virial corrections at the current vdw lambda,
-/// each times the volume of the box. \c elrc_vol and \c vlrc_vol hold them at
-/// the lambda of the setup.
-void evdwLrcVol(energy_prec& elrc, virial_prec& vlrc);
+/// \brief Long-range correction (lrc) of the van der Waals or dispersion
+/// energy, split by how each class of pairs follows the vdw lambda, each times
+/// the volume of the box (evcorr.f:evcorr1). The energy times the volume is
+/// `s0 + w*s1 + b*s2` with `w = vlambda^nw` for pairs of the environment and
+/// ligand 1 and `b = (1-vlambda)^nb` for those of the environment and ligand 2,
+/// so it holds at any vlambda. The sums are 0 if the system is unbound.
+struct LrcSums
+{
+   double s0; ///< pairs that do not follow the vdw lambda
+   double s1; ///< pairs that follow vlambda
+   double s2; ///< pairs that follow one minus vlambda
+   double nw; ///< lambda exponent of \c s1
+   double nb; ///< lambda exponent of \c s2
+};
 
-/// \ingroup vdw
-/// \brief Long-range virial correction (lrc), used as `v(i,i) += lrc/volume`.
-/// \note Must be 0 if system is unbound.
-TINKER_EXTERN virial_prec vlrc_vol;
+/// Integrates the class sums of the van der Waals (\c dsp false) or the
+/// dispersion correction from the Fortran setup.
+void lrcSetup(LrcSums& ls, bool dsp);
+
+/// The correction times the volume at vdw lambda \c vl, with its first and
+/// second derivatives carried to the main lambda by the vdw lambda derivatives
+/// \c dl and \c d2l (lmdaChain). A constant over the volume, its virial is
+/// minus the energy on each diagonal element.
+LmdaFn lrcEval(const LrcSums& ls, double vl, double dl, double d2l);
+
+/// Adds the correction at the current vlam over the box volume to the energy and
+/// virial of the term, \c eterm and \c vterm, and of van der Waals, with its
+/// main lambda derivatives where the term's lambda version \c dlvers asks for
+/// them (evcorr.f).
+void lrcApply(int vers, int dlvers, const LrcSums& ls, energy_prec& eterm, virial_prec (&vterm)[9]);
+
+/// The long-range van der Waals energy and virial corrections at the current
+/// vdw lambda, each times the volume of the box.
+void evdwLrcVol(energy_prec& elrc, virial_prec& vlrc);
 
 /// \ingroup vdw
 /// \brief Type or class index into vdw parameters for each atom.
@@ -217,13 +239,20 @@ TINKER_EXTERN Vdw vcouple;
 
 /// \ingroup vdw
 /// \brief Exponential factor for soft core buffered 14-7 potential.
-TINKER_EXTERN real scexp;
+TINKER_EXTERN double scexp;
 
 /// \ingroup vdw
 /// \brief Scale factor \f$ \alpha \f$ for soft core buffered 14-7 potential.
-TINKER_EXTERN real scalphav;
+TINKER_EXTERN double scalphav;
 
-TINKER_EXTERN real vlam;
+/// \ingroup vdw
+/// \brief Exponents \f$ m \f$ of lambda and \f$ p \f$ of one minus lambda in
+/// the softening \f$ \alpha \lambda^m (1-\lambda)^p \f$ of the soft core buffered
+/// 14-7 potential.
+TINKER_EXTERN double scexpm, scexpp;
+
+/// van der Waals sub-lambda, in double on the host.
+TINKER_EXTERN double vlam;
 
 /// \ingroup vdw
 /// \brief State weighting values (lambda) of all atoms for van der Waals potentials.

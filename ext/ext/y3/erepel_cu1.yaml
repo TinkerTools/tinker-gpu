@@ -52,7 +52,7 @@ EXTRA_PARAMS: |
   , const real* restrict dmppr
   , const int*  restrict mut
   , Vdw vcouple
-  , RepelSoft rs
+  , SoftCoreLmda rs
 # IMPLICIT_PARAMS:
 
 I_VARIABLES:

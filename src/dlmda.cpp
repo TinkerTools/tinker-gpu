@@ -81,8 +81,6 @@ Lmdamap lmdamapFrom(const char* s)
       return Lmdamap::INV;
    if (std::strncmp(s, "APM", 3) == 0)
       return Lmdamap::APM;
-   if (std::strncmp(s, "QNT", 3) == 0)
-      return Lmdamap::QNT;
    return Lmdamap::QNT;
 }
 
@@ -125,45 +123,77 @@ GrpScale grpScale(double lmda)
    return c;
 }
 
-CtScale ctScale()
+// The derivatives of a sub-lambda while its lambda derivatives are active,
+// zero otherwise.
+static void activeChain(bool active, double dl, double d2l, double& outdl, double& outd2l)
 {
-   const bool driven = pdlmdaActive();
-   double w = 0, b = 0, d2 = 0;
-   GrpScale g0, g1, g;
-   if (use_epdt) {
-      double dw, d2w;
-      dtWeight(plam, epdtexp, w, dw, d2w);
-      b = driven ? dw * dpldlmda : 0;
-      d2 = driven ? d2w * dpldlmda * dpldlmda + dw * d2pldlmda2 : 0;
-      g0 = grpScale(0);
-      g1 = grpScale(1);
-   } else {
-      g = grpScale(plam);
-   }
+   outdl = active ? dl : 0;
+   outd2l = active ? d2l : 0;
+}
 
-   CtScale c;
+static void polarChain(double& dl, double& d2l)
+{
+   activeChain(pdlmdaActive(), dpldlmda, d2pldlmda2, dl, d2l);
+}
+
+// one group pair of a scale table, live when it has a scale or a derivative
+static void setPairScale(GrpPairScale& c, int i, int k, const LmdaFn& sc)
+{
+   c.sc[i][k] = sc.f;
+   c.dl[i][k] = sc.d1;
+   c.d2l[i][k] = sc.d2;
+   if (sc.f != 0 or sc.d1 != 0 or sc.d2 != 0)
+      c.live |= 1u << (3 * i + k);
+}
+
+GrpPairScale grpPairScale(const GrpScale& g, double dl, double d2l)
+{
+   GrpPairScale c;
    c.live = 0;
    for (int i = 0; i < 3; ++i) {
       for (int k = 0; k < 3; ++k) {
-         double sc, dl, d2l;
-         if (use_epdt) {
-            double s0 = g0.s[i] * g0.s[k];
-            double s1 = g1.s[i] * g1.s[k];
-            sc = s0 + w * (s1 - s0);
-            dl = b * (s1 - s0);
-            d2l = d2 * (s1 - s0);
-         } else {
-            double dsc = g.ds[i] * g.s[k] + g.s[i] * g.ds[k];
-            double d2sc = 2 * g.ds[i] * g.ds[k];
-            sc = g.s[i] * g.s[k];
-            dl = driven ? dsc * dpldlmda : 0;
-            d2l = driven ? d2sc * dpldlmda * dpldlmda + dsc * d2pldlmda2 : 0;
-         }
-         c.sc[i][k] = sc;
-         c.dl[i][k] = dl;
-         c.d2l[i][k] = d2l;
-         if (sc != 0 or dl != 0 or d2l != 0)
-            c.live |= 1u << (3 * i + k);
+         double dsc = g.ds[i] * g.s[k] + g.s[i] * g.ds[k];
+         double d2sc = 2 * g.ds[i] * g.ds[k];
+         setPairScale(c, i, k, lmdaChain(g.s[i] * g.s[k], dsc, d2sc, dl, d2l));
+      }
+   }
+   return c;
+}
+
+GrpSelfScale grpSelfScale(const GrpPairScale& ps)
+{
+   GrpSelfScale c;
+   for (int g = 0; g < 3; ++g) {
+      c.sc[g] = ps.sc[g][g];
+      c.dl[g] = ps.dl[g][g];
+      c.d2l[g] = ps.d2l[g][g];
+   }
+   return c;
+}
+
+GrpPairScale elecPairScale()
+{
+   double dl, d2l;
+   activeChain(edlmdaActive(), deldlmda, d2eldlmda2, dl, d2l);
+   return grpPairScale(grpScale(elam), dl, d2l);
+}
+
+GrpPairScale ctScale()
+{
+   double dl, d2l;
+   polarChain(dl, d2l);
+   if (not use_epdt)
+      return grpPairScale(grpScale(plam), dl, d2l);
+
+   const LmdaFn w = dtWeight(plam, epdtexp, dl, d2l);
+   const GrpScale g0 = grpScale(0), g1 = grpScale(1);
+   GrpPairScale c;
+   c.live = 0;
+   for (int i = 0; i < 3; ++i) {
+      for (int k = 0; k < 3; ++k) {
+         double s0 = g0.s[i] * g0.s[k];
+         double s1 = g1.s[i] * g1.s[k];
+         setPairScale(c, i, k, {s0 + w.f * (s1 - s0), w.d1 * (s1 - s0), w.d2 * (s1 - s0)});
       }
    }
    return c;
@@ -200,54 +230,96 @@ const int* elecDeadGroups()
    return anydead ? emGroup() : nullptr;
 }
 
-// E = w*E1 + (1-w)*E0, so dE/dl = dw*(E1-E0) and d2E/dl2 = d2w*(E1-E0), which
-// is what the endpoint mixing used to form from two finished endpoints. Both terms of
-// the second-derivative chain rule are proportional to E1-E0, so the whole of
-// it collapses onto one scalar per endpoint. need0/need1 are not consulted: a
-// dead endpoint already falls out with every weight at zero.
-void dtWeightsToCoef(DtCoef& c, double w, double dw, double d2w, double chain, double d2chain, bool driven)
+LmdaFn lmdaChain(double f, double df, double d2f, double dl, double d2l)
 {
-   c.a0 = 1 - w;
-   c.a1 = w;
-   double b = driven ? dw * chain : 0;
-   double d2 = driven ? d2w * chain * chain + dw * d2chain : 0;
-   c.b0 = -b;
-   c.b1 = b;
-   c.c0 = -d2;
-   c.c1 = d2;
+   LmdaFn c = {f, df * dl, 0};
+   if (use_d2lmda)
+      c.d2 = d2f * dl * dl + df * d2l;
+   return c;
 }
 
-void dtWeight(double x, int nexp, double& w, double& dw, double& d2w)
+void lmdaPwr(double x, double a, bool do2, double& f, double& df, double& d2f)
 {
-   // The linear case is taken separately so that a zero sub-lambda never
-   // reaches a zero power.
-   w = std::pow(x, nexp);
-   dw = 0.0;
-   d2w = 0.0;
-   if (nexp == 1) {
-      dw = 1.0;
-   } else if (nexp >= 2) {
-      dw = (double)nexp * std::pow(x, nexp - 1);
-      d2w = (double)nexp * (double)(nexp - 1) * std::pow(x, nexp - 2);
+   f = std::pow(x, a);
+   df = 0.0;
+   d2f = 0.0;
+   if (a != 0.0)
+      df = a * std::pow(x, a - 1.0);
+   if (do2 and a != 0.0 and a != 1.0)
+      d2f = a * (a - 1.0) * std::pow(x, a - 2.0);
+}
+
+void lmdaPow(double x, double c, double a, double b, bool do2, double& f, double& f1, double& f2)
+{
+   double omx = 1.0 - x;
+   double xa = c * std::pow(x, a);
+   double xa1 = xa * x;
+   double xa2 = xa1 * x;
+   f = xa * std::pow(omx, b);
+   f1 = 0.0;
+   if (a != 0.0)
+      f1 = a * xa * std::pow(omx, b);
+   if (b != 0.0)
+      f1 = f1 - b * xa1 * std::pow(omx, b - 1.0);
+   f2 = 0.0;
+   if (do2) {
+      if (a != 0.0) {
+         f2 = a * (a - 1.0) * xa * std::pow(omx, b);
+         if (b != 0.0)
+            f2 = f2 - 2.0 * a * b * xa1 * std::pow(omx, b - 1.0);
+      }
+      if (b != 0.0 and b != 1.0)
+         f2 = f2 + b * (b - 1.0) * xa2 * std::pow(omx, b - 2.0);
    }
 }
 
-void dtNeed(double w, double dw, double d2w, double chain, double d2chain, bool& need0, bool& need1)
+LmdaFn lmdaPwrChain(double x, double a, double dl, double d2l, bool dodl)
 {
-   double c1 = dw * chain;
-   double c2 = d2w * chain * chain + dw * d2chain;
-   need1 = (w != 0.0) or (c1 != 0.0) or (c2 != 0.0);
-   need0 = (w != 1.0) or (c1 != 0.0) or (c2 != 0.0);
+   double f, df, d2f;
+   lmdaPwr(x, a, dodl and use_d2lmda, f, df, d2f);
+   if (not dodl)
+      return {f, 0, 0};
+   return lmdaChain(f, df, d2f, dl, d2l);
 }
 
-void dtWeightNeed(double sublmda, int dtexp, double chain, double d2chain, //
-   double& w, double& dw, double& d2w, bool& need0, bool& need1)
+SoftCoreLmda softCoreLmda(double v, double n, double alpha, double m, double p, double dl, double d2l, bool dodl)
 {
-   dtWeight(sublmda, dtexp, w, dw, d2w);
-   dtNeed(w, dw, d2w, chain, d2chain, need0, need1);
+   const bool do2 = dodl and use_d2lmda;
+   double sc, sc1, sc2;
+   lmdaPow(v, alpha, m, p, do2, sc, sc1, sc2);
+
+   SoftCoreLmda s = {};
+   s.p0 = std::pow(v, n);
+   s.sc = sc;
+   if (not dodl)
+      return s;
+
+   // c v^k, skipped when c vanishes, so that v = 0 never meets a negative k
+   auto term = [v](double c, double k) { return c == 0 ? 0 : c * std::pow(v, k); };
+   const double dl2 = dl * dl;
+   s.a1 = term(n * dl, n - 1);
+   s.b1 = term(sc1 * dl, n - 1);
+   if (do2) {
+      s.a2 = term(n * (n - 1) * dl2, n - 2) + term(n * d2l, n - 1);
+      s.b2 = term((2 * n * sc1 + sc2) * dl2, n - 2) + term(sc1 * d2l, n - 1);
+      s.c2 = term(sc1 * sc1 * dl2, n - 2);
+   }
+   return s;
 }
 
-void LmdaBuffer::manage(RcOp op, int flag, bool driven, EnergyBuffer* dl1, EnergyBuffer* dl2,
+LmdaFn dtWeight(double x, int nexp, double dl, double d2l)
+{
+   return lmdaPwrChain(x, nexp, dl, d2l, true);
+}
+
+void dtNeed(const LmdaFn& w, bool& need0, bool& need1)
+{
+   bool slope = (w.d1 != 0.0) or (w.d2 != 0.0);
+   need1 = (w.f != 0.0) or slope;
+   need0 = (w.f != 1.0) or slope;
+}
+
+void LmdaBuffer::manage(RcOp op, int flag, bool driven, bool (*active)(), EnergyBuffer* dl1, EnergyBuffer* dl2,
    energy_prec* term1, energy_prec* term2)
 {
    const bool rc_a = flag & calc::analyz;
@@ -263,9 +335,9 @@ void LmdaBuffer::manage(RcOp op, int flag, bool driven, EnergyBuffer* dl1, Energ
       mDl2 = nullptr;
       mTerm1 = nullptr;
       mTerm2 = nullptr;
+      mActive = nullptr;
       mFlag = 0;
       mMask = 0;
-      mDriven = false;
    }
 
    if (op & RcOp::ALLOC) {
@@ -273,8 +345,8 @@ void LmdaBuffer::manage(RcOp op, int flag, bool driven, EnergyBuffer* dl1, Energ
       mDl2 = dl2;
       mTerm1 = term1;
       mTerm2 = term2;
+      mActive = active;
       mFlag = flag;
-      mDriven = driven;
 
       const int mask = lmdaDerivMask(flag, driven);
       mMask = mask;
@@ -295,11 +367,18 @@ void LmdaBuffer::manage(RcOp op, int flag, bool driven, EnergyBuffer* dl1, Energ
    }
 }
 
-void LmdaBuffer::zero(int vers) const
+// The channels a version fills under analysis: none while the term's map is
+// flat, since its kernels then run without lambda derivatives.
+int LmdaBuffer::channels(int vers) const
 {
    if (not(mFlag & calc::analyz) or not mDl1)
-      return;
-   const int mask = lmdaDerivVers(vers, mDriven) & mMask;
+      return 0;
+   return lmdaDerivVers(vers, mActive()) & mMask;
+}
+
+void LmdaBuffer::zero(int vers) const
+{
+   const int mask = channels(vers);
    if (mask & calc::energy_dlmda1)
       darray::zero(g::q0, bufferSize(), *mDl1);
    if (mask & calc::energy_dlmda2)
@@ -308,9 +387,7 @@ void LmdaBuffer::zero(int vers) const
 
 void LmdaBuffer::flush(int vers) const
 {
-   if (not(mFlag & calc::analyz) or not mDl1)
-      return;
-   const int mask = lmdaDerivVers(vers, mDriven) & mMask;
+   const int mask = channels(vers);
    if (mask & calc::energy_dlmda1) {
       energy_prec e = energyReduce(*mDl1);
       *mTerm1 += e;
@@ -329,7 +406,7 @@ void polarLmdaData(RcOp op)
 {
    if (not use(Potent::POLAR) and not use(Potent::CHGTRN))
       return;
-   ep_dl.manage(op, rc_flag, use_pdlmda, &depdl_buf, &d2epdl2_buf, &depdl, &d2epdl2);
+   ep_dl.manage(op, rc_flag, use_pdlmda, pdlmdaActive, &depdl_buf, &d2epdl2_buf, &depdl, &d2epdl2);
 }
 
 void polarLmdaZero(int vers)
@@ -348,7 +425,7 @@ void vdwLmdaData(RcOp op)
 {
    if (not use(Potent::VDW) and not use(Potent::REPULS) and not use(Potent::DISP))
       return;
-   ev_dl.manage(op, rc_flag, use_vdlmda, &devdl_buf, &d2evdl2_buf, &devdl, &d2evdl2);
+   ev_dl.manage(op, rc_flag, use_vdlmda, vdlmdaActive, &devdl_buf, &d2evdl2_buf, &devdl, &d2evdl2);
 }
 
 void vdwLmdaZero(int vers)
@@ -361,23 +438,24 @@ void vdwLmdaFlush(int vers)
    ev_dl.flush(vers);
 }
 
-int dtPassList(DtPass out[2])
+// E = w*E1 + (1-w)*E0, so dE/dL = w'*(E1-E0) and d2E/dL2 = w''*(E1-E0), with
+// w' and w'' carried to the main lambda. Both terms of the second derivative
+// chain rule are proportional to E1-E0, so the whole of it collapses onto one
+// scalar per endpoint (epolar4.f:epolar4dt).
+int dtPasses(DtPass out[2])
 {
+   double dl, d2l;
+   polarChain(dl, d2l);
+   const LmdaFn w = dtWeight(plam, epdtexp, dl, d2l);
+   bool need0, need1;
+   dtNeed(w, need0, need1);
+
    // Endpoint 0 zeroes both ligands and endpoint 1 keeps the charging one, with
-   // the other ligand of a staged relative leg annihilated (dlambda.f:grpscale);
-   // there is nothing the two share.
-   out[0] = {RdtMask::ENV, true, false};
-   out[1] = {coupledMask(), false, true};
+   // the other ligand of a staged relative leg annihilated (dlambda.f:grpscale).
+   out[0] = {RdtMask::ENV, real(1 - w.f), real(-w.d1), real(-w.d2), need0};
+   out[1] = {coupledMask(), real(w.f), real(w.d1), real(w.d2), need1};
    return 2;
 }
-
-void dtPassWeights(const DtCoef& c, const DtPass& p, real& wa, real& wb, real& wc)
-{
-   wa = (p.in0 ? c.a0 : 0) + (p.in1 ? c.a1 : 0);
-   wb = (p.in0 ? c.b0 : 0) + (p.in1 ? c.b1 : 0);
-   wc = (p.in0 ? c.c0 : 0) + (p.in1 ? c.c1 : 0);
-}
-
 
 void dlmda_mech()
 {
@@ -397,7 +475,9 @@ void dlmda_mech()
    use_epast = use_prst and use_pdlmda;
 
    // Every multipole run takes the single topology path; a relative one scales
-   // each ligand group on its own (grpScale).
+   // each ligand group on its own (grpScale). Unlike use_edlmda, which the
+   // numerical lambda derivative switches off around its energies
+   // (xtestlmda.cpp:ScopedDlmdaOff), this stays set for the whole run.
    use_emast = use_edlmda;
 
    epdtexp = dlmda::epdtexp;
@@ -450,43 +530,19 @@ void dlmda_mech()
    dedlstd = 0;
    lmdadeltag = 0;
 
-   elmdaexp = dlmda::elmdaexp;
-   plmdaexp = dlmda::plmdaexp;
-   vlmdaexp = dlmda::vlmdaexp;
-   elmdainvn = dlmda::elmdainvn;
-   plmdainvn = dlmda::plmdainvn;
-   vlmdainvn = dlmda::vlmdainvn;
-   elmdainveps = dlmda::elmdainveps;
-   plmdainveps = dlmda::plmdainveps;
-   vlmdainveps = dlmda::vlmdainveps;
-   elmdaapmn = dlmda::elmdaapmn;
-   plmdaapmn = dlmda::plmdaapmn;
-   vlmdaapmn = dlmda::vlmdaapmn;
-   elmdaapmrho = dlmda::elmdaapmrho;
-   plmdaapmrho = dlmda::plmdaapmrho;
-   vlmdaapmrho = dlmda::vlmdaapmrho;
-
-   elmdamap = lmdamapFrom(dlmda::elmdamap);
-   plmdamap = lmdamapFrom(dlmda::plmdamap);
-   vlmdamap = lmdamapFrom(dlmda::vlmdamap);
-
-   use_elmdamap = (dlmda::use_elmdamap != 0);
-   use_plmdamap = (dlmda::use_plmdamap != 0);
-   use_vlmdamap = (dlmda::use_vlmdamap != 0);
+   elmdamap = {lmdamapFrom(dlmda::elmdamap), dlmda::use_elmdamap != 0, dlmda::elmdaexp, dlmda::elmdainvn,
+      dlmda::elmdainveps, dlmda::elmdaapmn, dlmda::elmdaapmrho, dlmda::qntelmda0, dlmda::qntelmda1};
+   plmdamap = {lmdamapFrom(dlmda::plmdamap), dlmda::use_plmdamap != 0, dlmda::plmdaexp, dlmda::plmdainvn,
+      dlmda::plmdainveps, dlmda::plmdaapmn, dlmda::plmdaapmrho, dlmda::qntplmda0, dlmda::qntplmda1};
+   vlmdamap = {lmdamapFrom(dlmda::vlmdamap), dlmda::use_vlmdamap != 0, dlmda::vlmdaexp, dlmda::vlmdainvn,
+      dlmda::vlmdainveps, dlmda::vlmdaapmn, dlmda::vlmdaapmrho, dlmda::qntvlmda0, dlmda::qntvlmda1};
 
    deldlmda = dlmda::deldlmda;
    dpldlmda = dlmda::dpldlmda;
    dvldlmda = dlmda::dvldlmda;
-   d2eldlmda2 = 0.0;
-   d2pldlmda2 = 0.0;
-   d2vldlmda2 = 0.0;
-
-   qntelmda0 = dlmda::qntelmda0;
-   qntelmda1 = dlmda::qntelmda1;
-   qntplmda0 = dlmda::qntplmda0;
-   qntplmda1 = dlmda::qntplmda1;
-   qntvlmda0 = dlmda::qntvlmda0;
-   qntvlmda1 = dlmda::qntvlmda1;
+   d2eldlmda2 = dlmda::d2eldlmda2;
+   d2pldlmda2 = dlmda::d2pldlmda2;
+   d2vldlmda2 = dlmda::d2vldlmda2;
 
    relstage = relStageFrom(dlmda::relstage);
    for (int i = 0; i < 3; ++i) {
@@ -656,6 +712,27 @@ void lmdaLangStep(double gauss)
    lmdaThetaMap(lmdatheta, lambda, dldth);
 }
 
+// whether an adaptive bias, OST, metadynamics or ABF, moves the main lambda
+static bool lmdaBiased()
+{
+   return use_ost or use_meta or use_abf;
+}
+
+// whether the bias averages dU/dlambda at a held lambda, OST or ABF
+static bool lmdaHeldAvg()
+{
+   return use_ost or use_abf;
+}
+
+// the lambda derivatives of the bias saved this step by eostBias or eabfBias
+static void lmdaBiasDerivs()
+{
+   if (use_ost)
+      ostdgdl = bdgdl + bdgdfl * d2edl2;
+   if (lmdaHeldAvg())
+      lmdaddgdl = lmdadfdl;
+}
+
 // elmdaDyn -- advances the adaptive lambda bias by one dynamics step for
 // orthogonal space tempering, metadynamics or adaptive biasing force; it builds
 // the effective lambda derivative, saves the interval samples, deposits the
@@ -670,22 +747,19 @@ void elmdaDyn(int istep)
 
    // build the effective lambda derivative from the unbiased dedl left behind
    // by the energy call and the bias saved this step by eostBias or eabfBias
-   if (use_ost) {
-      ostdgdl = bdgdl + bdgdfl * d2edl2;
-      lmdaddgdl = lmdadfdl;
+   lmdaBiasDerivs();
+   if (use_ost)
       deffdl = dedl + ostdgdl - lmdaddgdl;
-   } else if (use_meta) {
+   else if (use_meta)
       deffdl = dedl + bdgdl;
-   } else if (use_abf) {
-      lmdaddgdl = lmdadfdl;
+   else if (use_abf)
       deffdl = dedl - lmdaddgdl;
-   }
 
    // save all values in the interval, but average only after the propagation
    // and equilibration phases; only OST and ABF keep dU/dlambda, which they
    // average at a fixed lambda
    lmdallist[isamp] = lambda;
-   if (use_ost or use_abf)
+   if (lmdaHeldAvg())
       lmdaflist[isamp] = dedl;
 
    // deposit the interval average every lmdaintv steps; an OST or ABF interval
@@ -693,7 +767,7 @@ void elmdaDyn(int istep)
    if (im == 0) {
       int nskip = lmdanpa + lmdanpb;
       avgstd(lmdallist, nskip, lmdanpc, lmdaavg, lmdastd);
-      if (use_ost or use_abf) {
+      if (lmdaHeldAvg()) {
          avgstd(lmdaflist, nskip, lmdanpc, dedlavg, dedlstd);
          if (depcriteria(dedlavg, dedlstd)) {
             if (use_ost)
@@ -712,21 +786,17 @@ void elmdaDyn(int istep)
 
    // propagate the lambda particle; OST and ABF hold lambda fixed after the
    // propagation phase
-   if (use_ost or use_abf) {
-      if (isamp < lmdanpa)
-         lmdaLangevin();
-   } else {
+   if (not lmdaHeldAvg() or isamp < lmdanpa)
       lmdaLangevin();
-   }
 }
 
-// Free energy at the current lambda by piecewise-linear integration of the mean
-// force of the lambda bins, and its lambda derivative (dlambda.f:efreelmda).
-void efreeLmda(double& eflmda, double& dfdl)
+// Free energy at lambda lmda by piecewise-linear integration of the mean force
+// of the lambda bins, and its lambda derivative (dlambda.f:efreelmda).
+void efreeLmda(double lmda, double& eflmda, double& dfdl)
 {
    eflmda = 0;
    dfdl = 0;
-   if (lambda <= 0.0) {
+   if (lmda <= 0.0) {
       dfdl = lmdafmean[1];
       return;
    }
@@ -737,8 +807,8 @@ void efreeLmda(double& eflmda, double& dfdl)
       double fl0 = lmdafmean[il0];
       double fl1 = lmdafmean[il1];
       double slope = (fl1 - fl0) / wlmda;
-      if (lambda <= lmda1) {
-         double xx = lambda - lmda0;
+      if (lmda < lmda1) {
+         double xx = lmda - lmda0;
          eflmda += fl0 * xx + 0.5 * slope * xx * xx;
          dfdl = fl0 + slope * xx;
          return;
@@ -748,14 +818,34 @@ void efreeLmda(double& eflmda, double& dfdl)
    dfdl = lmdafmean[nlmda];
 }
 
-// Total free energy change by trapezoid integration of the mean force of the
-// lambda bins (dlambda.f:efreetot).
+// Total free energy change, which efreeLmda integrates over the whole lambda
+// range by the trapezoid rule (dlambda.f:efreetot).
 double efreeTot()
 {
-   double tot = 0;
-   for (int il = 1; il <= nlmda - 1; ++il)
-      tot += 0.5 * (lmdafmean[il] + lmdafmean[il + 1]) * wlmda;
+   double tot, dfdl;
+   efreeLmda(1.0, tot, dfdl);
    return tot;
+}
+
+// the window position and count as Fortran has laid them out
+static void winScalarsFromFortran()
+{
+   lmdawin = dlmda::lmdawin;
+   lmdawineq = dlmda::lmdawineq;
+   lmdawinlen = dlmda::lmdawinlen;
+   nlmdawin = dlmda::nlmdawin;
+}
+
+// whether the current window lies on the window schedule
+static bool inWinSchedule()
+{
+   return not lmdawinend.empty() and lmdawin >= 1 and lmdawin <= nlmdawin;
+}
+
+// the last step of the window before window iwin, zero for the first
+static int winStart(int iwin)
+{
+   return iwin > 1 ? lmdawinend[iwin - 2] : 0;
 }
 
 void lmdaWinData(RcOp op)
@@ -767,10 +857,7 @@ void lmdaWinData(RcOp op)
    }
 
    if (op & RcOp::INIT) {
-      lmdawin = dlmda::lmdawin;
-      lmdawineq = dlmda::lmdawineq;
-      lmdawinlen = dlmda::lmdawinlen;
-      nlmdawin = dlmda::nlmdawin;
+      winScalarsFromFortran();
       lmdawinratio = dlmda::lmdawinratio;
 
       // The boundaries wait for the length of the run; lmdaWinFromFortran
@@ -790,25 +877,15 @@ void lmdaWinData(RcOp op)
 
 void lmdaWinFromFortran()
 {
-   nlmdawin = dlmda::nlmdawin;
-   lmdawin = dlmda::lmdawin;
-   lmdawineq = dlmda::lmdawineq;
-   lmdawinlen = dlmda::lmdawinlen;
+   winScalarsFromFortran();
    lmdawinend.assign(dlmda::lmdawinend, dlmda::lmdawinend + nlmdawin);
    lambda = mutant::lambda;
-}
-
-void setLmdaWin()
-{
-   lmdaWinSize(lmdawin, lmdawinlen, lmdawineq);
 }
 
 void lmdaWinSize(int iwin, int& nlen, int& neq)
 {
    // Measure the window against the preceding boundary.
-   nlen = lmdawinend[iwin - 1];
-   if (iwin > 1)
-      nlen = lmdawinend[iwin - 1] - lmdawinend[iwin - 2];
+   nlen = lmdawinend[iwin - 1] - winStart(iwin);
    neq = (int)((double)nlen * lmdawinratio);
 }
 
@@ -816,14 +893,11 @@ void lmdaWinPhase(int istep, int& iprod)
 {
    // No step is in production outside of the window schedule.
    iprod = 0;
-   if (lmdawinend.empty())
-      return;
-   if (lmdawin < 1 or lmdawin > nlmdawin)
+   if (not inWinSchedule())
       return;
 
    // Count the steps taken since the window finished equilibrating.
-   int istart = (lmdawin > 1) ? lmdawinend[lmdawin - 2] : 0;
-   iprod = std::max(0, istep - istart - lmdawineq);
+   iprod = std::max(0, istep - winStart(lmdawin) - lmdawineq);
 }
 
 // The bias energy at the current lambda of the methods whose bias follows
@@ -833,7 +907,7 @@ static double elmdaBias()
 {
    double vbias, slope;
    if (use_abf) {
-      efreeLmda(vbias, slope);
+      efreeLmda(lambda, vbias, slope);
       return -vbias;
    }
    eMetaBias(lambda, vbias, slope);
@@ -845,7 +919,7 @@ void lmdaMonte(int istep)
    // OST and ABF move lambda only in the propagation phase of the sample
    // interval, while metadynamics moves it at any step
    const int isamp = (istep - 1) % lmdaintv;
-   if ((use_ost or use_abf) and isamp >= lmdanpa)
+   if (lmdaHeldAvg() and isamp >= lmdanpa)
       return;
 
    // decide whether to attempt a lambda change at this step
@@ -878,9 +952,7 @@ void lmdaMonte(int istep)
    if (use_ost) {
       if (not gx_lmdamc)
          darray::allocate(n, &gx_lmdamc, &gy_lmdamc, &gz_lmdamc);
-      darray::copy(g::q0, n, gx_lmdamc, gx);
-      darray::copy(g::q0, n, gy_lmdamc, gy);
-      darray::copy(g::q0, n, gz_lmdamc, gz);
+      copyGradient(gx_lmdamc, gy_lmdamc, gz_lmdamc, gx, gy, gz);
    }
 
    // Get the old energy at the native lambda, using the energy of the step
@@ -915,10 +987,7 @@ void lmdaMonte(int istep)
    if (accept) {
       // accept the step, and keep the lambda particle at the new lambda
       ++nlmdamcacc;
-      if (use_ost)
-         ostdgdl = bdgdl + bdgdfl * d2edl2;
-      if (use_ost or use_abf)
-         lmdaddgdl = lmdadfdl;
+      lmdaBiasDerivs();
       lmdaThetaInv(lambda, lmdatheta);
       lmdavtheta = 0;
       trial.accept();
@@ -938,11 +1007,8 @@ void lmdaMonte(int istep)
    }
 
    // The integrator keeps the forces of the step for its next half kick.
-   if (use_ost) {
-      darray::copy(g::q0, n, gx, gx_lmdamc);
-      darray::copy(g::q0, n, gy, gy_lmdamc);
-      darray::copy(g::q0, n, gz, gz_lmdamc);
-   }
+   if (use_ost)
+      copyGradient(gx, gy, gz, gx_lmdamc, gy_lmdamc, gz_lmdamc);
 }
 
 void lmdaMonteCheck()
@@ -956,7 +1022,7 @@ void lmdaWinDyn(int istep)
 {
    // advance the adaptive lambda bias and the lambda particle, now that the
    // step and any Monte Carlo box change are complete
-   if (use_ost or use_meta or use_abf)
+   if (lmdaBiased())
       elmdaDyn(istep);
 
    // collect dU/dlambda for thermodynamic integration
@@ -968,7 +1034,7 @@ void lmdaWinDyn(int istep)
       efepDyn(istep);
 
    // try a Monte Carlo move of an adaptively biased lambda
-   if (use_lmdamc and (use_ost or use_meta or use_abf))
+   if (use_lmdamc and lmdaBiased())
       lmdaMonte(istep);
 }
 
@@ -982,16 +1048,14 @@ void nextLmdaWin()
    ++lmdawin;
    if (lmdawin <= nlmdawin) {
       lambda = lmdawinlist[lmdawin - 1];
-      setLmdaWin();
+      lmdaWinSize(lmdawin, lmdawinlen, lmdawineq);
    }
 }
 
 void lmdaWinStep(int istep)
 {
    // Nothing is left to advance outside of the window schedule.
-   if (lmdawinend.empty())
-      return;
-   if (lmdawin < 1 or lmdawin > nlmdawin)
+   if (not inWinSchedule())
       return;
 
    // Move on to the next lambda window at the window boundary.
@@ -999,46 +1063,20 @@ void lmdaWinStep(int istep)
       nextLmdaWin();
 }
 
-}
-
-namespace tinker {
-// Power-law sub-lambda map, lmda = x^exponent.
-static void sublmdaExp(double x, int exponent, double& lmda, double& dlmda, double& d2lmda)
-{
-   lmda = std::pow(x, exponent);
-   if (exponent == 1) {
-      dlmda = 1.0;
-      d2lmda = 0.0;
-   } else if (exponent == 2) {
-      dlmda = 2.0 * x;
-      d2lmda = 2.0;
-   } else {
-      double expnt = (double)exponent;
-      dlmda = expnt * std::pow(x, exponent - 1);
-      d2lmda = expnt * (expnt - 1.0) * std::pow(x, exponent - 2);
-   }
-}
-
 // Shifted inverse-power sub-lambda map onto [0,1] (dlambda.f:sublmdainvpower).
-static void sublmdaInvPower(double x, int nn, double eps, double& lmda, double& dlmda, double& d2lmda)
+static LmdaFn sublmdaInvPower(double x, int nn, double eps)
 {
-   double xval = x;
-   if (nn <= 1) {
-      lmda = xval;
-      dlmda = 1.0;
-      d2lmda = 0.0;
-      return;
-   }
+   if (nn <= 1)
+      return {x, 1.0, 0.0};
    double shift = eps;
    if (shift <= 0.0)
       shift = 0.1;
    double power = 1.0 / (double)nn;
    double root0 = std::pow(shift, power);
    double denom = std::pow(1.0 + shift, power) - root0;
-   double base = xval + shift;
-   lmda = (std::pow(base, power) - root0) / denom;
-   dlmda = power * std::pow(base, power - 1.0) / denom;
-   d2lmda = power * (power - 1.0) * std::pow(base, power - 2.0) / denom;
+   double base = x + shift;
+   return {(std::pow(base, power) - root0) / denom, power * std::pow(base, power - 1.0) / denom,
+      power * (power - 1.0) * std::pow(base, power - 2.0) / denom};
 }
 
 // Normalized asymmetric power sub-lambda map onto [0,1] (dlambda.f:sublmdaapm).
@@ -1046,28 +1084,32 @@ static void sublmdaInvPower(double x, int nn, double eps, double& lmda, double& 
 // one at the coupled end, so "rho" sets how much faster the sub-lambda leaves
 // the decoupled end than it arrives at the coupled end, and "n" sets how quickly
 // that head start decays.
-static void sublmdaApm(double x, int nn, double rho, double& lmda, double& dlmda, double& d2lmda)
+static LmdaFn sublmdaApm(double x, int nn, double rho)
 {
-   double xval = x;
    // A flat slope ratio or a degenerate power gives the identity map, the upper
    // bound holding the normalization off of its pole.
-   if (nn < 2 or rho <= 1.0 or rho >= (double)nn) {
-      lmda = xval;
-      dlmda = 1.0;
-      d2lmda = 0.0;
-      return;
-   }
+   if (nn < 2 or rho <= 1.0 or rho >= (double)nn)
+      return {x, 1.0, 0.0};
 
    double rn = (double)nn;
    double left = rn * (rho - 1.0) / (rn - rho);
    double right = left / rn;
    double denom = 1.0 + right;
-   double omx = 1.0 - xval;
+   double omx = 1.0 - x;
    double head = left * (1.0 - std::pow(omx, nn + 1)) / (rn + 1.0);
-   double tail = right * std::pow(xval, nn + 1) / (rn + 1.0);
-   lmda = (xval + head + tail) / denom;
-   dlmda = (1.0 + left * std::pow(omx, nn) + right * std::pow(xval, nn)) / denom;
-   d2lmda = rn * (right * std::pow(xval, nn - 1) - left * std::pow(omx, nn - 1)) / denom;
+   double tail = right * std::pow(x, nn + 1) / (rn + 1.0);
+   LmdaFn v;
+   v.f = (x + head + tail) / denom;
+   v.d1 = (1.0 + left * std::pow(omx, nn) + right * std::pow(x, nn)) / denom;
+   v.d2 = rn * (right * std::pow(x, nn - 1) - left * std::pow(omx, nn - 1)) / denom;
+   // The end states map exactly onto themselves, since rounding can put the
+   // sub-lambda an ulp past one, where a soft core power of one minus the
+   // sub-lambda is undefined.
+   if (x == 0.0)
+      v.f = 0.0;
+   if (x == 1.0)
+      v.f = 1.0;
+   return v;
 }
 
 // Quintic switching polynomial
@@ -1093,24 +1135,48 @@ void quinticTaper(double x, double cut, double off, double& taper, double& dtape
    d2taper = -60.0 * u * v * (1.0 - 2.0 * u) * rinv * rinv;
 }
 
-// Maps one sub-lambda from main lambda to its mapping type.
-static void mapOne(double lmda, Lmdamap map, double qnt0, double qnt1, int expExp, int invN, double invEps, int apmN,
-   double apmRho, double& value, double& dvalue, double& d2value)
+// Maps the main lambda onto one sub-lambda with its first two derivatives
+// (dlambda.f:sublmdamap).
+static LmdaFn mapOne(double lmda, const LmdaMap& m)
 {
-   if (map == Lmdamap::EXP) {
-      sublmdaExp(lmda, expExp, value, dvalue, d2value);
-   } else if (map == Lmdamap::INV) {
-      sublmdaInvPower(lmda, invN, invEps, value, dvalue, d2value);
-   } else if (map == Lmdamap::APM) {
-      sublmdaApm(lmda, apmN, apmRho, value, dvalue, d2value);
+   if (m.type == Lmdamap::EXP) {
+      // power-law map: sublambda = lambda^exponent.
+      LmdaFn v;
+      lmdaPwr(lmda, m.exp, true, v.f, v.d1, v.d2);
+      return v;
+   } else if (m.type == Lmdamap::INV) {
+      return sublmdaInvPower(lmda, m.invn, m.inveps);
+   } else if (m.type == Lmdamap::APM) {
+      return sublmdaApm(lmda, m.apmn, m.apmrho);
    } else { // Lmdamap::QNT
       // quantized map: sublambda = 1 - taper.
       double taper, dtaper, d2taper;
-      quinticTaper(lmda, qnt0, qnt1, taper, dtaper, d2taper);
-      value = 1.0 - taper;
-      dvalue = -dtaper;
-      d2value = -d2taper;
+      quinticTaper(lmda, m.qnt0, m.qnt1, taper, dtaper, d2taper);
+      return {1.0 - taper, -dtaper, -d2taper};
    }
+}
+
+// a sub-lambda and its first two derivatives with respect to the main lambda
+static void setSub(const LmdaFn& v, double& lam, double& dl, double& d2l)
+{
+   lam = v.f;
+   dl = v.d1;
+   d2l = v.d2;
+}
+
+// a map on the local coordinate of a leg, carried to the main lambda by ds
+static LmdaFn legChain(const LmdaFn& v, double ds)
+{
+   return {v.f, v.d1 * ds, v.d2 * (ds * ds)};
+}
+
+// A staged leg walks its map across the whole of its own coordinate, whatever
+// window a QNT map names (dlambda.f:maprelstage).
+static LmdaFn mapLeg(double s, LmdaMap m)
+{
+   m.qnt0 = 0.0;
+   m.qnt1 = 1.0;
+   return mapOne(s, m);
 }
 
 // Finds the declared leg of the staged relative schedule that holds the main
@@ -1164,59 +1230,56 @@ static void mapRelStage(double lmda)
    double s, ds;
    relStgLoc(lmda, s, ds);
 
-   double eval, vval;
-
+   LmdaFn e, v;
    if (relstage == RelStage::VDWM) {
       // The middle leg holds both ligands uncharged, so electrostatics sits at
       // the reference state and leaves the chain rule while van der Waals
       // morphs across its map.
-      eval = 0.0;
-      deldlmda = 0.0;
-      d2eldlmda2 = 0.0;
-      mapOne(s, vlmdamap, 0.0, 1.0, vlmdaexp, vlmdainvn, vlmdainveps, //
-         vlmdaapmn, vlmdaapmrho, vval, dvldlmda, d2vldlmda2);
-      vlam = vval;
+      e = {0.0, 0.0, 0.0};
+      v = mapLeg(s, vlmdamap);
    } else if (relstage == RelStage::LIG1) {
       // The ligand 1 leg charges ligand 1 with ligand 2 annihilated and van
       // der Waals already morphed onto ligand 1.
-      mapOne(s, elmdamap, 0.0, 1.0, elmdaexp, elmdainvn, elmdainveps, //
-         elmdaapmn, elmdaapmrho, eval, deldlmda, d2eldlmda2);
-      vlam = 1.0;
-      dvldlmda = 0.0;
-      d2vldlmda2 = 0.0;
+      e = mapLeg(s, elmdamap);
+      v = {1.0, 0.0, 0.0};
    } else {
       // The ligand 2 leg discharges ligand 2 as the main lambda rises, so its
       // weight is the complement of the map, with van der Waals still on it.
-      mapOne(s, elmdamap, 0.0, 1.0, elmdaexp, elmdainvn, elmdainveps, //
-         elmdaapmn, elmdaapmrho, eval, deldlmda, d2eldlmda2);
-      eval = 1.0 - eval;
-      deldlmda = -deldlmda;
-      d2eldlmda2 = -d2eldlmda2;
-      vlam = 0.0;
-      dvldlmda = 0.0;
-      d2vldlmda2 = 0.0;
+      const LmdaFn m = mapLeg(s, elmdamap);
+      e = {1.0 - m.f, -m.d1, -m.d2};
+      v = {0.0, 0.0, 0.0};
    }
 
    // Numerical guard on the map complement.
-   elam = std::min(1.0, std::max(0.0, eval));
+   e.f = std::min(1.0, std::max(0.0, e.f));
 
    // Carry the chain rule from the local coordinate of the leg back to the
-   // main lambda.
-   deldlmda *= ds;
-   d2eldlmda2 *= ds * ds;
-   dvldlmda *= ds;
-   d2vldlmda2 *= ds * ds;
-
-   // Polarization stages with the multipoles, same state same weight.
-   plam = elam;
-   dpldlmda = deldlmda;
-   d2pldlmda2 = d2eldlmda2;
+   // main lambda. Polarization stages with the multipoles, same state same
+   // weight.
+   e = legChain(e, ds);
+   setSub(e, elam, deldlmda, d2eldlmda2);
+   setSub(e, plam, dpldlmda, d2pldlmda2);
+   setSub(legChain(v, ds), vlam, dvldlmda, d2vldlmda2);
 }
 
 bool lmdaSameValue(double a, double b)
 {
    constexpr double eps = 1.0e-6;
    return std::fabs(a - b) <= eps;
+}
+
+bool sameLmdaMap(const LmdaMap& a, const LmdaMap& b)
+{
+   if (a.type != b.type)
+      return false;
+   if (a.type == Lmdamap::EXP)
+      return a.exp == b.exp;
+   else if (a.type == Lmdamap::INV)
+      return a.invn == b.invn and lmdaSameValue(a.inveps, b.inveps);
+   else if (a.type == Lmdamap::APM)
+      return a.apmn == b.apmn and lmdaSameValue(a.apmrho, b.apmrho);
+   else
+      return lmdaSameValue(a.qnt0, b.qnt0) and lmdaSameValue(a.qnt1, b.qnt1);
 }
 
 bool polTracksEle()
@@ -1227,24 +1290,12 @@ bool polTracksEle()
       return true;
    // One sub-lambda driven and the other frozen: they part company as soon as
    // the main lambda moves off the value they happen to share now.
-   if (use_elmdamap != use_plmdamap)
+   if (elmdamap.on != plmdamap.on)
       return false;
    // Neither is driven, so today's values are the only values.
-   if (not(use_mainlmda and use_elmdamap))
+   if (not(use_mainlmda and elmdamap.on))
       return lmdaSameValue(elam, plam);
-
-   if (plmdamap != elmdamap)
-      return false;
-
-   if (elmdamap == Lmdamap::EXP) {
-      return plmdaexp == elmdaexp;
-   } else if (elmdamap == Lmdamap::INV) {
-      return plmdainvn == elmdainvn and lmdaSameValue(plmdainveps, elmdainveps);
-   } else if (elmdamap == Lmdamap::APM) {
-      return plmdaapmn == elmdaapmn and lmdaSameValue(plmdaapmrho, elmdaapmrho);
-   } else {
-      return lmdaSameValue(qntplmda0, qntelmda0) and lmdaSameValue(qntplmda1, qntelmda1);
-   }
+   return sameLmdaMap(elmdamap, plmdamap);
 }
 
 bool usePoleorig()
@@ -1263,25 +1314,12 @@ void mapSubLambda()
    }
 
    // Map the main lambda onto each sub-lambda that follows it.
-   if (use_plmdamap) {
-      double pval;
-      mapOne(lambda, plmdamap, qntplmda0, qntplmda1, plmdaexp, plmdainvn, plmdainveps, //
-         plmdaapmn, plmdaapmrho, pval, dpldlmda, d2pldlmda2);
-      plam = pval;
-   }
-   if (use_elmdamap) {
-      double eval;
-      mapOne(lambda, elmdamap, qntelmda0, qntelmda1, elmdaexp, elmdainvn, elmdainveps, //
-         elmdaapmn, elmdaapmrho, eval, deldlmda, d2eldlmda2);
-      elam = eval;
-   }
-   if (use_vlmdamap) {
-      double vval;
-      mapOne(lambda, vlmdamap, qntvlmda0, qntvlmda1, vlmdaexp, vlmdainvn, vlmdainveps, //
-         vlmdaapmn, vlmdaapmrho, vval, dvldlmda, d2vldlmda2);
-      vlam = vval;
-   }
-
+   if (plmdamap.on)
+      setSub(mapOne(lambda, plmdamap), plam, dpldlmda, d2pldlmda2);
+   if (elmdamap.on)
+      setSub(mapOne(lambda, elmdamap), elam, deldlmda, d2eldlmda2);
+   if (vlmdamap.on)
+      setSub(mapOne(lambda, vlmdamap), vlam, dvldlmda, d2vldlmda2);
 }
 
 }

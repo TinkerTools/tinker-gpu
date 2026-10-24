@@ -51,6 +51,12 @@ void epolarData(RcOp);
 void epolar(int vers);
 void epolar_dt(int vers);
 void epolarDtPasses(int vers);
+/// Single topology polarization at the polarization lambda (epolar4.f:
+/// epolar4s): the parameters scaled to it, charge flux, the solve and pair
+/// terms of \c kernel, the external field, torque, the flux and exchange
+/// polarization gradients, the torque virial, and the explicit lambda
+/// derivative. The caller zeroes and flushes the term's buffers.
+void epolarSingleTopology(int vers, void (*kernel)(int vers, bool use_cfgrad));
 void epolarSetActiveMask();
 void epolarAstDeriv();
 void polarState(RdtMask mask, const int* group, real factor = 1);

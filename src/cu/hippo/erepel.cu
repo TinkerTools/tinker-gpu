@@ -18,7 +18,7 @@ static void erepel_cu2()
    const auto& st = *mspatial_v2_unit;
    real cut = switchCut(Switch::REPULS);
    real off = switchOff(Switch::REPULS);
-   const RepelSoft rs = repelSoft(Ver::e_dlmda1);
+   const SoftCoreLmda rs = repelSoft(Ver::e_dlmda1);
 
    int ngrid = gpuGridSize(BLOCK_DIM);
    erepel_cu1<Ver><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nrep, er, devdl_buf, d2evdl2_buf, vir_er,

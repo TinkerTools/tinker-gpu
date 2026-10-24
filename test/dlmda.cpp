@@ -48,22 +48,20 @@ TEST_CASE("DLMDA-one-main-lambda", "[ff][dlmda]")
    // Without a sampling method the main lambda is the one from the key file.
    bool oldUseOst = use_ost, oldUseMeta = use_meta, oldUseTi = use_ti;
    bool oldRel = use_rel;
-   bool oldE = use_elmdamap, oldP = use_plmdamap, oldV = use_vlmdamap;
-   Lmdamap oldEm = elmdamap, oldPm = plmdamap, oldVm = vlmdamap;
-   int oldEx = elmdaexp, oldPx = plmdaexp, oldVx = vlmdaexp;
+   const LmdaMap oldEm = elmdamap, oldPm = plmdamap, oldVm = vlmdamap;
    double oldMutant = mutant::lambda, oldLambda = lambda;
 
    // A main lambda claims all three sub-lambdas, so map all three.
    use_rel = false;
-   elmdamap = Lmdamap::EXP;
-   plmdamap = Lmdamap::EXP;
-   vlmdamap = Lmdamap::EXP;
-   elmdaexp = 2;
-   plmdaexp = 2;
-   vlmdaexp = 2;
-   use_elmdamap = true;
-   use_plmdamap = true;
-   use_vlmdamap = true;
+   elmdamap.type = Lmdamap::EXP;
+   plmdamap.type = Lmdamap::EXP;
+   vlmdamap.type = Lmdamap::EXP;
+   elmdamap.exp = 2;
+   plmdamap.exp = 2;
+   vlmdamap.exp = 2;
+   elmdamap.on = true;
+   plmdamap.on = true;
+   vlmdamap.on = true;
 
    // Decoy: were the Fortran copy consulted, elam would come out 0.81.
    mutant::lambda = 0.9;
@@ -82,15 +80,9 @@ TEST_CASE("DLMDA-one-main-lambda", "[ff][dlmda]")
    use_meta = oldUseMeta;
    use_ti = oldUseTi;
    use_rel = oldRel;
-   use_elmdamap = oldE;
-   use_plmdamap = oldP;
-   use_vlmdamap = oldV;
    elmdamap = oldEm;
    plmdamap = oldPm;
    vlmdamap = oldVm;
-   elmdaexp = oldEx;
-   plmdaexp = oldPx;
-   vlmdaexp = oldVx;
    mutant::lambda = oldMutant;
    lambda = oldLambda;
 }
@@ -199,58 +191,149 @@ TEST_CASE("DLMDA-taper-degenerate", "[ff][dlmda]")
    COMPARE_REALS(dt, 0.0, 1.0e-14);
 }
 
+// Two maps are the same only with the same type and the parameters that type
+// reads; the fused single topology kernel relies on it (polTracksEle).
+TEST_CASE("DLMDA-same-map", "[ff][dlmda]")
+{
+   const LmdaMap exp2 = {Lmdamap::EXP, true, 2, 1, 0.1, 2, 1.5, 0.0, 1.0};
+   LmdaMap m = exp2;
+   REQUIRE(sameLmdaMap(m, exp2));
+   m.exp = 3;
+   REQUIRE_FALSE(sameLmdaMap(m, exp2));
+   // parameters of the other types do not matter
+   m = exp2;
+   m.invn = 4;
+   m.qnt1 = 0.5;
+   REQUIRE(sameLmdaMap(m, exp2));
+   m = exp2;
+   m.type = Lmdamap::QNT;
+   REQUIRE_FALSE(sameLmdaMap(m, exp2));
+   LmdaMap q = m;
+   REQUIRE(sameLmdaMap(m, q));
+   q.qnt1 = 0.5;
+   REQUIRE_FALSE(sameLmdaMap(m, q));
+   m.type = q.type = Lmdamap::INV;
+   q.inveps = 0.3;
+   REQUIRE_FALSE(sameLmdaMap(m, q));
+   m.type = q.type = Lmdamap::APM;
+   q.inveps = m.inveps;
+   q.apmrho = 1.8;
+   REQUIRE_FALSE(sameLmdaMap(m, q));
+}
+
 TEST_CASE("DLMDA-dtneed", "[ff][dlmda]")
 {
    bool need0, need1;
 
    // An endpoint is dead only when it contributes neither weight nor either
    // lambda derivative (dlambda.f:relneed).
-   dtNeed(0.0, 0.0, 0.0, 0.0, 0.0, need0, need1);
+   dtNeed(lmdaChain(0.0, 0.0, 0.0, 0.0, 0.0), need0, need1);
    REQUIRE(need0);
    REQUIRE_FALSE(need1);
 
-   dtNeed(1.0, 0.0, 0.0, 0.0, 0.0, need0, need1);
+   dtNeed(lmdaChain(1.0, 0.0, 0.0, 0.0, 0.0), need0, need1);
    REQUIRE_FALSE(need0);
    REQUIRE(need1);
 
-   dtNeed(0.5, 0.0, 0.0, 0.0, 0.0, need0, need1);
+   dtNeed(lmdaChain(0.5, 0.0, 0.0, 0.0, 0.0), need0, need1);
    REQUIRE(need0);
    REQUIRE(need1);
 
    // A flat weight with a live first derivative keeps both endpoints, because
    // the mix still has to supply dE/dL.
-   dtNeed(0.0, 1.0, 0.0, 1.0, 0.0, need0, need1);
+   dtNeed(lmdaChain(0.0, 1.0, 0.0, 1.0, 0.0), need0, need1);
    REQUIRE(need0);
    REQUIRE(need1);
-   dtNeed(1.0, 1.0, 0.0, 1.0, 0.0, need0, need1);
+   dtNeed(lmdaChain(1.0, 1.0, 0.0, 1.0, 0.0), need0, need1);
    REQUIRE(need0);
    REQUIRE(need1);
 
    // A zero chain rule factor kills the derivative even when dw is nonzero:
    // this is the pinned sub-lambda that lets a term drop an endpoint.
-   dtNeed(0.0, 1.0, 0.0, 0.0, 0.0, need0, need1);
+   dtNeed(lmdaChain(0.0, 1.0, 0.0, 0.0, 0.0), need0, need1);
    REQUIRE(need0);
    REQUIRE_FALSE(need1);
 
-   // Only the second derivative survives: c2 = d2w*chain^2 + dw*d2chain.
-   dtNeed(1.0, 0.0, 2.0, 1.0, 0.0, need0, need1);
+   // Only the second derivative survives: c2 = d2w*chain^2 + dw*d2chain. It
+   // keeps both endpoints when second derivatives are requested, and is ignored
+   // otherwise (dlambda.f:relneed).
+   const bool saved_d2 = use_d2lmda;
+   use_d2lmda = true;
+   dtNeed(lmdaChain(1.0, 0.0, 2.0, 1.0, 0.0), need0, need1);
    REQUIRE(need0);
    REQUIRE(need1);
-   dtNeed(1.0, 1.0, 0.0, 0.0, 3.0, need0, need1);
+   dtNeed(lmdaChain(1.0, 1.0, 0.0, 0.0, 3.0), need0, need1);
    REQUIRE(need0);
    REQUIRE(need1);
+   use_d2lmda = false;
+   dtNeed(lmdaChain(1.0, 0.0, 2.0, 1.0, 0.0), need0, need1);
+   REQUIRE_FALSE(need0);
+   REQUIRE(need1);
+   dtNeed(lmdaChain(1.0, 1.0, 0.0, 0.0, 3.0), need0, need1);
+   REQUIRE_FALSE(need0);
+   REQUIRE(need1);
+   use_d2lmda = saved_d2;
 
-   // dtWeight takes the linear case separately so a zero sub-lambda never
-   // reaches a zero power.
+   // The weight zeroes a derivative whose coefficient vanishes, so a zero
+   // sub-lambda never reaches a negative power (dlambda.f:lmdapwr).
    double w, dw, d2w;
-   dtWeight(0.0, 1, w, dw, d2w);
+   lmdaPwr(0.0, 1, true, w, dw, d2w);
    COMPARE_REALS(w, 0.0, 1.0e-14);
    COMPARE_REALS(dw, 1.0, 1.0e-14);
    COMPARE_REALS(d2w, 0.0, 1.0e-14);
-   dtWeight(0.5, 3, w, dw, d2w);
+   lmdaPwr(0.5, 3, true, w, dw, d2w);
    COMPARE_REALS(w, 0.125, 1.0e-14);
    COMPARE_REALS(dw, 0.75, 1.0e-14);
    COMPARE_REALS(d2w, 3.0, 1.0e-14);
+}
+
+// A quadratic dual topology weight at zero polarization lambda has curvature
+// and no slope, so without second derivatives the coupled polarization
+// endpoint and the ligand-ligand charge transfer pairs carry nothing and are
+// left out; with them, both come back.
+TEST_CASE("DLMDA-curvature-gate", "[ff][dlmda]")
+{
+   const bool saved_d2 = use_d2lmda, saved_pdl = use_pdlmda, saved_epdt = use_epdt, saved_rel = use_rel;
+   const double saved_plam = plam;
+   const int saved_exp = epdtexp;
+   const double saved_dpl = dpldlmda, saved_d2pl = d2pldlmda2;
+   use_pdlmda = true;
+   use_rel = false;
+   plam = 0;
+   dpldlmda = 1;
+   d2pldlmda2 = 0;
+   epdtexp = 2;
+
+   DtPass pass[2];
+   use_epdt = true;
+   use_d2lmda = false;
+   dtPasses(pass);
+   REQUIRE(pass[0].need);
+   REQUIRE_FALSE(pass[1].need);
+   REQUIRE(dtPassIsIdle(calc::v7, pass[1], false));
+   use_d2lmda = true;
+   dtPasses(pass);
+   REQUIRE(pass[1].need);
+   COMPARE_REALS(pass[1].wc, 2.0, 1.0e-14);
+   REQUIRE_FALSE(dtPassIsIdle(calc::v9, pass[1], false));
+
+   // single topology charge transfer: a ligand-ligand pair goes as plam^2
+   use_epdt = false;
+   use_d2lmda = false;
+   REQUIRE_FALSE(ctScale().live & (1u << (3 * 1 + 1)));
+   use_d2lmda = true;
+   const GrpPairScale cs = ctScale();
+   REQUIRE(cs.live & (1u << (3 * 1 + 1)));
+   COMPARE_REALS(cs.d2l[1][1], 2.0, 1.0e-14);
+
+   use_d2lmda = saved_d2;
+   use_pdlmda = saved_pdl;
+   use_epdt = saved_epdt;
+   use_rel = saved_rel;
+   plam = saved_plam;
+   epdtexp = saved_exp;
+   dpldlmda = saved_dpl;
+   d2pldlmda2 = saved_d2pl;
 }
 
 namespace {
@@ -258,30 +341,21 @@ namespace {
 // into later cases.
 struct StagedScope
 {
-   bool rel, mainl, useE, useP, useV;
+   bool rel, mainl;
    RelStage leg;
    bool stg[3];
    double stglo[3], stghi[3];
-   Lmdamap em, pm, vm;
-   double e0, e1, p0, p1, v0, v1, mainlmda;
+   LmdaMap em, pm, vm;
+   double mainlmda;
    int dtexp;
 
    StagedScope()
       : rel(use_rel)
       , mainl(use_mainlmda)
-      , useE(use_elmdamap)
-      , useP(use_plmdamap)
-      , useV(use_vlmdamap)
       , leg(relstage)
       , em(elmdamap)
       , pm(plmdamap)
       , vm(vlmdamap)
-      , e0(qntelmda0)
-      , e1(qntelmda1)
-      , p0(qntplmda0)
-      , p1(qntplmda1)
-      , v0(qntvlmda0)
-      , v1(qntvlmda1)
       , mainlmda(lambda)
       , dtexp(epdtexp)
    {
@@ -296,9 +370,6 @@ struct StagedScope
    {
       use_rel = rel;
       use_mainlmda = mainl;
-      use_elmdamap = useE;
-      use_plmdamap = useP;
-      use_vlmdamap = useV;
       relstage = leg;
       for (int i = 0; i < 3; ++i) {
          use_relstg[i] = stg[i];
@@ -308,12 +379,6 @@ struct StagedScope
       elmdamap = em;
       plmdamap = pm;
       vlmdamap = vm;
-      qntelmda0 = e0;
-      qntelmda1 = e1;
-      qntplmda0 = p0;
-      qntplmda1 = p1;
-      qntvlmda0 = v0;
-      qntvlmda1 = v1;
       lambda = mainlmda;
       epdtexp = dtexp;
    }
@@ -328,14 +393,14 @@ void setStages(double lo2, double hi2, double lov, double hiv, double lo1, doubl
    use_rel = true;
    // A staged schedule drives every sub-lambda off the main lambda (mutate.f).
    use_mainlmda = true;
-   use_elmdamap = true;
-   use_plmdamap = true;
-   use_vlmdamap = true;
+   elmdamap.on = true;
+   plmdamap.on = true;
+   vlmdamap.on = true;
    // mutate.f floors this at 1; nothing has run dlmda_mech() here.
    epdtexp = 1;
-   elmdamap = Lmdamap::QNT;
-   plmdamap = Lmdamap::QNT;
-   vlmdamap = Lmdamap::QNT;
+   elmdamap.type = Lmdamap::QNT;
+   plmdamap.type = Lmdamap::QNT;
+   vlmdamap.type = Lmdamap::QNT;
    const double lo[3] = {lo2, lov, lo1};
    const double hi[3] = {hi2, hiv, hi1};
    for (int i = 0; i < 3; ++i) {
@@ -414,12 +479,11 @@ TEST_CASE("DLMDA-relstage-pinned-endpoints", "[ff][dlmda]")
    // a flat chain rule. dtNeed() therefore drops the coupled polarization
    // endpoint on the morph leg. The multipoles and van der Waals are single
    // passes with no endpoints to skip.
-   double w, dw, d2w;
    bool need0, need1;
 
    setStagedLeg(RelStage::VDWM);
    mapAt(0.5);
-   dtWeightNeed(plam, epdtexp, dpldlmda, d2pldlmda2, w, dw, d2w, need0, need1);
+   dtNeed(dtWeight(plam, epdtexp, dpldlmda, d2pldlmda2), need0, need1);
    REQUIRE(need0);
    REQUIRE_FALSE(need1);
 }
@@ -541,9 +605,9 @@ TEST_CASE("DLMDA-relstage-pol-carries-ele", "[ff][dlmda]")
    // staged leg (test_eostmap.f).
    StagedScope scope;
    setStages(0.0, 0.3, 0.3, 0.7, 0.7, 1.0);
-   plmdamap = Lmdamap::EXP;
-   qntelmda0 = 0.9;
-   qntvlmda1 = 0.1;
+   plmdamap.type = Lmdamap::EXP;
+   elmdamap.qnt0 = 0.9;
+   vlmdamap.qnt1 = 0.1;
 
    for (double lambda : {0.1, 0.5, 0.85}) {
       CAPTURE(lambda);
@@ -616,55 +680,36 @@ namespace {
 // globals. This puts back everything that walks on.
 struct ApmScope
 {
-   bool rel, mainl, useE, useP, useV;
-   Lmdamap em, pm, vm;
-   int en, pn, vn;
-   double erho, prho, vrho, mainlmda;
+   bool rel, mainl;
+   LmdaMap em, pm, vm;
+   double mainlmda;
 
    ApmScope()
       : rel(use_rel)
       , mainl(use_mainlmda)
-      , useE(use_elmdamap)
-      , useP(use_plmdamap)
-      , useV(use_vlmdamap)
       , em(elmdamap)
       , pm(plmdamap)
       , vm(vlmdamap)
-      , en(elmdaapmn)
-      , pn(plmdaapmn)
-      , vn(vlmdaapmn)
-      , erho(elmdaapmrho)
-      , prho(plmdaapmrho)
-      , vrho(vlmdaapmrho)
       , mainlmda(lambda)
    {
       // One main lambda claiming all three sub-lambdas, each on the apm map.
       use_rel = false;
       use_mainlmda = true;
-      use_elmdamap = true;
-      use_plmdamap = true;
-      use_vlmdamap = true;
-      elmdamap = Lmdamap::APM;
-      plmdamap = Lmdamap::APM;
-      vlmdamap = Lmdamap::APM;
+      elmdamap.on = true;
+      plmdamap.on = true;
+      vlmdamap.on = true;
+      elmdamap.type = Lmdamap::APM;
+      plmdamap.type = Lmdamap::APM;
+      vlmdamap.type = Lmdamap::APM;
    }
 
    ~ApmScope()
    {
       use_rel = rel;
       use_mainlmda = mainl;
-      use_elmdamap = useE;
-      use_plmdamap = useP;
-      use_vlmdamap = useV;
       elmdamap = em;
       plmdamap = pm;
       vlmdamap = vm;
-      elmdaapmn = en;
-      plmdaapmn = pn;
-      vlmdaapmn = vn;
-      elmdaapmrho = erho;
-      plmdaapmrho = prho;
-      vlmdaapmrho = vrho;
       lambda = mainlmda;
    }
 };
@@ -672,12 +717,12 @@ struct ApmScope
 // The same power and slope ratio on all three sub-lambdas.
 void setApm(int nn, double rho)
 {
-   elmdaapmn = nn;
-   plmdaapmn = nn;
-   vlmdaapmn = nn;
-   elmdaapmrho = rho;
-   plmdaapmrho = rho;
-   vlmdaapmrho = rho;
+   elmdamap.apmn = nn;
+   plmdamap.apmn = nn;
+   vlmdamap.apmn = nn;
+   elmdamap.apmrho = rho;
+   plmdamap.apmrho = rho;
+   vlmdamap.apmrho = rho;
 }
 }
 
@@ -708,6 +753,23 @@ TEST_CASE("DLMDA-apm-endpoints", "[ff][dlmda]")
    COMPARE_REALS(d2vldlmda2, -0.017578125, 1.0e-12);
 }
 
+TEST_CASE("DLMDA-apm-exact-ends", "[ff][dlmda]")
+{
+   // The end states map exactly onto themselves: at a power of two and a slope
+   // ratio of 1.0325 the normalized sum rounds an ulp past one, where a soft
+   // core power of one minus the sub-lambda is undefined (dlambda.f:sublmdaapm).
+   ApmScope scope;
+   setApm(2, 1.0325);
+   mapAt(1.0);
+   REQUIRE(vlam == 1);
+   REQUIRE(elam == 1);
+   REQUIRE(plam == 1);
+   mapAt(0.0);
+   REQUIRE(vlam == 0);
+   REQUIRE(elam == 0);
+   REQUIRE(plam == 0);
+}
+
 TEST_CASE("DLMDA-apm-degenerate", "[ff][dlmda]")
 {
    // A power below two or a slope ratio of one or less leaves no asymmetry to
@@ -732,12 +794,12 @@ TEST_CASE("DLMDA-apm-per-term-shape", "[ff][dlmda]")
    // argument at a mapOne() call site would land the wrong shape on the wrong
    // sub-lambda instead of going unnoticed.
    ApmScope scope;
-   plmdaapmn = 2;
-   elmdaapmn = 3;
-   vlmdaapmn = 4;
-   plmdaapmrho = 1.5;
-   elmdaapmrho = 2.0;
-   vlmdaapmrho = 2.5;
+   plmdamap.apmn = 2;
+   elmdamap.apmn = 3;
+   vlmdamap.apmn = 4;
+   plmdamap.apmrho = 1.5;
+   elmdamap.apmrho = 2.0;
+   vlmdamap.apmrho = 2.5;
 
    mapAt(0.25);
    COMPARE_REALS(plam, 0.3203125, 1.0e-6);
@@ -759,11 +821,11 @@ TEST_CASE("DLMDA-apm-pol-tracks-ele", "[ff][dlmda]")
    setApm(12, 4.0);
    REQUIRE(polTracksEle());
 
-   plmdaapmn = 8;
+   plmdamap.apmn = 8;
    REQUIRE_FALSE(polTracksEle());
 
-   plmdaapmn = 12;
-   plmdaapmrho = 2.0;
+   plmdamap.apmn = 12;
+   plmdamap.apmrho = 2.0;
    REQUIRE_FALSE(polTracksEle());
 }
 

@@ -19,6 +19,7 @@ EXTRA_PARAMS: |
   , real (*restrict zrsd)[3]
   , const real* restrict pdamp
   , const real* restrict polarity
+  , const int* restrict grp, RdtMask live
 IMPLICIT_PARAMS:
   - d::jpolar
   - d::njpolar
@@ -34,6 +35,7 @@ I_VARIABLES:
   - shared   real pdi    from:pdamp
   - shared   int  jpi    from:jpolar
   - shared   real poli   from:polarity
+  - shared   int  gi     from:grp ifset:grp
 K_VARIABLES:
   - register real xk     from:x
   - register real yk     from:y
@@ -44,6 +46,7 @@ K_VARIABLES:
   - register real pdk    from:pdamp
   - register int  jpk    from:jpolar
   - register real polk   from:polarity
+  - register int  gk     from:grp ifset:grp
 I_FORCE:
   - register real fidx addto:zrsd,0
   - register real fidy addto:zrsd,1
@@ -59,7 +62,9 @@ FULL_PAIRWISE_INTERACTION: |
   real yr = @yk@ - @yi@;
   real zr = @zk@ - @zi@;
   real r2 = image2(xr,yr,zr);
-  if (r2 <= off * off and incl) {
+  // a pair with a dead group has no multipole or induced dipole;
+  // grp is null when every group is live
+  if (r2 <= off * off and incl and (not grp or grpPairLive(live, @gi@, @gk@))) {
     real r = REAL_SQRT(r2);
     real scale3, scale5;
     real pga = thlval[njpolar * jpi[klane] + jpk];

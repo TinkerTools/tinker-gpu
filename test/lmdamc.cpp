@@ -854,12 +854,41 @@ TEST_CASE("LMDAMC-predictor", "[ff][lmdamc]")
       s.session.end();
    }
 
-   // dual topology polarization, which orthogonal space tempering uses with a
-   // polarization map, never predicts
+   // Dual topology polarization, which orthogonal space tempering uses with a
+   // polarization map, keeps a predictor history for each endpoint, and a
+   // lambda move reads and writes neither.
    {
       Setup s(kIonwat, "ost", kMd, 0., "integrator verlet\n");
       REQUIRE(use_epdt);
-      REQUIRE(polpred == UPred::NONE);
+      REQUIRE(polpred == UPred::ASPC);
+      REQUIRE(induceHistoryUsable());
+      const double e0 = mcLoad();
+      for (int i = 0; i < 3; ++i)
+         energy(calc::v4);
+      DtPass pass[2];
+      dtPasses(pass);
+      std::vector<State> before;
+      for (int k : {0, 1}) {
+         induceUseHistory(k, pass[k].mask);
+         before.emplace_back();
+         REQUIRE(before.back().nualt >= 3);
+      }
+      // the two endpoints solve different subsystems
+      const int last = (before[0].nualt - 1) % maxualt;
+      REQUIRE_FALSE(sameBits(before[0].slots[last], before[1].slots[last]));
+
+      REQUIRE_FALSE(mcTrial(lambda, 1, -1.0e30));
+      REQUIRE(mcTrial(lambda, 1, e0 + 1.0e6));
+      for (int k : {0, 1}) {
+         CAPTURE(k);
+         induceUseHistory(k, pass[k].mask);
+         const State after;
+         REQUIRE(after.nualt == before[k].nualt);
+         for (size_t i = 0; i < before[k].slots.size(); ++i) {
+            REQUIRE(sameBits(after.slots[i], before[k].slots[i]));
+            REQUIRE(sameBits(after.pslots[i], before[k].pslots[i]));
+         }
+      }
       s.session.end();
    }
 }

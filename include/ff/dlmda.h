@@ -68,33 +68,69 @@ LmdaThMap lmdaThMapFrom(const char* s);
 /// Parses a Fortran character*4 leg selector into a RelStage value.
 RelStage relStageFrom(const char* s);
 
-/// Power law interpolation weight and its first two derivatives
-/// (dlambda.f:relpowerwt). Used by absolute and relative dual topology alike.
-void dtWeight(double x, int nexp, double& w, double& dw, double& d2w);
+/// \f$ x^a \f$ with its first derivative, and its second only if \c do2
+/// (dlambda.f:lmdapwr). A derivative whose coefficient vanishes is zero, so a
+/// zero \c x never reaches a negative power in the constant or linear case.
+void lmdaPwr(double x, double a, bool do2, double& f, double& df, double& d2f);
 
-/// Live dual topology endpoint test (dlambda.f:relneed). An endpoint has to be
-/// built only when it carries weight or a lambda derivative.
-void dtNeed(double w, double dw, double d2w, double chain, double d2chain, bool& need0, bool& need1);
-
-/// dtWeight followed by dtNeed, the pair every dual topology term needs.
-void dtWeightNeed(double sublmda, int dtexp, double chain, double d2chain, //
-   double& w, double& dw, double& d2w, bool& need0, bool& need1);
+/// The soft core shift \f$ f = c x^a (1-x)^b \f$ with \f$ f_1 = x f' \f$ and,
+/// only if \c do2, \f$ f_2 = x^2 f'' \f$ (dlambda.f:lmdapow). The powers of
+/// \c x keep both finite at zero for any nonnegative \c a, and a term whose
+/// coefficient vanishes is skipped, so neither factor reaches a negative power
+/// at an endpoint.
+void lmdaPow(double x, double c, double a, double b, bool do2, double& f, double& f1, double& f2);
 
 /// \ingroup ff
-/// The endpoint mixing weights of one dual topology term:
-///
-///     E     <- (in0 ? a0 : 0) + (in1 ? a1 : 0)  times the subsystem energy
-///     dE/dL <- (in0 ? b0 : 0) + (in1 ? b1 : 0)  times the same
-///     d2E   <- (in0 ? c0 : 0) + (in1 ? c1 : 0)  times the same
-///
-/// The sub-lambda chain rule is folded into b and c, so what the kernel writes
-/// is already in main lambda units.
-struct DtCoef
+/// A function of a sub-lambda and its first two derivatives with respect to
+/// the main lambda.
+struct LmdaFn
 {
-   real a0, a1; ///< energy, virial, gradient
-   real b0, b1; ///< dE/dlambda
-   real c0, c1; ///< d2E/dlambda2, energy channel only
+   double f, d1, d2;
 };
+
+/// Carries \c f, with derivatives \c df and \c d2f with respect to its
+/// sub-lambda, to the main lambda through the sub-lambda's own derivatives
+/// \c dl and \c d2l (dlambda.f:lmdachain). The curvature only counts when
+/// second derivatives are requested, as in lmdaDrv, so \c d2 is zero without
+/// use_d2lmda.
+LmdaFn lmdaChain(double f, double df, double d2f, double dl, double d2l);
+
+/// \f$ x^a \f$ (lmdaPwr) carried to the main lambda by lmdaChain, with no
+/// derivatives unless \c dodl.
+LmdaFn lmdaPwrChain(double x, double a, double dl, double d2l, bool dodl);
+
+/// \ingroup ff
+/// The soft core of a pair coupling at lambda \f$ v \f$: its scale
+/// \f$ p_0 = v^n \f$ and its shift \f$ s = \alpha v^m (1-v)^p \f$, with the
+/// coefficients of the main lambda derivatives of a pair \f$ p_0 T(s) \f$,
+///
+///     dE/dL   = a1 T + b1 T'
+///     d2E/dL2 = a2 T + b2 T' + c2 T''
+///
+/// where T' and T'' are derivatives with respect to the shift (ehalsc.f:halsc4,
+/// erepsc.f:repsc4). A pair that does not follow lambda takes {1, 0, ...}.
+struct SoftCoreLmda
+{
+   real p0, sc;
+   real a1, b1;
+   real a2, b2, c2;
+};
+
+/// The soft core terms at lambda \c v, with the derivative coefficients only if
+/// \c dodl, carried to the main lambda by \c dl and \c d2l. The coefficients
+/// keep Fortran's factored products of \f$ v^{n-1} \f$ and \f$ v^{n-2} \f$ with
+/// the lambda-scaled shift derivatives of lmdaPow, and drop a product whose
+/// coefficient vanishes, so they stay finite at \c v = 0.
+SoftCoreLmda softCoreLmda(double v, double n, double alpha, double m, double p, double dl, double d2l, bool dodl);
+
+/// The power law interpolation weight \f$ x^n \f$ of the coupled dual topology
+/// endpoint (dlambda.f:lmdapwr), carried to the main lambda by lmdaChain
+/// (lmdaPwrChain).
+LmdaFn dtWeight(double x, int nexp, double dl, double d2l);
+
+/// Live dual topology endpoint test (dlambda.f:relneed). An endpoint has to be
+/// built only when it carries weight or a lambda derivative of weight \c w.
+void dtNeed(const LmdaFn& w, bool& need0, bool& need1);
 
 /// \ingroup ff
 /// The electrostatic or polarization scale of each atom group at the coupling
@@ -132,14 +168,12 @@ RdtMask elecLiveMask();
 const int* elecDeadGroups();
 
 /// \ingroup ff
-/// The charge transfer scale of each pair of atom groups at the polarization
-/// lambda (dlambda.f:ctlmdasc), indexed by the two mutg groups. Single topology
-/// takes the product of the two group scales, so a pair inside the ligand goes
-/// as lambda squared; dual topology interpolates between the endpoint pair
-/// scales. \c dl and \c d2l are already in main lambda units, and zero unless
-/// the polarization lambda derivatives are active. Bit 3*gi+gk of \c live is
-/// set for a group pair with a scale or a derivative.
-struct CtScale
+/// The scale of each pair of atom groups, indexed by the two group labels of
+/// emGroup(), with its first and second derivatives \c dl and \c d2l, already in
+/// main lambda units and zero unless the lambda derivatives of the term are
+/// active. Bit 3*gi+gk of \c live is set for a group pair with a scale or a
+/// derivative; a pair without it contributes nothing and may be skipped.
+struct GrpPairScale
 {
    real sc[3][3];
    real dl[3][3];
@@ -147,39 +181,62 @@ struct CtScale
    unsigned live;
 };
 
-CtScale ctScale();
+/// Whether the group pair \c gi, \c gk carries a scale or a derivative.
+SEQ_ROUTINE
+inline bool grpPairScaleLive(const GrpPairScale& ps, int gi, int gk)
+{
+   return (ps.live >> (3 * gi + gk)) & 1u;
+}
 
-/// Fills the six mixing weights of \c DtCoef from the interpolation weight and
-/// its two derivatives. \c chain and \c d2chain are the sub-lambda derivatives
-/// of the term; \c driven is false when the main lambda does not drive the
-/// term, which leaves every derivative weight at zero.
-void dtWeightsToCoef(DtCoef& c, double w, double dw, double d2w, double chain, double d2chain, bool driven);
+/// The single topology pair scale: the product of the two group scales of
+/// \c g, carried to the main lambda by \c dl and \c d2l, so a pair inside a
+/// charging ligand goes as lambda squared.
+GrpPairScale grpPairScale(const GrpScale& g, double dl, double d2l);
+
+/// The multipole pair scale at the electrostatic lambda (empole4.f).
+GrpPairScale elecPairScale();
 
 /// \ingroup ff
-/// One subsystem a dual topology term has to evaluate, and which of the two
-/// endpoints claim it.
-struct DtPass
+/// The scale of a site against itself by group, the diagonal of a pair scale
+/// table, for the self terms; indexed by group alone, as GrpScale is.
+struct GrpSelfScale
 {
-   RdtMask mask;
-   bool in0, in1;
+   real sc[3];
+   real dl[3];
+   real d2l[3];
 };
 
-/// The subsystems one dual topology term must evaluate, in order: the
-/// environment alone (endpoint 0) and the fully coupled state (endpoint 1).
-/// Returns how many entries were written.
-int dtPassList(DtPass out[2]);
+/// The diagonal of \c ps.
+GrpSelfScale grpSelfScale(const GrpPairScale& ps);
 
-/// The interpolation weights one pass carries, as the endpoint weights of
-/// \c DtCoef summed over the endpoints that claim it.
+/// The charge transfer pair scale at the polarization lambda
+/// (dlambda.f:ctlmdasc): grpPairScale in single topology; dual topology
+/// interpolates between the endpoint pair scales.
+GrpPairScale ctScale();
+
+/// \ingroup ff
+/// One endpoint subsystem of dual topology polarization and the weights it
+/// carries:
 ///
 ///     E     <- wa times the subsystem energy
 ///     dE/dL <- wb times the same
 ///     d2E   <- wc times the same
 ///
-/// A subsystem shared by both endpoints comes out at wa = 1 and wb = wc = 0,
-/// and one belonging to a dead endpoint comes out all zero, which the caller
-/// may skip.
-void dtPassWeights(const DtCoef& c, const DtPass& p, real& wa, real& wb, real& wc);
+/// The sub-lambda chain rule is folded into wb and wc, so what the kernel
+/// writes is already in main lambda units. \c need is false for an endpoint
+/// with neither weight nor a lambda derivative (dtNeed).
+struct DtPass
+{
+   RdtMask mask;
+   real wa, wb, wc;
+   bool need;
+};
+
+/// The two endpoints of dual topology polarization at the polarization lambda,
+/// in order: the environment alone (endpoint 0) and the fully coupled state
+/// (endpoint 1); there is nothing the two share. Returns how many entries were
+/// written.
+int dtPasses(DtPass out[2]);
 
 /// Whether a pass can be skipped outright because it contributes to nothing
 /// this version computes. The derivative weights only matter when a derivative
@@ -190,11 +247,15 @@ void dtPassWeights(const DtCoef& c, const DtPass& p, real& wa, real& wb, real& w
 /// reports. Polarization picks that endpoint by its weight (epolar3.f), so the
 /// pass also has wa != 0 today, but a pass that owes a count must never be
 /// skipped whatever its weights.
-inline bool dtPassIsIdle(int vers, real wa, real wb, real wc, bool counts)
+inline bool dtPassIsIdle(int vers, const DtPass& p, bool counts)
 {
-   if (wa != 0 or counts)
+   if (counts)
       return false;
-   return not(vers & calc::dlmda) or (wb == 0 and wc == 0);
+   if (not p.need)
+      return true;
+   if (p.wa != 0)
+      return false;
+   return not(vers & calc::dlmda) or (p.wb == 0 and p.wc == 0);
 }
 
 
@@ -246,9 +307,10 @@ void lmdaLangStep(double gauss);
 /// the interval average at the end of each interval and propagates the lambda
 /// particle (dlambda.f:elmdadyn).
 void elmdaDyn(int istep);
-/// Free energy at the current lambda and its lambda derivative (dlambda.f:efreelmda).
-void efreeLmda(double& eflmda, double& dfdl);
-/// Total free energy change from the mean force (dlambda.f:efreetot).
+/// Free energy at lambda \p lmda and its lambda derivative (dlambda.f:efreelmda).
+void efreeLmda(double lmda, double& eflmda, double& dfdl);
+/// Total free energy change from the mean force, efreeLmda over the whole
+/// lambda range (dlambda.f:efreetot).
 double efreeTot();
 
 /// Adopts the schedule of sequential lambda windows built by the Fortran
@@ -257,9 +319,6 @@ void lmdaWinData(RcOp op);
 /// Reads the window boundaries, the current window and the main lambda after
 /// the Fortran layout of the windows over a run (dlambda.f:initlmdawin).
 void lmdaWinFromFortran();
-/// Sets the step count and equilibration length of the current lambda window
-/// (dlambda.f:setlmdawin).
-void setLmdaWin();
 /// Number of dynamics steps in lambda window \c iwin, counted from 1, and the
 /// number of those steps at its start that are discarded as equilibration
 /// (dlambda.f:lmdawinsize).
@@ -441,44 +500,29 @@ TINKER_EXTERN std::vector<double> lmdawinlist; ///< main lambda of each window i
 //        main lambda -> sub-lambda mapping, shared by all methods    //
 //====================================================================//
 
-// exponential mapping exponents.
-TINKER_EXTERN int elmdaexp;
-TINKER_EXTERN int plmdaexp;
-TINKER_EXTERN int vlmdaexp;
+/// \ingroup ff
+/// The map from the main lambda onto one sub-lambda (dlambda.f:sublmdamap):
+/// its type, whether the main lambda drives the sub-lambda at all, and the
+/// parameters of each map type.
+struct LmdaMap
+{
+   Lmdamap type;
+   bool on;        ///< whether the sub-lambda follows the main lambda
+   int exp;        ///< EXP exponent
+   int invn;       ///< INV exponent
+   double inveps;  ///< INV shift
+   int apmn;       ///< APM exponent
+   double apmrho;  ///< APM endpoint slope ratio
+   double qnt0;    ///< QNT window start
+   double qnt1;    ///< QNT window end
+};
 
-// inverse-power mapping exponents and shifts.
-TINKER_EXTERN int elmdainvn;
-TINKER_EXTERN int plmdainvn;
-TINKER_EXTERN int vlmdainvn;
-TINKER_EXTERN double elmdainveps;
-TINKER_EXTERN double plmdainveps;
-TINKER_EXTERN double vlmdainveps;
+/// Whether two maps give the same sub-lambda at every main lambda.
+bool sameLmdaMap(const LmdaMap& a, const LmdaMap& b);
 
-// asymmetric-power mapping exponents and endpoint slope ratios.
-TINKER_EXTERN int elmdaapmn;
-TINKER_EXTERN int plmdaapmn;
-TINKER_EXTERN int vlmdaapmn;
-TINKER_EXTERN double elmdaapmrho;
-TINKER_EXTERN double plmdaapmrho;
-TINKER_EXTERN double vlmdaapmrho;
-
-// mapping-type selectors.
-TINKER_EXTERN Lmdamap elmdamap;
-TINKER_EXTERN Lmdamap plmdamap;
-TINKER_EXTERN Lmdamap vlmdamap;
-
-// Whether each sub-lambda follows the main lambda map.
-TINKER_EXTERN bool use_elmdamap;
-TINKER_EXTERN bool use_plmdamap;
-TINKER_EXTERN bool use_vlmdamap;
-
-// sub-lambda bounds used by the taper/quantized maps.
-TINKER_EXTERN double qntelmda0;
-TINKER_EXTERN double qntelmda1;
-TINKER_EXTERN double qntplmda0;
-TINKER_EXTERN double qntplmda1;
-TINKER_EXTERN double qntvlmda0;
-TINKER_EXTERN double qntvlmda1;
+TINKER_EXTERN LmdaMap elmdamap; ///< electrostatic sub-lambda map
+TINKER_EXTERN LmdaMap plmdamap; ///< polarization sub-lambda map
+TINKER_EXTERN LmdaMap vlmdamap; ///< van der Waals sub-lambda map
 
 //====================================================================//
 //        staged relative free energy schedule                        //
@@ -508,27 +552,41 @@ TINKER_EXTERN double d2eldlmda2;
 TINKER_EXTERN double d2pldlmda2;
 TINKER_EXTERN double d2vldlmda2;
 
-/// Whether a term takes its lambda derivative now: it is lambda driven and its
-/// map has slope or curvature at the current lambda. A flat map, such as a
-/// quintic taper away from its window, zeroes the chain rule, and the plain
-/// version gives the same energy and gradient for less work (gradient.f: edrv,
-/// pdrv, vdrv). Allocation and the kernel family still follow use_*dlmda.
+/// Whether a term whose lambda derivatives are enabled by \c use must compute
+/// them, given the first and second derivatives of its sublambda map: they are
+/// needed while the map has slope, or curvature when second derivatives are
+/// requested, since the chain rule zeroes them otherwise (dlambda.f:lmdadrv).
+inline bool lmdaDrv(bool use, double dl, double d2l)
+{
+   return use and (dl != 0 or (use_d2lmda and d2l != 0));
+}
+
+/// Whether a term takes its lambda derivative now (lmdaDrv). A flat map, such
+/// as a quintic taper away from its window, zeroes the chain rule, and the
+/// plain version gives the same energy and gradient for less work (gradient.f:
+/// edrv, pdrv; dlambda.f:vdlflags). Allocation and the kernel family still
+/// follow use_*dlmda.
 inline bool edlmdaActive()
 {
-   return use_edlmda and (deldlmda != 0 or d2eldlmda2 != 0);
+   return lmdaDrv(use_edlmda, deldlmda, d2eldlmda2);
 }
 
 inline bool pdlmdaActive()
 {
-   return use_pdlmda and (dpldlmda != 0 or d2pldlmda2 != 0);
+   return lmdaDrv(use_pdlmda, dpldlmda, d2pldlmda2);
 }
 
 inline bool vdlmdaActive()
 {
-   return use_vdlmda and (dvldlmda != 0 or d2vldlmda2 != 0);
+   return lmdaDrv(use_vdlmda, dvldlmda, d2vldlmda2);
 }
 
+/// Whether the multipoles stay unscaled and each site's group scale is applied
+/// on the fly (single topology electrostatics). Set with use_edlmda, but kept
+/// for the whole run while the numerical lambda derivative switches use_edlmda
+/// off around its energies.
 TINKER_EXTERN bool use_emast;
+
 
 TINKER_EXTERN int epdtexp;
 TINKER_EXTERN int* rdt_group;
@@ -568,24 +626,27 @@ class LmdaBuffer
 public:
    /// Binds the term's buffers and host scalars, and allocates or frees as the
    /// policy requires. \c driven is false when the main lambda does not drive
-   /// this term, which leaves both channels unused.
-   void manage(RcOp op, int flag, bool driven, EnergyBuffer* dl1, EnergyBuffer* dl2,
+   /// this term, which leaves both channels unused; \c active tells whether
+   /// the term takes its lambda derivatives now (lmdaDrv).
+   void manage(RcOp op, int flag, bool driven, bool (*active)(), EnergyBuffer* dl1, EnergyBuffer* dl2,
       energy_prec* term1, energy_prec* term2);
 
-   /// Clears whichever channels this version asks for.
+   /// Clears whichever channels this version asks for while the term is active.
    void zero(int vers) const;
 
    /// Reduces them into the term's scalars and the totals.
    void flush(int vers) const;
 
 private:
+   int channels(int vers) const;
+
    EnergyBuffer* mDl1 = nullptr;
    EnergyBuffer* mDl2 = nullptr;
    energy_prec* mTerm1 = nullptr;
    energy_prec* mTerm2 = nullptr;
+   bool (*mActive)() = nullptr;
    int mFlag = 0;
    int mMask = 0;
-   bool mDriven = false;
 };
 
 /// \ingroup ff

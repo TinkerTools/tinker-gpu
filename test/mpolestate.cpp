@@ -292,7 +292,7 @@ TEST_CASE("MPOLESTATE-leg-jump", "[ff][mpolestate]")
 
    struct State
    {
-      real weight; // the polarization lambda
+      double weight; // the polarization lambda
       double e;
       std::vector<real> u;
    };

@@ -7,7 +7,8 @@ void epolarAplus_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, Energ
    const real (*restrict exclude_scale)[4], const real* restrict x, const real* restrict y, const real* restrict z,
    const Spatial::SortedAtom* restrict sorted, int nakpl, const int* restrict iakpl, int niak, const int* restrict iak,
    const int* restrict lst, real (*restrict ufld)[3], real (*restrict dufld)[6], const real (*restrict uind)[3],
-   real* restrict pot, const real (*restrict rpole)[10], const real* restrict pdamp, real aewald, real f)
+   real* restrict pot, const real (*restrict rpole)[10], const real* restrict pdamp, real aewald, real f,
+   const int* restrict grp, RdtMask live)
 {
    using d::jpolar;
    using d::njpolar;
@@ -44,12 +45,12 @@ void epolarAplus_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, Energ
    __shared__ real xi[BLOCK_DIM], yi[BLOCK_DIM], zi[BLOCK_DIM], ci[BLOCK_DIM], dix[BLOCK_DIM], diy[BLOCK_DIM],
       diz[BLOCK_DIM], qixx[BLOCK_DIM], qixy[BLOCK_DIM], qixz[BLOCK_DIM], qiyy[BLOCK_DIM], qiyz[BLOCK_DIM],
       qizz[BLOCK_DIM], uix[BLOCK_DIM], uiy[BLOCK_DIM], uiz[BLOCK_DIM], pdi[BLOCK_DIM];
-   __shared__ int jpi[BLOCK_DIM];
+   __shared__ int jpi[BLOCK_DIM], gi[BLOCK_DIM];
    __shared__ real xk[BLOCK_DIM], yk[BLOCK_DIM], zk[BLOCK_DIM], ck[BLOCK_DIM], dkx[BLOCK_DIM], dky[BLOCK_DIM],
       dkz[BLOCK_DIM], qkxx[BLOCK_DIM], qkxy[BLOCK_DIM], qkxz[BLOCK_DIM], qkyy[BLOCK_DIM], qkyz[BLOCK_DIM],
       qkzz[BLOCK_DIM];
    real ukx, uky, ukz, pdk;
-   int jpk;
+   int jpk, gk;
    real frcxi, frcyi, frczi, ufld0i, ufld1i, ufld2i, dufld0i, dufld1i, dufld2i, dufld3i, dufld4i, dufld5i, poti;
    real frcxk, frcyk, frczk, ufld0k, ufld1k, ufld2k, dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, potk;
 
@@ -110,6 +111,7 @@ void epolarAplus_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, Energ
       uiz[klane] = uind[i][2];
       pdi[klane] = pdamp[i];
       jpi[klane] = jpolar[i];
+      gi[klane] = (grp ? grp[i] : 0);
       xk[threadIdx.x] = x[k];
       yk[threadIdx.x] = y[k];
       zk[threadIdx.x] = z[k];
@@ -128,13 +130,16 @@ void epolarAplus_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, Energ
       ukz = uind[k][2];
       pdk = pdamp[k];
       jpk = jpolar[k];
+      gk = (grp ? grp[k] : 0);
 
       constexpr bool incl = true;
       real xr = xk[threadIdx.x] - xi[klane];
       real yr = yk[threadIdx.x] - yi[klane];
       real zr = zk[threadIdx.x] - zi[klane];
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off * off and incl) {
+      // a pair with a dead group has no multipole or induced dipole;
+      // grp is null when every group is live
+      if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
          real pga = thlval[njpolar * jpi[klane] + jpk];
          real pgd = thdval[njpolar * jpi[klane] + jpk];
          real e, edamp, vxx, vyx, vzx, vyy, vzy, vzz;
@@ -286,6 +291,7 @@ void epolarAplus_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, Energ
       uiz[threadIdx.x] = uind[i][2];
       pdi[threadIdx.x] = pdamp[i];
       jpi[threadIdx.x] = jpolar[i];
+      gi[threadIdx.x] = (grp ? grp[i] : 0);
       xk[threadIdx.x] = sorted[atomk].x;
       yk[threadIdx.x] = sorted[atomk].y;
       zk[threadIdx.x] = sorted[atomk].z;
@@ -304,6 +310,7 @@ void epolarAplus_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, Energ
       ukz = uind[k][2];
       pdk = pdamp[k];
       jpk = jpolar[k];
+      gk = (grp ? grp[k] : 0);
       __syncwarp();
 
       unsigned int mdpuinfo0 = mdpuinfo[iw * WARP_SIZE + ilane];
@@ -317,7 +324,9 @@ void epolarAplus_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, Energ
          real yr = yk[threadIdx.x] - yi[klane];
          real zr = zk[threadIdx.x] - zi[klane];
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // a pair with a dead group has no multipole or induced dipole;
+         // grp is null when every group is live
+         if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
             real pga = thlval[njpolar * jpi[klane] + jpk];
             real pgd = thdval[njpolar * jpi[klane] + jpk];
             real e, edamp, vxx, vyx, vzx, vyy, vzy, vzz;
@@ -465,6 +474,7 @@ void epolarAplus_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, Energ
       uiz[threadIdx.x] = uind[i][2];
       pdi[threadIdx.x] = pdamp[i];
       jpi[threadIdx.x] = jpolar[i];
+      gi[threadIdx.x] = (grp ? grp[i] : 0);
       xk[threadIdx.x] = sorted[atomk].x;
       yk[threadIdx.x] = sorted[atomk].y;
       zk[threadIdx.x] = sorted[atomk].z;
@@ -483,6 +493,7 @@ void epolarAplus_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, Energ
       ukz = uind[k][2];
       pdk = pdamp[k];
       jpk = jpolar[k];
+      gk = (grp ? grp[k] : 0);
       __syncwarp();
 
       for (int j = 0; j < WARP_SIZE; ++j) {
@@ -493,7 +504,9 @@ void epolarAplus_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, Energ
          real yr = yk[threadIdx.x] - yi[klane];
          real zr = zk[threadIdx.x] - zi[klane];
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // a pair with a dead group has no multipole or induced dipole;
+         // grp is null when every group is live
+         if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
             real pga = thlval[njpolar * jpi[klane] + jpk];
             real pgd = thdval[njpolar * jpi[klane] + jpk];
             real e, edamp, vxx, vyx, vzx, vyy, vzy, vzz;

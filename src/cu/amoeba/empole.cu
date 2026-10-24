@@ -38,7 +38,7 @@ static void empole_cu()
       if CONSTEXPR (do_e) {
          if CONSTEXPR (eq<LTYP, DLMDA>()) {
             launch_k1b(g::s0, n, empoleSelfDlmda_cu<Ver>, //
-               nem, em, demdl_buf, d2emdl2_buf, rpole, emGroup(), grpScale(elam), n, f, aewald, deldlmda, d2eldlmda2);
+               nem, em, demdl_buf, d2emdl2_buf, rpole, emGroup(), grpSelfScale(elecPairScale()), n, f, aewald);
          } else {
             launch_k1b(g::s0, n, empoleSelf_cu<do_a>, //
                nem, em, rpole, n, f, aewald);
@@ -47,11 +47,10 @@ static void empole_cu()
    }
    int ngrid = gpuGridSize(BLOCK_DIM);
    if CONSTEXPR (eq<LTYP, DLMDA>()) {
-      empoledlmda_cu1<Ver, ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, demdl_buf, d2emdl2_buf,
-         vir_em, dvirdl_buf, demx, demy, demz, dfdlx, dfdly, dfdlz, off, st.si1.bit0, nmdpuexclude,
-         mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst,
-         trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, rpole, emGroup(), f, aewald, grpScale(elam), deldlmda, d2eldlmda2,
-         elecLiveMask());
+      empoledlmda_cu1<Ver, ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, demdl_buf,
+         d2emdl2_buf, vir_em, dvirdl_buf, demx, demy, demz, dfdlx, dfdly, dfdlz, off, st.si1.bit0, nmdpuexclude,
+         mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, trqx,
+         trqy, trqz, dltrqx, dltrqy, dltrqz, rpole, emGroup(), f, aewald, elecPairScale());
    } else {
       empole_cu1<Ver, ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, vir_em, demx, demy, demz,
          off, st.si1.bit0, nmdpuexclude, mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl,

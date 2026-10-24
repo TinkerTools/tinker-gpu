@@ -34,7 +34,7 @@ void empoleChgpenData(RcOp op)
       demx = nullptr;
       demy = nullptr;
       demz = nullptr;
-      em_dl.manage(op, rc_flag, use_edlmda, &demdl_buf, &d2emdl2_buf, &demdl, &d2emdl2);
+      em_dl.manage(op, rc_flag, use_edlmda, edlmdaActive, &demdl_buf, &d2emdl2_buf, &demdl, &d2emdl2);
    }
 
    if (op & RcOp::ALLOC) {
@@ -50,7 +50,7 @@ void empoleChgpenData(RcOp op)
          bufferAllocate(rc_flag, &em, &vir_em, &demx, &demy, &demz);
       }
 
-      em_dl.manage(op, rc_flag, use_edlmda, &demdl_buf, &d2emdl2_buf, &demdl, &d2emdl2);
+      em_dl.manage(op, rc_flag, use_edlmda, edlmdaActive, &demdl_buf, &d2emdl2_buf, &demdl, &d2emdl2);
    }
 
    if (op & RcOp::INIT) {}

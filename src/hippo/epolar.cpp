@@ -22,6 +22,7 @@
 #include <tinker/detail/uprior.hh>
 
 namespace tinker {
+// HIPPO polarization owns ep_buf here, since epolarData leaves it to us.
 void epolarChgpenData(RcOp op)
 {
    if (not use(Potent::POLAR))
@@ -37,20 +38,15 @@ void epolarChgpenData(RcOp op)
       darray::deallocate(polarity, polarity_inv);
       darray::deallocate(polarityorig);
 
-      if (rc_a) {
+      if (rc_a)
          bufferDeallocate(rc_flag, nep);
-         bufferDeallocate(rc_flag, ep, vir_ep, depx, depy, depz);
-      }
+      ep_buf.manage(op, rc_flag, {}, {}, false);
       nep = nullptr;
-      ep = nullptr;
-      vir_ep = nullptr;
-      depx = nullptr;
-      depy = nullptr;
-      depz = nullptr;
 
       darray::deallocate(ufld, dufld);
       darray::deallocate(work01_, work02_, work03_, work04_, work05_);
 
+      induceHistoryData(RcOp::DEALLOC, false);
       if (polpred == UPred::ASPC) {
          darray::deallocate(udalt_00, udalt_01, udalt_02, udalt_03, udalt_04, udalt_05, udalt_06, udalt_07, udalt_08,
             udalt_09, udalt_10, udalt_11, udalt_12, udalt_13, udalt_14, udalt_15);
@@ -74,15 +70,11 @@ void epolarChgpenData(RcOp op)
          polarityorig = nullptr;
 
       nep = nullptr;
-      ep = eng_buf_elec;
-      vir_ep = vir_buf_elec;
-      depx = gx_elec;
-      depy = gy_elec;
-      depz = gz_elec;
-      if (rc_a) {
+      ep_buf.manage(op, rc_flag, {&ep, &vir_ep, &depx, &depy, &depz},
+         {eng_buf_elec, vir_buf_elec, gx_elec, gy_elec, gz_elec}, rc_a, //
+         {&energy_ep, &virial_ep}, {&energy_elec, &virial_elec});
+      if (rc_a)
          bufferAllocate(rc_flag, &nep);
-         bufferAllocate(rc_flag, &ep, &vir_ep, &depx, &depy, &depz);
-      }
 
       if (rc_flag & calc::grad) {
          darray::allocate(n, &ufld, &dufld);
@@ -115,6 +107,7 @@ void epolarChgpenData(RcOp op)
          darray::allocate(lenb, &udalt_lsqr_b);
          darray::zero(g::q0, n, udalt_00, udalt_01, udalt_02, udalt_03, udalt_04, udalt_05, udalt_06);
       }
+      induceHistoryData(RcOp::ALLOC, false);
    }
 
    if (op & RcOp::INIT) {
@@ -203,92 +196,26 @@ void epolarChgpen(int vers)
 {
    auto rc_a = rc_flag & calc::analyz;
    auto do_a = vers & calc::analyz;
-   auto do_e = vers & calc::energy;
-   auto do_v = vers & calc::virial;
-   auto do_g = vers & calc::grad;
-   auto use_cf = use(Potent::CHGFLX);
-   int use_cfgrad = use_cf and do_g;
 
    zeroOnHost(energy_ep, virial_ep);
-   size_t bsize = bufferSize();
-   if (rc_a) {
-      if (do_a)
-         darray::zero(g::q0, bsize, nep);
-      if (do_e)
-         darray::zero(g::q0, bsize, ep);
-      if (do_v)
-         darray::zero(g::q0, bsize, vir_ep);
-      if (do_g)
-         darray::zero(g::q0, n, depx, depy, depz);
-   }
+   if (rc_a and do_a)
+      darray::zero(g::q0, bufferSize(), nep);
+   ep_buf.zero(vers);
    polarLmdaZero(vers);
 
-   // Dual topology solves at each endpoint and weights them (epolar4.f:epolar4f).
-   if (use_epdt) {
+   // Dual topology solves at each endpoint and weights them (epolar4.f:
+   // epolar4f); single topology solves once at the polarization lambda.
+   if (use_epdt)
       epolarDtPasses(vers);
-   } else {
-      // Single topology solves with every parameter scaled to the polarization
-      // lambda, which the multipoles share only when the two lambdas agree
-      // (mutate.f:altepset), as epolar() does.
-      if (use_prst) {
-         mpoleScale(plam, use_cf);
-         polarState(coupledMask(), emGroup(), plam);
-      }
-      if (use_cf)
-         alterchg();
-      mpoleInit(vers, false);
-      if (use_cfgrad) {
-         cfluxZeroPot();
-      }
-      // the explicit plambda derivative of the stationary functional
-      // (epolar4.f:epolar4s), from the dipoles about to be solved; with
-      // exchange polarization their solve also gathers the overlap with the
-      // charging ligand
-      const bool do_astdl = use_epast and (lmdaDerivVers(vers, pdlmdaActive()) & calc::energy_dlmda1);
-      expol_mutpsc = do_astdl and polpot::use_expol;
-      if (useEwald())
-         epolarChgpenEwald(vers, use_cfgrad);
-      else
-         epolarChgpenNonEwald(vers, use_cfgrad);
-      expol_mutpsc = false;
-      epolarPairwiseExtfield(vers, uind);
-      torque(vers, depx, depy, depz);
-      if (use_cfgrad)
-         dcflux(vers, depx, depy, depz, vir_ep);
-      if (polpot::use_expol and do_g)
-         dexpol(vers);
-      if (do_astdl)
-         epolarAstDeriv();
-      if (do_v) {
-         VirialBuffer u2 = vir_trq;
-         virial_prec v2[9];
-         virialReduce(v2, u2);
-         for (int iv = 0; iv < 9; ++iv) {
-            virial_ep[iv] += v2[iv];
-            virial_elec[iv] += v2[iv];
-         }
-      }
-   }
+   else
+      epolarSingleTopology(vers, [](int vers, bool use_cfgrad) {
+         if (useEwald())
+            epolarChgpenEwald(vers, use_cfgrad);
+         else
+            epolarChgpenNonEwald(vers, use_cfgrad);
+      });
 
-   if (rc_a) {
-      if (do_e) {
-         EnergyBuffer u = ep;
-         energy_prec e = energyReduce(u);
-         energy_ep += e;
-         energy_elec += e;
-      }
-      if (do_v) {
-         VirialBuffer u1 = vir_ep;
-         virial_prec v1[9];
-         virialReduce(v1, u1);
-         for (int iv = 0; iv < 9; ++iv) {
-            virial_ep[iv] += v1[iv];
-            virial_elec[iv] += v1[iv];
-         }
-      }
-      if (do_g)
-         sumGradient(gx_elec, gy_elec, gz_elec, depx, depy, depz);
-   }
+   ep_buf.flush(vers);
    polarLmdaFlush(vers);
 }
 }

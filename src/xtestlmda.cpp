@@ -17,11 +17,11 @@
 #include "tool/ioread.h"
 #include "tool/xtesthelper.h"
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <string>
 #include <tinker/detail/files.hh>
 #include <tinker/detail/inform.hh>
-#include <tinker/detail/mutant.hh>
 #include <tinker/detail/usage.hh>
 #include <tinker/routines.h>
 #include <vector>
@@ -63,31 +63,6 @@ enum class LambdaVariable
    POL
 };
 
-struct FdLambdaState
-{
-   bool useMain;
-   double main;
-   double vdw;
-   double ele;
-   double pol;
-};
-
-static void setLambda(double vlambda, double elambda, double plambda)
-{
-   mutant::vlambda = vlambda;
-   vlam = vlambda;
-   mutant::elambda = elambda;
-   elam = elambda;
-   mutant::plambda = plambda;
-   plam = plambda;
-}
-
-static FdLambdaState captureFdLambdaState()
-{
-   bool useMain = use_mainlmda;
-   return {useMain, useMain ? lambda : 0.0, vlam, elam, plam};
-}
-
 struct ScopedDlmdaOff
 {
    bool saved, saved_e, saved_p, saved_v;
@@ -111,40 +86,13 @@ struct ScopedDlmdaOff
    }
 };
 
-// Applies a displacement from the captured point. A main lambda is mapped to
-// all sub-lambdas by energy(); without one, exactly one fixed sub-lambda moves.
-static void setFdOffset(const FdLambdaState& state, LambdaVariable variable, double delta)
+// Evaluates at a displacement of the main lambda, which energy() maps onto all
+// sub-lambdas. A lambda derivative always has a main lambda, since Fortran
+// setup stops without one (mutate.f:mutate_check), so every sub-lambda follows
+// it (testlmda.f:settestlmda).
+static LambdaEvaluation evaluateAtOffset(double lmda0, double delta)
 {
-   if (state.useMain) {
-      lambda = state.main + delta;
-      return;
-   }
-
-   double vdw = state.vdw;
-   double ele = state.ele;
-   double pol = state.pol;
-   if (variable == LambdaVariable::VDW)
-      vdw += delta;
-   else if (variable == LambdaVariable::ELE)
-      ele += delta;
-   else if (variable == LambdaVariable::POL)
-      pol += delta;
-   setLambda(vdw, ele, pol);
-}
-
-static void restoreFdLambdaState(const FdLambdaState& state)
-{
-   if (state.useMain) {
-      lambda = state.main;
-      mapSubLambda();
-   } else {
-      setLambda(state.vdw, state.ele, state.pol);
-   }
-}
-
-static LambdaEvaluation evaluateAtOffset(const FdLambdaState& state, LambdaVariable variable, double delta)
-{
-   setFdOffset(state, variable, delta);
+   lambda = lmda0 + delta;
    energy(calc::v1);
 
    LambdaEvaluation eout;
@@ -219,70 +167,46 @@ TestlmdaResult testlmdaEvaluate(const FdTestOptions& opts)
 
    // ---- Numerical lambda derivatives ---------------------------------------
    if (opts.numer and keylmda) {
-      const FdLambdaState state = captureFdLambdaState();
+      assert(use_mainlmda);
+      const double lmda0 = lambda;
       ScopedDlmdaOff dlmda_off;
       const double eps = opts.eps;
       const double eps2 = eps * eps;
-      LambdaEvaluation center = evaluateAtOffset(state, LambdaVariable::MAIN, 0.0);
+      const bool atLower = lmda0 - eps < 0;
 
-      if (state.useMain) {
-         const bool atLower = state.main - eps < 0;
+      LambdaEvaluation center = evaluateAtOffset(lmda0, 0.0);
+      LambdaEvaluation plus = evaluateAtOffset(lmda0, eps);
+      LambdaEvaluation minus, plus2;
+      if (atLower)
+         plus2 = evaluateAtOffset(lmda0, 2.0 * eps);
+      else
+         minus = evaluateAtOffset(lmda0, -eps);
 
-         LambdaEvaluation plus = evaluateAtOffset(state, LambdaVariable::MAIN, eps);
-         LambdaEvaluation minus, plus2;
-         if (atLower)
-            plus2 = evaluateAtOffset(state, LambdaVariable::MAIN, 2.0 * eps);
-         else
-            minus = evaluateAtOffset(state, LambdaVariable::MAIN, -eps);
-
-         const LambdaVariable variables[] = {
-            LambdaVariable::MAIN, LambdaVariable::VDW, LambdaVariable::ELE, LambdaVariable::POL};
-         for (int k = 0; k < 4; ++k) {
-            double ep = lambdaEnergy(plus, variables[k]);
-            double ec = lambdaEnergy(center, variables[k]);
-            if (atLower) {
-               double ep2 = lambdaEnergy(plus2, variables[k]);
-               r.ndedl[k] = (-3.0 * ec + 4.0 * ep - ep2) / (2.0 * eps);
-               r.nd2edl2[k] = (ec - 2.0 * ep + ep2) / eps2;
-            } else {
-               double em = lambdaEnergy(minus, variables[k]);
-               r.ndedl[k] = (ep - em) / (2.0 * eps);
-               r.nd2edl2[k] = (ep - 2.0 * ec + em) / eps2;
-            }
-         }
+      const LambdaVariable variables[] = {
+         LambdaVariable::MAIN, LambdaVariable::VDW, LambdaVariable::ELE, LambdaVariable::POL};
+      for (int k = 0; k < 4; ++k) {
+         double ep = lambdaEnergy(plus, variables[k]);
+         double ec = lambdaEnergy(center, variables[k]);
          if (atLower) {
-            for (int k = 0; k < 3 * n; ++k)
-               r.ndfdl[k] = (-3.0 * center.gradient[k] + 4.0 * plus.gradient[k] - plus2.gradient[k]) / (2.0 * eps);
-            for (int k = 0; k < 9; ++k)
-               r.ndvirdl[k] = (-3.0 * center.virial[k] + 4.0 * plus.virial[k] - plus2.virial[k]) / (2.0 * eps);
+            double ep2 = lambdaEnergy(plus2, variables[k]);
+            r.ndedl[k] = (-3.0 * ec + 4.0 * ep - ep2) / (2.0 * eps);
+            r.nd2edl2[k] = (ec - 2.0 * ep + ep2) / eps2;
          } else {
-            for (int k = 0; k < 3 * n; ++k)
-               r.ndfdl[k] = (plus.gradient[k] - minus.gradient[k]) / (2.0 * eps);
-            for (int k = 0; k < 9; ++k)
-               r.ndvirdl[k] = (plus.virial[k] - minus.virial[k]) / (2.0 * eps);
+            double em = lambdaEnergy(minus, variables[k]);
+            r.ndedl[k] = (ep - em) / (2.0 * eps);
+            r.nd2edl2[k] = (ep - 2.0 * ec + em) / eps2;
          }
+      }
+      if (atLower) {
+         for (int k = 0; k < 3 * n; ++k)
+            r.ndfdl[k] = (-3.0 * center.gradient[k] + 4.0 * plus.gradient[k] - plus2.gradient[k]) / (2.0 * eps);
+         for (int k = 0; k < 9; ++k)
+            r.ndvirdl[k] = (-3.0 * center.virial[k] + 4.0 * plus.virial[k] - plus2.virial[k]) / (2.0 * eps);
       } else {
-         // Fixed sub-lambdas are independent coordinates. Test each derivative
-         // at its own configured value, then sum them for the total derivative.
-         const LambdaVariable variables[] = {LambdaVariable::VDW, LambdaVariable::ELE, LambdaVariable::POL};
-         for (int j = 0; j < 3; ++j) {
-            LambdaVariable variable = variables[j];
-            LambdaEvaluation plus = evaluateAtOffset(state, variable, eps);
-            LambdaEvaluation minus = evaluateAtOffset(state, variable, -eps);
-            double ep = lambdaEnergy(plus, variable);
-            double ec = lambdaEnergy(center, variable);
-            double em = lambdaEnergy(minus, variable);
-            r.ndedl[j + 1] = (ep - em) / (2.0 * eps);
-            r.nd2edl2[j + 1] = (ep - 2.0 * ec + em) / eps2;
-            for (int k = 0; k < 3 * n; ++k)
-               r.ndfdl[k] += (plus.gradient[k] - minus.gradient[k]) / (2.0 * eps);
-            for (int k = 0; k < 9; ++k)
-               r.ndvirdl[k] += (plus.virial[k] - minus.virial[k]) / (2.0 * eps);
-         }
-         for (int k = 1; k < 4; ++k) {
-            r.ndedl[0] += r.ndedl[k];
-            r.nd2edl2[0] += r.nd2edl2[k];
-         }
+         for (int k = 0; k < 3 * n; ++k)
+            r.ndfdl[k] = (plus.gradient[k] - minus.gradient[k]) / (2.0 * eps);
+         for (int k = 0; k < 9; ++k)
+            r.ndvirdl[k] = (plus.virial[k] - minus.virial[k]) / (2.0 * eps);
       }
 
       if (reduced) {
@@ -293,7 +217,8 @@ TestlmdaResult testlmdaEvaluate(const FdTestOptions& opts)
             r.ndvirdl[k] = 0.0;
       }
 
-      restoreFdLambdaState(state);
+      lambda = lmda0;
+      mapSubLambda();
    }
 
    return r;

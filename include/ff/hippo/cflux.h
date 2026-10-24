@@ -19,8 +19,6 @@ void dcfluxDlmda(int vers, int dlvers);
 /// The charge flux chain rule with the potential of each atom weighted by
 /// \c w.s of its lambda group, as a dual topology pass takes it.
 void dcfluxGroup(const int* grp, GrpScale w, grad_prec* gx, grad_prec* gy, grad_prec* gz, VirialBuffer vir);
-/// Sets the lambda scale of each atom's charge flux change (mutate.f:altelec).
-void cfluxScale(const double* sc);
 /// Records that the flux scale of each lambda group is now \c sc, which the
 /// device scaling set.
 void cfluxGroupScale(const GrpScale& sc);

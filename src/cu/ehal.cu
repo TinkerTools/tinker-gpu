@@ -75,7 +75,7 @@ void ehalResolveGradient_cu(const grad_prec* gxred, const grad_prec* gyred, cons
  *    - Different vcouple methods.
  *    - PBC type in image().
  *    - Random access to the "i" parameters and gradients.
- *    - (If not hard-coded) ghal, dhal, scexp, scalphav.
+ *    - (If not hard-coded) ghal, dhal, scexp.
  */
 
 /**
@@ -97,8 +97,6 @@ void ehalResolveGradient_cu(const grad_prec* gxred, const grad_prec* gyred, cons
  */
 
 namespace tinker {
-#define SCEXP   scexp
-#define SCALPHA scalphav
 #if 1
 #define GHAL    (real)0.12
 #define DHAL    (real)0.07
@@ -108,23 +106,12 @@ namespace tinker {
 #endif
 #include "ehal_cu1.cc"
 
-// The soft core powers of lambda v, taken here once instead of per pair.
-static PairHalLambdaPow ehalLambdaPow(double v)
-{
-   PairHalLambdaPow lp;
-   lp.p0 = std::pow(v, scexp);
-   lp.p1 = std::pow(v, scexp - 1);
-   // The second derivative factor diverges at v = 0 for exponents below two,
-   // which mutate_check only allows without use_d2lmda (ehalsc.f:halsc4).
-   lp.p2 = (use_d2lmda ? std::pow(v, scexp - 2) : 0);
-   return lp;
-}
-
 template <class Ver>
 static void ehal_cu3()
 {
    constexpr bool do_g = Ver::g;
    constexpr bool do_gdl = Ver::g_dlmda;
+   constexpr bool dodl = Ver::value & calc::dlmda;
 
    const auto& st = *vspatial_v2_unit;
    const real cut = switchCut(Switch::VDW);
@@ -132,9 +119,10 @@ static void ehal_cu3()
 
    // A relative calculation labels atoms by ligand group; ligand 2 couples as
    // the complement of vlambda.
-   const int* grp = use_rel ? rdt_group : mut;
-   const auto lp1 = ehalLambdaPow(vlam);
-   const auto lp2 = ehalLambdaPow(1 - vlam);
+   const int* grp = emGroup();
+   // The soft core terms, taken here once instead of per pair.
+   const auto lp1 = softCoreLmda(vlam, scexp, scalphav, scexpm, scexpp, dvldlmda, d2vldlmda2, dodl);
+   const auto lp2 = softCoreLmda(1 - vlam, scexp, scalphav, scexpm, scexpp, -dvldlmda, -d2vldlmda2, dodl);
 
    if CONSTEXPR (do_g) {
       darray::zero(g::q0, n, gxred, gyred, gzred);
@@ -147,8 +135,7 @@ static void ehal_cu3()
    ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, devdl_buf, d2evdl2_buf, vir_ev,
       dvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0, nvexclude_scaled,
       vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, njvdw,
-      vlam, vcouple, radmin, epsilon, vexclude14, radmin4, epsilon4, jvdw, grp, scexp, scalphav, dvldlmda, d2vldlmda2,
-      lp1, lp2);
+      vcouple, radmin, epsilon, vexclude14, radmin4, epsilon4, jvdw, grp, lp1, lp2);
 
    if CONSTEXPR (do_g) {
       ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);

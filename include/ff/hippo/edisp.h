@@ -73,9 +73,6 @@ TINKER_EXTERN real dsp3scale;
 TINKER_EXTERN real dsp4scale;
 TINKER_EXTERN real dsp5scale;
 
-TINKER_EXTERN real elrc_vol_dsp;
-TINKER_EXTERN real vlrc_vol_dsp;
-
 TINKER_EXTERN double scrdsp;
 TINKER_EXTERN double scexpd;
 TINKER_EXTERN double scexpdq;

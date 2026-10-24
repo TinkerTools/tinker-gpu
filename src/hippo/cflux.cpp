@@ -23,10 +23,8 @@
 namespace tinker {
 // Whether the scales cfluxScale() last set differ across a flux bond or angle.
 static bool cflux_moves_net = false;
-// Whether a flux bond or angle joins two lambda groups, which is when the flux
-// moves the net charge of each group, and which pairs of groups it joins, as
-// bit 3*a+b for groups a < b.
-static bool cflux_crosses_groups = false;
+// The pairs of lambda groups that a flux bond or angle joins, as bit 3*a+b for
+// groups a < b; the flux moves the net charge of each group they join.
 static unsigned cflux_group_pairs = 0;
 
 // Whether a flux bond or angle joins atoms of different values of v. It moves
@@ -77,6 +75,14 @@ static unsigned cfluxGroupPairs(const int* grp)
    return pairs;
 }
 
+// Sets the lambda scale of each atom's charge flux change (mutate.f:altelec).
+static void cfluxScale(const double* sc)
+{
+   darray::copyin(g::q0, n, fluxsc, sc);
+   waitFor(g::q0);
+   cflux_moves_net = cfluxDiffers(sc);
+}
+
 void cfluxData(RcOp op)
 {
    if (not use(Potent::CHGFLX))
@@ -89,7 +95,6 @@ void cfluxData(RcOp op)
       darray::deallocate(decfx, decfy, decfz, pot);
       darray::deallocate(dlpot);
       cflux_moves_net = false;
-      cflux_crosses_groups = false;
       cflux_group_pairs = 0;
    }
 
@@ -134,7 +139,6 @@ void cfluxData(RcOp op)
       if (mutant::nmut != 0)
          for (int i = 0; i < n; ++i)
             grp[i] = use_rel ? mutant::mutg[i] : (mutant::mutg[i] != 0 ? 1 : 0);
-      cflux_crosses_groups = cfluxDiffers(grp.data());
       cflux_group_pairs = cfluxGroupPairs(grp.data());
 
       if (rc_flag & calc::grad)
@@ -159,13 +163,6 @@ void cfluxGroupScale(const GrpScale& sc)
    cflux_moves_net = moves;
 }
 
-void cfluxScale(const double* sc)
-{
-   darray::copyin(g::q0, n, fluxsc, sc);
-   waitFor(g::q0);
-   cflux_moves_net = cfluxDiffers(sc);
-}
-
 bool cfluxMovesNetCharge()
 {
    return cflux_moves_net;
@@ -173,7 +170,7 @@ bool cfluxMovesNetCharge()
 
 bool cfluxCrossesGroups()
 {
-   return cflux_crosses_groups;
+   return cflux_group_pairs != 0;
 }
 
 TINKER_FVOID2(acc1, cu1, alterchg);

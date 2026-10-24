@@ -735,7 +735,7 @@ void eostBias(int vers)
       egkernelInterpolate(bgbias, bdgdl, bdgdfl);
    else
       egkernel(bgbias, bdgdl, bdgdfl);
-   efreeLmda(bostlmda, lmdadfdl);
+   efreeLmda(lambda, bostlmda, lmdadfdl);
 
    if (vers & calc::energy)
       esum += bgbias - bostlmda;

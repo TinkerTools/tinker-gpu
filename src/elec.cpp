@@ -133,6 +133,9 @@ static void mpoleData(RcOp op)
 
       if (use(Potent::POLAR)) {
          darray::allocate(n, &uind, &uinp, &udir, &udirp);
+         // HIPPO never writes the second set, and an induced dipole trial
+         // copies all four before any solve
+         darray::zero(g::q0, n, uind, uinp, udir, udirp);
       } else {
          uind = nullptr;
          uinp = nullptr;
@@ -995,14 +998,13 @@ static void ewaldBackground(int vers, int dlvers, double q, double dq, double de
    if (not(do_e and charged) and not do_v and not do_dl1 and not do_dl2 and not do_dv)
       return;
 
+   // f q^2 with the net charge q linear in elambda
    const double fterm = ewaldBackgroundCoef(aewald);
-   const double e = fterm * q * q;
-   const double dl1 = 2 * fterm * q * dq * deldl;
-   const double dl2 = 2 * fterm * (dq * dq * deldl * deldl + q * dq * d2eldl2);
+   const LmdaFn e = lmdaChain(fterm * q * q, 2 * fterm * q * dq, 2 * fterm * dq * dq, deldl, d2eldl2);
    const int count = (vers & calc::analyz) and charged ? 1 : 0;
 
    TINKER_FCALL2(acc1, cu1, ewaldBackgroundAdd, count ? nc : nullptr, do_e ? eb : nullptr, do_dl1 ? dl1b : nullptr,
-      do_dl2 ? dl2b : nullptr, do_v ? vb : nullptr, do_dv ? dvb : nullptr, count, e, dl1, dl2);
+      do_dl2 ? dl2b : nullptr, do_v ? vb : nullptr, do_dv ? dvb : nullptr, count, e.f, e.d1, e.d2);
 }
 
 TINKER_FVOID2(acc1, cu1, ewaldBackgroundFlux, fixed*, const int*, GrpScale, real, real, real, CountBuffer,

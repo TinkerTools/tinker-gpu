@@ -317,8 +317,8 @@ void induceMutualPcg4_cu(real (*uind)[3])
       // calculate/update p
       launch_k1s(g::s0, n, eppcgP6, n, sum, sum1, conj, zrsd);
 
-      // copy sum1/p to sum/p
-      darray::copy(g::q0, 2, sum, sum1);
+      // copy sum1 to sum; one set of dipoles has no sump
+      darray::copy(g::q0, 1, sum, sum1);
 
       real* epsd = &((real*)dptr_buf)[3];
       darray::dot(g::q0, n, epsd, rsd, rsd);

@@ -5,6 +5,7 @@
 #include "ff/switch.h"
 #include "seq/add.h"
 #include "seq/pair_hal.h"
+#include "seq/pair_vlambda.h"
 #include "tool/gpucard.h"
 
 namespace tinker {
@@ -62,9 +63,11 @@ static void ehal_acc1()
    const real off2 = off * off;
    const int maxnlst = vlist_unit->maxnlst;
    const auto* vlst = vlist_unit.deviceptr();
-   // The soft core power of vlam, taken once here instead of per pair. Without
-   // lambda derivatives pair_hal_v2 reads only PairHalLambdaPow::p0.
-   const real vlamexp = std::pow(vlam, scexp);
+   // The soft core power and softening of vlam, taken once here instead of per
+   // pair. Without lambda derivatives pair_hal_v2 reads only p0 and sc.
+   const SoftCoreLmda lpm = softCoreLmda(vlam, scexp, scalphav, scexpm, scexpp, 0, 0, false);
+   const real vlamexp = lpm.p0;
+   const real vlamsc = lpm.sc;
 
    auto bufsize = bufferSize();
 
@@ -95,14 +98,10 @@ static void ehal_acc1()
          real zr = zi - zred[k];
          int mut2 = mut[k];
 
-         real vlambda = 1;
-         if (vcouple == Vdw::DECOUPLE) {
-            vlambda = (mut1 == mut2 ? 1 : vlam);
-         }
-         if (vcouple == Vdw::ANNIHILATE) {
-            vlambda = (mut1 || mut2 ? vlam : 1);
-         }
-         PairHalLambdaPow lp = {vlambda == 1 ? 1 : vlamexp, 0, 0};
+         bool mutik = pair_mutik(vcouple, mut1, mut2);
+         SoftCoreLmda lp = {1, 0, 0, 0, 0, 0, 0};
+         if (mutik)
+            lp = {vlamexp, vlamsc, 0, 0, 0, 0, 0};
 
          real rik2 = image2(xr, yr, zr);
          if (rik2 <= off2) {
@@ -111,7 +110,7 @@ static void ehal_acc1()
             real eps = epsilon[it * njvdw + kt];
 
             MAYBE_UNUSED real e, de;
-            pair_hal_v2<do_g, 1>(rik, 1, rv, eps, cut, off, vlambda, lp, ghal, dhal, scexp, scalphav, e, de);
+            pair_hal_v2<do_g, 1>(rik, 1, rv, eps, cut, off, lp, ghal, dhal, e, de);
 
             // Increment the energy, gradient, and virial. Only a pair with a
             // nonzero energy counts as an interaction, as in ehal3.f.
@@ -178,14 +177,10 @@ static void ehal_acc1()
       real zr = zi - zred[k];
       int mut2 = mut[k];
 
-      real vlambda = 1;
-      if (vcouple == Vdw::DECOUPLE) {
-         vlambda = (mut1 == mut2 ? 1 : vlam);
-      }
-      if (vcouple == Vdw::ANNIHILATE) {
-         vlambda = (mut1 || mut2 ? vlam : 1);
-      }
-      PairHalLambdaPow lp = {vlambda == 1 ? 1 : vlamexp, 0, 0};
+      bool mutik = pair_mutik(vcouple, mut1, mut2);
+      SoftCoreLmda lp = {1, 0, 0, 0, 0, 0, 0};
+      if (mutik)
+         lp = {vlamexp, vlamsc, 0, 0, 0, 0, 0};
 
       real rik2 = image2(xr, yr, zr);
       if (rik2 <= off2) {
@@ -197,16 +192,14 @@ static void ehal_acc1()
          // A 1-4 pair with vdw14 values takes them instead: remove the whole
          // pair the neighbor loop added, and add it back scaled with them.
          bool v14 = vexclude14 and vexclude14[ii];
-         pair_hal_v2<do_g, 0>(rik, (v14 ? -1 : vscale), rv, eps, cut, off, vlambda, lp, ghal, dhal, scexp, scalphav,
-            e, de);
+         pair_hal_v2<do_g, 0>(rik, (v14 ? -1 : vscale), rv, eps, cut, off, lp, ghal, dhal, e, de);
          // The neighbor loop counted this pair only if its energy was nonzero.
          MAYBE_UNUSED bool counted = (e != 0);
          if (v14) {
             MAYBE_UNUSED real e4, de4;
             real rv4 = radmin4[it * njvdw + kt];
             real eps4 = epsilon4[it * njvdw + kt];
-            pair_hal_v2<do_g, 0>(rik, vscale + 1, rv4, eps4, cut, off, vlambda, lp, ghal, dhal, scexp, scalphav, e4,
-               de4);
+            pair_hal_v2<do_g, 0>(rik, vscale + 1, rv4, eps4, cut, off, lp, ghal, dhal, e4, de4);
             e += e4;
             if CONSTEXPR (do_g)
                de += de4;

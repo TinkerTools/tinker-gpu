@@ -13,16 +13,21 @@
 #include "tool/iotext.h"
 #include <tinker/detail/atomid.hh>
 #include <tinker/detail/atoms.hh>
+#include <tinker/detail/bound.hh>
 #include <tinker/detail/couple.hh>
+#include <tinker/detail/kdsp.hh>
 #include <tinker/detail/keys.hh>
 #include <tinker/detail/mutant.hh>
 #include <tinker/detail/params.hh>
+#include <tinker/detail/shunt.hh>
 #include <tinker/detail/sizes.hh>
 #include <tinker/detail/vdw.hh>
 #include <tinker/detail/vdwpot.hh>
 #include <tinker/routines.h>
 
+#include <algorithm>
 #include <cassert>
+#include <cmath>
 
 namespace tinker {
 inline namespace v1 {
@@ -34,10 +39,8 @@ static std::vector<new_type> jvec;
 static std::vector<new_type> jvdwbuf;
 static int jcount;
 
-// Lambda slope of the plain long-range correction and the vlambda it was taken at.
-static energy_prec delrc_vol;
-static virial_prec dvlrc_vol;
-static double vlam_lrc0;
+// The class sums of the long-range correction.
+static LrcSums vdw_lrc;
 
 void vdwSoftcoreData(RcOp op)
 {
@@ -111,11 +114,7 @@ void evdwData(RcOp op)
       gyred_dlmda = nullptr;
       gzred_dlmda = nullptr;
 
-      elrc_vol = 0;
-      vlrc_vol = 0;
-      delrc_vol = 0;
-      dvlrc_vol = 0;
-      vlam_lrc0 = 0;
+      vdw_lrc = {};
    }
 
    if (op & RcOp::ALLOC) {
@@ -461,6 +460,8 @@ void evdwData(RcOp op)
          dhal = vdwpot::dhal;
          scexp = mutant::scexp;
          scalphav = mutant::scalphav;
+         scexpm = mutant::scexpm;
+         scexpp = mutant::scexpp;
 
          std::vector<int> iredbuf(n);
          std::vector<double> kredbuf(n);
@@ -515,39 +516,197 @@ void evdwData(RcOp op)
          waitFor(g::q0);
       }
 
-      // Initialize elrc and vlrc.
-      if (vdwpot::use_vcorr) {
-         double elrc = 0, vlrc = 0, delrc = 0, dvlrc = 0;
-         tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &elrc, &vlrc, &delrc, &dvlrc);
-         elrc_vol = elrc * boxVolume();
-         vlrc_vol = vlrc * boxVolume();
-         delrc_vol = delrc * boxVolume();
-         dvlrc_vol = dvlrc * boxVolume();
-         vlam_lrc0 = mutant::vlambda; // the vlambda evcorr1 actually used
-      } else {
-         elrc_vol = 0;
-         vlrc_vol = 0;
-         delrc_vol = 0;
-         dvlrc_vol = 0;
-         vlam_lrc0 = 0;
+      vdw_lrc = {};
+      if (vdwpot::use_vcorr)
+         lrcSetup(vdw_lrc, false);
+   }
+}
+
+void lrcSetup(LrcSums& ls, bool dsp)
+{
+   // dispersion has no relative free energy treatment (mutate.f), so it never
+   // has a ligand 2
+   assert(not(dsp and use_rel));
+   ls = {0, 0, 0, 1, 1};
+   if (not bound::use_bounds)
+      return;
+
+   // The soft core buffered 14-7 potential scales a mutated pair by the soft
+   // core power of its group lambda, its softening being negligible against the
+   // buffered distance beyond the cutoff; beyond its switch radius the soft core
+   // of the damped dispersion leaves only its lambda power on a mutated pair.
+   if (dsp) {
+      ls.nw = mutant::scexpd;
+   } else if (vdwtyp == Vdw::HAL) {
+      ls.nw = mutant::scexp;
+      ls.nb = mutant::scexp;
+   }
+
+   // The coefficients of the switching function.
+   if (dsp)
+      tinker_f_switch({const_cast<char*>("DISP  "), 6});
+   else
+      tinker_f_switch({const_cast<char*>("VDW   "), 6});
+   const double cut = shunt::cut, off = shunt::off;
+   const double c0 = shunt::c0, c1 = shunt::c1, c2 = shunt::c2;
+   const double c3 = shunt::c3, c4 = shunt::c4, c5 = shunt::c5;
+
+   // The number of steps and range of the numerical integration.
+   const int nstep = 2;
+   const double range = 100.0;
+   const int ndelta = (int)((double)nstep * (range - cut));
+   const double rdelta = (range - cut) / (double)ndelta;
+   const double offset = cut - 0.5 * rdelta;
+
+   // Count the types, or the classes for dispersion, of the environment and
+   // each ligand group.
+   std::vector<int> ivt;
+   std::vector<double> jvt, avt, bvt;
+   for (int i = 0; i < n; ++i) {
+      int it = dsp ? atomid::class_[i] : vdw::jvdw[i];
+      int k = std::find(ivt.begin(), ivt.end(), it) - ivt.begin();
+      if (k == (int)ivt.size()) {
+         ivt.push_back(it);
+         jvt.push_back(0);
+         avt.push_back(0);
+         bvt.push_back(0);
+      }
+      jvt[k] += 1;
+      if (mutant::mutg[i] == 1)
+         avt[k] += 1;
+      if (mutant::mutg[i] == 2)
+         bvt[k] += 1;
+   }
+
+   // Sum the pairs of each class, with ligand 2 coupling as the complement of
+   // vlambda and no interaction between the two ligand groups.
+   const int nvt = ivt.size();
+   const double ghal = vdwpot::ghal, dhal = vdwpot::dhal;
+   const double abuck = vdwpot::abuck, bbuck = vdwpot::bbuck, cbuck = vdwpot::cbuck;
+   for (int i = 0; i < nvt; ++i) {
+      int it = ivt[i];
+      double fi = 4 * M_PI * jvt[i];
+      double fia = 4 * M_PI * avt[i];
+      double fib = 4 * M_PI * bvt[i];
+      double fie = fi - fia - fib;
+      for (int k = i; k < nvt; ++k) {
+         int kt = ivt[k];
+         double fka = avt[k];
+         double fkb = bvt[k];
+         double fke = jvt[k] - fka - fkb;
+         double ee = fie * fke;
+         double ea = fie * fka + fia * fke;
+         double eb = fie * fkb + fib * fke;
+         double aa = fia * fka;
+         double bb = fib * fkb;
+         double f0, f1, f2;
+         if (mutant::vcouple == 0) {
+            f0 = ee + aa + bb, f1 = ea, f2 = eb;
+         } else {
+            f0 = ee, f1 = ea + aa, f2 = eb + bb;
+         }
+         if (k == i)
+            f0 *= 0.5, f1 *= 0.5, f2 *= 0.5;
+
+         double cik = 0, rv = 0, eps = 0, rv2 = 0, rv6 = 0, rv7 = 0;
+         if (dsp) {
+            cik = kdsp::dspsix[it - 1] * kdsp::dspsix[kt - 1];
+         } else {
+            int offs = (it - 1) * njvdw + (kt - 1);
+            rv = vdw::radmin[offs];
+            eps = vdw::epsilon[offs];
+            rv2 = rv * rv;
+            rv6 = rv2 * rv2 * rv2;
+            rv7 = rv6 * rv;
+         }
+         double etot = 0;
+         for (int j = 1; j <= ndelta; ++j) {
+            double r = offset + j * rdelta;
+            double r2 = r * r;
+            double r3 = r2 * r;
+            double r6 = r3 * r3;
+            double r7 = r6 * r;
+            double e = 0;
+            if (dsp) {
+               e = -cik / r6;
+            } else if (vdwtyp == Vdw::LJ) {
+               double p6 = rv6 / r6;
+               double p12 = p6 * p6;
+               e = eps * (p12 - 2 * p6);
+            } else if (vdwtyp == Vdw::HAL) {
+               double rho = r7 + ghal * rv7;
+               double tau = (dhal + 1) / (r + dhal * rv);
+               double tau7 = std::pow(tau, 7);
+               e = eps * rv7 * tau7 * ((ghal + 1) * rv7 / rho - 2);
+            } else if (vdwtyp == Vdw::BUCK or vdwtyp == Vdw::MM3HB) {
+               double p = std::sqrt(rv2 / r2);
+               double p6 = rv6 / r6;
+               double expterm = abuck * std::exp(-bbuck / p);
+               e = eps * (expterm - cbuck * p6);
+            }
+            if (r < off) {
+               double r4 = r2 * r2;
+               double r5 = r2 * r3;
+               double taper = c5 * r5 + c4 * r4 + c3 * r3 + c2 * r2 + c1 * r + c0;
+               e = e * (1 - taper);
+            }
+            etot += e * rdelta * r2;
+         }
+         ls.s0 += f0 * etot;
+         ls.s1 += f1 * etot;
+         ls.s2 += f2 * etot;
       }
    }
 }
 
-static void evdwZeroBuffers(int vers)
+LmdaFn lrcEval(const LrcSums& ls, double vl, double dl, double d2l)
 {
-   auto rc_a = rc_flag & calc::analyz;
-   auto do_a = vers & calc::analyz;
-   if (rc_a and do_a)
-      darray::zero(g::q0, bufferSize(), nev);
-   ev_buf.zero(vers);
-   vdwLmdaZero(vers);
+   const bool dodl = dl != 0 or d2l != 0;
+   const LmdaFn w = lmdaPwrChain(vl, ls.nw, dl, d2l, dodl);
+   const LmdaFn b = lmdaPwrChain(1 - vl, ls.nb, -dl, -d2l, dodl);
+   return {ls.s0 + w.f * ls.s1 + b.f * ls.s2, w.d1 * ls.s1 + b.d1 * ls.s2, w.d2 * ls.s1 + b.d2 * ls.s2};
 }
 
-static void evdwBegin(int vers)
+void lrcApply(int vers, int dlvers, const LrcSums& ls, energy_prec& eterm, virial_prec (&vterm)[9])
 {
-   zeroOnHost(energy_ev, virial_ev);
-   evdwZeroBuffers(vers);
+   auto do_e = vers & calc::energy;
+   auto do_v = vers & calc::virial;
+   const bool dodl = dlvers & calc::energy_dlmda1;
+   const LmdaFn e = lrcEval(ls, vlam, dodl ? dvldlmda : 0, dodl ? d2vldlmda2 : 0);
+   const double vol = boxVolume();
+
+   if (do_e) {
+      if (e.f != 0) {
+         energy_prec corr = e.f / vol;
+         eterm += corr;
+         energy_vdw += corr;
+      }
+      if ((dlvers & calc::energy_dlmda1) and e.d1 != 0) {
+         energy_prec corr = e.d1 / vol;
+         devdl += corr;
+         dedl += corr;
+      }
+      if ((dlvers & calc::energy_dlmda2) and e.d2 != 0) {
+         energy_prec corr = e.d2 / vol;
+         d2evdl2 += corr;
+         d2edl2 += corr;
+      }
+   }
+   // the virial of a constant over the volume is minus its energy
+   if (do_v) {
+      if (e.f != 0) {
+         virial_prec term = -e.f / vol;
+         for (int k : {0, 4, 8}) {
+            vterm[k] += term;
+            virial_vdw[k] += term;
+         }
+      }
+      if ((dlvers & calc::virial_dlmda) and e.d1 != 0) {
+         virial_prec term = -e.d1 / vol;
+         for (int k : {0, 4, 8})
+            dvirdl[k] += term;
+      }
+   }
 }
 
 static void evdwKernel(int vers)
@@ -566,68 +725,29 @@ static void evdwKernel(int vers)
       assert(false);
 }
 
-static void evdwFinish(int vers, energy_prec elrcv, virial_prec vlrcv, energy_prec delrcv = 0, energy_prec d2elrcv = 0,
-   virial_prec dvlrcv = 0)
+void evdw(int vers)
 {
-   auto do_e = vers & calc::energy;
-   auto do_v = vers & calc::virial;
-   const int vdl = lmdaDerivVers(vers, vdlmdaActive());
+   auto rc_a = rc_flag & calc::analyz;
+   auto do_a = vers & calc::analyz;
 
-   if (do_e) {
-      if (elrcv != 0) {
-         energy_prec corr = elrcv / boxVolume();
-         energy_ev += corr;
-         energy_vdw += corr;
-      }
-      if ((vdl & calc::energy_dlmda1) and delrcv != 0) {
-         energy_prec corr = delrcv / boxVolume();
-         devdl += corr;
-         dedl += corr;
-      }
-      if ((vdl & calc::energy_dlmda2) and d2elrcv != 0) {
-         energy_prec corr = d2elrcv / boxVolume();
-         d2evdl2 += corr;
-         d2edl2 += corr;
-      }
-   }
-   if (do_v) {
-      if (vlrcv != 0) {
-         virial_prec term = vlrcv / boxVolume();
-         virial_ev[0] += term; // xx
-         virial_ev[4] += term; // yy
-         virial_ev[8] += term; // zz
-         virial_vdw[0] += term;
-         virial_vdw[4] += term;
-         virial_vdw[8] += term;
-      }
-      if ((vdl & calc::virial_dlmda) and dvlrcv != 0) {
-         virial_prec term = dvlrcv / boxVolume();
-         dvirdl[0] += term;
-         dvirdl[4] += term;
-         dvirdl[8] += term;
-      }
-   }
+   zeroOnHost(energy_ev, virial_ev);
+   if (rc_a and do_a)
+      darray::zero(g::q0, bufferSize(), nev);
+   ev_buf.zero(vers);
+   vdwLmdaZero(vers);
+
+   evdwKernel(vers);
+   lrcApply(vers, lmdaDerivVers(vers, vdlmdaActive()), vdw_lrc, energy_ev, virial_ev);
+
    ev_buf.flush(vers);
    vdwLmdaFlush(vers);
 }
 
-void evdw(int vers)
-{
-   evdwBegin(vers);
-   evdwKernel(vers);
-   // The long-range correction is linear in vlambda, so the stored slope
-   // carries it to the current vlam exactly and gives its lambda derivatives.
-   energy_prec elrc;
-   virial_prec vlrc;
-   evdwLrcVol(elrc, vlrc);
-   evdwFinish(vers, elrc, vlrc, delrc_vol * dvldlmda, delrc_vol * d2vldlmda2, dvlrc_vol * dvldlmda);
-}
-
 void evdwLrcVol(energy_prec& elrc, virial_prec& vlrc)
 {
-   double dvl = vlam - vlam_lrc0;
-   elrc = elrc_vol + dvl * delrc_vol;
-   vlrc = vlrc_vol + dvl * dvlrc_vol;
+   const LmdaFn e = lrcEval(vdw_lrc, vlam, 0, 0);
+   elrc = e.f;
+   vlrc = -e.f;
 }
 }
 

@@ -53,7 +53,9 @@ InducedTrial::InducedTrial(History history)
 {
    assert(not s_trial);
    s_trial = true;
-   s_bypass = (history == History::BYPASS);
+   // A dual topology trial solves both endpoints, and its slot in each history
+   // would need putting back; it bypasses them instead.
+   s_bypass = (history == History::BYPASS) or use_epdt;
    if (use(Potent::POLAR)) {
       if (not s_snapshot)
          s_snapshot = new InducedSnapshot;
@@ -82,8 +84,7 @@ bool induceHistoryBypassed()
 
 UGuess induceGuess()
 {
-   // dual topology solves each subsystem from scratch
-   const bool wanted = polpred != UPred::NONE and not use_epdt;
+   const bool wanted = induceHistoryUsable();
    // After a wiggle the history belongs to the unwiggled coordinates.
    if (wanted and nualt >= maxualt and not s_retrying and not s_bypass)
       return UGuess::PREDICT;

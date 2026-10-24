@@ -11,8 +11,7 @@ void empoleChgpenDlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem,
    const int* restrict lst, real* restrict trqx, real* restrict trqy, real* restrict trqz, real* restrict dltrqx,
    real* restrict dltrqy, real* restrict dltrqz, real* restrict pot, real* restrict dlpot,
    const real (*restrict rpole)[10], const real* restrict pcore, const real* restrict pval, const real* restrict pdelta,
-   const real* restrict palpha, const int* restrict grp, real aewald, real f, GrpScale esc, real deldl, real d2eldl2,
-   RdtMask live)
+   const real* restrict palpha, const int* restrict grp, real aewald, real f, GrpScale esc, GrpPairScale ps)
 {
    constexpr bool do_a = Ver::a;
    constexpr bool do_e = Ver::e;
@@ -167,11 +166,11 @@ void empoleChgpenDlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem,
       real yr = yk[threadIdx.x] - yi[klane];
       real zr = zk[threadIdx.x] - zi[klane];
       real r2 = image2(xr, yr, zr);
+      // the site scales weight the flux potentials of the pair
       real si = esc.s[gi[klane]], dsi = esc.ds[gi[klane]];
       real sk = esc.s[gk], dsk = esc.ds[gk];
       // a pair with an annihilated site has neither energy nor lambda derivative
-      bool weighted = (si != 0 or dsi != 0) and (sk != 0 or dsk != 0);
-      if (r2 <= off * off and incl and weighted and grpPairLive(live, gi[klane], gk)) {
+      if (r2 <= off * off and incl and grpPairScaleLive(ps, gi[klane], gk)) {
          real e;
          real pota, potb;
          PairMPoleGrad pgrad;
@@ -203,12 +202,10 @@ void empoleChgpenDlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem,
             vzy = -0.5f * (zr * pgrad.frcy + yr * pgrad.frcz);
             vzz = -zr * pgrad.frcz;
          }
-         real scalelmda = si * sk;
-         real dlscale = dsi * sk + si * dsk;
-         real d2scale = 2 * dsi * dsk;
-         if (dsi != 0 or dsk != 0) {
-            real d2w = d2scale * deldl * deldl + dlscale * d2eldl2;
-            real dlw = dlscale * deldl;
+         real scalelmda = ps.sc[gi[klane]][gk];
+         real dlw = ps.dl[gi[klane]][gk];
+         real d2w = ps.d2l[gi[klane]][gk];
+         if (dlw != 0 or d2w != 0) {
             if CONSTEXPR (do_e) {
                if CONSTEXPR (do_dl1)
                   demdltl += floatTo<ebuf_prec>(dlw * e);
@@ -427,15 +424,16 @@ void empoleChgpenDlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem,
          bool incl = iid < kid and kid < n;
          int srcmask = 1 << srclane;
          incl = incl and (minfo0 & srcmask) == 0;
+         real scalea = 1;
          real xr = xk[threadIdx.x] - xi[klane];
          real yr = yk[threadIdx.x] - yi[klane];
          real zr = zk[threadIdx.x] - zi[klane];
          real r2 = image2(xr, yr, zr);
+         // the site scales weight the flux potentials of the pair
          real si = esc.s[gi[klane]], dsi = esc.ds[gi[klane]];
          real sk = esc.s[gk], dsk = esc.ds[gk];
          // a pair with an annihilated site has neither energy nor lambda derivative
-         bool weighted = (si != 0 or dsi != 0) and (sk != 0 or dsk != 0);
-         if (r2 <= off * off and incl and weighted and grpPairLive(live, gi[klane], gk)) {
+         if (r2 <= off * off and incl and grpPairScaleLive(ps, gi[klane], gk)) {
             real e;
             real pota, potb;
             PairMPoleGrad pgrad;
@@ -443,14 +441,14 @@ void empoleChgpenDlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem,
             real vi = vali[klane] + dvali[klane];
             real vk = valk + dvalk;
             if CONSTEXPR (CP == Chgpen::GORDON1) {
-               pair_mpole_chgpen<do_e, do_g, ETYP, CFLX>(r2, xr, yr, zr, 1,                                 //
+               pair_mpole_chgpen<do_e, do_g, ETYP, CFLX>(r2, xr, yr, zr, scalea,                            //
                   ci[klane], dix[klane], diy[klane], diz[klane], corei[klane], vi, alphai[klane],           //
                   qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane],             //
                   ck[threadIdx.x], dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x], corek, vk, alphak, //
                   qkxx, qkxy, qkxz, qkyy, qkyz, qkzz,                                                       //
                   f, aewald, e, pota, potb, pgrad);
             } else if CONSTEXPR (CP == Chgpen::GORDON2) {
-               pair_mpole_chgpen_aplus<do_e, do_g, ETYP, CFLX>(r2, xr, yr, zr, 1,                           //
+               pair_mpole_chgpen_aplus<do_e, do_g, ETYP, CFLX>(r2, xr, yr, zr, scalea,                      //
                   ci[klane], dix[klane], diy[klane], diz[klane], corei[klane], vi, alphai[klane],           //
                   qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane],             //
                   ck[threadIdx.x], dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x], corek, vk, alphak, //
@@ -467,12 +465,10 @@ void empoleChgpenDlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem,
                vzy = -0.5f * (zr * pgrad.frcy + yr * pgrad.frcz);
                vzz = -zr * pgrad.frcz;
             }
-            real scalelmda = si * sk;
-            real dlscale = dsi * sk + si * dsk;
-            real d2scale = 2 * dsi * dsk;
-            if (dsi != 0 or dsk != 0) {
-               real d2w = d2scale * deldl * deldl + dlscale * d2eldl2;
-               real dlw = dlscale * deldl;
+            real scalelmda = ps.sc[gi[klane]][gk];
+            real dlw = ps.dl[gi[klane]][gk];
+            real d2w = ps.d2l[gi[klane]][gk];
+            if (dlw != 0 or d2w != 0) {
                if CONSTEXPR (do_e) {
                   if CONSTEXPR (do_dl1)
                      demdltl += floatTo<ebuf_prec>(dlw * e);
@@ -512,7 +508,7 @@ void empoleChgpenDlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem,
                e *= scalelmda;
                emtl += floatTo<ebuf_prec>(e);
                if CONSTEXPR (do_a) {
-                  if (e != 0)
+                  if (scalea != 0 and e != 0)
                      nemtl += 1;
                }
             }
@@ -708,15 +704,16 @@ void empoleChgpenDlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem,
          int srclane = (ilane + j) & (WARP_SIZE - 1);
          int klane = srclane + threadIdx.x - ilane;
          bool incl = atomk > 0;
+         real scalea = 1;
          real xr = xk[threadIdx.x] - xi[klane];
          real yr = yk[threadIdx.x] - yi[klane];
          real zr = zk[threadIdx.x] - zi[klane];
          real r2 = image2(xr, yr, zr);
+         // the site scales weight the flux potentials of the pair
          real si = esc.s[gi[klane]], dsi = esc.ds[gi[klane]];
          real sk = esc.s[gk], dsk = esc.ds[gk];
          // a pair with an annihilated site has neither energy nor lambda derivative
-         bool weighted = (si != 0 or dsi != 0) and (sk != 0 or dsk != 0);
-         if (r2 <= off * off and incl and weighted and grpPairLive(live, gi[klane], gk)) {
+         if (r2 <= off * off and incl and grpPairScaleLive(ps, gi[klane], gk)) {
             real e;
             real pota, potb;
             PairMPoleGrad pgrad;
@@ -724,14 +721,14 @@ void empoleChgpenDlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem,
             real vi = vali[klane] + dvali[klane];
             real vk = valk + dvalk;
             if CONSTEXPR (CP == Chgpen::GORDON1) {
-               pair_mpole_chgpen<do_e, do_g, ETYP, CFLX>(r2, xr, yr, zr, 1,                                 //
+               pair_mpole_chgpen<do_e, do_g, ETYP, CFLX>(r2, xr, yr, zr, scalea,                            //
                   ci[klane], dix[klane], diy[klane], diz[klane], corei[klane], vi, alphai[klane],           //
                   qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane],             //
                   ck[threadIdx.x], dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x], corek, vk, alphak, //
                   qkxx, qkxy, qkxz, qkyy, qkyz, qkzz,                                                       //
                   f, aewald, e, pota, potb, pgrad);
             } else if CONSTEXPR (CP == Chgpen::GORDON2) {
-               pair_mpole_chgpen_aplus<do_e, do_g, ETYP, CFLX>(r2, xr, yr, zr, 1,                           //
+               pair_mpole_chgpen_aplus<do_e, do_g, ETYP, CFLX>(r2, xr, yr, zr, scalea,                      //
                   ci[klane], dix[klane], diy[klane], diz[klane], corei[klane], vi, alphai[klane],           //
                   qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane],             //
                   ck[threadIdx.x], dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x], corek, vk, alphak, //
@@ -748,12 +745,10 @@ void empoleChgpenDlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem,
                vzy = -0.5f * (zr * pgrad.frcy + yr * pgrad.frcz);
                vzz = -zr * pgrad.frcz;
             }
-            real scalelmda = si * sk;
-            real dlscale = dsi * sk + si * dsk;
-            real d2scale = 2 * dsi * dsk;
-            if (dsi != 0 or dsk != 0) {
-               real d2w = d2scale * deldl * deldl + dlscale * d2eldl2;
-               real dlw = dlscale * deldl;
+            real scalelmda = ps.sc[gi[klane]][gk];
+            real dlw = ps.dl[gi[klane]][gk];
+            real d2w = ps.d2l[gi[klane]][gk];
+            if (dlw != 0 or d2w != 0) {
                if CONSTEXPR (do_e) {
                   if CONSTEXPR (do_dl1)
                      demdltl += floatTo<ebuf_prec>(dlw * e);
@@ -793,7 +788,7 @@ void empoleChgpenDlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem,
                e *= scalelmda;
                emtl += floatTo<ebuf_prec>(e);
                if CONSTEXPR (do_a) {
-                  if (e != 0)
+                  if (scalea != 0 and e != 0)
                      nemtl += 1;
                }
             }

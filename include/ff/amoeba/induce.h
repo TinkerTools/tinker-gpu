@@ -6,6 +6,8 @@
 #include <vector>
 
 namespace tinker {
+enum class RdtMask : unsigned;
+
 /// \ingroup polar
 /// \{
 // electrostatic field due to permanent multipoles
@@ -34,11 +36,30 @@ void sparsePrecondApply(const real (*rsd)[3],
 void ulspredSave(const real (*uind)[3], const real (*uinp)[3]);
 
 /// The induced dipole predictor a run uses: the choice the Fortran reader made
-/// (predict.f), except for the dynamics of free energy perturbation and of the
-/// adaptive lambda bias methods, where the reader turns prediction off and the
-/// POLAR-PREDICT keyword is read again here.
+/// (predict.f), except for the dynamics of free energy perturbation, of the
+/// adaptive lambda bias methods and of dual topology polarization, where the
+/// reader turns prediction off and the POLAR-PREDICT keyword is read again here.
 UPred polarPredictor();
 void ulspredSum(real (*uind)[3], real (*uinp)[3]);
+
+/// Dual topology polarization solves two parameter states that do not move with
+/// lambda, so each endpoint keeps a predictor history of its own; the globals
+/// hold the one selected last. Allocates the second history after, and puts
+/// the first back before, the epolar data routines handle the globals;
+/// \c two_sets is whether the system keeps the uinp history too.
+void induceHistoryData(RcOp op, bool two_sets);
+/// Selects the predictor history of dual topology endpoint \c k for the solves
+/// to come; nothing to do without per-endpoint histories. \c state is the
+/// subsystem the endpoint solves: a staged relative leg changes the charging
+/// ligand, and a history built for another subsystem is emptied rather than
+/// extrapolated from.
+void induceUseHistory(int k, RdtMask state);
+/// Empties the history of endpoint \c k, whose solves were skipped, so that
+/// it is never extrapolated across the gap.
+void induceForgetHistory(int k);
+/// Whether solves may predict from and save to the history: a predictor is
+/// chosen and, under dual topology, each endpoint has a history of its own.
+bool induceHistoryUsable();
 
 /// A copy of the induced dipoles, the predictor history and, with exchange
 /// polarization, its matrices, so that an energy evaluated at a trial geometry

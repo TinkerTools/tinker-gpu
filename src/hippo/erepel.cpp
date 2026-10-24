@@ -167,40 +167,9 @@ void erepelData(RcOp op)
    }
 }
 
-RepelSoft repelSoft(bool dodl)
+SoftCoreLmda repelSoft(bool dodl)
 {
-   // Skip any shift term whose coefficient vanishes, so that no power of one
-   // minus lambda goes negative (erepsc.f:repsc4).
-   double vlm = vlam;
-   double omvl = 1 - vlm;
-   double alm = scalphar * std::pow(vlm, scexprm);
-   double alm1 = alm * vlm;
-   double alm2 = alm1 * vlm;
-
-   RepelSoft rs = {};
-   rs.rlsc = std::pow(vlm, scexpr);
-   rs.rshf = alm * std::pow(omvl, scexprp);
-   rs.n = scexpr;
-   if (dodl) {
-      rs.rlsc1 = std::pow(vlm, scexpr - 1);
-      double rshf1 = 0;
-      if (scexprm != 0)
-         rshf1 = scexprm * alm * std::pow(omvl, scexprp);
-      rs.rshf1 = rshf1 - scexprp * alm1 * std::pow(omvl, scexprp - 1);
-      if (use_d2lmda) {
-         rs.rlsc2 = std::pow(vlm, scexpr - 2);
-         double rshf2 = 0;
-         if (scexprm != 0)
-            rshf2 = scexprm * (scexprm - 1) * alm * std::pow(omvl, scexprp)
-               - 2 * scexprm * scexprp * alm1 * std::pow(omvl, scexprp - 1);
-         if (scexprp != 1)
-            rshf2 += scexprp * (scexprp - 1) * alm2 * std::pow(omvl, scexprp - 2);
-         rs.rshf2 = rshf2;
-      }
-      rs.dvl = dvldlmda;
-      rs.d2vl = d2vldlmda2;
-   }
-   return rs;
+   return softCoreLmda(vlam, scexpr, scalphar, scexprm, scexprp, dvldlmda, d2vldlmda2, dodl);
 }
 
 TINKER_FVOID2(acc1, cu1, rotrepole);

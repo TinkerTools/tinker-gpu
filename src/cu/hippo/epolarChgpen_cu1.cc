@@ -1,4 +1,4 @@
-// ck.py Version 3.0.2
+// ck.py Version 3.1.0
 template <class Ver, class ETYP, bool CFLX>
 __global__
 void epolarChgpen_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict np, EnergyBuffer restrict ep,
@@ -8,7 +8,7 @@ void epolarChgpen_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict np, Energ
    const Spatial::SortedAtom* restrict sorted, int nakpl, const int* restrict iakpl, int niak, const int* restrict iak,
    const int* restrict lst, real (*restrict ufld)[3], real (*restrict dufld)[6], const real (*restrict uind)[3],
    real* restrict pot, const real (*restrict rpole)[10], real* restrict pcore, real* restrict pval,
-   const real* restrict palpha, real aewald, real f)
+   const real* restrict palpha, real aewald, real f, const int* restrict grp, RdtMask live)
 {
    constexpr bool do_a = Ver::a;
    constexpr bool do_e = Ver::e;
@@ -42,10 +42,12 @@ void epolarChgpen_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict np, Energ
       diz[BLOCK_DIM], qixx[BLOCK_DIM], qixy[BLOCK_DIM], qixz[BLOCK_DIM], qiyy[BLOCK_DIM], qiyz[BLOCK_DIM],
       qizz[BLOCK_DIM], uix[BLOCK_DIM], uiy[BLOCK_DIM], uiz[BLOCK_DIM], corei[BLOCK_DIM], alphai[BLOCK_DIM],
       vali[BLOCK_DIM];
+   __shared__ int gi[BLOCK_DIM];
    __shared__ real xk[BLOCK_DIM], yk[BLOCK_DIM], zk[BLOCK_DIM], ck[BLOCK_DIM], dkx[BLOCK_DIM], dky[BLOCK_DIM],
       dkz[BLOCK_DIM], qkxx[BLOCK_DIM], qkxy[BLOCK_DIM], qkxz[BLOCK_DIM], qkyy[BLOCK_DIM], qkyz[BLOCK_DIM],
       qkzz[BLOCK_DIM];
    real ukx, uky, ukz, corek, alphak, valk;
+   int gk;
    real gxi, gyi, gzi, txi, tyi, tzi, dui0, dui1, dui2, dui3, dui4, dui5, poti;
    real gxk, gyk, gzk, txk, tyk, tzk, duk0, duk1, duk2, duk3, duk4, duk5, potk;
 
@@ -107,6 +109,7 @@ void epolarChgpen_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict np, Energ
       corei[klane] = pcore[i];
       alphai[klane] = palpha[i];
       vali[klane] = pval[i];
+      gi[klane] = (grp ? grp[i] : 0);
       xk[threadIdx.x] = x[k];
       yk[threadIdx.x] = y[k];
       zk[threadIdx.x] = z[k];
@@ -126,6 +129,7 @@ void epolarChgpen_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict np, Energ
       corek = pcore[k];
       alphak = palpha[k];
       valk = pval[k];
+      gk = (grp ? grp[k] : 0);
 
       constexpr bool incl = true;
       real xr = xk[threadIdx.x] - xi[klane];
@@ -138,7 +142,9 @@ void epolarChgpen_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict np, Energ
       zero(pgrad);
 
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off * off and incl) {
+      // a pair with a dead group has no multipole or induced dipole;
+      // grp is null when every group is live
+      if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
          pair_polar_chgpen<do_e, do_g, ETYP, CFLX>( //
             r2, xr, yr, zr, scaleb, scalec,         //
             ci[klane], dix[klane], diy[klane], diz[klane], corei[klane], vali[klane], alphai[klane], qixx[klane],
@@ -289,6 +295,7 @@ void epolarChgpen_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict np, Energ
       corei[threadIdx.x] = pcore[i];
       alphai[threadIdx.x] = palpha[i];
       vali[threadIdx.x] = pval[i];
+      gi[threadIdx.x] = (grp ? grp[i] : 0);
       xk[threadIdx.x] = sorted[atomk].x;
       yk[threadIdx.x] = sorted[atomk].y;
       zk[threadIdx.x] = sorted[atomk].z;
@@ -308,6 +315,7 @@ void epolarChgpen_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict np, Energ
       corek = pcore[k];
       alphak = palpha[k];
       valk = pval[k];
+      gk = (grp ? grp[k] : 0);
       __syncwarp();
 
       unsigned int dwinfo0 = dwinfo[iw * WARP_SIZE + ilane];
@@ -327,7 +335,9 @@ void epolarChgpen_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict np, Energ
          zero(pgrad);
 
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // a pair with a dead group has no multipole or induced dipole;
+         // grp is null when every group is live
+         if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
             pair_polar_chgpen<do_e, do_g, ETYP, CFLX>( //
                r2, xr, yr, zr, 1, 1,                   //
                ci[klane], dix[klane], diy[klane], diz[klane], corei[klane], vali[klane], alphai[klane], qixx[klane],
@@ -492,6 +502,7 @@ void epolarChgpen_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict np, Energ
       corei[threadIdx.x] = pcore[i];
       alphai[threadIdx.x] = palpha[i];
       vali[threadIdx.x] = pval[i];
+      gi[threadIdx.x] = (grp ? grp[i] : 0);
       xk[threadIdx.x] = sorted[atomk].x;
       yk[threadIdx.x] = sorted[atomk].y;
       zk[threadIdx.x] = sorted[atomk].z;
@@ -511,6 +522,7 @@ void epolarChgpen_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict np, Energ
       corek = pcore[k];
       alphak = palpha[k];
       valk = pval[k];
+      gk = (grp ? grp[k] : 0);
       __syncwarp();
 
       for (int j = 0; j < WARP_SIZE; ++j) {
@@ -527,7 +539,9 @@ void epolarChgpen_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict np, Energ
          zero(pgrad);
 
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // a pair with a dead group has no multipole or induced dipole;
+         // grp is null when every group is live
+         if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
             pair_polar_chgpen<do_e, do_g, ETYP, CFLX>( //
                r2, xr, yr, zr, 1, 1,                   //
                ci[klane], dix[klane], diy[klane], diz[klane], corei[klane], vali[klane], alphai[klane], qixx[klane],

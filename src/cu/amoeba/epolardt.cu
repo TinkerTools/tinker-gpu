@@ -25,7 +25,7 @@
 //
 // and the kernel needs no per-pair group machinery. The caller accumulates all
 // the passes into the global buffers and converts the torque once at the end.
-// See DtCoef and dtPassWeights().
+// See DtPass and dtPasses().
 //
 // The energy travels with its own lambda derivatives, and for polarization all
 // three ride the dot product rather than this kernel -- the only version that

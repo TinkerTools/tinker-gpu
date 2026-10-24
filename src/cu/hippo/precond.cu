@@ -1,4 +1,5 @@
 #include "ff/cumodamoeba.h"
+#include "ff/dlmda.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/modhippo.h"
@@ -36,7 +37,7 @@ void sparsePrecondApply2_cu(const real (*rsd)[3], real (*zrsd)[3])
    int ngrid = gpuGridSize(BLOCK_DIM);
    sparsePrecond_cu4<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, off, st.si1.bit0, nwexclude, wexclude,
       wexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, rsd, zrsd, palpha,
-      polarity);
+      polarity, elecDeadGroups(), elecLiveMask());
 }
 
 #include "sparsePrecond_cu6.cc"
@@ -52,6 +53,6 @@ void sparsePrecondApply3_cu(const real (*rsd)[3], real (*zrsd)[3])
    int ngrid = gpuGridSize(BLOCK_DIM);
    sparsePrecond_cu6<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, off, st.si1.bit0, nuexclude, uexclude,
       uexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, rsd, zrsd, pdamp,
-      polarity);
+      polarity, elecDeadGroups(), elecLiveMask());
 }
 }

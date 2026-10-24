@@ -396,6 +396,160 @@ TEST_CASE("INDUCE-trial-history", "[ff][induce]")
    s.session.end();
 }
 
+#if TINKER_GPULANG_CUDA
+// Dual topology keeps a predictor history for each endpoint. A trial that asks
+// to use the history bypasses both instead, since putting a rejected trial back
+// would take a slot from each; accepted or not, it leaves them as they were.
+TEST_CASE("INDUCE-trial-dualtopo", "[ff][induce]")
+{
+   Setup s(kMd, "lambda-deriv2\n");
+   REQUIRE(use_epdt);
+   REQUIRE(polpred == UPred::ASPC);
+   REQUIRE(induceHistoryUsable());
+   for (int step = 0; step < 19; ++step) {
+      nudge(step);
+      energy(calc::v1);
+   }
+   DtPass pass[2];
+   dtPasses(pass);
+   std::vector<Induced> before;
+   for (int k : {0, 1}) {
+      induceUseHistory(k, pass[k].mask);
+      before.emplace_back();
+      REQUIRE(before.back().nualt >= maxualt);
+      REQUIRE(induceGuess() == UGuess::PREDICT);
+   }
+   REQUIRE_FALSE(sameHistory(before[0], before[1]));
+
+   for (bool accept : {false, true}) {
+      CAPTURE(accept);
+      {
+         InducedTrial trial(InducedTrial::History::USE);
+         nudge(19);
+         energy(calc::v1);
+         if (accept)
+            trial.accept();
+      }
+      for (int k : {0, 1}) {
+         CAPTURE(k);
+         induceUseHistory(k, pass[k].mask);
+         REQUIRE(sameHistory(Induced(), before[k]));
+      }
+   }
+
+   s.session.end();
+}
+
+// One step at main lambda lmda with energy version vers, and the history
+// lengths of the two dual topology endpoints and the guess the next coupled
+// solve takes.
+struct EndpointStep
+{
+   int step = 0;
+   int env = 0, coupled = 0;
+   UGuess guess = UGuess::ZERO;
+
+   void at(double lmda, int vers = calc::v1)
+   {
+      lambda = lmda;
+      nudge(step++);
+      energy(vers);
+      DtPass pass[2];
+      dtPasses(pass);
+      induceUseHistory(0, pass[0].mask);
+      env = nualt;
+      induceUseHistory(1, pass[1].mask);
+      coupled = nualt;
+      guess = induceGuess();
+   }
+};
+
+// An endpoint history has to come from consecutive solves of one subsystem.
+// The coupled endpoint carries nothing in the middle leg of a staged relative
+// schedule, so a step there skips it and empties its history; the solves after
+// the gap start from the direct guess and predict again only once the history
+// is full. The legs on either side of the middle one charge different ligands,
+// so a move that jumps over it, as a Monte Carlo lambda move may, empties the
+// coupled history as well. The environment endpoint keeps predicting.
+TEST_CASE("INDUCE-dualtopo-history-gaps", "[ff][induce]")
+{
+   const System rels = {"mutate/083_water_rels_ye_l085.key", "mutate/water2.xyz", "commit_6fe8e913/water03.prm"};
+   Setup s(kMd, "polar-predict aspc\nrel-stage lig2 0.0 0.3\nrel-stage vdwm 0.3 0.7\n", rels);
+   REQUIRE(use_epdt);
+   REQUIRE(use_rel);
+   REQUIRE(induceHistoryUsable());
+
+   EndpointStep e;
+   for (int i = 0; i < maxualt + 3; ++i)
+      e.at(0.85);
+   REQUIRE(relstage == RelStage::LIG1);
+   REQUIRE(e.env >= maxualt);
+   REQUIRE(e.coupled >= maxualt);
+   REQUIRE(e.guess == UGuess::PREDICT);
+
+   // the middle leg: no coupled solve, and its history is dropped
+   int env0 = e.env;
+   e.at(0.5);
+   REQUIRE(relstage == RelStage::VDWM);
+   REQUIRE(e.env == env0 + 1);
+   REQUIRE(e.coupled == 0);
+
+   // back in the ligand 1 leg it starts over from the direct guess, and
+   // predicts once it is full
+   for (int i = 0; i < maxualt - 1; ++i)
+      e.at(0.85);
+   REQUIRE(e.coupled == maxualt - 1);
+   REQUIRE(e.guess == UGuess::DIRECT);
+   e.at(0.85);
+   REQUIRE(e.coupled == maxualt);
+   REQUIRE(e.guess == UGuess::PREDICT);
+
+   // straight into the ligand 2 leg: another ligand, another history
+   env0 = e.env;
+   e.at(0.15);
+   REQUIRE(relstage == RelStage::LIG2);
+   REQUIRE(e.env == env0 + 1);
+   REQUIRE(e.coupled == 1);
+   REQUIRE(e.guess == UGuess::DIRECT);
+
+   s.session.end();
+}
+
+// Whether an endpoint is solved also depends on the version: at a weight of
+// zero with a slope, the coupled endpoint is solved for the lambda derivative
+// of a gradient and skipped for an energy alone, which empties its history.
+TEST_CASE("INDUCE-dualtopo-version-skip", "[ff][induce]")
+{
+   Setup s(kMd, "lambda-deriv2\n");
+   REQUIRE(use_epdt);
+   REQUIRE(induceHistoryUsable());
+
+   EndpointStep e;
+   for (int i = 0; i < maxualt + 3; ++i)
+      e.at(0.5);
+   REQUIRE(e.coupled >= maxualt);
+
+   int env0 = e.env, coupled0 = e.coupled;
+   e.at(0.0);
+   DtPass pass[2];
+   dtPasses(pass);
+   REQUIRE(pass[1].wa == 0);
+   REQUIRE(pass[1].wb != 0);
+   REQUIRE(e.env == env0 + 1);
+   REQUIRE(e.coupled == coupled0 + 1);
+
+   env0 = e.env;
+   e.at(0.0, calc::v0);
+   REQUIRE(e.env == env0 + 1);
+   REQUIRE(e.coupled == 0);
+   e.at(0.0);
+   REQUIRE(e.coupled == 1);
+   REQUIRE(e.guess == UGuess::DIRECT);
+
+   s.session.end();
+}
+#endif
+
 // HIPPO keeps one set of predictor slots, where AMOEBA keeps two; a trial must
 // not reach for the second. Copying an unallocated slot is an error that only
 // a build that checks the device calls reports, so this case counts in the

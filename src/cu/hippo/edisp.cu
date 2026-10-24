@@ -5,6 +5,7 @@
 #include "ff/spatial.h"
 #include "ff/switch.h"
 #include "seq/bsplgen.h"
+#include "seq/dspsplit.h"
 #include "seq/launch.h"
 #include "seq/pair_disp.h"
 #include "seq/triangle.h"
@@ -92,18 +93,10 @@ static void pmeConvDisp_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgr
 
       // With the ligand in the imaginary part, the environment and ligand
       // transforms at k come from the packed one at k and -k (edisp.f:dspsplit).
-      real gridx = 0, gridy = 0, ser = 0, sei = 0, slr = 0, sli = 0;
+      real gridx = 0, gridy = 0;
+      DspGridK sk = {};
       if (split) {
-         int j1 = (nfft1 - k1) % nfft1;
-         int j2 = (nfft2 - k2) % nfft2;
-         int j3 = (nfft3 - k3) % nfft3;
-         int jj = j1 + nfft1 * (j2 + nfft2 * j3);
-         real zr = qfwd[i][0], zi = qfwd[i][1];
-         real yr = qfwd[jj][0], yi = qfwd[jj][1];
-         ser = (zr + yr) / 2;
-         sei = (zi - yi) / 2;
-         slr = (zi + yi) / 2;
-         sli = (yr - zr) / 2;
+         sk = dspGridK(qfwd, i, k1, k2, k3, nfft1, nfft2, nfft3);
       } else {
          gridx = qgrid[i][0];
          gridy = qgrid[i][1];
@@ -132,7 +125,7 @@ static void pmeConvDisp_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgr
          if CONSTEXPR (DO_E or DO_V) {
             real struc2;
             if (split)
-               struc2 = ser * ser + sei * sei + wll * (slr * slr + sli * sli) + 2 * wel * (ser * slr + sei * sli);
+               struc2 = dspStruc(sk, 1, wel, wll);
             else
                struc2 = gridx * gridx + gridy * gridy;
             real e = eterm * struc2;
@@ -159,11 +152,11 @@ static void pmeConvDisp_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgr
          // the lambda derivatives of the energy and virial come from those of
          // the pair weights, with the split always on
          if CONSTEXPR (DO_DL1) {
-            real strucd = dwll * (slr * slr + sli * sli) + 2 * dwel * (ser * slr + sei * sli);
+            real strucd = dspStruc(sk, 0, dwel, dwll);
             real edl = eterm * strucd;
             dl1tl += floatTo<ebuf_prec>(edl);
             if CONSTEXPR (DO_DL2) {
-               real strucd2 = d2wll * (slr * slr + sli * sli) + 2 * d2wel * (ser * slr + sei * sli);
+               real strucd2 = dspStruc(sk, 0, d2wel, d2wll);
                dl2tl += floatTo<ebuf_prec>(eterm * strucd2);
             }
             if CONSTEXPR (DO_VDL) {
@@ -180,8 +173,7 @@ static void pmeConvDisp_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgr
 
       // the potentials of the environment and of the ligand, packed the same way
       if (split) {
-         qgrid[i][0] = eterm * (ser - wel * sei + wel * slr - wll * sli);
-         qgrid[i][1] = eterm * (sei + wel * ser + wel * sli + wll * slr);
+         dspPot(sk, eterm, 1, wel, wll, qgrid[i]);
       } else {
          qgrid[i][0] = eterm * gridx;
          qgrid[i][1] = eterm * gridy;
@@ -189,8 +181,7 @@ static void pmeConvDisp_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgr
 
       // and their lambda derivatives, packed with those of the pair weights
       if CONSTEXPR (DO_DL2) {
-         qdl[i][0] = eterm * (dwel * slr - dwel * sei - dwll * sli);
-         qdl[i][1] = eterm * (dwel * ser + dwel * sli + dwll * slr);
+         dspPot(sk, eterm, 0, dwel, dwll, qdl[i]);
       }
    }
 

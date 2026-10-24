@@ -45,7 +45,7 @@ void eabfBias(int vers)
    // The bias depends on lambda alone, so it carries no Cartesian force/virial.
    // Its value stays in bostlmda: a Monte Carlo lambda move takes it back out
    // of the energy of the step.
-   efreeLmda(bostlmda, lmdadfdl);
+   efreeLmda(lambda, bostlmda, lmdadfdl);
    if (vers & calc::energy)
       esum -= bostlmda;
 }

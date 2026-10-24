@@ -4,9 +4,11 @@
 #include "ff/amoeba/mpole.h"
 #include "ff/atom.h"
 #include "ff/dlmda.h"
+#include "ff/efep.h"
 #include "ff/egvop.h"
 #include "ff/elec.h"
 #include "ff/energy.h"
+#include "ff/ethrmint.h"
 #include "ff/evdw.h"
 #include "ff/hippo/edisp.h"
 #include "ff/hippo/erepel.h"
@@ -21,8 +23,10 @@
 
 #include <tinker/detail/atoms.hh>
 #include <tinker/detail/dlmda.hh>
+#include <tinker/detail/fep.hh>
 #include <tinker/detail/mpole.hh>
 #include <tinker/detail/mutant.hh>
+#include <tinker/detail/thrmint.hh>
 #include <tinker/routines.h>
 
 #include <algorithm>
@@ -36,7 +40,7 @@
 using namespace tinker;
 
 // The fixtures that need neither lambda derivatives nor dual topology (001-029,
-// most of 089-103, 180, 182, 209 and 212) run on the OpenACC build's own kernels too;
+// most of 089-103, 180, 182, 209, 212, 236 and 238) run on the OpenACC build's own kernels too;
 // the rest of this file is CUDA only.
 #if TINKER_GPULANG_CUDA || TINKER_GPULANG_OPENACC
 
@@ -84,6 +88,9 @@ struct Fixture
    /// reference's first lambda derivatives are scaled by it and the second by
    /// its square, as are their tolerances.
    double dlscale = 1;
+   /// Parameter file under test/file, for a fixture whose force field is not
+   /// the one its coordinates usually load; see copyParams.
+   const char* prm = nullptr;
 };
 
 const Fixture kFixtures[] = {
@@ -209,9 +216,9 @@ const Fixture kFixtures[] = {
    {"120_water_rels_ye_lig1_ex3_l085", "water2", true, true, true, true},
    {"121_water_rels_ye_lig2_ix2_l015", "water2", true, true, true, true},
    {"122_water_ast_v05_annihilate", "water2", true, true, true, true},
-   {"123_water_exf_adt_l10", "water2", true, true, false, true},
-   {"124_water_exf_adt_l05", "water2", true, true, false, true},
-   {"125_water_exf_adt_l00", "water2", true, true, false, true},
+   {"123_water_exf_adt_l10", "water2", true, true, true, true},
+   {"124_water_exf_adt_l05", "water2", true, true, true, true},
+   {"125_water_exf_adt_l00", "water2", true, true, true, true},
    {"126_water_ast_ye_l10", "water2", true, true, true, true},
    {"127_water_ast_ne_l10", "water2", true, true, true, true},
    {"128_water_ast_ye_l05", "water2", true, true, true, true},
@@ -275,6 +282,12 @@ const Fixture kFixtures[] = {
    {"186_water2ovl_rels_ne_lig2_l015", "water2ovl", true, true, true, true},
    {"187_water2ovl_rels_ye_vdwm_exp_l050", "water2ovl", true, true, true, true},
    {"188_water2near_rels_ye_vdwm_exp_l050", "water2near", true, true, true, true},
+   {"236_wat2ovl_hip_m00p00", "wat2ovl", false, false, false, false, nullptr, {}, 1, "commit_aad9340c/water21.prm"},
+   {"237_wat2ovl_hip_m00_d2_l00", "wat2ovl", false, false, false, true, nullptr, {}, 1, "commit_aad9340c/water21.prm"},
+   {"238_water2ovl_ap_m00p00", "water2ovl", true, true, false, false, nullptr, {}, 1,
+      "commit_152ecec0/AMOEBAplus_Org.prm"},
+   {"239_water2ovl_hip_rels_lig1_ex3_l085", "water2ovl", true, true, false, true, nullptr, {}, 1,
+      "commit_aad9340c/water21.prm"},
    {"189_water_rels3_l100", "water2", true, true, true, true, "082_water_rels_ye_l100"},
    {"190_water_rels3_l085", "water2", true, true, true, true, "083_water_rels_ye_l085"},
    {"191_water_rels3_l070", "water2", true, true, true, true, "084_water_rels_ye_l070"},
@@ -356,11 +369,14 @@ std::string systemDir(const std::string& base)
 // The frames dimer and the ion cluster load amoeba09, chignolin and its mirror
 // amoebabio09, trp-cage amoebapro13, the AMOEBA+ water dimer, the alcohol
 // tetramer and the tetramer without its ethanol AMOEBAplus_Org, and the HIPPO
-// water dimer water21.
-std::vector<std::unique_ptr<TestFile>> copyParams(const std::string& base)
+// water dimer water21. A fixture that names its own parameter file loads that
+// one instead.
+std::vector<std::unique_ptr<TestFile>> copyParams(const std::string& base, const char* prm)
 {
    std::vector<std::unique_ptr<TestFile>> files;
-   if (base == "g3") {
+   if (prm) {
+      files.emplace_back(new TestFile(TINKER9_DIRSTR "/test/file/" + std::string(prm)));
+   } else if (base == "g3") {
       std::string dir = systemDir(base);
       files.emplace_back(new TestFile(dir + "g3.prm"));
       files.emplace_back(new TestFile(dir + "g3_vdw14.prm"));
@@ -412,7 +428,7 @@ struct Setup
       , argv{"dummy", xyz.c_str(), "-k", key.c_str()}
       , fxyz(systemDir(fx.base) + xyz, xyz)
       , fkey(TINKER9_DIRSTR "/test/file/mutate/" + key, key, platformKey(keyextra))
-      , fprm(copyParams(fx.base))
+      , fprm(copyParams(fx.base, fx.prm))
       , session(4, argv)
    {
       rc_flag = rc;
@@ -655,6 +671,16 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
 }
 
 #if TINKER_GPULANG_CUDA
+// The topology flags the fixture's key sets, read in a session of their own,
+// since a finished run clears them.
+void requireSingleTopology(const Fixture& fx, bool epast)
+{
+   Setup s(fx, calc::xyz | calc::mass | calc::energy);
+   REQUIRE(use_emast);
+   REQUIRE(use_epast == epast);
+   s.session.end();
+}
+
 // Single topology electrostatics that the fused kernel still has to decline:
 // without single topology polarization alongside it, the dispatch is not the
 // reduced one emplarast is built for. Dropping the counts is what makes this
@@ -662,10 +688,9 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
 // assertion would pass for the wrong reason.
 void runNoEmplarFixture(const Fixture& fx)
 {
+   requireSingleTopology(fx, false);
    runFixture(fx);
    runFixture(fx, Fuse::Forbid);
-   REQUIRE(use_emast);
-   REQUIRE_FALSE(use_epast);
 }
 
 // Single topology on both terms, run twice: once asking for interaction counts,
@@ -676,25 +701,22 @@ void runNoEmplarFixture(const Fixture& fx)
 // references carry zeros for d2E/dL2, dF/dL and dV/dL.
 void runEmplarAstFixture(const Fixture& fx)
 {
+   requireSingleTopology(fx, true);
    runFixture(fx);
    runFixture(fx, Fuse::Require);
-   REQUIRE(use_emast);
-   REQUIRE(use_epast);
 }
 
-// Checks which dual topology endpoints the run had to build. dtNeed() decides
-// this per term from the interpolation weight and the chain rule, so it is
+// Checks which dual topology endpoints the run had to build. dtPasses() decides
+// this from the interpolation weight and the chain rule (dtNeed), so it is
 // asserted against the sub-lambda state the fixture left behind.
 void runLegSkipFixture(const Fixture& fx, bool expect0, bool expect1)
 {
    runFixture(fx);
 
-   double w, dw, d2w;
-   bool need0, need1;
-
-   dtWeightNeed(plam, epdtexp, dpldlmda, d2pldlmda2, w, dw, d2w, need0, need1);
-   REQUIRE(need0 == expect0);
-   REQUIRE(need1 == expect1);
+   DtPass pass[2];
+   dtPasses(pass);
+   REQUIRE(pass[0].need == expect0);
+   REQUIRE(pass[1].need == expect1);
 }
 
 // Sum of |dF/dL| over every atom, zero if the force lambda derivative has no
@@ -854,8 +876,8 @@ void runRepscCase(const RepscCase& c)
 // an exponent below one, a nonpositive added exponent, and with "lambda-deriv2"
 // an exponent between one and two or an exponent sum below two. Each key must
 // then give the energy of a key that holds the reset values (test_mutate_dspsc).
-// Lambda derivatives with the long range correction stop in Fortran setup and
-// cannot run in process.
+// Lambda derivatives with the long range correction run and leave the energy
+// of the same key without them.
 struct DspscCase
 {
    const char* key;
@@ -895,6 +917,51 @@ void runDspscCase(const DspscCase& c, bool deriv)
    const double e = dspscEnergy(c.key, c, deriv);
    const double eref = dspscEnergy(c.refkey, c, deriv);
    REQUIRE(e == eref);
+}
+
+// A soft core buffered 14-7 parameter outside its allowed range is reset to
+// its default (mutate.f): a negative alpha or m, an exponent below one, a one
+// minus lambda exponent below one, and with "lambda-deriv2" or OST an exponent
+// below two or a one minus lambda exponent between one and two. Each key must
+// then give the energy of a key that holds the reset values (test_mutate_scexp).
+struct VsoftCase
+{
+   const char* key;
+   const char* refkey;
+   double alpha, n, m, p;
+};
+
+static double vsoftEnergy(const char* key, const VsoftCase& c)
+{
+   INFO(key);
+   Fixture fx = {key, "water2", false, false, false, true};
+   Setup s(fx, calc::xyz | calc::mass | calc::vmask);
+   REQUIRE(mutant::scalphav == c.alpha);
+   REQUIRE(mutant::scexp == c.n);
+   REQUIRE(mutant::scexpm == c.m);
+   REQUIRE(mutant::scexpp == c.p);
+   REQUIRE(scalphav == c.alpha);
+   REQUIRE(scexp == c.n);
+   REQUIRE(scexpm == c.m);
+   REQUIRE(scexpp == c.p);
+
+   energy(calc::v1);
+   const double e = esum;
+   REQUIRE(std::isfinite(e));
+   if (use_vdlmda) {
+      REQUIRE(std::isfinite(dedl));
+      REQUIRE(std::isfinite(d2edl2));
+   }
+   s.session.end();
+   return e;
+}
+
+void runVsoftCase(const VsoftCase& c)
+{
+   // The induced dipoles of two runs are not bitwise equal on the GPU.
+   const double e = vsoftEnergy(c.key, c);
+   const double eref = vsoftEnergy(c.refkey, c);
+   COMPARE_REALS(e, eref, testGetEps(1.0e-5, 1.0e-8));
 }
 
 // One multipole or polarization result of runFlatFixture.
@@ -1169,6 +1236,77 @@ TEST_CASE("MUTATE-092_water_lmda_ast_none", "[ff][mutate][lmda]") { runFixture(f
 TEST_CASE("MUTATE-093_water_lmda_qnt_l05", "[ff][mutate][lmda]") { runFixture(fx("093_water_lmda_qnt_l05")); }
 TEST_CASE("MUTATE-094_water_lmda_vexp_l05", "[ff][mutate][lmda]") { runFixture(fx("094_water_lmda_vexp_l05")); }
 TEST_CASE("MUTATE-095_water_lmda_mp05", "[ff][mutate][lmda]") { runFixture(fx("095_water_lmda_mp05")); }
+
+// The sub-lambdas and chain factors energy() maps from each key's main lambda
+// (test_mutate.f:test_mutate_lmda): a main lambda with no map keyword drives all
+// three sub-lambdas, a map keyword drives only its own term, and a term with no
+// map stays where its keyword or the default holds it, out of the chain rule.
+TEST_CASE("MUTATE-lmda-maps", "[ff][mutate][lmda]")
+{
+   const int rc = calc::xyz | calc::mass | calc::v0;
+   // the sub-lambdas are reals, the chain factors doubles
+   const double eps = testGetEps(1.0e-6, 1.0e-12);
+   auto check = [&](double e, double p, double v, double de, double dp, double dv) {
+      COMPARE_REALS(elam, e, eps);
+      COMPARE_REALS(plam, p, eps);
+      COMPARE_REALS(vlam, v, eps);
+      COMPARE_REALS(deldlmda, de, 1.0e-12);
+      COMPARE_REALS(dpldlmda, dp, 1.0e-12);
+      COMPARE_REALS(dvldlmda, dv, 1.0e-12);
+   };
+
+   {
+      Setup s(fx("089_water_lmda_ast_l05"), rc);
+      energy(calc::v0);
+      REQUIRE(use_mainlmda);
+      REQUIRE(elmdamap.on);
+      REQUIRE(plmdamap.on);
+      REQUIRE(vlmdamap.on);
+      check(0.5, 0.5, 0.5, 1, 1, 1);
+      s.session.end();
+   }
+   {
+      Setup s(fx("091_water_lmda_ast_l10"), rc);
+      energy(calc::v0);
+      check(1, 1, 1, 1, 1, 1);
+      REQUIRE(scalphav == 0);
+      REQUIRE(scexp == 2);
+      s.session.end();
+   }
+   {
+      Setup s(fx("093_water_lmda_qnt_l05"), rc);
+      energy(calc::v0);
+      REQUIRE(elmdamap.on);
+      REQUIRE_FALSE(plmdamap.on);
+      REQUIRE_FALSE(vlmdamap.on);
+      check(0.5, 1, 1, 1.875, 0, 0);
+      s.session.end();
+   }
+   {
+      // The polarization window starts at the main lambda, on the flat side
+      // of its taper.
+      Setup s(fx("094_water_lmda_vexp_l05"), rc);
+      energy(calc::v0);
+      REQUIRE(vlmdamap.type == Lmdamap::EXP);
+      check(0.31744, 0, 0.125, 3.456, 0, 0.75);
+      s.session.end();
+   }
+   {
+      Setup s(fx("095_water_lmda_mp05"), rc);
+      energy(calc::v0);
+      REQUIRE(elmdamap.on);
+      REQUIRE(plmdamap.on);
+      REQUIRE_FALSE(vlmdamap.on);
+      check(0.5, 0.5, 1, 1, 1, 0);
+      s.session.end();
+   }
+   {
+      Setup s(fx("096_water_lmda_mp05_expl"), rc);
+      energy(calc::v0);
+      COMPARE_REALS(vlam, 1, eps);
+      s.session.end();
+   }
+}
 TEST_CASE("MUTATE-096_water_lmda_mp05_expl", "[ff][mutate][lmda]") { runFixture(fx("096_water_lmda_mp05_expl")); }
 TEST_CASE("MUTATE-097_water_lmda_e_l06", "[ff][mutate][lmdadrv]") { runFixture(fx("097_water_lmda_e_l06")); }
 TEST_CASE("MUTATE-099_water_lmda_v_l06", "[ff][mutate][lmdadrv]") { runFixture(fx("099_water_lmda_v_l06")); }
@@ -1179,6 +1317,10 @@ TEST_CASE("MUTATE-101_water_lmda_ev_l06", "[ff][mutate][lmdadrv]") { runFixture(
 // to be skipped rather than evaluated as 0 * (1/r^n).
 TEST_CASE("MUTATE-180_wat2ovl_m00v00", "[ff][mutate][overlap]") { runFixture(fx("180_wat2ovl_m00v00")); }
 TEST_CASE("MUTATE-182_wat2near_m00v00", "[ff][mutate][overlap]") { runFixture(fx("182_wat2near_m00v00")); }
+// The same ghost under HIPPO and AMOEBA+, whose charge penetration, field,
+// preconditioner and charge transfer pairs skip a dead group too.
+TEST_CASE("MUTATE-236_wat2ovl_hip_m00p00", "[ff][mutate][overlap][hippo]") { runFixture(fx("236_wat2ovl_hip_m00p00")); }
+TEST_CASE("MUTATE-238_water2ovl_ap_m00p00", "[ff][mutate][overlap][aplus]") { runFixture(fx("238_water2ovl_ap_m00p00")); }
 
 // A single AMOEBA+ water hydrogen whose charge flux bond reaches into the
 // environment (test_mutate.f: test_mutate_cflux). Only its own flux change is
@@ -1376,6 +1518,8 @@ TEST_CASE("MUTATE-185_water2ovl_rels_ye_lig1_ex3_l085", "[ff][mutate][overlap][r
 TEST_CASE("MUTATE-186_water2ovl_rels_ne_lig2_l015", "[ff][mutate][overlap][rels][noewald]") { runFixture(fx("186_water2ovl_rels_ne_lig2_l015")); }
 TEST_CASE("MUTATE-187_water2ovl_rels_ye_vdwm_exp_l050", "[ff][mutate][overlap][rels]") { runFixture(fx("187_water2ovl_rels_ye_vdwm_exp_l050")); }
 TEST_CASE("MUTATE-188_water2near_rels_ye_vdwm_exp_l050", "[ff][mutate][overlap][rels]") { runFixture(fx("188_water2near_rels_ye_vdwm_exp_l050")); }
+TEST_CASE("MUTATE-237_wat2ovl_hip_m00_d2_l00", "[ff][mutate][overlap][hippo]") { runFixture(fx("237_wat2ovl_hip_m00_d2_l00")); }
+TEST_CASE("MUTATE-239_water2ovl_hip_rels_lig1_ex3_l085", "[ff][mutate][overlap][rels][hippo]") { runFixture(fx("239_water2ovl_hip_rels_lig1_ex3_l085")); }
 TEST_CASE("MUTATE-189_water_rels3_l100", "[ff][mutate][rels][relstg]") { runFixture(fx("189_water_rels3_l100")); }
 TEST_CASE("MUTATE-190_water_rels3_l085", "[ff][mutate][rels][relstg]") { runFixture(fx("190_water_rels3_l085")); }
 TEST_CASE("MUTATE-191_water_rels3_l070", "[ff][mutate][rels][relstg]") { runFixture(fx("191_water_rels3_l070")); }
@@ -1630,6 +1774,10 @@ TEST_CASE("MUTATE-DYN-185_water2ovl_rels_ye_lig1_ex3_l085", "[ff][mutate][dyn][o
 TEST_CASE("MUTATE-DYN-186_water2ovl_rels_ne_lig2_l015", "[ff][mutate][dyn][overlap]") { runFixture(fx("186_water2ovl_rels_ne_lig2_l015"), Fuse::Auto); }
 TEST_CASE("MUTATE-DYN-187_water2ovl_rels_ye_vdwm_exp_l050", "[ff][mutate][dyn][overlap]") { runFixture(fx("187_water2ovl_rels_ye_vdwm_exp_l050"), Fuse::Auto); }
 TEST_CASE("MUTATE-DYN-188_water2near_rels_ye_vdwm_exp_l050", "[ff][mutate][dyn][overlap]") { runFixture(fx("188_water2near_rels_ye_vdwm_exp_l050"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-236_wat2ovl_hip_m00p00", "[ff][mutate][dyn][overlap]") { runFixture(fx("236_wat2ovl_hip_m00p00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-237_wat2ovl_hip_m00_d2_l00", "[ff][mutate][dyn][overlap]") { runFixture(fx("237_wat2ovl_hip_m00_d2_l00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-238_water2ovl_ap_m00p00", "[ff][mutate][dyn][overlap]") { runFixture(fx("238_water2ovl_ap_m00p00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-239_water2ovl_hip_rels_lig1_ex3_l085", "[ff][mutate][dyn][overlap]") { runFixture(fx("239_water2ovl_hip_rels_lig1_ex3_l085"), Fuse::Auto); }
 TEST_CASE("MUTATE-DYN-189_water_rels3_l100", "[ff][mutate][dyn][relstg]") { runFixture(fx("189_water_rels3_l100"), Fuse::Auto); }
 TEST_CASE("MUTATE-DYN-190_water_rels3_l085", "[ff][mutate][dyn][relstg]") { runFixture(fx("190_water_rels3_l085"), Fuse::Auto); }
 TEST_CASE("MUTATE-DYN-191_water_rels3_l070", "[ff][mutate][dyn][relstg]") { runFixture(fx("191_water_rels3_l070"), Fuse::Auto); }
@@ -1676,6 +1824,67 @@ TEST_CASE("MUTATE-repsc", "[ff][mutate][repsc]")
       runRepscCase(c);
 }
 
+TEST_CASE("MUTATE-vsoft", "[ff][mutate][scexp]")
+{
+   const VsoftCase cases[] = {
+      {"vsoft_n05_d1", "vsoft_default_d1", 0.2, 5, 0, 2},
+      {"vsoft_n15_d2", "vsoft_default_d2", 0.2, 5, 0, 2},
+      {"vsoft_n15_ost", "vsoft_default_ost", 0.2, 5, 0, 2},
+      {"vsoft_a_neg_d1", "vsoft_a07_d1", 0.7, 5, 0, 2},
+      {"vsoft_m_neg_d1", "vsoft_default_d1", 0.2, 5, 0, 2},
+      {"vsoft_p05_d1", "vsoft_default_d1", 0.2, 5, 0, 2},
+      {"vsoft_p15_d2", "vsoft_default_d2", 0.2, 5, 0, 2},
+   };
+   for (const auto& c : cases)
+      runVsoftCase(c);
+}
+
+// Lambda keywords given without a value are skipped, a negative sublambda is
+// taken as zero and one above one as one, and OST sample settings that leave no
+// samples are reset to their defaults, each leaving the energy of the key
+// without them (test_mutate_unsup).
+TEST_CASE("MUTATE-unsup-reset", "[ff][mutate][scexp]")
+{
+   runVsoftCase({"mut_bare_kw", "vsoft_default_d1", 0.2, 5, 0, 2});
+   runVsoftCase({"mut_elam_neg", "vsoft_default_d1", 0.2, 5, 0, 2});
+   runVsoftCase({"mut_lam_big", "mut_lam_one", 0.7, 5, 0, 1.5});
+   runVsoftCase({"mut_ost_reset", "vsoft_default_ost", 0.2, 5, 0, 2});
+}
+
+// A TI block, window equilibration ratio and FEP interval below their limits,
+// and OST equilibration ratios that leave no samples with an interval too short
+// for its three phases, are each reset to their defaults (mutate.f), in the
+// Fortran setup and in the copies tinker9 takes (test_mutate_sampreset).
+TEST_CASE("MUTATE-sampreset", "[ff][mutate]")
+{
+   {
+      Fixture fx = {"mut_ti_reset", "water2", false, false, false, false};
+      Setup s(fx, calc::xyz | calc::mass | calc::vmask);
+      REQUIRE(use_ti);
+      REQUIRE(thrmint::tinstepavg == 100);
+      REQUIRE(tinstepavg == 100);
+      REQUIRE(dlmda::lmdawinratio == 0.5);
+      REQUIRE(fep::fepintv == 1000);
+      s.session.end();
+   }
+   {
+      Fixture fx = {"mut_ost_reset", "water2", false, false, false, false};
+      Setup s(fx, calc::xyz | calc::mass | calc::vmask);
+      REQUIRE(use_ost);
+      REQUIRE(dlmda::lmdaintv == 100);
+      REQUIRE(dlmda::lmdaparatio == 0.3);
+      REQUIRE(dlmda::lmdapbratio == 0.3);
+      REQUIRE(lmdaintv == 100);
+      REQUIRE(lmdaparatio == 0.3);
+      REQUIRE(lmdapbratio == 0.3);
+      REQUIRE(lmdanpa + lmdanpb + lmdanpc == 100);
+      REQUIRE(lmdanpa == dlmda::lmdanpa);
+      REQUIRE(lmdanpb == dlmda::lmdanpb);
+      REQUIRE(lmdanpc == dlmda::lmdanpc);
+      s.session.end();
+   }
+}
+
 TEST_CASE("MUTATE-dspsc", "[ff][mutate][dspsc][disp]")
 {
    const DspscCase deriv[] = {
@@ -1689,6 +1898,13 @@ TEST_CASE("MUTATE-dspsc", "[ff][mutate][dspsc][disp]")
    for (const auto& c : deriv)
       runDspscCase(c, true);
    runDspscCase({"dsoft_rs_taper_d0", "dsoft_box_dcorr_d0", 2, 4, 1}, false);
+
+   // The long range correction with lambda derivatives, against the same key
+   // without them.
+   const DspscCase corr = {"dsoft_dcorr_d1", "dsoft_dcorr_d0", 2, 4, 1};
+   const double e = dspscEnergy(corr.key, corr, true);
+   const double eref = dspscEnergy(corr.refkey, corr, false);
+   COMPARE_REALS(e, eref, testGetEps(1.0e-4, 1.0e-8));
 }
 
 TEST_CASE("MUTATE-flags", "[ff][mutate][flags]")

@@ -8,7 +8,7 @@ void echgtrn_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nc, EnergyBuff
    const int (*restrict exclude)[2], const real (*restrict exclude_scale)[3], const real* restrict x,
    const real* restrict y, const real* restrict z, const Spatial::SortedAtom* restrict sorted, int nakpl,
    const int* restrict iakpl, int niak, const int* restrict iak, const int* restrict lst, real* restrict chgct,
-   real* restrict dmpct, real f, const int* restrict grp, CtScale ctsc)
+   real* restrict dmpct, real f, const int* restrict grp, GrpPairScale ctsc)
 {
    constexpr bool do_a = Ver::a;
    constexpr bool do_e = Ver::e;

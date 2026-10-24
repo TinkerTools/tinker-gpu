@@ -289,6 +289,8 @@ void testResetLmdaFlags()
    use_edlmda = false;
    use_pdlmda = false;
    use_vdlmda = false;
+   use_emast = false;
+   use_epast = false;
    use_ost = false;
    use_meta = false;
    use_ti = false;

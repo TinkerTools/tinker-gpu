@@ -27,7 +27,7 @@ static void echgtrn_acc1()
    // derivatives, dual topology and relative legs are CUDA only, so the 0/1
    // mutation flags pick the scale here: environment, environment-ligand, and
    // ligand-ligand pairs, as scalars so the loops take them firstprivate.
-   const CtScale cs = ctScale();
+   const GrpPairScale cs = ctScale();
    const real sc0 = cs.sc[0][0], sc1 = cs.sc[0][1], sc2 = cs.sc[1][1];
    real cut = switchCut(Switch::CHGTRN);
    real off = switchOff(Switch::CHGTRN);
@@ -68,9 +68,11 @@ static void echgtrn_acc1()
          int kmut = mut[k];
 
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off2) {
+         // a group pair with no scale is skipped (echgtrn1.f), so two
+         // overlapping sites never reach 0/0
+         real elambda = (imut + kmut == 0 ? sc0 : (imut + kmut == 1 ? sc1 : sc2));
+         if (r2 <= off2 and elambda != 0) {
             real r = REAL_SQRT(r2);
-            real elambda = (imut + kmut == 0 ? sc0 : (imut + kmut == 1 ? sc1 : sc2));
             MAYBE_UNUSED real e, de;
             pair_chgtrn<do_g>(r, cut, off, 1, f, alphai, chgi, alphak, chgk, elambda, e, de);
 
@@ -141,9 +143,11 @@ static void echgtrn_acc1()
       real zr = z[k] - zi;
 
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off2) {
+      // a group pair with no scale is skipped (echgtrn1.f), so two
+      // overlapping sites never reach 0/0
+      real elambda = (imut + kmut == 0 ? sc0 : (imut + kmut == 1 ? sc1 : sc2));
+      if (r2 <= off2 and elambda != 0) {
          real r = REAL_SQRT(r2);
-         real elambda = (imut + kmut == 0 ? sc0 : (imut + kmut == 1 ? sc1 : sc2));
          MAYBE_UNUSED real e, de;
          pair_chgtrn<do_g>(r, cut, off, mscale, f, alphai, chgi, alphak, chgk, elambda, e, de);
 

@@ -653,6 +653,10 @@ void egvData(RcOp op)
 
    if (op & RcOp::ALLOC) {
       deviceMemoryAllocateBytes((void**)(&ev_dptr), sizeof(DHRc));
+      // energy() copies the whole struct back but reads only the fields it
+      // reduced; zeroed, the rest is defined for memory checkers too
+      deviceMemoryZeroBytesAsync(ev_dptr, sizeof(DHRc), g::q0);
+      waitFor(g::q0);
    }
 
    if (rc_flag & calc::energy) {

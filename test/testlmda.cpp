@@ -1,13 +1,19 @@
 #include "ff/atom.h"
 #include "ff/dlmda.h"
 #include "ff/energy.h"
+#include "ff/evdw.h"
 #include "tool/xtesthelper.h"
 
 #include "test.h"
 #include "testrt.h"
 #include "tinker9.h"
 
+#include <cmath>
+#include <fstream>
 #include <string>
+#include <tinker/detail/boxes.hh>
+#include <tinker/detail/mutant.hh>
+#include <tinker/routines.h>
 
 using namespace tinker;
 
@@ -163,6 +169,18 @@ const Fixture kFixtures[] = {
    {"109_hipmix_dsp_ewald_l10", 1.0e-2, 1.0, 1.0e-4, "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
    {"110_hipmix_dsp_d1_n1_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
    {"112_hipmix_dsp_ewald_group_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
+   {"113_hipmix_dsp_corr_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
+   {"114_hipmix_dsp_corr_annih_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
+   {"115_hipmix_dsp_corr_n1_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
+   {"116_hipmix_dsp_corr_n2_l00", 1.0e-2, 1.0, 1.0e-4, "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
+   {"118_water_vsoft_m15_p3_l05"},
+   {"119_water_vsoft_m05_p1_l03"},
+   {"120_hipmix_dsp_ewald_exp3_l08", 5.0e-3, 1.0, 1.0e-4, "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
+   {"121_hipmix_dsp_corr_exp3_l06", 1.0e-2, 1.0, 1.0e-4, "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
+   {"122_hipmix_rep_qnt_l045", 5.0e-3, 1.0, 1.0e-4, "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
+   {"123_hipmix_rep_inv_l03", 5.0e-3, 1.0, 1.0e-4, "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
+   {"124_hipmix_dsp_corr_qnt_l06", 5.0e-3, 1.0, 1.0e-4, "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
+   {"125_hipmix_dsp_ewald_inv_l04", 5.0e-3, 1.0, 1.0e-4, "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
@@ -309,6 +327,157 @@ void runRefusedFixture(const Fixture& fx)
    rc_flag = testlmdaFlags(opts);
    REQUIRE_THROWS(session.init());
 }
+
+// The long range correction from its class sums against Fortran evcorr1 at a
+// few van der Waals lambdas, for the van der Waals (dsp false) or the
+// dispersion correction. Fortran takes the second lambda derivative only with
+// use_d2lmda, and its virial is minus the energy. evcorr1 compares its whole
+// character*6 mode, so the mode is padded to six characters.
+void runLrcFixture(const Fixture& fx, bool dsp)
+{
+   TestLmdaFlagReset lmdaReset;
+
+   const std::string files = TINKER9_DIRSTR "/test/file/";
+   const std::string xyzname = testBaseName(fx.xyz);
+   TestFile fxyz(files + fx.xyz, xyzname);
+   std::string keyname = std::string(fx.name) + ".key";
+   TestFile fkey(files + "testlmda/" + keyname, keyname);
+   TestFile fprm(files + fx.prm);
+
+   const char* argv[] = {"dummy", xyzname.c_str(), "-k", keyname.c_str()};
+   int argc = 4;
+   TestSession session(argc, argv);
+   rc_flag = calc::xyz | calc::mass | calc::energy;
+   session.init();
+
+   LrcSums ls;
+   lrcSetup(ls, dsp);
+   REQUIRE(ls.s0 != 0);
+   REQUIRE(ls.s1 != 0);
+   const double vol = boxes::volbox;
+   const double saved = mutant::vlambda;
+   for (double vl : {0.0, 0.3, 0.7, 1.0}) {
+      INFO("vlambda " << vl);
+      mutant::vlambda = vl;
+      double elrc, vlrc, delrc, dvlrc, d2elrc;
+      if (dsp)
+         tinker_f_evcorr1({const_cast<char*>("DISP  "), 6}, &elrc, &vlrc, &delrc, &dvlrc, &d2elrc);
+      else
+         tinker_f_evcorr1({const_cast<char*>("VDW   "), 6}, &elrc, &vlrc, &delrc, &dvlrc, &d2elrc);
+      // with respect to vlambda itself
+      const LmdaFn f = lrcEval(ls, vl, 1, 0);
+      const double e = f.f, de = f.d1, d2e = f.d2;
+      auto near = [](double a, double b) { return std::fabs(a - b) <= 1.0e-12 * std::fabs(b) + 1.0e-15; };
+      CAPTURE(fx.name, e / vol, elrc, de / vol, delrc, d2e / vol, d2elrc);
+      REQUIRE(near(e / vol, elrc));
+      REQUIRE(near(de / vol, delrc));
+      REQUIRE(near(d2e / vol, d2elrc));
+      REQUIRE(vlrc == -elrc);
+      REQUIRE(dvlrc == -delrc);
+   }
+   mutant::vlambda = saved;
+}
+
+// What the long range correction adds to the energy, its lambda derivatives,
+// the virial and its lambda derivative, as the difference of the fixture's key
+// with and without its correction keyword, against Fortran evcorr1 carried to
+// the main lambda. The key keeps only the term that owns the correction; its
+// cubic van der Waals map puts both map derivatives into the chain rule.
+void runLrcChainFixture(const Fixture& fx, bool dsp)
+{
+   TestLmdaFlagReset lmdaReset;
+
+   const std::string files = TINKER9_DIRSTR "/test/file/";
+   const std::string xyzname = testBaseName(fx.xyz);
+   TestFile fxyz(files + fx.xyz, xyzname);
+   TestFile fprm(files + fx.prm);
+
+   std::ifstream fin(files + "testlmda/" + fx.name + ".key");
+   REQUIRE(fin.good());
+   const char* corr = dsp ? "disp-correction" : "vdw-correction";
+   std::string with, without, line;
+   bool found = false;
+   while (std::getline(fin, line)) {
+      with += line + "\n";
+      if (line.rfind(corr, 0) == 0)
+         found = true;
+      else
+         without += line + "\n";
+   }
+   REQUIRE(found);
+   const std::string only = dsp ? "dispersionterm only\n" : "vdwterm only\n";
+   with += only;
+   without += only;
+
+   struct Terms
+   {
+      double e, dedl, d2edl2, vir[9], dvirdl[9];
+   };
+   double want[5] = {};
+   auto run = [&](const std::string& content, bool expect) {
+      const std::string keyname = std::string(fx.name) + "_lrc.key";
+      TestFile fkey("", keyname, content);
+      const char* argv[] = {"dummy", xyzname.c_str(), "-k", keyname.c_str()};
+      int argc = 4;
+      TestSession session(argc, argv);
+      FdTestOptions opts;
+      opts.analyt = true;
+      opts.numer = false;
+      rc_flag = testlmdaFlags(opts);
+      session.init();
+
+      energy(calc::v1);
+      // energy() maps the main lambda onto the sub-lambdas.
+      REQUIRE(use_d2lmda);
+      REQUIRE(dvldlmda != 0);
+      REQUIRE(d2vldlmda2 != 0);
+      Terms t;
+      t.e = esum;
+      t.dedl = dedl;
+      t.d2edl2 = d2edl2;
+      for (int k = 0; k < 9; ++k) {
+         t.vir[k] = vir[k];
+         t.dvirdl[k] = dvirdl[k];
+      }
+
+      if (expect) {
+         // Fortran at the vdw lambda tinker9 holds.
+         const double saved = mutant::vlambda;
+         mutant::vlambda = vlam;
+         double elrc, vlrc, delrc, dvlrc, d2elrc;
+         if (dsp)
+            tinker_f_evcorr1({const_cast<char*>("DISP  "), 6}, &elrc, &vlrc, &delrc, &dvlrc, &d2elrc);
+         else
+            tinker_f_evcorr1({const_cast<char*>("VDW   "), 6}, &elrc, &vlrc, &delrc, &dvlrc, &d2elrc);
+         mutant::vlambda = saved;
+         want[0] = elrc;
+         want[1] = delrc * dvldlmda;
+         want[2] = d2elrc * dvldlmda * dvldlmda + delrc * d2vldlmda2;
+         want[3] = vlrc;
+         want[4] = dvlrc * dvldlmda;
+         REQUIRE(want[1] != 0);
+         REQUIRE(want[2] != 0);
+      }
+      return t;
+   };
+   const Terms a = run(with, true);
+   const Terms b = run(without, false);
+
+   // The box volume is a real, which leaves the correction float round-off
+   // apart from Fortran in mixed precision.
+   const double rel = testGetEps(1.0e-5, 1.0e-10);
+   auto near = [&](double x, double y) { return std::fabs(x - y) <= rel * std::fabs(y) + 1.0e-12; };
+   CAPTURE(fx.name, a.e - b.e, want[0], a.dedl - b.dedl, want[1], a.d2edl2 - b.d2edl2, want[2]);
+   REQUIRE(near(a.e - b.e, want[0]));
+   REQUIRE(near(a.dedl - b.dedl, want[1]));
+   REQUIRE(near(a.d2edl2 - b.d2edl2, want[2]));
+   for (int k = 0; k < 9; ++k) {
+      const bool diag = (k == 0 or k == 4 or k == 8);
+      CAPTURE(k, a.vir[k] - b.vir[k], a.dvirdl[k] - b.dvirdl[k], want[3], want[4]);
+      REQUIRE(near(a.vir[k] - b.vir[k], diag ? want[3] : 0));
+      REQUIRE(near(a.dvirdl[k] - b.dvirdl[k], diag ? want[4] : 0));
+   }
+}
 }
 
 TEST_CASE("TESTLMDA-01_water_adt_l05", "[ff][testlmda]") { runFixture(fx("01_water_adt_l05")); }
@@ -440,6 +609,50 @@ TEST_CASE("TESTLMDA-110_hipmix_dsp_d1_n1_l04", "[ff][testlmda][disp]") { runFixt
 // The reciprocal space lambda derivative of the force reuses the PME grid.
 TEST_CASE("TESTLMDA-repeat-105_hipmix_dsp_ewald_l04", "[ff][testlmda][disp]") { runRepeatedFixture(fx("105_hipmix_dsp_ewald_l04")); }
 TEST_CASE("TESTLMDA-112_hipmix_dsp_ewald_group_l04", "[ff][testlmda][disp]") { runRefusedFixture(fx("112_hipmix_dsp_ewald_group_l04")); }
+// The long range dispersion correction follows the lambda power of the soft
+// core, alone, under annihilation, with an exponent of one, and with an
+// exponent of two at lambda 0 (test_testlmda.f cases 113 to 116).
+TEST_CASE("TESTLMDA-113_hipmix_dsp_corr_l04", "[ff][testlmda][disp]") { runFixture(fx("113_hipmix_dsp_corr_l04")); }
+TEST_CASE("TESTLMDA-114_hipmix_dsp_corr_annih_l04", "[ff][testlmda][disp]") { runFixture(fx("114_hipmix_dsp_corr_annih_l04")); }
+TEST_CASE("TESTLMDA-115_hipmix_dsp_corr_n1_l04", "[ff][testlmda][disp]") { runFixture(fx("115_hipmix_dsp_corr_n1_l04")); }
+TEST_CASE("TESTLMDA-116_hipmix_dsp_corr_n2_l00", "[ff][testlmda][disp]") { runFixture(fx("116_hipmix_dsp_corr_n2_l00")); }
+// Ewald dispersion through a cubic van der Waals lambda map, so the soft core
+// powers of the real space, reciprocal space and self terms all carry both map
+// derivatives (test_testlmda.f case 120); the step is halved as for 117.
+// The class sums of the long range correction give Fortran's correction at any
+// lambda: buffered 14-7 with ligand 1 decoupled or annihilated and with both
+// ligands of a relative leg, and dispersion decoupled or annihilated.
+TEST_CASE("TESTLMDA-lrc-evcorr1", "[ff][testlmda]")
+{
+   runLrcFixture(fx("07_water_ast_vcorr_l05"), false);
+   runLrcFixture(fx("08_water_ast_vcorr_annih_l05"), false);
+   runLrcFixture(fx("10_water_rels_vdwm_vcorr_annih_l05"), false);
+   runLrcFixture(fx("11_water_rels_vdwm_vcorr_l050"), false);
+   runLrcFixture(fx("113_hipmix_dsp_corr_l04"), true);
+   runLrcFixture(fx("114_hipmix_dsp_corr_annih_l04"), true);
+}
+// The long range correction's own lambda derivatives and virial through a cubic
+// van der Waals map, buffered 14-7 and dispersion at lambda 0.6.
+TEST_CASE("TESTLMDA-lrc-chain", "[ff][testlmda]")
+{
+   runLrcChainFixture(fx("09_water_ast_vcorr_l06exp"), false);
+   runLrcChainFixture(fx("121_hipmix_dsp_corr_exp3_l06"), true);
+}
+TEST_CASE("TESTLMDA-120_hipmix_dsp_ewald_exp3_l08", "[ff][testlmda][disp]") { runFixture(fx("120_hipmix_dsp_ewald_exp3_l08")); }
+// The long range dispersion correction through the cubic map (test_testlmda.f
+// case 121), whose curvature puts d2vl into the chain rule.
+TEST_CASE("TESTLMDA-121_hipmix_dsp_corr_exp3_l06", "[ff][testlmda][disp]") { runFixture(fx("121_hipmix_dsp_corr_exp3_l06")); }
+// The other van der Waals map shapes, a quintic taper and an inverse power,
+// through repulsion and dispersion (test_testlmda.f cases 122 to 125).
+TEST_CASE("TESTLMDA-122_hipmix_rep_qnt_l045", "[ff][testlmda][repel]") { runFixture(fx("122_hipmix_rep_qnt_l045")); }
+TEST_CASE("TESTLMDA-123_hipmix_rep_inv_l03", "[ff][testlmda][repel]") { runFixture(fx("123_hipmix_rep_inv_l03")); }
+TEST_CASE("TESTLMDA-124_hipmix_dsp_corr_qnt_l06", "[ff][testlmda][disp]") { runFixture(fx("124_hipmix_dsp_corr_qnt_l06")); }
+TEST_CASE("TESTLMDA-125_hipmix_dsp_ewald_inv_l04", "[ff][testlmda][disp]") { runFixture(fx("125_hipmix_dsp_ewald_inv_l04")); }
+// The buffered 14-7 soft core with a softening of alpha*lambda^m*(1-lambda)^p,
+// m 1.5 and p 3, then a non-integer m of 0.5 and p of one (test_testlmda.f
+// cases 118 and 119).
+TEST_CASE("TESTLMDA-118_water_vsoft_m15_p3_l05", "[ff][testlmda]") { runFixture(fx("118_water_vsoft_m15_p3_l05")); }
+TEST_CASE("TESTLMDA-119_water_vsoft_m05_p1_l03", "[ff][testlmda]") { runFixture(fx("119_water_vsoft_m05_p1_l03")); }
 
 // Every fixture once more without analysis, as dynamics runs it.
 TEST_CASE("TESTLMDA-DYN-01_water_adt_l05", "[ff][testlmda][dyn]") { runFixture(fx("01_water_adt_l05"), false); }
@@ -550,4 +763,14 @@ TEST_CASE("TESTLMDA-DYN-107_hipmix_dsp_sc_real_l04", "[ff][testlmda][dyn][disp]"
 TEST_CASE("TESTLMDA-DYN-108_hipmix_dsp_ewald_n2_l00", "[ff][testlmda][dyn][disp]") { runFixture(fx("108_hipmix_dsp_ewald_n2_l00"), false); }
 TEST_CASE("TESTLMDA-DYN-109_hipmix_dsp_ewald_l10", "[ff][testlmda][dyn][disp]") { runFixture(fx("109_hipmix_dsp_ewald_l10"), false); }
 TEST_CASE("TESTLMDA-DYN-110_hipmix_dsp_d1_n1_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("110_hipmix_dsp_d1_n1_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-113_hipmix_dsp_corr_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("113_hipmix_dsp_corr_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-116_hipmix_dsp_corr_n2_l00", "[ff][testlmda][dyn][disp]") { runFixture(fx("116_hipmix_dsp_corr_n2_l00"), false); }
+TEST_CASE("TESTLMDA-DYN-120_hipmix_dsp_ewald_exp3_l08", "[ff][testlmda][dyn][disp]") { runFixture(fx("120_hipmix_dsp_ewald_exp3_l08"), false); }
+TEST_CASE("TESTLMDA-DYN-121_hipmix_dsp_corr_exp3_l06", "[ff][testlmda][dyn][disp]") { runFixture(fx("121_hipmix_dsp_corr_exp3_l06"), false); }
+TEST_CASE("TESTLMDA-DYN-122_hipmix_rep_qnt_l045", "[ff][testlmda][dyn][repel]") { runFixture(fx("122_hipmix_rep_qnt_l045"), false); }
+TEST_CASE("TESTLMDA-DYN-123_hipmix_rep_inv_l03", "[ff][testlmda][dyn][repel]") { runFixture(fx("123_hipmix_rep_inv_l03"), false); }
+TEST_CASE("TESTLMDA-DYN-124_hipmix_dsp_corr_qnt_l06", "[ff][testlmda][dyn][disp]") { runFixture(fx("124_hipmix_dsp_corr_qnt_l06"), false); }
+TEST_CASE("TESTLMDA-DYN-125_hipmix_dsp_ewald_inv_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("125_hipmix_dsp_ewald_inv_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-118_water_vsoft_m15_p3_l05", "[ff][testlmda][dyn]") { runFixture(fx("118_water_vsoft_m15_p3_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-119_water_vsoft_m05_p1_l03", "[ff][testlmda][dyn]") { runFixture(fx("119_water_vsoft_m05_p1_l03"), false); }
 #endif

@@ -10,7 +10,7 @@ void empoledlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, Energ
    const Spatial::SortedAtom* restrict sorted, int nakpl, const int* restrict iakpl, int niak, const int* restrict iak,
    const int* restrict lst, real* restrict trqx, real* restrict trqy, real* restrict trqz, real* restrict dltrqx,
    real* restrict dltrqy, real* restrict dltrqz, const real (*restrict rpole)[10], const int* restrict grp, real f,
-   real aewald, GrpScale esc, real deldl, real d2eldl2, RdtMask live)
+   real aewald, GrpPairScale ps)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;
@@ -149,11 +149,8 @@ void empoledlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, Energ
       real yr = yk[threadIdx.x] - yi[klane];
       real zr = zk[threadIdx.x] - zi[klane];
       real r2 = image2(xr, yr, zr);
-      real si = esc.s[gi[klane]], dsi = esc.ds[gi[klane]];
-      real sk = esc.s[gk], dsk = esc.ds[gk];
       // a pair with an annihilated site has neither energy nor lambda derivative
-      bool weighted = (si != 0 or dsi != 0) and (sk != 0 or dsk != 0);
-      if (r2 <= off * off and incl and weighted and grpPairLive(live, gi[klane], gk)) {
+      if (r2 <= off * off and incl and grpPairScaleLive(ps, gi[klane], gk)) {
          real e, vxx, vyx, vzx, vyy, vzy, vzz;
          real e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1;
          real pfrcxi = 0, pfrcyi = 0, pfrczi = 0;
@@ -180,12 +177,10 @@ void empoledlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, Energ
             vzy = vzy + vzy1;
             vzz = vzz + vzz1;
          }
-         real scalelmda = si * sk;
-         real dlscale = dsi * sk + si * dsk;
-         real d2scale = 2 * dsi * dsk;
-         if (dsi != 0 or dsk != 0) {
-            real d2w = d2scale * deldl * deldl + dlscale * d2eldl2;
-            real dlw = dlscale * deldl;
+         real scalelmda = ps.sc[gi[klane]][gk];
+         real dlw = ps.dl[gi[klane]][gk];
+         real d2w = ps.d2l[gi[klane]][gk];
+         if (dlw != 0 or d2w != 0) {
             if CONSTEXPR (do_e) {
                if CONSTEXPR (do_dl1)
                   demdltl += floatTo<ebuf_prec>(dlw * e);
@@ -373,11 +368,8 @@ void empoledlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, Energ
          real yr = yk[threadIdx.x] - yi[klane];
          real zr = zk[threadIdx.x] - zi[klane];
          real r2 = image2(xr, yr, zr);
-         real si = esc.s[gi[klane]], dsi = esc.ds[gi[klane]];
-         real sk = esc.s[gk], dsk = esc.ds[gk];
          // a pair with an annihilated site has neither energy nor lambda derivative
-         bool weighted = (si != 0 or dsi != 0) and (sk != 0 or dsk != 0);
-         if (r2 <= off * off and incl and weighted and grpPairLive(live, gi[klane], gk)) {
+         if (r2 <= off * off and incl and grpPairScaleLive(ps, gi[klane], gk)) {
             real e, vxx, vyx, vzx, vyy, vzy, vzz;
             real pfrcxi = 0, pfrcyi = 0, pfrczi = 0;
             real pfrcxk = 0, pfrcyk = 0, pfrczk = 0;
@@ -388,12 +380,10 @@ void empoledlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, Energ
                dky[threadIdx.x], dkz[threadIdx.x], qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, f, aewald, pfrcxi, pfrcyi,
                pfrczi, pfrcxk, pfrcyk, pfrczk, ptrqxi, ptrqyi, ptrqzi, ptrqxk, ptrqyk, ptrqzk, e, vxx, vyx, vzx, vyy,
                vzy, vzz);
-            real scalelmda = si * sk;
-            real dlscale = dsi * sk + si * dsk;
-            real d2scale = 2 * dsi * dsk;
-            if (dsi != 0 or dsk != 0) {
-               real d2w = d2scale * deldl * deldl + dlscale * d2eldl2;
-               real dlw = dlscale * deldl;
+            real scalelmda = ps.sc[gi[klane]][gk];
+            real dlw = ps.dl[gi[klane]][gk];
+            real d2w = ps.d2l[gi[klane]][gk];
+            if (dlw != 0 or d2w != 0) {
                if CONSTEXPR (do_e) {
                   if CONSTEXPR (do_dl1)
                      demdltl += floatTo<ebuf_prec>(dlw * e);
@@ -594,11 +584,8 @@ void empoledlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, Energ
          real yr = yk[threadIdx.x] - yi[klane];
          real zr = zk[threadIdx.x] - zi[klane];
          real r2 = image2(xr, yr, zr);
-         real si = esc.s[gi[klane]], dsi = esc.ds[gi[klane]];
-         real sk = esc.s[gk], dsk = esc.ds[gk];
          // a pair with an annihilated site has neither energy nor lambda derivative
-         bool weighted = (si != 0 or dsi != 0) and (sk != 0 or dsk != 0);
-         if (r2 <= off * off and incl and weighted and grpPairLive(live, gi[klane], gk)) {
+         if (r2 <= off * off and incl and grpPairScaleLive(ps, gi[klane], gk)) {
             real e, vxx, vyx, vzx, vyy, vzy, vzz;
             real pfrcxi = 0, pfrcyi = 0, pfrczi = 0;
             real pfrcxk = 0, pfrcyk = 0, pfrczk = 0;
@@ -609,12 +596,10 @@ void empoledlmda_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, Energ
                dky[threadIdx.x], dkz[threadIdx.x], qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, f, aewald, pfrcxi, pfrcyi,
                pfrczi, pfrcxk, pfrcyk, pfrczk, ptrqxi, ptrqyi, ptrqzi, ptrqxk, ptrqyk, ptrqzk, e, vxx, vyx, vzx, vyy,
                vzy, vzz);
-            real scalelmda = si * sk;
-            real dlscale = dsi * sk + si * dsk;
-            real d2scale = 2 * dsi * dsk;
-            if (dsi != 0 or dsk != 0) {
-               real d2w = d2scale * deldl * deldl + dlscale * d2eldl2;
-               real dlw = dlscale * deldl;
+            real scalelmda = ps.sc[gi[klane]][gk];
+            real dlw = ps.dl[gi[klane]][gk];
+            real d2w = ps.d2l[gi[klane]][gk];
+            if (dlw != 0 or d2w != 0) {
                if CONSTEXPR (do_e) {
                   if CONSTEXPR (do_dl1)
                      demdltl += floatTo<ebuf_prec>(dlw * e);

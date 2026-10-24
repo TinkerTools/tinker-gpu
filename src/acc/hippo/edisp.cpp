@@ -5,6 +5,7 @@
 #include "ff/pme.h"
 #include "ff/switch.h"
 #include "seq/bsplgen.h"
+#include "seq/dspsplit.h"
 #include "seq/pair_disp.h"
 #include "tool/gpucard.h"
 #include <cassert>
@@ -63,18 +64,10 @@ static void pmeConvDisp_acc1(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu
 
       // With the ligand in the imaginary part, the environment and ligand
       // transforms at k come from the packed one at k and -k (edisp.f:dspsplit).
-      real gridx = 0, gridy = 0, ser = 0, sei = 0, slr = 0, sli = 0;
+      real gridx = 0, gridy = 0;
+      DspGridK sk = {};
       if (split) {
-         int j1 = (nfft1 - k1) % nfft1;
-         int j2 = (nfft2 - k2) % nfft2;
-         int j3 = (nfft3 - k3) % nfft3;
-         int jj = j1 + nfft1 * (j2 + nfft2 * j3);
-         real zr = qfwd[i][0], zi = qfwd[i][1];
-         real yr = qfwd[jj][0], yi = qfwd[jj][1];
-         ser = (zr + yr) / 2;
-         sei = (zi - yi) / 2;
-         slr = (zi + yi) / 2;
-         sli = (yr - zr) / 2;
+         sk = dspGridK(qfwd, i, k1, k2, k3, nfft1, nfft2, nfft3);
       } else {
          gridx = qgrid[i][0];
          gridy = qgrid[i][1];
@@ -101,7 +94,7 @@ static void pmeConvDisp_acc1(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu
 
          real struc2;
          if (split)
-            struc2 = ser * ser + sei * sei + wll * (slr * slr + sli * sli) + 2 * wel * (ser * slr + sei * sli);
+            struc2 = dspStruc(sk, 1, wel, wll);
          else
             struc2 = gridx * gridx + gridy * gridy;
          eterm = (-fac1 * erfcterm * hhh - expterm * (fac2 + fac3 * hsq)) * REAL_RECIP(denom);
@@ -123,8 +116,7 @@ static void pmeConvDisp_acc1(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu
 
       // the potentials of the environment and of the ligand, packed the same way
       if (split) {
-         qgrid[i][0] = eterm * (ser - wel * sei + wel * slr - wll * sli);
-         qgrid[i][1] = eterm * (sei + wel * ser + wel * sli + wll * slr);
+         dspPot(sk, eterm, 1, wel, wll, qgrid[i]);
       } else {
          qgrid[i][0] = eterm * gridx;
          qgrid[i][1] = eterm * gridy;

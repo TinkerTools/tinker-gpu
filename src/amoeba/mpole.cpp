@@ -78,12 +78,13 @@ struct RpoleKey
 RpoleKey rpole_key;
 unsigned long long rpole_serial = 1;
 
-// cmp is a function of rpole alone, or with dlmda also of the lambda scale;
-// dl adds dlcmp without changing cmp.
+// cmp is a function of rpole alone, or with dlmda also of the lambda scale,
+// which follows the leg's charging ligand; dl adds dlcmp without changing cmp.
 struct CmpKey
 {
    bool valid = false, dlmda = false, dl = false;
    double lmda = 0;
+   RdtMask charge = RdtMask::LIGA;
    const int* group = nullptr;
    unsigned long long rpole = 0;
 };
@@ -275,7 +276,8 @@ static void ensureCmp(bool do_dlmda, bool build_dl)
 {
    const CmpKey& c = cmp_key;
    const bool current = c.valid and c.rpole == rpole_serial and c.dlmda == do_dlmda
-      and (not do_dlmda or (c.lmda == elam and c.group == emGroup() and (c.dl or not build_dl)));
+      and (not do_dlmda
+         or (c.lmda == elam and c.charge == chargeMask() and c.group == emGroup() and (c.dl or not build_dl)));
    if (current)
       return;
    if (do_dlmda)
@@ -287,6 +289,7 @@ static void ensureCmp(bool do_dlmda, bool build_dl)
    cmp_key.dlmda = do_dlmda;
    cmp_key.dl = build_dl;
    cmp_key.lmda = do_dlmda ? elam : 0;
+   cmp_key.charge = chargeMask();
    cmp_key.group = do_dlmda ? emGroup() : nullptr;
    cmp_key.rpole = rpole_serial;
 }

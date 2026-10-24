@@ -10,7 +10,7 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
    const int* restrict iakpl, int niak, const int* restrict iak, const int* restrict lst, real* restrict trqx,
    real* restrict trqy, real* restrict trqz, real* restrict dltrqx, real* restrict dltrqy, real* restrict dltrqz,
    const real (*restrict rpole)[10], const real* restrict sizpr, const real* restrict elepr, const real* restrict dmppr,
-   const int* restrict mut, Vdw vcouple, RepelSoft rs)
+   const int* restrict mut, Vdw vcouple, SoftCoreLmda rs)
 {
    constexpr bool do_a = Ver::a;
    constexpr bool do_e = Ver::e;

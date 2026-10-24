@@ -272,9 +272,9 @@ void gpuData(RcOp op)
       // else if (cuda_device_flags == 0)
 
       cuda_device_flags = cudaDeviceMapHost;
-#if 1
+#if 0
       cuda_device_flags |= cudaDeviceScheduleBlockingSync;
-#elif 0
+#elif 1
       // Using this flag may reduce the latency for the cudaStreamSynchronize() calls.
       cuda_device_flags |= cudaDeviceScheduleSpin;
 #endif

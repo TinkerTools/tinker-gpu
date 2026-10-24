@@ -130,7 +130,7 @@ TEST_CASE("NaCl-1", "[ff][evdw][evcorr][hal][switch][nacl]")
       const double ref_eng = 52.0802;
       const int ref_count = 1;
       const double ref_grad[][3] = {{184.4899, 0.0, 0.0}, {-184.4899, 0.0, 0.0}};
-      const double ref_v[][3] = {{-408.398, 0.0, 0.0}, {0.0, -2.521, 0.0}, {0.0, 0.0, -2.521}};
+      const double ref_v[][3] = {{-406.534, 0.0, 0.0}, {0.0, -0.656, 0.0}, {0.0, 0.0, -0.656}};
 
       TestSession session(argc, argv);
       rc_flag = usage;
@@ -158,10 +158,10 @@ TEST_CASE("NaCl-1", "[ff][evdw][evcorr][hal][switch][nacl]")
       const char* argv[] = {"dummy", x5};
       int argc = 2;
 
-      const double ref_eng = 25.8947;
+      const double ref_eng = 25.8220;
       const int ref_count = 1;
       const double ref_grad[][3] = {{81.9570, 0.0, 0.0}, {-81.9570, 0.0, 0.0}};
-      const double ref_v[][3] = {{-182.721, 0.0, 0.0}, {0.0, -2.415, 0.0}, {0.0, 0.0, -2.415}};
+      const double ref_v[][3] = {{-180.865, 0.0, 0.0}, {0.0, -0.560, 0.0}, {0.0, 0.0, -0.560}};
 
       TestSession session(argc, argv);
       rc_flag = usage;

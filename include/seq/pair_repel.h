@@ -28,16 +28,15 @@ inline void zero(PairRepelGrad& pgrad)
 }
 
 /// A mutated pair (\c mutik) takes the soft core scaling of \c rs (erepel1.f).
-/// \c DO_DL1, \c DO_DL2 and \c DO_GDL also give its lambda derivatives of the
-/// energy, \c dle and \c dle2, and of the force and torques, \c dlgrad, all
-/// chained to the main lambda by \c rs.dvl and \c rs.d2vl.
+/// \c DO_DL1, \c DO_DL2 and \c DO_GDL also give its main lambda derivatives of
+/// the energy, \c dle and \c dle2, and of the force and torques, \c dlgrad.
 #pragma acc routine seq
 template <bool do_g, bool DO_DL1, bool DO_DL2, bool DO_GDL>
 SEQ_CUDA
 void pair_repel(real r2,
                 real rscale,
                 bool mutik,
-                const RepelSoft& rs,
+                const SoftCoreLmda& rs,
                 real cut,
                 real off,
                 real xr,
@@ -143,27 +142,28 @@ void pair_repel(real r2,
    e = sizik * eterm * rInv;
 
    // energy via soft core lambda scaling of a mutated pair, along with the
-   // lambda derivatives of the scaling (erepsc.f:erepsc4)
+   // lambda derivatives of the scaling (erepsc.f:erepsc4); the scaling is
+   // p0 g(s) with g = r/sqrt(s + r^2) for the shift s
    real e0 = e;
    real soft = 1, dsoft = 0, dsdl = 0, d2sdl2 = 0, d2sdldr = 0;
    if (mutik) {
-      real q = REAL_RSQRT(rs.rshf + r2);
+      real q = REAL_RSQRT(rs.sc + r2);
       real q2 = q * q;
       real q3 = q2 * q;
-      soft = rs.rlsc * r * q;
-      dsoft = rs.rlsc * rs.rshf * q3;
+      soft = rs.p0 * r * q;
+      dsoft = rs.p0 * rs.sc * q3;
+      // g, dg/ds and d2g/ds2 are r q, -r q^3/2 and 3 r q^5/4
       if CONSTEXPR (DO_DL1 or DO_DL2 or DO_GDL)
-         dsdl = rs.rlsc1 * r * q * (rs.n - 0.5f * rs.rshf1 * q2);
+         dsdl = r * q * (rs.a1 - 0.5f * rs.b1 * q2);
       if CONSTEXPR (DO_DL2)
-         d2sdl2 = rs.rlsc2 * r * q
-            * (rs.n * (rs.n - 1) - rs.n * rs.rshf1 * q2 - 0.5f * rs.rshf2 * q2
-               + 0.75f * rs.rshf1 * rs.rshf1 * q2 * q2);
+         d2sdl2 = r * q * (rs.a2 - 0.5f * rs.b2 * q2 + 0.75f * rs.c2 * q2 * q2);
+      // dg/dr and d2g/dsdr are s q^3 and q^3 (1 - 3 s q^2/2)
       if CONSTEXPR (DO_GDL)
-         d2sdldr = rs.rlsc1 * q3 * (rs.n * rs.rshf + rs.rshf1 - 1.5f * rs.rshf * rs.rshf1 * q2);
+         d2sdldr = q3 * (rs.a1 * rs.sc + rs.b1 * (1 - 1.5f * rs.sc * q2));
       if CONSTEXPR (DO_DL1)
-         dle = rs.dvl * dsdl * e0;
+         dle = dsdl * e0;
       if CONSTEXPR (DO_DL2)
-         dle2 = (rs.dvl * rs.dvl * d2sdl2 + rs.d2vl * dsdl) * e0;
+         dle2 = d2sdl2 * e0;
       e *= soft;
    }
    // gradient
@@ -271,17 +271,16 @@ void pair_repel(real r2,
       // the unscaled pair terms
       if (mutik) {
          if CONSTEXPR (DO_GDL) {
-            real dlsc = rs.dvl * dsdl;
-            real dldsoft = rs.dvl * d2sdldr * rr1 * e0;
-            dlgrad.frcx = pgrad.frcx * dlsc - dldsoft * xr;
-            dlgrad.frcy = pgrad.frcy * dlsc - dldsoft * yr;
-            dlgrad.frcz = pgrad.frcz * dlsc - dldsoft * zr;
-            dlgrad.ttqi[0] = pgrad.ttqi[0] * dlsc;
-            dlgrad.ttqi[1] = pgrad.ttqi[1] * dlsc;
-            dlgrad.ttqi[2] = pgrad.ttqi[2] * dlsc;
-            dlgrad.ttqk[0] = pgrad.ttqk[0] * dlsc;
-            dlgrad.ttqk[1] = pgrad.ttqk[1] * dlsc;
-            dlgrad.ttqk[2] = pgrad.ttqk[2] * dlsc;
+            real dldsoft = d2sdldr * rr1 * e0;
+            dlgrad.frcx = pgrad.frcx * dsdl - dldsoft * xr;
+            dlgrad.frcy = pgrad.frcy * dsdl - dldsoft * yr;
+            dlgrad.frcz = pgrad.frcz * dsdl - dldsoft * zr;
+            dlgrad.ttqi[0] = pgrad.ttqi[0] * dsdl;
+            dlgrad.ttqi[1] = pgrad.ttqi[1] * dsdl;
+            dlgrad.ttqi[2] = pgrad.ttqi[2] * dsdl;
+            dlgrad.ttqk[0] = pgrad.ttqk[0] * dsdl;
+            dlgrad.ttqk[1] = pgrad.ttqk[1] * dsdl;
+            dlgrad.ttqk[2] = pgrad.ttqk[2] * dsdl;
          }
 
          dsoft *= rr1 * e0;
@@ -342,7 +341,7 @@ SEQ_CUDA
 void pair_repel(real r2,
                 real rscale,
                 bool mutik,
-                const RepelSoft& rs,
+                const SoftCoreLmda& rs,
                 real cut,
                 real off,
                 real xr,

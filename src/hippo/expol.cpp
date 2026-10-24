@@ -29,6 +29,8 @@ void expolData(RcOp op)
    if (op & RcOp::ALLOC) {
       darray::allocate(n, &kpep, &prepep, &dmppep, &lpep);
       darray::allocate(n, &polscale, &polinv);
+      // an induced dipole trial copies both before the first solve fills them
+      darray::zero(g::q0, n, polscale, polinv);
       // the sizes follow the polarizability, which is scaled from its unscaled
       // copy on the same condition (epolarChgpenData)
       prepeporig = nullptr;

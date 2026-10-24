@@ -1,4 +1,5 @@
 #include "ff/amoeba/mpolestate.h"
+#include "ff/dlmda.h"
 #include "ff/egvop.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
@@ -42,7 +43,8 @@ static void empoleChgpen_cu()
    int ngrid = gpuGridSize(BLOCK_DIM);
    empoleChgpen_cu1<Ver, ETYP, CP, CFLX><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, vir_em, demx,
       demy, demz, off, st.si1.bit0, nmdwexclude, mdwexclude, mdwexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl,
-      st.iakpl, st.niak, st.iak, st.lst, trqx, trqy, trqz, pot, rpole, pcore, pval, palpha, aewald, f);
+      st.iakpl, st.niak, st.iak, st.lst, trqx, trqy, trqz, pot, rpole, pcore, pval, palpha, aewald, f, elecDeadGroups(),
+      elecLiveMask());
 }
 
 void empoleChgpenNonEwald_cu(int vers, int use_cf)

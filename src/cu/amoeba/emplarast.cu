@@ -52,7 +52,7 @@ static void emplarast_cu(const real (*uind)[3], const real (*uinp)[3])
       if CONSTEXPR (Ver::e) {
          auto ker0 = empoleSelfDlmda_cu<Ver>;
          launch_k1b(g::s0, n, ker0, //
-            nullptr, em, demdl_buf, d2emdl2_buf, rpole, emGroup(), grpScale(elam), n, f, aewald, deldlmda, d2eldlmda2);
+            nullptr, em, demdl_buf, d2emdl2_buf, rpole, emGroup(), grpSelfScale(elecPairScale()), n, f, aewald);
       }
    }
    int ngrid = gpuGridSize(BLOCK_DIM);

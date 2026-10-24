@@ -47,7 +47,7 @@ template <class Ver, int CFLX>
 __global__
 void empoleChgpenSelfDlmda_cu(CountBuffer restrict nem, EnergyBuffer restrict em, EnergyBuffer restrict demdl,
    EnergyBuffer restrict d2emdl2, const real (*restrict rpole)[10], const int* restrict grp, GrpScale esc,
-   real* restrict pot, real* restrict dlpot, int n, real f, real aewald, real deldl, real d2eldl2)
+   GrpSelfScale ss, real* restrict pot, real* restrict dlpot, int n, real f, real aewald)
 {
    constexpr bool do_a = Ver::a;
    constexpr bool do_e = Ver::e;
@@ -60,16 +60,19 @@ void empoleChgpenSelfDlmda_cu(CountBuffer restrict nem, EnergyBuffer restrict em
 
    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < n; i += blockDim.x * gridDim.x) {
       int offset = threadIdx.x + blockIdx.x * blockDim.x;
-      real s = esc.s[grp[i]], ds = esc.ds[grp[i]];
+      int g = grp[i];
+      real s = esc.s[g], ds = esc.ds[g];
       if CONSTEXPR (do_e) {
+         // a site against itself takes the scale of its own group pair
          real e = empoleSelfEnergyAtomI(i, rpole, fterm, aewald_sq_2);
-         if (ds != 0) {
+         real dl = ss.dl[g], d2l = ss.d2l[g];
+         if (dl != 0 or d2l != 0) {
             if CONSTEXPR (do_dl1)
-               atomic_add(2 * s * ds * deldl * e, demdl, offset);
+               atomic_add(dl * e, demdl, offset);
             if CONSTEXPR (do_dl2)
-               atomic_add((2 * ds * ds * deldl * deldl + 2 * s * ds * d2eldl2) * e, d2emdl2, offset);
+               atomic_add(d2l * e, d2emdl2, offset);
          }
-         atomic_add(s * s * e, em, offset);
+         atomic_add(ss.sc[g] * e, em, offset);
          if CONSTEXPR (do_a)
             atomic_add(1, nem, offset);
       }

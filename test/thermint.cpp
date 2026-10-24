@@ -65,16 +65,16 @@ void mapAt(double lmda)
 void useExpMaps(int eexp, int pexp, int vexp)
 {
    use_rel = false;
-   elmdamap = Lmdamap::EXP;
-   plmdamap = Lmdamap::EXP;
-   vlmdamap = Lmdamap::EXP;
-   elmdaexp = eexp;
-   plmdaexp = pexp;
-   vlmdaexp = vexp;
+   elmdamap.type = Lmdamap::EXP;
+   plmdamap.type = Lmdamap::EXP;
+   vlmdamap.type = Lmdamap::EXP;
+   elmdamap.exp = eexp;
+   plmdamap.exp = pexp;
+   vlmdamap.exp = vexp;
    // Every sub-lambda follows the main lambda here.
-   use_elmdamap = true;
-   use_plmdamap = true;
-   use_vlmdamap = true;
+   elmdamap.on = true;
+   plmdamap.on = true;
+   vlmdamap.on = true;
 }
 
 // resettisched -- install an arbitrary schedule and size the accumulators the
@@ -108,7 +108,7 @@ void resettisched(const std::vector<double>& lam, const std::vector<int>& winend
 
    lmdawin = 1;
    lambda = lmdawinlist[0];
-   setLmdaWin();
+   lmdaWinSize(lmdawin, lmdawinlen, lmdawineq);
    dedl = 0;
 }
 
@@ -149,12 +149,12 @@ void clearti()
    tilmdadedl.clear();
    tilmdadedlstd.clear();
    tidedllist.clear();
-   elmdamap = Lmdamap::QNT;
-   plmdamap = Lmdamap::QNT;
-   vlmdamap = Lmdamap::QNT;
-   use_elmdamap = false;
-   use_plmdamap = false;
-   use_vlmdamap = false;
+   elmdamap.type = Lmdamap::QNT;
+   plmdamap.type = Lmdamap::QNT;
+   vlmdamap.type = Lmdamap::QNT;
+   elmdamap.on = false;
+   plmdamap.on = false;
+   vlmdamap.on = false;
 }
 
 // True for a line that holds nothing but blanks.
@@ -721,7 +721,7 @@ TEST_CASE("THERMINT-mapsublambda", "[ff][thermint]")
    const double epsv = testGetEps(1.0e-6, 1.0e-12); // elam/plam/vlam are real
    const double epsd = 1.0e-12;                     // the derivatives are double
 
-   // ele uses elmdaexp, pol uses plmdaexp, vdw uses vlmdaexp.
+   // ele uses elmdamap.exp, pol uses plmdamap.exp, vdw uses vlmdamap.exp.
    useExpMaps(2, 3, 1);
 
    // The maps below are exercised from the one main lambda; DLMDA-one-main-lambda
@@ -762,16 +762,16 @@ TEST_CASE("THERMINT-mapsublambda", "[ff][thermint]")
    COMPARE_REALS(d2pldlmda2, 6.0, epsd);
 
    // Shifted inverse-power map, identity case.
-   vlmdamap = Lmdamap::INV;
-   vlmdainvn = 1;
-   vlmdainveps = 0.3;
+   vlmdamap.type = Lmdamap::INV;
+   vlmdamap.invn = 1;
+   vlmdamap.inveps = 0.3;
    mapAt(0.25);
    COMPARE_REALS(vlam, 0.25, epsv);
    COMPARE_REALS(dvldlmda, 1.0, epsd);
    COMPARE_REALS(d2vldlmda2, 0.0, epsd);
 
    // Shifted inverse-power map, n = 4. The endpoints are exact by construction.
-   vlmdainvn = 4;
+   vlmdamap.invn = 4;
    mapAt(0.0);
    COMPARE_REALS(vlam, 0.0, epsv);
    mapAt(1.0);

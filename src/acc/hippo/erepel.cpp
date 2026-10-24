@@ -30,7 +30,7 @@ static void erepel_acc1()
 
    PairRepelGrad pgrad;
    // OpenACC refuses every lambda mode, so only the soft core scaling is needed.
-   const RepelSoft rs = repelSoft(false);
+   const SoftCoreLmda rs = repelSoft(false);
 
    MAYBE_UNUSED int GRID_DIM = gpuGridSize(BLOCK_DIM);
    #pragma acc parallel async num_gangs(GRID_DIM) vector_length(BLOCK_DIM)\

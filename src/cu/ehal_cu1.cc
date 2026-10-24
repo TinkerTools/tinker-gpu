@@ -8,10 +8,9 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
    real off, const unsigned* restrict info, int nexclude, const int (*restrict exclude)[2],
    const real* restrict exclude_scale, const real* restrict x, const real* restrict y, const real* restrict z,
    const Spatial::SortedAtom* restrict sorted, int nakpl, const int* restrict iakpl, int niak, const int* restrict iak,
-   const int* restrict lst, int njvdw, real vlam, Vdw vcouple, const real* restrict radmin,
-   const real* restrict epsilon, const int* restrict exclude14, const real* restrict radmin4,
-   const real* restrict epsilon4, const int* restrict jvdw, const int* restrict mutg, real scexp, real scalphav,
-   real dvldl, real d2vldl2, PairHalLambdaPow lp1, PairHalLambdaPow lp2)
+   const int* restrict lst, int njvdw, Vdw vcouple, const real* restrict radmin, const real* restrict epsilon,
+   const int* restrict exclude14, const real* restrict radmin4, const real* restrict epsilon4, const int* restrict jvdw,
+   const int* restrict mutg, SoftCoreLmda lp1, SoftCoreLmda lp2)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;
@@ -122,24 +121,20 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
          // Ligand 2 couples as the complement of vlambda. Pairs of the two ligands
          // were skipped above, so this is also the pair that carries dE/dL.
          bool mutik = (vcouple == Vdw::DECOUPLE and imutg != kmutg) or (vcouple == Vdw::ANNIHILATE and ig);
-         real vlambda = 1;
-         PairHalLambdaPow lp = {1, 1, 1};
-         if (mutik) {
-            vlambda = (ig == 2 ? 1 - vlam : vlam);
+         SoftCoreLmda lp = {1, 0, 0, 0, 0, 0, 0};
+         if (mutik)
             lp = (ig == 2 ? lp2 : lp1);
-         }
-         real dv1 = (ig == 2 ? -dvldl : dvldl);
-         real dv2 = (ig == 2 ? -d2vldl2 : d2vldl2);
-         real e, de, dedl, d2edl2, dlde;
-         pair_hal_v3<do_g, 0, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, scalea, rv, eps, cut, off, vlambda, lp, GHAL, DHAL,
-            SCEXP, SCALPHA, e, de, dedl, d2edl2, dlde, mutik);
+         real e, de;
+         PairHalLambda dl = {0, 0, 0};
+         pair_hal<do_g, 0, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, scalea, rv, eps, cut, off, lp, GHAL, DHAL, e, de, &dl,
+            mutik);
          if CONSTEXPR (do_e) {
             evtl += floatTo<ebuf_prec>(e);
             if (mutik) {
                if CONSTEXPR (do_dl1)
-                  devdltl += floatTo<ebuf_prec>(dedl * dv1);
+                  devdltl += floatTo<ebuf_prec>(dl.dedl);
                if CONSTEXPR (do_dl2)
-                  d2evdl2tl += floatTo<ebuf_prec>(d2edl2 * dv1 * dv1 + dedl * dv2);
+                  d2evdl2tl += floatTo<ebuf_prec>(dl.d2edl2);
             }
             if CONSTEXPR (do_a) {
                if (scalea != 0 and e != 0)
@@ -161,7 +156,7 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
             fky -= dedy;
             fkz -= dedz;
             if (mutik) {
-               dlde = dlde * dv1 * rinv;
+               real dlde = dl.dlde * rinv;
                real dldedx = dlde * xr;
                real dldedy = dlde * yr;
                real dldedz = dlde * zr;
@@ -271,24 +266,20 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
             // Ligand 2 couples as the complement of vlambda. Pairs of the two ligands
             // were skipped above, so this is also the pair that carries dE/dL.
             bool mutik = (vcouple == Vdw::DECOUPLE and imutg != kmutg) or (vcouple == Vdw::ANNIHILATE and ig);
-            real vlambda = 1;
-            PairHalLambdaPow lp = {1, 1, 1};
-            if (mutik) {
-               vlambda = (ig == 2 ? 1 - vlam : vlam);
+            SoftCoreLmda lp = {1, 0, 0, 0, 0, 0, 0};
+            if (mutik)
                lp = (ig == 2 ? lp2 : lp1);
-            }
-            real dv1 = (ig == 2 ? -dvldl : dvldl);
-            real dv2 = (ig == 2 ? -d2vldl2 : d2vldl2);
-            real e, de, dedl, d2edl2, dlde;
-            pair_hal_v3<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, vlambda, lp, GHAL, DHAL,
-               SCEXP, SCALPHA, e, de, dedl, d2edl2, dlde, mutik);
+            real e, de;
+            PairHalLambda dl = {0, 0, 0};
+            pair_hal<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, lp, GHAL, DHAL, e, de, &dl,
+               mutik);
             if CONSTEXPR (do_e) {
                evtl += floatTo<ebuf_prec>(e);
                if (mutik) {
                   if CONSTEXPR (do_dl1)
-                     devdltl += floatTo<ebuf_prec>(dedl * dv1);
+                     devdltl += floatTo<ebuf_prec>(dl.dedl);
                   if CONSTEXPR (do_dl2)
-                     d2evdl2tl += floatTo<ebuf_prec>(d2edl2 * dv1 * dv1 + dedl * dv2);
+                     d2evdl2tl += floatTo<ebuf_prec>(dl.d2edl2);
                }
                if CONSTEXPR (do_a) {
                   if (e != 0)
@@ -310,7 +301,7 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
                fky -= dedy;
                fkz -= dedz;
                if (mutik) {
-                  dlde = dlde * dv1 * rinv;
+                  real dlde = dl.dlde * rinv;
                   real dldedx = dlde * xr;
                   real dldedy = dlde * yr;
                   real dldedz = dlde * zr;
@@ -428,24 +419,20 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
             // Ligand 2 couples as the complement of vlambda. Pairs of the two ligands
             // were skipped above, so this is also the pair that carries dE/dL.
             bool mutik = (vcouple == Vdw::DECOUPLE and imutg != kmutg) or (vcouple == Vdw::ANNIHILATE and ig);
-            real vlambda = 1;
-            PairHalLambdaPow lp = {1, 1, 1};
-            if (mutik) {
-               vlambda = (ig == 2 ? 1 - vlam : vlam);
+            SoftCoreLmda lp = {1, 0, 0, 0, 0, 0, 0};
+            if (mutik)
                lp = (ig == 2 ? lp2 : lp1);
-            }
-            real dv1 = (ig == 2 ? -dvldl : dvldl);
-            real dv2 = (ig == 2 ? -d2vldl2 : d2vldl2);
-            real e, de, dedl, d2edl2, dlde;
-            pair_hal_v3<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, vlambda, lp, GHAL, DHAL,
-               SCEXP, SCALPHA, e, de, dedl, d2edl2, dlde, mutik);
+            real e, de;
+            PairHalLambda dl = {0, 0, 0};
+            pair_hal<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, lp, GHAL, DHAL, e, de, &dl,
+               mutik);
             if CONSTEXPR (do_e) {
                evtl += floatTo<ebuf_prec>(e);
                if (mutik) {
                   if CONSTEXPR (do_dl1)
-                     devdltl += floatTo<ebuf_prec>(dedl * dv1);
+                     devdltl += floatTo<ebuf_prec>(dl.dedl);
                   if CONSTEXPR (do_dl2)
-                     d2evdl2tl += floatTo<ebuf_prec>(d2edl2 * dv1 * dv1 + dedl * dv2);
+                     d2evdl2tl += floatTo<ebuf_prec>(dl.d2edl2);
                }
                if CONSTEXPR (do_a) {
                   if (e != 0)
@@ -467,7 +454,7 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
                fky -= dedy;
                fkz -= dedz;
                if (mutik) {
-                  dlde = dlde * dv1 * rinv;
+                  real dlde = dl.dlde * rinv;
                   real dldedx = dlde * xr;
                   real dldedy = dlde * yr;
                   real dldedz = dlde * zr;

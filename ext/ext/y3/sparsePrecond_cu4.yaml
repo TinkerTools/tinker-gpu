@@ -19,6 +19,7 @@ EXTRA_PARAMS: |
   , real (*restrict zrsd)[3]
   , const real* restrict palpha
   , const real* restrict polarity
+  , const int* restrict grp, RdtMask live
 # IMPLICIT_PARAMS:
 
 I_VARIABLES:
@@ -30,6 +31,7 @@ I_VARIABLES:
   - shared   real uidz   from:rsd,2
   - shared   real alphai from:palpha
   - shared   real poli   from:polarity
+  - shared   int  gi     from:grp ifset:grp
 K_VARIABLES:
   - register real xk     from:x
   - register real yk     from:y
@@ -39,6 +41,7 @@ K_VARIABLES:
   - register real ukdz   from:rsd,2
   - register real alphak from:palpha
   - register real polk   from:polarity
+  - register int  gk     from:grp ifset:grp
 I_FORCE:
   - register real fidx addto:zrsd,0
   - register real fidy addto:zrsd,1
@@ -54,7 +57,9 @@ FULL_PAIRWISE_INTERACTION: |
   real yr = @yk@ - @yi@;
   real zr = @zk@ - @zi@;
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  // a pair with a dead group has no multipole or induced dipole;
+  // grp is null when every group is live
+  if (r2 <= off * off and incl and (not grp or grpPairLive(live, @gi@, @gk@))) {
     real r = REAL_SQRT(r2);
     real dmpik[3];
     damp_mut(dmpik,r,@alphai@,@alphak@);

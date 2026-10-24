@@ -34,6 +34,9 @@ const Fixture kFixtures[] = {
    // Ewald dispersion of the DMSO box: in mixed precision, with or without the
    // mutation, the analytical diagonal is 8e-3 off and the numerical yz 0.12
    {"10_disp_dewald_ann_l05", "dmso/dmso.xyz", "hippo/hippo19.prm", 1.5e-2, 0.15},
+   // the long range dispersion correction with a wide taper window, whose
+   // virial is minus its energy
+   {"12_disp_corr", "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
@@ -100,6 +103,7 @@ TEST_CASE("TESTVIR-09_mpole_cflux_l04", "[ff][testvir][cflux]") { runFixture(fx(
 // Ewald dispersion of an annihilated DMSO, whose reciprocal and self terms
 // follow the van der Waals lambda (test_testvir.f case 10).
 TEST_CASE("TESTVIR-10_disp_dewald_ann_l05", "[ff][testvir][hippo][disp]") { runFixture(fx("10_disp_dewald_ann_l05")); }
+TEST_CASE("TESTVIR-12_disp_corr", "[ff][testvir][hippo][disp]") { runFixture(fx("12_disp_corr")); }
 
 #if TINKER_GPULANG_CUDA
 TEST_CASE("TESTVIR-06_mpole_lambda_l05", "[ff][testvir][ast]") { runFixture(fx("06_mpole_lambda_l05")); }

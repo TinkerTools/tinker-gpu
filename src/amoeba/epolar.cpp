@@ -73,6 +73,7 @@ void epolarData(RcOp op)
       if (not polpot::use_tholed) // AMOEBA
          darray::deallocate(work06_, work07_, work08_, work09_, work10_);
 
+      induceHistoryData(RcOp::DEALLOC, not polpot::use_tholed);
       if (polpred == UPred::ASPC) {
          darray::deallocate(udalt_00, udalt_01, udalt_02, udalt_03, udalt_04, udalt_05, udalt_06, udalt_07, udalt_08,
             udalt_09, udalt_10, udalt_11, udalt_12, udalt_13, udalt_14, udalt_15);
@@ -484,6 +485,7 @@ void epolarData(RcOp op)
             darray::zero(g::q0, n, upalt_00, upalt_01, upalt_02, upalt_03, upalt_04, upalt_05, upalt_06);
          }
       }
+      induceHistoryData(RcOp::ALLOC, not polpot::use_tholed);
    }
 
    if (op & RcOp::INIT) {
@@ -710,33 +712,39 @@ void epolarAstDeriv()
    TINKER_FCALL2(acc0, cu1, epolarAstDeriv, depdl_buf, uind, up, dfd, dfp, f0d, f0p, ufd, ufp, expol, polinv, dpscdl);
 }
 
-void epolar(int vers)
+void epolarSingleTopology(int vers, void (*kernel)(int vers, bool use_cfgrad))
 {
-   assert(!use_epdt);
-
    auto do_v = vers & calc::virial;
    auto do_g = vers & calc::grad;
-   bool use_cf = use(Potent::CHGFLX);
-   bool use_cfgrad = use_cf and static_cast<bool>(do_g);
+   const bool use_cf = use(Potent::CHGFLX);
+   const bool use_cfgrad = use_cf and do_g;
 
-   epolarBegin(vers);
-
+   // Every parameter is scaled to the polarization lambda, which the multipoles
+   // share only when the two lambdas agree (mutate.f:altepset).
    if (use_prst) {
       mpoleScale(plam, use_cf);
       polarState(coupledMask(), emGroup(), plam);
    }
-
    if (use_cf)
       alterchg();
-   mpoleInit(vers, use_emast and not use_prst);
+   mpoleInit(vers, false);
    if (use_cfgrad)
       cfluxZeroPot();
 
-   epolarKernel(vers, use_cfgrad);
+   // the explicit plambda derivative of the stationary functional
+   // (epolar4.f:epolar4s), from the dipoles about to be solved; with exchange
+   // polarization their solve also gathers the overlap with the charging ligand
+   const bool do_astdl = use_epast and (lmdaDerivVers(vers, pdlmdaActive()) & calc::energy_dlmda1);
+   expol_mutpsc = do_astdl and polpot::use_expol;
+   kernel(vers, use_cfgrad);
+   expol_mutpsc = false;
+
    epolarPairwiseExtfield(vers, uind);
    torque(vers, depx, depy, depz);
    if (use_cfgrad)
       dcflux(vers, depx, depy, depz, vir_ep);
+   if (polpot::use_expol and do_g)
+      dexpol(vers);
    if (do_v) {
       VirialBuffer u2 = vir_trq;
       virial_prec v2[9];
@@ -746,11 +754,16 @@ void epolar(int vers)
          virial_elec[iv] += v2[iv];
       }
    }
-
-   const bool do_astdl = use_epast and (lmdaDerivVers(vers, pdlmdaActive()) & calc::energy_dlmda1);
    if (do_astdl)
       epolarAstDeriv();
+}
 
+void epolar(int vers)
+{
+   assert(!use_epdt);
+
+   epolarBegin(vers);
+   epolarSingleTopology(vers, epolarKernel);
    // pole and rpole are left in the polarization state; every reader of them
    // asks for the state it needs.
    epolarFinish(vers);
@@ -925,10 +938,10 @@ static void epolarState(int vers, RdtMask mask, const int* group, bool first_sta
 // coupled one (epolar3.f:2450), so there is never a count-only pass -- but only
 // that endpoint may count, or the two endpoints would be summed together. When
 // both carry weight, epolar3.f reports the larger count and this the lambda = 1
-// one.
-static bool epolarCounts(const DtPass& p, double w)
+// one. Endpoint 1 carries the weight w of the coupled state.
+static bool epolarCounts(int k, const DtPass pass[2])
 {
-   return w != 0 ? p.in1 : p.in0;
+   return k == (pass[1].wa != 0 ? 1 : 0);
 }
 
 void epolarDtPasses(int vers)
@@ -938,27 +951,23 @@ void epolarDtPasses(int vers)
    auto do_g = vers & calc::grad;
    auto do_a = vers & calc::analyz;
 
-   double w, dw, d2w;
-   dtWeight(plam, epdtexp, w, dw, d2w);
-
    // the masked endpoints carry the flux change of these coordinates
    if (use(Potent::CHGFLX))
       alterchg();
 
-   DtCoef c;
-   dtWeightsToCoef(c, w, dw, d2w, dpldlmda, d2pldlmda2, pdlmdaActive());
-
    DtPass pass[2];
-   const int npass = dtPassList(pass);
+   const int npass = dtPasses(pass);
 
    bool first = true;
    for (int k = 0; k < npass; ++k) {
-      real wa, wb, wc;
-      dtPassWeights(c, pass[k], wa, wb, wc);
-      const bool counts = do_a and epolarCounts(pass[k], w);
-      if (dtPassIsIdle(dvers, wa, wb, wc, counts))
+      const DtPass& p = pass[k];
+      const bool counts = do_a and epolarCounts(k, pass);
+      if (dtPassIsIdle(dvers, p, counts)) {
+         induceForgetHistory(k);
          continue;
-      epolarState(counts ? dvers : dvers & ~calc::analyz, pass[k].mask, group, first, wa, wb, wc);
+      }
+      induceUseHistory(k, p.mask);
+      epolarState(counts ? dvers : dvers & ~calc::analyz, p.mask, group, first, p.wa, p.wb, p.wc);
       first = false;
    }
 

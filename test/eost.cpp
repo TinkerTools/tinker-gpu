@@ -61,18 +61,18 @@ void resetost(int nl, int nf, int nhist)
    dedlavg = 0.0;
    dedlstd = 0.0;
    deffdl = 0.0;
-   plmdamap = Lmdamap::QNT;
-   elmdamap = Lmdamap::QNT;
-   vlmdamap = Lmdamap::QNT;
-   plmdaexp = 1;
-   elmdaexp = 1;
-   vlmdaexp = 1;
-   plmdainvn = 1;
-   elmdainvn = 1;
-   vlmdainvn = 1;
-   plmdainveps = 0.0;
-   elmdainveps = 0.0;
-   vlmdainveps = 0.0;
+   plmdamap.type = Lmdamap::QNT;
+   elmdamap.type = Lmdamap::QNT;
+   vlmdamap.type = Lmdamap::QNT;
+   plmdamap.exp = 1;
+   elmdamap.exp = 1;
+   vlmdamap.exp = 1;
+   plmdamap.invn = 1;
+   elmdamap.invn = 1;
+   vlmdamap.invn = 1;
+   plmdamap.inveps = 0.0;
+   elmdamap.inveps = 0.0;
+   vlmdamap.inveps = 0.0;
    lmdaparatio = 0.3;
    lmdapbratio = 0.3;
    hbias = 0.0;
@@ -759,7 +759,7 @@ TEST_CASE("EOST-efkernel", "[ff][eost]")
    for (int i = 1; i <= nlmda; ++i)
       lmdafmean[i] = (double)(i - 1) * wlmda;
    lambda = 0.375;
-   efreeLmda(eostlmda, dfdl);
+   efreeLmda(lambda, eostlmda, dfdl);
    expected = 0.5 * lambda * lambda;
    COMPARE_REALS(eostlmda, expected, 1.0e-12);
    COMPARE_REALS(dfdl, lambda, 1.0e-12);
@@ -770,20 +770,20 @@ TEST_CASE("EOST-efkernel", "[ff][eost]")
       lmdafmean[i] = 1.0 + (double)(i - 1) * wlmda;
 
    lambda = 0.0;
-   efreeLmda(eostlmda, dfdl);
+   efreeLmda(lambda, eostlmda, dfdl);
    COMPARE_REALS(eostlmda, 0.0, 1.0e-12);
    COMPARE_REALS(dfdl, 1.0, 1.0e-12);
    lambda = -0.25;
-   efreeLmda(eostlmda, dfdl);
+   efreeLmda(lambda, eostlmda, dfdl);
    COMPARE_REALS(eostlmda, 0.0, 1.0e-12);
    COMPARE_REALS(dfdl, 1.0, 1.0e-12);
 
    lambda = 1.0;
-   efreeLmda(eostlmda, dfdl);
+   efreeLmda(lambda, eostlmda, dfdl);
    COMPARE_REALS(eostlmda, 1.5, 1.0e-12);
    COMPARE_REALS(dfdl, 2.0, 1.0e-12);
    lambda = 1.25;
-   efreeLmda(eostlmda, dfdl);
+   efreeLmda(lambda, eostlmda, dfdl);
    COMPARE_REALS(eostlmda, 1.5, 1.0e-12);
    COMPARE_REALS(dfdl, 2.0, 1.0e-12);
 

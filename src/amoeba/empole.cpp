@@ -32,7 +32,7 @@ void empoleData(RcOp op)
       if (rc_a)
          bufferDeallocate(rc_flag, nem);
       em_buf.manage(op, rc_flag, {}, {}, false);
-      em_dl.manage(op, rc_flag, use_edlmda, &demdl_buf, &d2emdl2_buf, &demdl, &d2emdl2);
+      em_dl.manage(op, rc_flag, use_edlmda, edlmdaActive, &demdl_buf, &d2emdl2_buf, &demdl, &d2emdl2);
       nem = nullptr;
    }
 
@@ -42,7 +42,7 @@ void empoleData(RcOp op)
          {eng_buf_elec, vir_buf_elec, gx_elec, gy_elec, gz_elec}, rc_a, //
          {&energy_em, &virial_em}, {&energy_elec, &virial_elec});
 
-      em_dl.manage(op, rc_flag, use_edlmda, &demdl_buf, &d2emdl2_buf, &demdl, &d2emdl2);
+      em_dl.manage(op, rc_flag, use_edlmda, edlmdaActive, &demdl_buf, &d2emdl2_buf, &demdl, &d2emdl2);
 
       if (rc_a)
          bufferAllocate(rc_flag, &nem);

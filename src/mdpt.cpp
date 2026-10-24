@@ -131,11 +131,8 @@ void monteCarloBarostat(energy_prec epot, T_prec temp, bool semiiso, bool aniso)
    // the lambda state and the forces of the step to put back afterwards.
    const bool ost_trial = use_ost;
    const LmdaStepState lmda0;
-   if (ost_trial) {
-      darray::copy(g::q0, n, gx_pmonte, gx);
-      darray::copy(g::q0, n, gy_pmonte, gy);
-      darray::copy(g::q0, n, gz_pmonte, gz);
-   }
+   if (ost_trial)
+      copyGradient(gx_pmonte, gy_pmonte, gz_pmonte, gx, gy, gz);
    double step = volmove * (2 * random<double>() - 1);
 
    if (isotropic) {
@@ -314,11 +311,8 @@ void monteCarloBarostat(energy_prec epot, T_prec temp, bool semiiso, bool aniso)
    energy(ost_trial ? calc::v4 : calc::energy);
    energy_prec enew;
    copyEnergy(calc::energy, &enew);
-   if (ost_trial) {
-      darray::copy(g::q0, n, gx, gx_pmonte);
-      darray::copy(g::q0, n, gy, gy_pmonte);
-      darray::copy(g::q0, n, gz, gz_pmonte);
-   }
+   if (ost_trial)
+      copyGradient(gx, gy, gz, gx_pmonte, gy_pmonte, gz_pmonte);
    double dpot = enew - eold;
    double dpv = bath::atmsph * (volnew - volold) / units::prescon;
 

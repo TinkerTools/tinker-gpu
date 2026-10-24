@@ -96,6 +96,14 @@ void sumGradient(double s, grad_prec* g0x, grad_prec* g0y, grad_prec* g0z, const
    else
       TINKER_FCALL2(acc1, cu1, sumGradientV2, s, g0x, g0y, g0z, g1x, g1y, g1z);
 }
+
+void copyGradient(grad_prec* g0x, grad_prec* g0y, grad_prec* g0z, const grad_prec* g1x, const grad_prec* g1y,
+   const grad_prec* g1z)
+{
+   darray::copy(g::q0, n, g0x, g1x);
+   darray::copy(g::q0, n, g0y, g1y);
+   darray::copy(g::q0, n, g0z, g1z);
+}
 }
 
 namespace tinker {

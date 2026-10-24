@@ -1,4 +1,5 @@
 #include "ff/atom.h"
+#include "ff/dlmda.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/modhippo.h"
@@ -35,6 +36,10 @@ static void epolarAplus_acc1(const real (*uind)[3])
    const real off2 = off * off;
    const int maxnlst = mlist_unit->maxnlst;
    const auto* mlst = mlist_unit.deviceptr();
+   // a pair with a dead group has no multipole or induced dipole;
+   // grp is null when every group is live
+   const int* grp = elecDeadGroups();
+   const RdtMask live = elecLiveMask();
 
    size_t bufsize = bufferSize();
    PairPolarGrad pgrad;
@@ -44,7 +49,7 @@ static void epolarAplus_acc1(const real (*uind)[3])
    MAYBE_UNUSED int GRID_DIM = gpuGridSize(BLOCK_DIM);
    #pragma acc parallel async num_gangs(GRID_DIM) vector_length(BLOCK_DIM)\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(POLAR_DPTRS,mlst)
+               deviceptr(POLAR_DPTRS,grp,mlst)
    #pragma acc loop gang independent
    for (int i = 0; i < n; ++i) {
       real xi = x[i];
@@ -85,7 +90,7 @@ static void epolarAplus_acc1(const real (*uind)[3])
 
          zero(pgrad);
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off2) {
+         if (r2 <= off2 and (not grp or grpPairLive(live, grp[i], grp[k]))) {
             MAYBE_UNUSED real e, edamp;
             MAYBE_UNUSED real pota, potb;
 
@@ -185,7 +190,7 @@ static void epolarAplus_acc1(const real (*uind)[3])
 
    #pragma acc parallel async\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(POLAR_DPTRS,dpuexclude,dpuexclude_scale)
+               deviceptr(POLAR_DPTRS,grp,dpuexclude,dpuexclude_scale)
    #pragma acc loop independent private(pgrad)
    for (int ii = 0; ii < ndpuexclude; ++ii) {
       int offset = ii & (bufsize - 1);
@@ -224,7 +229,7 @@ static void epolarAplus_acc1(const real (*uind)[3])
       bool incl = pscale != 0 or uscale != 0;
 
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off2 and incl) {
+      if (r2 <= off2 and incl and (not grp or grpPairLive(live, grp[i], grp[k]))) {
 
          MAYBE_UNUSED real e, edamp;
          MAYBE_UNUSED real pota, potb;

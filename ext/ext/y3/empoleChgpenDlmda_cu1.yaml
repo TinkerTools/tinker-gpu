@@ -47,9 +47,7 @@ EXTRA_PARAMS: |
   , const real* restrict pcore, const real* restrict pval
   , const real* restrict pdelta, const real* restrict palpha
   , const int* restrict grp
-  , real aewald, real f, GrpScale esc
-  , real deldl, real d2eldl2
-  , RdtMask live
+  , real aewald, real f, GrpScale esc, GrpPairScale ps
 # IMPLICIT_PARAMS:
 
 I_VARIABLES:
@@ -125,16 +123,16 @@ K_FORCE_DLMDA:
 
 # The site parameters are unscaled, so is the pair, and each site's group scale
 # weights it (empole4.f); the valence charge carries the unscaled flux change.
-SCALED_PAIRWISE_INTERACTION: |
+FULL_PAIRWISE_INTERACTION: |
   real xr = @xk@ - @xi@;
   real yr = @yk@ - @yi@;
   real zr = @zk@ - @zi@;
   real r2 = image2(xr, yr, zr);
+  // the site scales weight the flux potentials of the pair
   real si = esc.s[@gi@], dsi = esc.ds[@gi@];
   real sk = esc.s[@gk@], dsk = esc.ds[@gk@];
   // a pair with an annihilated site has neither energy nor lambda derivative
-  bool weighted = (si != 0 or dsi != 0) and (sk != 0 or dsk != 0);
-  if (r2 <= off * off and incl and weighted and grpPairLive(live, @gi@, @gk@)) {
+  if (r2 <= off * off and incl and grpPairScaleLive(ps, @gi@, @gk@)) {
     real e;
     real pota, potb;
     PairMPoleGrad pgrad;
@@ -168,12 +166,10 @@ SCALED_PAIRWISE_INTERACTION: |
       vzy = -0.5f * (zr * pgrad.frcy + yr * pgrad.frcz);
       vzz = -zr * pgrad.frcz;
     }
-    real scalelmda = si * sk;
-    real dlscale = dsi * sk + si * dsk;
-    real d2scale = 2 * dsi * dsk;
-    if (dsi != 0 or dsk != 0) {
-      real d2w = d2scale * deldl * deldl + dlscale * d2eldl2;
-      real dlw = dlscale * deldl;
+    real scalelmda = ps.sc[@gi@][@gk@];
+    real dlw = ps.dl[@gi@][@gk@];
+    real d2w = ps.d2l[@gi@][@gk@];
+    if (dlw != 0 or d2w != 0) {
       if CONSTEXPR (do_e) {
         if CONSTEXPR (do_dl1)
           demdltl += floatTo<ebuf_prec>(dlw * e);
@@ -214,132 +210,6 @@ SCALED_PAIRWISE_INTERACTION: |
       emtl += floatTo<ebuf_prec>(e);
       if CONSTEXPR (do_a) {
         if (scalea != 0 and e != 0)
-          nemtl += 1;
-      }
-    }
-    if CONSTEXPR (do_g) {
-      @gxi@ += scalelmda * pgrad.frcx;
-      @gyi@ += scalelmda * pgrad.frcy;
-      @gzi@ += scalelmda * pgrad.frcz;
-      @gxk@ -= scalelmda * pgrad.frcx;
-      @gyk@ -= scalelmda * pgrad.frcy;
-      @gzk@ -= scalelmda * pgrad.frcz;
-
-      @txi@ += scalelmda * pgrad.ttmi[0];
-      @tyi@ += scalelmda * pgrad.ttmi[1];
-      @tzi@ += scalelmda * pgrad.ttmi[2];
-      @txk@ += scalelmda * pgrad.ttmk[0];
-      @tyk@ += scalelmda * pgrad.ttmk[1];
-      @tzk@ += scalelmda * pgrad.ttmk[2];
-    }
-    if CONSTEXPR (do_v) {
-      vemtlxx += floatTo<vbuf_prec>(scalelmda * vxx);
-      vemtlyx += floatTo<vbuf_prec>(scalelmda * vyx);
-      vemtlzx += floatTo<vbuf_prec>(scalelmda * vzx);
-      vemtlyy += floatTo<vbuf_prec>(scalelmda * vyy);
-      vemtlzy += floatTo<vbuf_prec>(scalelmda * vzy);
-      vemtlzz += floatTo<vbuf_prec>(scalelmda * vzz);
-    }
-    // the potential of the scaled multipoles at each site, and of their
-    // lambda derivative
-    if CONSTEXPR (CFLX and do_g) {
-      @poti@ += sk * pota;
-      @potk@ += si * potb;
-      if CONSTEXPR (do_gdl) {
-        @dlpoti@ += dsk * pota;
-        @dlpotk@ += dsi * potb;
-      }
-    }
-  } // end if (include)
-FULL_PAIRWISE_INTERACTION: |
-  real xr = @xk@ - @xi@;
-  real yr = @yk@ - @yi@;
-  real zr = @zk@ - @zi@;
-  real r2 = image2(xr, yr, zr);
-  real si = esc.s[@gi@], dsi = esc.ds[@gi@];
-  real sk = esc.s[@gk@], dsk = esc.ds[@gk@];
-  // a pair with an annihilated site has neither energy nor lambda derivative
-  bool weighted = (si != 0 or dsi != 0) and (sk != 0 or dsk != 0);
-  if (r2 <= off * off and incl and weighted and grpPairLive(live, @gi@, @gk@)) {
-    real e;
-    real pota, potb;
-    PairMPoleGrad pgrad;
-    zero(pgrad);
-    real vi = @vali@ + @dvali@;
-    real vk = @valk@ + @dvalk@;
-    if CONSTEXPR (CP == Chgpen::GORDON1) {
-    pair_mpole_chgpen<do_e, do_g, ETYP, CFLX>(
-      r2, xr, yr, zr, 1,                  //
-      @ci@, @dix@, @diy@, @diz@, @corei@, vi, @alphai@, //
-      @qixx@, @qixy@, @qixz@, @qiyy@, @qiyz@, @qizz@, //
-      @ck@, @dkx@, @dky@, @dkz@, @corek@, vk, @alphak@, //
-      @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@, //
-      f, aewald, e, pota, potb, pgrad);
-    } else if CONSTEXPR (CP == Chgpen::GORDON2) {
-    pair_mpole_chgpen_aplus<do_e, do_g, ETYP, CFLX>(
-      r2, xr, yr, zr, 1,                  //
-      @ci@, @dix@, @diy@, @diz@, @corei@, vi, @alphai@, //
-      @qixx@, @qixy@, @qixz@, @qiyy@, @qiyz@, @qizz@, //
-      @ck@, @dkx@, @dky@, @dkz@, @corek@, vk, @alphak@, //
-      @qkxx@, @qkxy@, @qkxz@, @qkyy@, @qkyz@, @qkzz@, //
-      f, aewald, e, pota, potb, pgrad);
-    }
-
-    real vxx, vyx, vzx, vyy, vzy, vzz;
-    if CONSTEXPR (do_v) {
-      vxx = -xr * pgrad.frcx;
-      vyx = -0.5f * (yr * pgrad.frcx + xr * pgrad.frcy);
-      vzx = -0.5f * (zr * pgrad.frcx + xr * pgrad.frcz);
-      vyy = -yr * pgrad.frcy;
-      vzy = -0.5f * (zr * pgrad.frcy + yr * pgrad.frcz);
-      vzz = -zr * pgrad.frcz;
-    }
-    real scalelmda = si * sk;
-    real dlscale = dsi * sk + si * dsk;
-    real d2scale = 2 * dsi * dsk;
-    if (dsi != 0 or dsk != 0) {
-      real d2w = d2scale * deldl * deldl + dlscale * d2eldl2;
-      real dlw = dlscale * deldl;
-      if CONSTEXPR (do_e) {
-        if CONSTEXPR (do_dl1)
-          demdltl += floatTo<ebuf_prec>(dlw * e);
-        if CONSTEXPR (do_dl2)
-          d2emdl2tl += floatTo<ebuf_prec>(d2w * e);
-      }
-      if CONSTEXPR (do_g) {
-        if CONSTEXPR (do_gdl) {
-          @dgxi@ += dlw * pgrad.frcx;
-          @dgyi@ += dlw * pgrad.frcy;
-          @dgzi@ += dlw * pgrad.frcz;
-          @dgxk@ -= dlw * pgrad.frcx;
-          @dgyk@ -= dlw * pgrad.frcy;
-          @dgzk@ -= dlw * pgrad.frcz;
-        }
-        if CONSTEXPR (do_tdl) {
-          @dltxi@ += dlw * pgrad.ttmi[0];
-          @dltyi@ += dlw * pgrad.ttmi[1];
-          @dltzi@ += dlw * pgrad.ttmi[2];
-          @dltxk@ += dlw * pgrad.ttmk[0];
-          @dltyk@ += dlw * pgrad.ttmk[1];
-          @dltzk@ += dlw * pgrad.ttmk[2];
-        }
-        if CONSTEXPR (do_v) {
-          if CONSTEXPR (do_vdl) {
-            demvirdltlxx += floatTo<vbuf_prec>(dlw * vxx);
-            demvirdltlyx += floatTo<vbuf_prec>(dlw * vyx);
-            demvirdltlzx += floatTo<vbuf_prec>(dlw * vzx);
-            demvirdltlyy += floatTo<vbuf_prec>(dlw * vyy);
-            demvirdltlzy += floatTo<vbuf_prec>(dlw * vzy);
-            demvirdltlzz += floatTo<vbuf_prec>(dlw * vzz);
-          }
-        }
-      }
-    }
-    if CONSTEXPR (do_e) {
-      e *= scalelmda;
-      emtl += floatTo<ebuf_prec>(e);
-      if CONSTEXPR (do_a) {
-        if (e != 0)
           nemtl += 1;
       }
     }

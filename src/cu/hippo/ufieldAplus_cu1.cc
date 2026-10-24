@@ -5,7 +5,7 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
    const int (*restrict exclude)[2], const real* restrict exclude_scale, const real* restrict x, const real* restrict y,
    const real* restrict z, const Spatial::SortedAtom* restrict sorted, int nakpl, const int* restrict iakpl, int niak,
    const int* restrict iak, const int* restrict lst, const real (*restrict uind)[3], real (*restrict field)[3],
-   const real* restrict pdamp, real aewald)
+   const real* restrict pdamp, real aewald, const int* restrict grp, RdtMask live)
 {
    using d::jpolar;
    using d::njpolar;
@@ -16,10 +16,10 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
    const int ilane = threadIdx.x & (WARP_SIZE - 1);
 
    __shared__ real uidx[BLOCK_DIM], uidy[BLOCK_DIM], uidz[BLOCK_DIM], pdi[BLOCK_DIM];
-   __shared__ int jpi[BLOCK_DIM];
+   __shared__ int jpi[BLOCK_DIM], gi[BLOCK_DIM];
    real xi, yi, zi;
    real xk, yk, zk, ukdx, ukdy, ukdz, pdk;
-   int jpk;
+   int jpk, gk;
    real fidx, fidy, fidz;
    real fkdx, fkdy, fkdz;
 
@@ -42,6 +42,7 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
       uidz[klane] = uind[i][2];
       pdi[klane] = pdamp[i];
       jpi[klane] = jpolar[i];
+      gi[klane] = (grp ? grp[i] : 0);
       xi = x[i];
       yi = y[i];
       zi = z[i];
@@ -53,13 +54,16 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
       ukdz = uind[k][2];
       pdk = pdamp[k];
       jpk = jpolar[k];
+      gk = (grp ? grp[k] : 0);
 
       constexpr bool incl = true;
       real xr = xk - xi;
       real yr = yk - yi;
       real zr = zk - zi;
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off * off and incl) {
+      // a pair with a dead group has no multipole or induced dipole;
+      // grp is null when every group is live
+      if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
          real pga = thlval[njpolar * jpi[klane] + jpk];
          pair_ufield_aplus_v2<ETYP>(r2, xr, yr, zr, scalea, uidx[klane], uidy[klane], uidz[klane], pdi[klane], pga,
             ukdx, ukdy, ukdz, pdk, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
@@ -97,6 +101,7 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
       uidz[threadIdx.x] = uind[i][2];
       pdi[threadIdx.x] = pdamp[i];
       jpi[threadIdx.x] = jpolar[i];
+      gi[threadIdx.x] = (grp ? grp[i] : 0);
       xi = sorted[atomi].x;
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
@@ -108,6 +113,7 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
       ukdz = uind[k][2];
       pdk = pdamp[k];
       jpk = jpolar[k];
+      gk = (grp ? grp[k] : 0);
       __syncwarp();
 
       unsigned int uinfo0 = uinfo[iw * WARP_SIZE + ilane];
@@ -122,7 +128,9 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
          real yr = yk - yi;
          real zr = zk - zi;
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // a pair with a dead group has no multipole or induced dipole;
+         // grp is null when every group is live
+         if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
             real pga = thlval[njpolar * jpi[klane] + jpk];
             pair_ufield_aplus_v2<ETYP>(r2, xr, yr, zr, scalea, uidx[klane], uidy[klane], uidz[klane], pdi[klane], pga,
                ukdx, ukdy, ukdz, pdk, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
@@ -164,6 +172,7 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
       uidz[threadIdx.x] = uind[i][2];
       pdi[threadIdx.x] = pdamp[i];
       jpi[threadIdx.x] = jpolar[i];
+      gi[threadIdx.x] = (grp ? grp[i] : 0);
       xi = sorted[atomi].x;
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
@@ -175,6 +184,7 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
       ukdz = uind[k][2];
       pdk = pdamp[k];
       jpk = jpolar[k];
+      gk = (grp ? grp[k] : 0);
       __syncwarp();
 
       for (int j = 0; j < WARP_SIZE; ++j) {
@@ -186,7 +196,9 @@ void ufieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
          real yr = yk - yi;
          real zr = zk - zi;
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // a pair with a dead group has no multipole or induced dipole;
+         // grp is null when every group is live
+         if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
             real pga = thlval[njpolar * jpi[klane] + jpk];
             pair_ufield_aplus_v2<ETYP>(r2, xr, yr, zr, scalea, uidx[klane], uidy[klane], uidz[klane], pdi[klane], pga,
                ukdx, ukdy, ukdz, pdk, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);

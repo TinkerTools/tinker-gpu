@@ -336,8 +336,14 @@ void refreshsublmda_();
 #define tinker_f_refreshsublmda refreshsublmda_
 void grpscale_(double* lmda, double* sc, double* dsc);
 #define tinker_f_grpscale grpscale_
+int lmdadrv_(int* use, double* dl, double* d2l);
+#define tinker_f_lmdadrv lmdadrv_
 void vdlflags_(int* dodl, int* dod2);
 #define tinker_f_vdlflags vdlflags_
+void dlcpair_(int* i, int* k, double* xr, double* yr, double* zr, double* dldx, double* dldy, double* dldz, double* dfl, double* dvir);
+#define tinker_f_dlcpair dlcpair_
+void dlcvir_(double* xr, double* yr, double* zr, double* dldx, double* dldy, double* dldz, double* dvir);
+#define tinker_f_dlcvir dlcvir_
 void ctlmdasc_(int* dodl, double* sc, double* dsc, double* d2sc, int* live);
 #define tinker_f_ctlmdasc ctlmdasc_
 void eleclive_(int* live, int* doskip);
@@ -352,14 +358,14 @@ void maprelstage_(double* lmda);
 #define tinker_f_maprelstage maprelstage_
 void relstgloc_(double* lmda, double* s, double* ds);
 #define tinker_f_relstgloc relstgloc_
-void relpowerwt_(double* x, int* nexp, double* w, double* dw, double* d2w);
-#define tinker_f_relpowerwt relpowerwt_
+void lmdapwr_(double* x, double* a, int* do2, double* f, double* df, double* d2f);
+#define tinker_f_lmdapwr lmdapwr_
+void lmdapow_(double* x, double* c, double* a, double* b, int* do2, double* f, double* f1, double* f2);
+#define tinker_f_lmdapow lmdapow_
 void relneed_(double* w, double* dw, double* d2w, double* chain, double* d2chain, int* need0, int* need1);
 #define tinker_f_relneed relneed_
 void quintaper_(double* x, double* cut, double* off, double* taper, double* dtaper, double* d2taper);
 #define tinker_f_quintaper quintaper_
-void sublmdaexp_(double* x, int* exponent, double* lmda, double* dlmda, double* d2lmda);
-#define tinker_f_sublmdaexp sublmdaexp_
 void sublmdainvpower_(double* x, int* n, double* eps, double* lmda, double* dlmda, double* d2lmda);
 #define tinker_f_sublmdainvpower sublmdainvpower_
 void sublmdaapm_(double* x, int* n, double* rho, double* lmda, double* dlmda, double* d2lmda);
@@ -373,6 +379,10 @@ int depcriteria_(double* avg, double* std);
 void rdbiashead_(int* ihis, char* histfile, char* title, tinker_fchar_len_t histfile_cap, tinker_fchar_len_t title_cap);
 inline void tinker_f_rdbiashead(int* ihis, tinker_fchars histfile, tinker_fchars title) {
     return rdbiashead_(ihis, histfile.string, title.string, histfile.capacity, title.capacity);
+}
+void fmtbiashead_(char* title, char* label, int* nrec, char* record, tinker_fchar_len_t title_cap, tinker_fchar_len_t label_cap, tinker_fchar_len_t record_cap);
+inline void tinker_f_fmtbiashead(tinker_fchars title, tinker_fchars label, int* nrec, tinker_fchars record) {
+    return fmtbiashead_(title.string, label.string, nrec, record.string, title.capacity, label.capacity, record.capacity);
 }
 void prtbiashead_(int* ihis, char* title, char* label, tinker_fchar_len_t title_cap, tinker_fchar_len_t label_cap);
 inline void tinker_f_prtbiashead(int* ihis, tinker_fchars title, tinker_fchars label) {
@@ -400,7 +410,7 @@ void lmdathetamap_(double* theta, double* lmda, double* dldth);
 #define tinker_f_lmdathetamap lmdathetamap_
 void lmdathetainv_(double* lmda, double* theta);
 #define tinker_f_lmdathetainv lmdathetainv_
-void efreelmda_(double* eflmda, double* dfdl);
+void efreelmda_(double* lmda, double* eflmda, double* dfdl);
 #define tinker_f_efreelmda efreelmda_
 double efreetot_();
 #define tinker_f_efreetot efreetot_
@@ -408,8 +418,6 @@ void setlmdasched_(int* nwin, int* nwinset);
 #define tinker_f_setlmdasched setlmdasched_
 void initlmdawin_(int* nstep);
 #define tinker_f_initlmdawin initlmdawin_
-void setlmdawin_();
-#define tinker_f_setlmdawin setlmdawin_
 void lmdawinsize_(int* iwin, int* nlen, int* neq);
 #define tinker_f_lmdawinsize lmdawinsize_
 void lmdawinphase_(int* istep, int* iprod);
@@ -886,11 +894,11 @@ void ehal3c_();
 // ehalsc.f
 void halsc_(double* vlsc, double* vscal);
 #define tinker_f_halsc halsc_
-void halsc4_(double* vlsc, double* vscal, double* vlsc1, double* vlsc2, double* dvscal);
+void halsc4_(double* vlsc, double* vscal, double* vlsc1, double* vlsc2, double* vscal1, double* vscal2);
 #define tinker_f_halsc4 halsc4_
 void ehalsc_(double* rik, double* rv, double* eps, int* ig, double* vlsc, double* vscal, double* e, double* de);
 #define tinker_f_ehalsc ehalsc_
-void ehalsc4_(double* rik, double* rv, double* eps, int* ig, double* vlsc, double* vlsc1, double* vlsc2, double* vscal, double* dvscal, double* e, double* de, double* dlambda, double* dlambda2, double* dlde);
+void ehalsc4_(double* rik, double* rv, double* eps, int* ig, double* vlsc, double* vlsc1, double* vlsc2, double* vscal, double* vscal1, double* vscal2, double* e, double* de, double* dlambda, double* dlambda2, double* dlde);
 #define tinker_f_ehalsc4 ehalsc4_
 
 // eimprop.f
@@ -1692,9 +1700,9 @@ void evcorr_(char* mode, double* elrc, tinker_fchar_len_t mode_cap);
 inline void tinker_f_evcorr(tinker_fchars mode, double* elrc) {
     return evcorr_(mode.string, elrc, mode.capacity);
 }
-void evcorr1_(char* mode, double* elrc, double* vlrc, double* delrc, double* dvlrc, tinker_fchar_len_t mode_cap);
-inline void tinker_f_evcorr1(tinker_fchars mode, double* elrc, double* vlrc, double* delrc, double* dvlrc) {
-    return evcorr1_(mode.string, elrc, vlrc, delrc, dvlrc, mode.capacity);
+void evcorr1_(char* mode, double* elrc, double* vlrc, double* delrc, double* dvlrc, double* d2elrc, tinker_fchar_len_t mode_cap);
+inline void tinker_f_evcorr1(tinker_fchars mode, double* elrc, double* vlrc, double* delrc, double* dvlrc, double* d2elrc) {
+    return evcorr1_(mode.string, elrc, vlrc, delrc, dvlrc, d2elrc, mode.capacity);
 }
 
 // exfield.f
@@ -2352,6 +2360,8 @@ void altemdt_(double* elmda);
 #define tinker_f_altemdt altemdt_
 void altpolr_();
 #define tinker_f_altpolr altpolr_
+void altgrpsc_(double* sc, int* dopole);
+#define tinker_f_altgrpsc altgrpsc_
 void altepdt_(double* plmda);
 #define tinker_f_altepdt altepdt_
 void altepset_(int* same);

@@ -35,6 +35,7 @@ static void empoleChgpenDlmda_cu()
    const real f = electric / dielec;
    const int* grp = emGroup();
    const GrpScale esc = grpScale(elam);
+   const GrpPairScale ps = elecPairScale();
    real* dlp = Ver::g_dlmda ? dlpot : nullptr;
    const real* dq = use(Potent::CHGFLX) ? pdelta : nullptr;
 
@@ -43,15 +44,14 @@ static void empoleChgpenDlmda_cu()
       PMEUnit pu = epme_unit;
       aewald = pu->aewald;
       launch_k1b(g::s0, n, empoleChgpenSelfDlmda_cu<Ver, CFLX>, //
-         nem, em, demdl_buf, d2emdl2_buf, rpole, grp, esc, pot, dlp, n, f, aewald, deldlmda, d2eldlmda2);
+         nem, em, demdl_buf, d2emdl2_buf, rpole, grp, esc, grpSelfScale(ps), pot, dlp, n, f, aewald);
    }
 
    int ngrid = gpuGridSize(BLOCK_DIM);
    empoleChgpenDlmda_cu1<Ver, ETYP, CP, CFLX><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em,
-      demdl_buf, d2emdl2_buf, vir_em, dvirdl_buf, demx, demy, demz, dfdlx, dfdly, dfdlz, off, st.si1.bit0,
-      nmdwexclude, mdwexclude, mdwexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak,
-      st.lst, trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, pot, dlp, rpole, pcoreorig, pvalorig, dq, palpha, grp,
-      aewald, f, esc, deldlmda, d2eldlmda2, elecLiveMask());
+      demdl_buf, d2emdl2_buf, vir_em, dvirdl_buf, demx, demy, demz, dfdlx, dfdly, dfdlz, off, st.si1.bit0, nmdwexclude,
+      mdwexclude, mdwexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, trqx,
+      trqy, trqz, dltrqx, dltrqy, dltrqz, pot, dlp, rpole, pcoreorig, pvalorig, dq, palpha, grp, aewald, f, esc, ps);
 }
 
 // The flux potentials are gathered with the gradient only, so CFLX leaves out

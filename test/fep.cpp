@@ -25,6 +25,7 @@
 
 #include <tinker/detail/bath.hh>
 #include <tinker/detail/dlmda.hh>
+#include <tinker/detail/dsppot.hh>
 #include <tinker/detail/fep.hh>
 #include <tinker/detail/files.hh>
 #include <tinker/detail/inform.hh>
@@ -311,6 +312,15 @@ void termsDisp()
    REQUIRE_FALSE(use(Potent::VDW));
 }
 
+// Dispersion without Ewald, whose long range correction follows the lambda
+// power of the soft core.
+void termsDispCorr()
+{
+   REQUIRE_FALSE(useDEwald());
+   REQUIRE(dsppot::use_dcorr);
+   REQUIRE_FALSE(use(Potent::VDW));
+}
+
 #define WATER "mutate/water2.xyz", "commit_6fe8e913/water03.prm"
 const std::vector<double> kAbs{0.0, 0.4, 0.6, 1.0};
 const std::vector<double> kDual{0.0, 0.5, 0.7, 1.0};
@@ -359,6 +369,9 @@ const Fixture kFixtures[] = {
    // Ewald dispersion of one DMSO of a DMSO box, annihilated or decoupled
    {"dispann", "fep/dispann.key", "dmso/dmso.xyz", "hippo/hippo19.prm", "", "", kAbs, 1.0e-4, termsDisp},
    {"dispdec", "fep/dispdec.key", "dmso/dmso.xyz", "hippo/hippo19.prm", "", "", kAbs, 1.0e-4, termsDisp},
+   // dispersion with its long range correction (test_testlmda.f case 113)
+   {"dispcorr", "testlmda/113_hipmix_dsp_corr_l04.key", "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm", "", "",
+      kAbs, 1.0e-4, termsDispCorr},
 };
 
 const Fixture& fx(const char* tag)
@@ -788,6 +801,7 @@ TEST_CASE("FEP-trial-expol", "[ff][fep][expol]") { runTrial(fx("expol")); }
 TEST_CASE("FEP-trial-expol-dt", "[ff][fep][expol]") { runTrial(fx("expol-dt")); }
 TEST_CASE("FEP-trial-expol-box", "[ff][fep][expol]") { runTrial(fx("expol-box")); }
 TEST_CASE("FEP-trial-dispdec", "[ff][fep][disp]") { runTrial(fx("dispdec")); }
+TEST_CASE("FEP-trial-dispcorr", "[ff][fep][disp]") { runTrial(fx("dispcorr")); }
 
 TEST_CASE("FEP-trial-dyn-ast", "[ff][fep]") { runTrial(fx("ast"), kRcDyn); }
 TEST_CASE("FEP-trial-dyn-ast-ewald-ion", "[ff][fep]") { runTrial(fx("ast-ewald-ion"), kRcDyn); }
@@ -804,6 +818,7 @@ TEST_CASE("FEP-trial-dyn-hippo", "[ff][fep]") { runTrial(fx("hippo"), kRcDyn); }
 TEST_CASE("FEP-trial-dyn-aplus", "[ff][fep]") { runTrial(fx("aplus"), kRcDyn); }
 TEST_CASE("FEP-trial-dyn-aplus-cross", "[ff][fep][cflux]") { runTrial(fx("aplus-cross"), kRcDyn); }
 TEST_CASE("FEP-trial-dyn-dispann", "[ff][fep][disp]") { runTrial(fx("dispann"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-dispcorr", "[ff][fep][disp]") { runTrial(fx("dispcorr"), kRcDyn); }
 TEST_CASE("FEP-trial-dyn-expol", "[ff][fep][expol]") { runTrial(fx("expol"), kRcDyn); }
 TEST_CASE("FEP-trial-dyn-expol-dt", "[ff][fep][expol]") { runTrial(fx("expol-dt"), kRcDyn); }
 TEST_CASE("FEP-trial-dyn-expol-box", "[ff][fep][expol]") { runTrial(fx("expol-box"), kRcDyn); }
@@ -891,16 +906,50 @@ TEST_CASE("FEP-predict", "[ff][fep]")
       s.session.end();
    }
 
-   // Dual topology solves each of its subsystems from scratch and never
-   // predicts, so no history is kept for it.
+   // Dual topology keeps a history for each endpoint, and the trial and native
+   // solves leave both as they were.
    {
       Setup s(f, kMd, std::string(f.native) + "\npol-dualtopo\nintegrator verlet\n", false);
       testMdInit(298., 0.);
       s.session.init();
       REQUIRE(use_fep);
       REQUIRE(use_epdt);
-      REQUIRE(polpred == UPred::NONE);
-      REQUIRE(maxualt == 0);
+      REQUIRE(polpred == UPred::ASPC);
+      REQUIRE(induceHistoryUsable());
+
+      std::vector<pos_prec> xb(n);
+      for (int step = 0; step < 19; ++step) {
+         darray::copyout(g::q0, n, xb.data(), xpos);
+         waitFor(g::q0);
+         for (int i = 0; i < n; ++i)
+            xb[i] += 0.01 * ((i + step) % 3 - 1);
+         darray::copyin(g::q0, n, xpos, xb.data());
+         waitFor(g::q0);
+         copyPosToXyz(true);
+         energy(calc::v1);
+      }
+      // an endpoint the native lambda gives no weight is not solved, and its
+      // history is emptied rather than left to go stale
+      DtPass pass[2];
+      dtPasses(pass);
+      REQUIRE((pass[0].wa == 0) != (pass[1].wa == 0));
+      std::vector<State> before;
+      for (int k : {0, 1}) {
+         CAPTURE(k);
+         induceUseHistory(k, pass[k].mask);
+         before.emplace_back();
+         if (pass[k].wa != 0)
+            REQUIRE(before.back().nualt >= maxualt);
+         else
+            REQUIRE(before.back().nualt == 0);
+      }
+
+      efepTrial(2, trial, e, en);
+      for (int k : {0, 1}) {
+         CAPTURE(k);
+         induceUseHistory(k, pass[k].mask);
+         requireSame(State(), before[k]);
+      }
       s.session.end();
    }
 
@@ -1111,10 +1160,11 @@ TEST_CASE("FEP-dyn-save-lambda", "[ff][fep]")
 TEST_CASE("FEP-dyn-dual", "[ff][fep]")
 {
    // Dual topology polarization, whose trial energies weigh two solves apiece,
-   // leaves the trajectory alone as the single topology does.
+   // leaves the trajectory alone as the single topology does, predictor
+   // histories of both endpoints included.
    DynOpts o;
    o.extra = std::string("\npol-dualtopo\n") + kTwice;
-   o.pred = UPred::NONE;
+   o.pred = UPred::ASPC;
    o.terms = []() {
       REQUIRE(use_fep);
       REQUIRE(use_epdt);

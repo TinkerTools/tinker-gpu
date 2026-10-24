@@ -18,6 +18,7 @@
 #include <tinker/detail/uprior.hh>
 
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace tinker {
@@ -40,7 +41,7 @@ TINKER_FVOID2(acc1, cu1, ulspredSaveP1, real (*)[3], real (*)[3], //
    const real (*)[3], const real (*)[3]);
 void ulspredSave(const real (*uind)[3], const real (*uinp)[3])
 {
-   if (polpred == UPred::NONE || use_epdt)
+   if (not induceHistoryUsable())
       return;
    // a trial that bypasses the history leaves no trace in it
    if (induceHistoryBypassed())
@@ -89,6 +90,101 @@ static real (**udalt[])[3] = {&udalt_00, &udalt_01, &udalt_02, &udalt_03, &udalt
    &udalt_08, &udalt_09, &udalt_10, &udalt_11, &udalt_12, &udalt_13, &udalt_14, &udalt_15};
 static real (**upalt[])[3] = {&upalt_00, &upalt_01, &upalt_02, &upalt_03, &upalt_04, &upalt_05, &upalt_06, &upalt_07,
    &upalt_08, &upalt_09, &upalt_10, &upalt_11, &upalt_12, &upalt_13, &upalt_14, &upalt_15};
+
+// The predictor history of the dual topology endpoint the globals do not hold.
+namespace {
+struct UHistory
+{
+   real (*ud[16])[3];
+   real (*up[16])[3];
+   int nualt;
+   RdtMask state; // the subsystem it was built for
+};
+UHistory s_other;
+int s_active = -1;              // the endpoint the globals hold; -1 with a single history
+RdtMask s_state = RdtMask::ALL; // and the subsystem the globals' history was built for
+bool s_twoset = false;
+
+// Puts the history of endpoint k into the globals.
+void swapHistory(int k)
+{
+   if (s_active == k)
+      return;
+   for (int i = 0; i < maxualt; ++i) {
+      std::swap(*udalt[i], s_other.ud[i]);
+      if (s_twoset)
+         std::swap(*upalt[i], s_other.up[i]);
+   }
+   std::swap(nualt, s_other.nualt);
+   std::swap(s_state, s_other.state);
+   s_active = k;
+}
+}
+
+void induceHistoryData(RcOp op, bool two_sets)
+{
+   if (op & RcOp::DEALLOC) {
+      if (s_active >= 0) {
+         // the first history goes back into the globals, which are freed there
+         swapHistory(0);
+         for (int i = 0; i < maxualt; ++i) {
+            darray::deallocate(s_other.ud[i]);
+            if (s_twoset)
+               darray::deallocate(s_other.up[i]);
+         }
+      }
+      s_other = UHistory{};
+      s_active = -1;
+      s_twoset = false;
+   }
+
+   if (op & RcOp::ALLOC) {
+      // LSQR keeps fits of its own beside the dipoles, so it gets no second
+      // history and dual topology does not predict with it
+      if (use_epdt and (polpred == UPred::ASPC or polpred == UPred::GEAR)) {
+         s_twoset = two_sets;
+         s_other = UHistory{};
+         for (int i = 0; i < maxualt; ++i) {
+            darray::allocate(n, &s_other.ud[i]);
+            darray::zero(g::q0, n, s_other.ud[i]);
+            if (two_sets) {
+               darray::allocate(n, &s_other.up[i]);
+               darray::zero(g::q0, n, s_other.up[i]);
+            }
+         }
+         s_other.state = RdtMask::ALL;
+         s_state = RdtMask::ALL;
+         s_active = 0;
+      }
+   }
+}
+
+void induceUseHistory(int k, RdtMask state)
+{
+   if (s_active < 0)
+      return;
+   swapHistory(k);
+   // dipoles of another subsystem predict nothing about this one
+   if (s_state != state) {
+      nualt = 0;
+      s_state = state;
+   }
+}
+
+void induceForgetHistory(int k)
+{
+   if (s_active < 0)
+      return;
+   if (k == s_active)
+      nualt = 0;
+   else
+      s_other.nualt = 0;
+}
+
+bool induceHistoryUsable()
+{
+   return polpred != UPred::NONE and (not use_epdt or s_active >= 0);
+}
 
 InducedSnapshot::InducedSnapshot()
    : m_ud{nullptr, nullptr}
@@ -189,11 +285,12 @@ UPred polarPredictor()
 
    // The Fortran reader turns prediction off for free energy perturbation and
    // for the adaptive lambda bias methods, so that their trial energies cannot
-   // enter the history. Here the trial solves bypass the predictor
-   // (InducedTrial), and the dynamics keeps it. Dual topology never predicts,
-   // so its history is not asked for.
+   // enter the history, and for dual topology polarization (predict.f). Here
+   // the trial solves bypass the predictor (InducedTrial), and dual topology
+   // keeps a history for each endpoint (induceUseHistory), so the dynamics
+   // keeps it.
    const bool trials = use_fep or use_ost or use_abf or use_meta;
-   if (trials and not use_epdt and (rc_flag & calc::md)) {
+   if ((trials or use_epdt) and (rc_flag & calc::md)) {
       for (int i = 0; i < keys::nkey; ++i) {
          FstrView record = keys::keyline[i];
          auto vs = Text::split(record.trim());
