@@ -15,7 +15,7 @@ Pygments==2.18.0
 PyYAML==6.0.3
 six==1.16.0
 snowballstemmer==2.2.0
-soupsieve==2.4
+soupsieve==2.9
 Sphinx==7.3.7
 sphinxcontrib-applehelp==2.0.0
 sphinxcontrib-bibtex==2.6.5
