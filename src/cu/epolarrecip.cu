@@ -618,16 +618,16 @@ static void epolarChgpenEwaldRecipSelf_cu1(const real (*gpu_uind)[3], bool use_c
 
    auto* fphid = fdip_phi1;
 
-   cuindToFuind(pu, gpu_uind, gpu_uind, fuind, fuind);
+   cuindToFuind(pu, gpu_uind, nullptr, fuind, nullptr);
    if CONSTEXPR (do_e) {
       launch_k1b(g::s0, n, epolarEwaldRecipSelfEp_cu, n, out_e, f, fuind, fphi, dt);
    }
-   gridUind(pu, fuind, fuind);
-   fftfront(pu);
+   gridUindOneSet(pu, fuind);
+   fftfrontOneSet(pu);
    // TODO: store vs. recompute qfac
-   pmeConv(pu);
-   fftback(pu);
-   fphiUind(pu, fphid, fphid, fphidp);
+   pmeConvOneSet(pu);
+   fftbackOneSet(pu);
+   fphiUindOneSet(pu, fphid, fphidp);
 
    // increment the dipole polarization gradient contributions
 

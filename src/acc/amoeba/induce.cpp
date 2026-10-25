@@ -321,6 +321,9 @@ void sparsePrecondApply_acc(const real (*rsd)[3], const real (*rsdp)[3], real (*
    // grp is null when every group is live
    const int* grp = elecDeadGroups();
    const RdtMask live = elecLiveMask();
+   // The preconditioner takes the pairs within the cutoff; the list adds the buffer.
+   const real off = switchOff(Switch::USOLVE);
+   const real off2 = off * off;
 
    MAYBE_UNUSED int GRID_DIM = gpuGridSize(BLOCK_DIM);
    #pragma acc parallel async num_gangs(GRID_DIM) vector_length(BLOCK_DIM)\
@@ -350,6 +353,8 @@ void sparsePrecondApply_acc(const real (*rsd)[3], const real (*rsdp)[3], real (*
          real zr = z[k] - zi;
 
          real r2 = image2(xr, yr, zr);
+         if (r2 > off2)
+            continue;
          real r = REAL_SQRT(r2);
 
          real scale3, scale5;
@@ -482,7 +487,7 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
    if (nualt < maxualt)
       return;
 
-   constexpr double aspc[16] = {62. / 17., //
+   constexpr real aspc[16] = {62. / 17., //
       -310. / 51.,                         //
       2170. / 323.,                        //
       -2329. / 400.,                       //
@@ -498,7 +503,7 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
       -3. / 67015.,                        //
       2. / 646323.,                        //
       -1. / 9694845.};
-   constexpr double gear[6] = {6., //
+   constexpr real gear[6] = {6., //
       -15.,                        //
       20.,                         //
       -15.,                        //
@@ -507,8 +512,8 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
 
    using real3_ptr = real(*)[3];
    if (polpred == UPred::ASPC and uinp) {
-      double c00, c01, c02, c03, c04, c05, c06, c07;
-      double c08, c09, c10, c11, c12, c13, c14, c15;
+      real c00, c01, c02, c03, c04, c05, c06, c07;
+      real c08, c09, c10, c11, c12, c13, c14, c15;
       c00 = aspc[(nualt - 1 + 16) % 16];
       c01 = aspc[(nualt - 2 + 16) % 16];
       c02 = aspc[(nualt - 3 + 16) % 16];
@@ -559,7 +564,7 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
             + c12 * upalt_12[i][2] + c13 * upalt_13[i][2] + c14 * upalt_14[i][2] + c15 * upalt_15[i][2];
       }
    } else if (polpred == UPred::GEAR and uinp) {
-      double c00, c01, c02, c03, c04, c05;
+      real c00, c01, c02, c03, c04, c05;
       c00 = gear[(nualt - 1 + 6) % 6];
       c01 = gear[(nualt - 2 + 6) % 6];
       c02 = gear[(nualt - 3 + 6) % 6];
@@ -652,8 +657,8 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
             + bp[5] * pp5[i][2];
       }
    } else if (polpred == UPred::ASPC) {
-      double c00, c01, c02, c03, c04, c05, c06, c07;
-      double c08, c09, c10, c11, c12, c13, c14, c15;
+      real c00, c01, c02, c03, c04, c05, c06, c07;
+      real c08, c09, c10, c11, c12, c13, c14, c15;
       c00 = aspc[(nualt - 1 + 16) % 16];
       c01 = aspc[(nualt - 2 + 16) % 16];
       c02 = aspc[(nualt - 3 + 16) % 16];
@@ -690,7 +695,7 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
             + c12 * udalt_12[i][2] + c13 * udalt_13[i][2] + c14 * udalt_14[i][2] + c15 * udalt_15[i][2];
       }
    } else if (polpred == UPred::GEAR) {
-      double c00, c01, c02, c03, c04, c05;
+      real c00, c01, c02, c03, c04, c05;
       c00 = gear[(nualt - 1 + 6) % 6];
       c01 = gear[(nualt - 2 + 6) % 6];
       c02 = gear[(nualt - 3 + 6) % 6];

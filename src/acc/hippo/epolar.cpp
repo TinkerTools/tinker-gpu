@@ -347,7 +347,7 @@ static void epolarChgpenEwaldRecipSelf_acc1(const real (*gpu_uind)[3], bool use_
 
    auto* fphid = fdip_phi1;
 
-   cuindToFuind(pu, gpu_uind, gpu_uind, fuind, fuind);
+   cuindToFuind(pu, gpu_uind, nullptr, fuind, nullptr);
    if CONSTEXPR (do_e) {
       #pragma acc parallel loop independent async deviceptr(fuind,fphi,ep)
       for (int i = 0; i < n; ++i) {
@@ -356,12 +356,12 @@ static void epolarChgpenEwaldRecipSelf_acc1(const real (*gpu_uind)[3], bool use_
          atomic_add(e, ep, offset);
       }
    }
-   gridUind(pu, fuind, fuind);
-   fftfront(pu);
+   gridUindOneSet(pu, fuind);
+   fftfrontOneSet(pu);
    // TODO: store vs. recompute qfac
-   pmeConv(pu);
-   fftback(pu);
-   fphiUind(pu, fphid, fphid, fphidp);
+   pmeConvOneSet(pu);
+   fftbackOneSet(pu);
+   fphiUindOneSet(pu, fphid, fphidp);
 
    // increment the dipole polarization gradient contributions
 

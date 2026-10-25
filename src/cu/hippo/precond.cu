@@ -29,7 +29,7 @@ void sparsePrecond_cu3(const real (*restrict rsd)[3], real (*restrict zrsd)[3], 
 void sparsePrecondApply2_cu(const real (*rsd)[3], real (*zrsd)[3])
 {
    const auto& st = *uspatial_v2_unit;
-   const real off = switchOff(Switch::USOLVE) + st.buffer;
+   const real off = switchOff(Switch::USOLVE);
 
    launch_k1s(g::s0, n, sparsePrecond_cu3, //
       rsd, zrsd, polarity, n, udiag);
@@ -45,7 +45,7 @@ void sparsePrecondApply2_cu(const real (*rsd)[3], real (*zrsd)[3])
 void sparsePrecondApply3_cu(const real (*rsd)[3], real (*zrsd)[3])
 {
    const auto& st = *uspatial_v2_unit;
-   const real off = switchOff(Switch::USOLVE) + st.buffer;
+   const real off = switchOff(Switch::USOLVE);
 
    launch_k1s(g::s0, n, sparsePrecond_cu3, //
       rsd, zrsd, polarity, n, udiag);

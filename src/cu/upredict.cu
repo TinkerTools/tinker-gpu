@@ -47,7 +47,7 @@ static void ulspredSumASPC_cu(int n, int nualt,        //
    const real (*restrict upalt_12)[3], const real (*restrict upalt_13)[3], const real (*restrict upalt_14)[3],
    const real (*restrict upalt_15)[3])
 {
-   constexpr double aspc[16] = {62. / 17., //
+   constexpr real aspc[16] = {62. / 17., //
       -310. / 51.,                         //
       2170. / 323.,                        //
       -2329. / 400.,                       //
@@ -64,8 +64,8 @@ static void ulspredSumASPC_cu(int n, int nualt,        //
       2. / 646323.,                        //
       -1. / 9694845.};
 
-   double c00, c01, c02, c03, c04, c05, c06, c07;
-   double c08, c09, c10, c11, c12, c13, c14, c15;
+   real c00, c01, c02, c03, c04, c05, c06, c07;
+   real c08, c09, c10, c11, c12, c13, c14, c15;
    c00 = aspc[(nualt - 1 + 16) % 16];
    c01 = aspc[(nualt - 2 + 16) % 16];
    c02 = aspc[(nualt - 3 + 16) % 16];
@@ -136,14 +136,14 @@ static void ulspredSumGEAR_cu(int n, int nualt,        //
    const real (*restrict upalt_00)[3], const real (*restrict upalt_01)[3], const real (*restrict upalt_02)[3],
    const real (*restrict upalt_03)[3], const real (*restrict upalt_04)[3], const real (*restrict upalt_05)[3])
 {
-   constexpr double gear[6] = {6., //
+   constexpr real gear[6] = {6., //
       -15.,                        //
       20.,                         //
       -15.,                        //
       6.,                          //
       -1.};
 
-   double c00, c01, c02, c03, c04, c05;
+   real c00, c01, c02, c03, c04, c05;
    c00 = gear[(nualt - 1 + 6) % 6];
    c01 = gear[(nualt - 2 + 6) % 6];
    c02 = gear[(nualt - 3 + 6) % 6];

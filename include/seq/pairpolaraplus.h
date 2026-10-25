@@ -142,22 +142,22 @@ void pair_polar_aplus(real r2,
       real uir = uix * xr + uiy * yr + uiz * zr;
       real ukr = ukx * xr + uky * yr + ukz * zr;
       if CONSTEXPR (CFLX) {
-         poti = -2.0 * ukr * f * dscale * sr3;
-         potk = 2.0 * uir * f * dscale * sr3;
+         poti = -2 * ukr * f * dscale * sr3;
+         potk = 2 * uir * f * dscale * sr3;
       }
 
       // get the induced dipole field used for dipole torques
 
       real tuir, tukr;
 
-      real tix3 = 2.0 * dscale * sr3 * ukx;
-      real tiy3 = 2.0 * dscale * sr3 * uky;
-      real tiz3 = 2.0 * dscale * sr3 * ukz;
-      real tkx3 = 2.0 * dscale * sr3 * uix;
-      real tky3 = 2.0 * dscale * sr3 * uiy;
-      real tkz3 = 2.0 * dscale * sr3 * uiz;
-      tuir = -2.0 * dscale * sr5 * ukr;
-      tukr = -2.0 * dscale * sr5 * uir;
+      real tix3 = 2 * dscale * sr3 * ukx;
+      real tiy3 = 2 * dscale * sr3 * uky;
+      real tiz3 = 2 * dscale * sr3 * ukz;
+      real tkx3 = 2 * dscale * sr3 * uix;
+      real tky3 = 2 * dscale * sr3 * uiy;
+      real tkz3 = 2 * dscale * sr3 * uiz;
+      tuir = -2 * dscale * sr5 * ukr;
+      tukr = -2 * dscale * sr5 * uir;
 
       pgrad.ufldi[0] = f * (tix3 + xr * tuir);
       pgrad.ufldi[1] = f * (tiy3 + yr * tuir);
@@ -174,8 +174,8 @@ void pair_polar_aplus(real r2,
       real tkx5 = 4 * (dscale * sr5 * uix);
       real tky5 = 4 * (dscale * sr5 * uiy);
       real tkz5 = 4 * (dscale * sr5 * uiz);
-      tuir = -2.0 * dscale * sr7 * ukr;
-      tukr = -2.0 * dscale * sr7 * uir;
+      tuir = -2 * dscale * sr7 * ukr;
+      tukr = -2 * dscale * sr7 * uir;
 
       pgrad.dufldi[0] = f * (xr * tix5 + xr * xr * tuir);
       pgrad.dufldi[1] = f * (xr * tiy5 + yr * tix5 + 2 * xr * yr * tuir);
@@ -505,8 +505,8 @@ void pair_polar_aplus_v2(real r2,
    }
 
    if CONSTEXPR (CFLX) {
-      poti = -2.0 * ukr * f * dscale * sr3;
-      potk = 2.0 * uir * f * dscale * sr3;
+      poti = -2 * ukr * f * dscale * sr3;
+      potk = 2 * uir * f * dscale * sr3;
    }
 
    if CONSTEXPR (do_g) {
@@ -517,14 +517,14 @@ void pair_polar_aplus_v2(real r2,
 
       real tuir, tukr;
 
-      real tix3 = 2.0 * dscale * sr3 * ukx;
-      real tiy3 = 2.0 * dscale * sr3 * uky;
-      real tiz3 = 2.0 * dscale * sr3 * ukz;
-      real tkx3 = 2.0 * dscale * sr3 * uix;
-      real tky3 = 2.0 * dscale * sr3 * uiy;
-      real tkz3 = 2.0 * dscale * sr3 * uiz;
-      tuir = -2.0 * dscale * sr5 * ukr;
-      tukr = -2.0 * dscale * sr5 * uir;
+      real tix3 = 2 * dscale * sr3 * ukx;
+      real tiy3 = 2 * dscale * sr3 * uky;
+      real tiz3 = 2 * dscale * sr3 * ukz;
+      real tkx3 = 2 * dscale * sr3 * uix;
+      real tky3 = 2 * dscale * sr3 * uiy;
+      real tkz3 = 2 * dscale * sr3 * uiz;
+      tuir = -2 * dscale * sr5 * ukr;
+      tukr = -2 * dscale * sr5 * uir;
 
       uf0i += f * (tix3 + xr * tuir);
       uf1i += f * (tiy3 + yr * tuir);
@@ -541,8 +541,8 @@ void pair_polar_aplus_v2(real r2,
       real tkx5 = 4 * (dscale * sr5 * uix);
       real tky5 = 4 * (dscale * sr5 * uiy);
       real tkz5 = 4 * (dscale * sr5 * uiz);
-      tuir = -2.0 * dscale * sr7 * ukr;
-      tukr = -2.0 * dscale * sr7 * uir;
+      tuir = -2 * dscale * sr7 * ukr;
+      tukr = -2 * dscale * sr7 * uir;
 
       duf0i += f * (xr * tix5 + xr * xr * tuir);
       duf1i += f * (xr * tiy5 + yr * tix5 + 2 * xr * yr * tuir);

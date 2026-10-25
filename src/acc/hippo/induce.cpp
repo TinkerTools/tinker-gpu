@@ -1,6 +1,7 @@
 #include "ff/amoeba/induce.h"
 #include "ff/atom.h"
 #include "ff/dlmda.h"
+#include "ff/hippo/expol.h"
 #include "ff/hippo/induce.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
@@ -30,6 +31,8 @@ void induceMutualPcg2_acc(real (*uind)[3])
    auto pcg_dfield = polpot::use_tholed ? dfieldAplus : dfieldChgpen;
    auto pcg_ufield = polpot::use_tholed ? ufieldAplus : ufieldChgpen;
    auto pcg_sparse_apply = polpot::use_tholed ? sparsePrecondApply3 : sparsePrecondApply2;
+   // Exchange polarization (HIPPO) scales each induced dipole by the I+kS^2 matrix of its atom.
+   const bool xpol = polpot::use_expol and not polpot::use_tholed;
 
    // use sparse matrix preconditioner
    // or just use diagonal matrix preconditioner
@@ -53,9 +56,23 @@ void induceMutualPcg2_acc(real (*uind)[3])
          udir[i][j] = poli * field[i][j];
    }
 
+   if (xpol)
+      alterpol(polscale, polinv);
+
    // initial induced dipole
    if (predict) {
       ulspredSum(uind, nullptr);
+   } else if (dirguess and xpol) {
+      #pragma acc parallel loop independent async\
+              deviceptr(polarity,field,polinv,uind)
+      for (int i = 0; i < n; ++i) {
+         real poli = polarity[i];
+         #pragma acc loop seq
+         for (int j = 0; j < 3; ++j) {
+            uind[i][j] = poli
+               * (polinv[i][0][j] * field[i][0] + polinv[i][1][j] * field[i][1] + polinv[i][2][j] * field[i][2]);
+         }
+      }
    } else if (dirguess) {
       darray::copy(g::q0, n, uind, udir);
    } else {
@@ -68,7 +85,21 @@ void induceMutualPcg2_acc(real (*uind)[3])
    //                       = E - E -Tu udir
    //                       = -Tu udir
 
-   if (predict) {
+   if (predict and xpol) {
+      pcg_ufield(uind, field);
+      #pragma acc parallel loop independent async\
+              deviceptr(polarity_inv,udir,uind,field,polscale,rsd)
+      for (int i = 0; i < n; ++i) {
+         real poli_inv = polarity_inv[i];
+         #pragma acc loop seq
+         for (int j = 0; j < 3; ++j) {
+            rsd[i][j] = (udir[i][j] - uind[i][0] * polscale[i][0][j] - uind[i][1] * polscale[i][1][j]
+                           - uind[i][2] * polscale[i][2][j])
+                  * poli_inv
+               + field[i][j];
+         }
+      }
+   } else if (predict) {
       pcg_ufield(uind, field);
       #pragma acc parallel loop independent async\
               deviceptr(polarity_inv,rsd,udir,uind,field)
@@ -79,6 +110,7 @@ void induceMutualPcg2_acc(real (*uind)[3])
             rsd[i][j] = (udir[i][j] - uind[i][j]) * pol + field[i][j];
       }
    } else if (dirguess) {
+      // uind, not udir: with exchange polarization the direct guess differs from udir.
       pcg_ufield(uind, rsd);
    } else {
       darray::copy(g::q0, n, rsd, field);
@@ -128,13 +160,27 @@ void induceMutualPcg2_acc(real (*uind)[3])
       // vec = (inv_alpha + Tu) conj, field = -Tu conj
       // vec = inv_alpha * conj - field
       pcg_ufield(conj, field);
-      #pragma acc parallel loop independent async\
-                  deviceptr(polarity_inv,vec,conj,field)
-      for (int i = 0; i < n; ++i) {
-         real poli_inv = polarity_inv[i];
-         #pragma acc loop seq
-         for (int j = 0; j < 3; ++j)
-            vec[i][j] = poli_inv * conj[i][j] - field[i][j];
+      if (xpol) {
+         #pragma acc parallel loop independent async\
+                     deviceptr(polarity_inv,conj,field,polscale,vec)
+         for (int i = 0; i < n; ++i) {
+            real poli_inv = polarity_inv[i];
+            #pragma acc loop seq
+            for (int j = 0; j < 3; ++j)
+               vec[i][j] = poli_inv
+                     * (conj[i][0] * polscale[i][0][j] + conj[i][1] * polscale[i][1][j]
+                        + conj[i][2] * polscale[i][2][j])
+                  - field[i][j];
+         }
+      } else {
+         #pragma acc parallel loop independent async\
+                     deviceptr(polarity_inv,vec,conj,field)
+         for (int i = 0; i < n; ++i) {
+            real poli_inv = polarity_inv[i];
+            #pragma acc loop seq
+            for (int j = 0; j < 3; ++j)
+               vec[i][j] = poli_inv * conj[i][j] - field[i][j];
+         }
       }
 
       // a <- p T p
@@ -269,6 +315,9 @@ void sparsePrecondApply2_acc(const real (*rsd)[3], real (*zrsd)[3])
    // grp is null when every group is live
    const int* grp = elecDeadGroups();
    const RdtMask live = elecLiveMask();
+   // The preconditioner takes the pairs within the cutoff; the list adds the buffer.
+   const real off = switchOff(Switch::USOLVE);
+   const real off2 = off * off;
 
    MAYBE_UNUSED int GRID_DIM = gpuGridSize(BLOCK_DIM);
    #pragma acc parallel async num_gangs(GRID_DIM) vector_length(BLOCK_DIM)\
@@ -298,6 +347,8 @@ void sparsePrecondApply2_acc(const real (*rsd)[3], real (*zrsd)[3])
          real zr = z[k] - zi;
 
          real r2 = image2(xr, yr, zr);
+         if (r2 > off2)
+            continue;
          real r = REAL_SQRT(r2);
 
          real dmpik[3];

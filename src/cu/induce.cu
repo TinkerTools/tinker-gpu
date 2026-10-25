@@ -27,6 +27,20 @@ void pcgUdirV2(int n, const real* restrict polarity, real (*restrict udir)[3], r
       }
    }
 }
+
+__global__
+void pcgUdirGuessV3(int n, const real* restrict polarity, real (*restrict uind)[3], const real (*restrict field)[3],
+   const real (*restrict polinv)[3][3])
+{
+   for (int i = ITHREAD; i < n; i += STRIDE) {
+      real poli = polarity[i];
+      #pragma unroll
+      for (int j = 0; j < 3; ++j) {
+         uind[i][j] = poli
+            * (polinv[i][0][j] * field[i][0] + polinv[i][1][j] * field[i][1] + polinv[i][2][j] * field[i][2]);
+      }
+   }
+}
 }
 
 namespace tinker {
@@ -126,6 +140,20 @@ void pcgP4(int n, const real* restrict polarity_inv, real (*restrict vec)[3], co
       #pragma unroll
       for (int j = 0; j < 3; ++j)
          vec[i][j] = poli_inv * conj[i][j] - field[i][j];
+   }
+}
+
+__global__
+void pcgP4V3(int n, const real* restrict polarity_inv, real (*restrict vec)[3], const real (*restrict conj)[3],
+   const real (*restrict field)[3], const real (*restrict polscale)[3][3])
+{
+   for (int i = ITHREAD; i < n; i += STRIDE) {
+      real poli_inv = polarity_inv[i];
+      #pragma unroll
+      for (int j = 0; j < 3; ++j)
+         vec[i][j] = poli_inv
+               * (conj[i][0] * polscale[i][0][j] + conj[i][1] * polscale[i][1][j] + conj[i][2] * polscale[i][2][j])
+            - field[i][j];
    }
 }
 

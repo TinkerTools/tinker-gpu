@@ -226,6 +226,10 @@ void runAplusLiquidCase(const char* keyextra, const char* ref)
 #if TINKER_GPULANG_OPENACC
    ke += "gpu-package openacc\n";
 #endif
+#if TINKER_REAL_SIZE == 8
+   // Converged this far the gradient no longer depends on the preconditioner.
+   ke += "polar-eps 1e-9\n";
+#endif
 
    TestFile fx1(TINKER9_DIRSTR "/test/file/aplus2022/tetramer.xyz", xn);
    TestFile fk1(TINKER9_DIRSTR "/test/file/aplus2022/liquid.key", kn, ke);

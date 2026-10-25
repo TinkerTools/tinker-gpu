@@ -318,15 +318,15 @@ static void edispEwald(int vers, const DispSoft& sc, const LmdaFn& v)
    }
 
    // account for the total energy and virial correction term
-   if CONSTEXPR (do_e || do_v) {
+   if (do_e || do_v) {
       const real aewald = u->aewald;
       const real denom0 = 6 * boxVolume() / std::pow(M_PI, 1.5);
       energy_prec term = h.cpr * aewald * aewald * aewald / denom0;
-      if CONSTEXPR (do_e) {
+      if (do_e) {
          energy_edsp -= term;
          energy_vdw -= term;
       }
-      if CONSTEXPR (do_v) {
+      if (do_v) {
          virial_edsp[0] += term; // xx
          virial_edsp[4] += term; // yy
          virial_edsp[8] += term; // zz

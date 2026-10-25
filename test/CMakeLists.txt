@@ -20,6 +20,8 @@ if (14 LESS_EQUAL ${T9_CPPSTD})
                         -DCMAKE_CXX_STANDARD=${T9_CPPSTD}
                         -DCMAKE_CXX_EXTENSIONS=OFF
                         -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+                        # catch2 v3.2.1 misses <cstdint> for gcc 13+
+                        "-DCMAKE_CXX_FLAGS=-include cstdint"
       )
       add_dependencies (__t9_all_tests_o BuildCatch2)
       target_include_directories (__t9_all_tests_o

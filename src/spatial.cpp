@@ -20,7 +20,10 @@ void Spatial::ScaleInfo::set(int nns, int (*jjs)[2])
 
 Spatial::~Spatial()
 {
-   darray::deallocate(iakpl, iak, lst, iak_idmap, lst_tmp);
+   if (iak != iak_full)
+      darray::deallocate(iak, lst);
+   darray::deallocate(iakpl, iak_full, lst_full, iak_idmap, lst_tmp);
+   darray::deallocate(prune_keep, prune_beg, prune_ntile);
 
    darray::deallocate(iakpl_rev, akpf, sorted, bnum);
    darray::deallocate(akc, half);
@@ -121,7 +124,7 @@ void Spatial::dataAlloc(SpatialUnit& u, int n, double cutoff, double buffer, con
    const real* z,                                  //
    int nstype,                                     //
    int ns1, int (*js1)[2], int ns2, int (*js2)[2], //
-   int ns3, int (*js3)[2], int ns4, int (*js4)[2], bool nblist4nn)
+   int ns3, int (*js3)[2], int ns4, int (*js4)[2], bool nblist4nn, double prune)
 {
    u = SpatialUnit::open();
    auto& st = *u;
@@ -129,12 +132,22 @@ void Spatial::dataAlloc(SpatialUnit& u, int n, double cutoff, double buffer, con
    // output
    st.nakpl = 0;
    st.niak = 0;
+   st.niak_full = 0;
    st.iakpl = nullptr;
    st.iak = nullptr;
    st.lst = nullptr;
+   st.iak_full = nullptr;
+   st.lst_full = nullptr;
    st.iak_idmap = nullptr;
    st.lst_tmp = nullptr;
    st.nblist4nn = nblist4nn;
+   // Pruning to a distance the buffered list already covers would gain nothing.
+   st.prune_cut = 0;
+   if (not nblist4nn and prune > 0 and prune < cutoff + buffer)
+      st.prune_cut = prune;
+   st.prune_keep = nullptr;
+   st.prune_beg = nullptr;
+   st.prune_ntile = nullptr;
 
    // internal
    st.n = n;
@@ -146,8 +159,16 @@ void Spatial::dataAlloc(SpatialUnit& u, int n, double cutoff, double buffer, con
    st.cap_nakpl = 32 + 8 * st.nak;
 
    darray::allocate(st.cap_nakpl, &st.iakpl);
-   darray::allocate(st.nak * Spatial::LSTCAP, &st.iak);
-   darray::allocate(st.nak * Spatial::LSTCAP * 32, &st.lst);
+   darray::allocate(st.nak * Spatial::LSTCAP, &st.iak_full);
+   darray::allocate(st.nak * Spatial::LSTCAP * 32, &st.lst_full);
+   st.iak = st.iak_full;
+   st.lst = st.lst_full;
+   if (st.prune_cut > 0) {
+      darray::allocate(st.nak * Spatial::LSTCAP, &st.iak, &st.prune_keep);
+      darray::allocate(st.nak * Spatial::LSTCAP * 32, &st.lst);
+      darray::allocate(st.nak + 1, &st.prune_beg, &st.prune_ntile);
+   }
+   // A pruned list sorts in iak and lst instead.
    if (st.nblist4nn) {
       darray::allocate(st.nak * Spatial::LSTCAP, &st.iak_idmap);
       darray::allocate(st.nak * Spatial::LSTCAP * 32, &st.lst_tmp);

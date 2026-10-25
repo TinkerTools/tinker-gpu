@@ -29,8 +29,7 @@ void sparsePrecond_cu0(const real (*restrict rsd)[3], const real (*restrict rsdp
 void sparsePrecondApply_cu(const real (*rsd)[3], const real (*rsdp)[3], real (*zrsd)[3], real (*zrsdp)[3])
 {
    const auto& st = *uspatial_v2_unit;
-   real off = switchOff(Switch::USOLVE);
-   off = off + st.buffer;
+   const real off = switchOff(Switch::USOLVE);
 
    launch_k1s(g::s0, n, sparsePrecond_cu0, //
       rsd, rsdp, zrsd, zrsdp, polarity, n, udiag);

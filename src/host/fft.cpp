@@ -17,6 +17,10 @@ struct FFTPlanFFTW : public FFTPlan
 
    type planf; ///< FFT front plan.
    type planb; ///< FFT back plan.
+
+   bool has_real = false; ///< The real plans are made on the first one-set FFT.
+   type planr2c;          ///< Real-to-complex plan.
+   type planc2r;          ///< Complex-to-real plan.
 };
 
 void fftData(RcOp op)
@@ -32,9 +36,17 @@ void fftData(RcOp op)
 #if TINKER_REAL_SIZE == 4
          fftwf_destroy_plan(ps.planf);
          fftwf_destroy_plan(ps.planb);
+         if (ps.has_real) {
+            fftwf_destroy_plan(ps.planr2c);
+            fftwf_destroy_plan(ps.planc2r);
+         }
 #elif TINKER_REAL_SIZE == 8
          fftw_destroy_plan(ps.planf);
          fftw_destroy_plan(ps.planb);
+         if (ps.has_real) {
+            fftw_destroy_plan(ps.planr2c);
+            fftw_destroy_plan(ps.planc2r);
+         }
 #else
          static_assert(false, "");
 #endif
@@ -110,6 +122,60 @@ void fftback(PMEUnit pme_u)
       reinterpret_cast<fftwf_complex*>(st.qgrid));
 #elif TINKER_REAL_SIZE == 8
    fftw_execute_dft(iplan.planb, reinterpret_cast<fftw_complex*>(st.qgrid), reinterpret_cast<fftw_complex*>(st.qgrid));
+#else
+   static_assert(false, "");
+#endif
+}
+
+static FFTPlanFFTW& fftRealPlans(PMEUnit pme_u)
+{
+   FFTPlanUnit iplan_u = static_cast<int>(pme_u);
+   auto& iplan = iplan_u->castTo<FFTPlanFFTW>();
+   if (not iplan.has_real) {
+      auto& st = *pme_u;
+      // in place, so the real grid has the padded rows of the half spectrum;
+      // FFTW_ESTIMATE leaves the grid alone while planning
+#if TINKER_REAL_SIZE == 4
+      iplan.planr2c = fftwf_plan_dft_r2c_3d(st.nfft3, st.nfft2, st.nfft1, st.qgrid,
+         reinterpret_cast<fftwf_complex*>(st.qgrid), FFTW_ESTIMATE);
+      iplan.planc2r = fftwf_plan_dft_c2r_3d(st.nfft3, st.nfft2, st.nfft1, reinterpret_cast<fftwf_complex*>(st.qgrid),
+         st.qgrid, FFTW_ESTIMATE);
+#elif TINKER_REAL_SIZE == 8
+      iplan.planr2c = fftw_plan_dft_r2c_3d(st.nfft3, st.nfft2, st.nfft1, st.qgrid,
+         reinterpret_cast<fftw_complex*>(st.qgrid), FFTW_ESTIMATE);
+      iplan.planc2r = fftw_plan_dft_c2r_3d(st.nfft3, st.nfft2, st.nfft1, reinterpret_cast<fftw_complex*>(st.qgrid),
+         st.qgrid, FFTW_ESTIMATE);
+#else
+      static_assert(false, "");
+#endif
+      iplan.has_real = true;
+   }
+   return iplan;
+}
+
+void fftfrontOneSet(PMEUnit pme_u)
+{
+   auto& iplan = fftRealPlans(pme_u);
+   auto& st = *pme_u;
+
+#if TINKER_REAL_SIZE == 4
+   fftwf_execute_dft_r2c(iplan.planr2c, st.qgrid, reinterpret_cast<fftwf_complex*>(st.qgrid));
+#elif TINKER_REAL_SIZE == 8
+   fftw_execute_dft_r2c(iplan.planr2c, st.qgrid, reinterpret_cast<fftw_complex*>(st.qgrid));
+#else
+   static_assert(false, "");
+#endif
+}
+
+void fftbackOneSet(PMEUnit pme_u)
+{
+   auto& iplan = fftRealPlans(pme_u);
+   auto& st = *pme_u;
+
+#if TINKER_REAL_SIZE == 4
+   fftwf_execute_dft_c2r(iplan.planc2r, reinterpret_cast<fftwf_complex*>(st.qgrid), st.qgrid);
+#elif TINKER_REAL_SIZE == 8
+   fftw_execute_dft_c2r(iplan.planc2r, reinterpret_cast<fftw_complex*>(st.qgrid), st.qgrid);
 #else
    static_assert(false, "");
 #endif

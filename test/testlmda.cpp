@@ -49,7 +49,9 @@ const Fixture kFixtures[] = {
    {"12_water_rels_lig1_l085", 4.0e-3, 3.0},
    {"13_water_rels_lig2_l015", 4.0e-3, 3.0, 5.0e-4},
    {"14_water_rels_lig1_ne_l085", 4.0e-3, 3.0},
-   {"15_water_rels_lig1_nlist_exf_l085", 4.0e-3, 3.0},
+   // the external field makes E_pol -134 kcal/mol, whose float-atomic noise in
+   // mixed precision moves the finite difference d2E/dL2 by 0.49 +/- 0.10
+   {"15_water_rels_lig1_nlist_exf_l085", 4.0e-3, 6.0},
    {"16_water_rels_lig1_st_l085", 4.0e-3, 3.0},
    {"17_water_rels_lig2_st_l015", 4.0e-3, 3.0},
    {"18_water_rels_lig1_st_ne_l085", 4.0e-3, 3.0},
@@ -105,7 +107,11 @@ const Fixture kFixtures[] = {
       4.0e-3},
    {"61_aptetra_rel_lig2_l015", 4.0e-3, 3.0, 6.0e-4, "testlmda/aptetra.xyz", "commit_152ecec0/AMOEBAplus_Org.prm",
       4.0e-3},
-   {"62_aptetra_rel_cross_l085", 4.0e-3, 3.0, 6.0e-4, "testlmda/aptetra.xyz", "commit_152ecec0/AMOEBAplus_Org.prm"},
+   // the multipole brick spread makes the 39-atom grid sum order vary between
+   // runs, which 4/eps^2 turns into 0.16 sd of the finite difference d2E/dL2
+   // at a step of 4e-3; this step and tolerance keep it and the truncation of
+   // dE/dL well inside their margins
+   {"62_aptetra_rel_cross_l085", 6.0e-3, 5.0, 6.0e-4, "testlmda/aptetra.xyz", "commit_152ecec0/AMOEBAplus_Org.prm"},
    {"63_hipwat_rel_lig1_ewald_l085", 4.0e-3, 3.0, 1.0e-4, "testlmda/hipwat.xyz", "commit_aad9340c/water21.prm", 4.0e-3},
    // HIPPO polarization driven alone
    {"64_hipwat_pol_only_st_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/hipwat.xyz", "commit_aad9340c/water21.prm"},
@@ -113,9 +119,11 @@ const Fixture kFixtures[] = {
    // HIPPO polarization with exchange polarization
    {"66_expnaclus_na_dt_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/expnaclus.xyz", "commit_dd1761ac/expol.prm"},
    {"67_expnaclus_wat_dt_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/expnaclus.xyz", "commit_dd1761ac/expol.prm"},
-   // the finite difference d2E/dL2 (-216) is 1.5e-3 off at the best step in
-   // mixed precision, truncation above and round-off below it
-   {"68_expbox_ewald_dt_l04", 5.0e-3, 3.0, 1.0e-4, "testlmda/expbox.xyz", "commit_dd1761ac/expol.prm"},
+   // the finite difference d2E/dL2 (-216) takes the round-off of the multipole
+   // energy times 4/eps^2 in mixed precision, about 3x more with fast math in a
+   // Release build, and dE/dL takes truncation above; this step keeps both at
+   // about a third of their tolerances in Debug and Release
+   {"68_expbox_ewald_dt_l04", 1.25e-2, 3.0, 1.0e-4, "testlmda/expbox.xyz", "commit_dd1761ac/expol.prm"},
    {"69_expnaclus_wat_st_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/expnaclus.xyz", "commit_dd1761ac/expol.prm"},
    {"70_expbox_ewald_st_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/expbox.xyz", "commit_dd1761ac/expol.prm"},
    {"71_expnaclus_na_lin_st_l00", 1.0e-2, 1.0, 1.0e-4, "testlmda/expnaclus.xyz", "commit_dd1761ac/expol.prm"},

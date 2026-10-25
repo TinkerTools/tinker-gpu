@@ -1,7 +1,9 @@
 #include "ff/amoeba/induce.h"
 #include "ff/cuinduce.h"
+#include "ff/hippo/expol.h"
 #include "ff/hippo/induce.h"
 #include "ff/modamoeba.h"
+#include "ff/modhippo.h"
 #include "ff/switch.h"
 #include "seq/launch.h"
 #include "tool/error.h"
@@ -10,6 +12,7 @@
 #include <tinker/detail/polpcg.hh>
 #include <tinker/detail/polpot.hh>
 #include <tinker/detail/units.hh>
+#include <utility>
 
 namespace tinker {
 void induceMutualPcg2_cu(real (*uind)[3])
@@ -23,6 +26,8 @@ void induceMutualPcg2_cu(real (*uind)[3])
    auto pcg_dfield = polpot::use_tholed ? dfieldAplus : dfieldChgpen;
    auto pcg_ufield = polpot::use_tholed ? ufieldAplus : ufieldChgpen;
    auto pcg_sparse_apply = polpot::use_tholed ? sparsePrecondApply3 : sparsePrecondApply2;
+   // Exchange polarization (HIPPO) scales each induced dipole by the I+kS^2 matrix of its atom.
+   const bool xpol = polpot::use_expol and not polpot::use_tholed;
 
    const bool sparse_prec = polpcg::pcgprec and (switchOff(Switch::USOLVE) > 0);
    const UGuess guess = induceGuess();
@@ -34,11 +39,17 @@ void induceMutualPcg2_cu(real (*uind)[3])
    // direct induced dipoles
    launch_k1s(g::s0, n, pcgUdirV1, n, polarity, udir, field);
 
+   if (xpol)
+      alterpol(polscale, polinv);
+
    // initial induced dipole
    if (predict) {
       ulspredSum(uind, nullptr);
    } else if (dirguess) {
-      darray::copy(g::q0, n, uind, udir);
+      if (xpol)
+         launch_k1s(g::s0, n, pcgUdirGuessV3, n, polarity, uind, field, polinv);
+      else
+         darray::copy(g::q0, n, uind, udir);
    } else {
       darray::zero(g::q0, n, uind);
    }
@@ -56,8 +67,12 @@ void induceMutualPcg2_cu(real (*uind)[3])
    // if do not use pcgguess, r(0) = E - T Zero = E
    if (predict) {
       pcg_ufield(uind, field);
-      launch_k1s(g::s0, n, pcgRsd0V1, n, polarity_inv, rsd, udir, uind, field);
+      if (xpol)
+         launch_k1s(g::s0, n, pcgRsd0V3, n, polarity_inv, rsd, udir, uind, field, polscale);
+      else
+         launch_k1s(g::s0, n, pcgRsd0V1, n, polarity_inv, rsd, udir, uind, field);
    } else if (dirguess) {
+      // uind, not udir: with exchange polarization the direct guess differs from udir.
       pcg_ufield(uind, rsd);
    } else {
       darray::copy(g::q0, n, rsd, field);
@@ -75,6 +90,7 @@ void induceMutualPcg2_cu(real (*uind)[3])
 
    // initial r(0) M r(0)
    real* sum = &((real*)dptr_buf)[0];
+   real* sum1 = &((real*)dptr_buf)[2];
    darray::dot(g::q0, n, sum, rsd, zrsd);
 
    // conjugate gradient iteration of the mutual induced dipoles
@@ -98,7 +114,10 @@ void induceMutualPcg2_cu(real (*uind)[3])
       // vec = (inv_alpha + Tu) conj, field = -Tu conj
       // vec = inv_alpha * conj - field
       pcg_ufield(conj, field);
-      launch_k1s(g::s0, n, pcgP4, n, polarity_inv, vec, conj, field);
+      if (xpol)
+         launch_k1s(g::s0, n, pcgP4V3, n, polarity_inv, vec, conj, field, polscale);
+      else
+         launch_k1s(g::s0, n, pcgP4, n, polarity_inv, vec, conj, field);
 
       // a <- p T p
       real* a = &((real*)dptr_buf)[1];
@@ -116,14 +135,13 @@ void induceMutualPcg2_cu(real (*uind)[3])
          diagPrecond2(rsd, zrsd);
 
       // b = sum1 / sum; bp = sump1 / sump
-      real* sum1 = &((real*)dptr_buf)[2];
       darray::dot(g::q0, n, sum1, rsd, zrsd);
 
       // calculate/update p
       launch_k1s(g::s0, n, pcgP6, n, sum, sum1, conj, zrsd);
 
-      // copy sum1 to sum; one set of dipoles has no sump
-      darray::copy(g::q0, 1, sum, sum1);
+      // sum1 becomes sum; the old slot takes the next sum1; one set of dipoles has no sump
+      std::swap(sum, sum1);
 
       real* epsd = &((real*)dptr_buf)[3];
       darray::dot(g::q0, n, epsd, rsd, rsd);

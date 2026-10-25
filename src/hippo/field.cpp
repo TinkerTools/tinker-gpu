@@ -42,13 +42,12 @@ void ufieldChgpenEwaldRecipSelf(const real (*uind)[3], real (*field)[3])
    darray::zero(g::q0, n, field);
 
    const PMEUnit pu = ppme_unit;
-   cuindToFuind(pu, uind, uind, fuind, fuind);
-   gridUind(pu, fuind, fuind);
-   fftfront(pu);
+   gridCuindOneSet(pu, uind);
+   fftfrontOneSet(pu);
    // TODO: store vs. recompute qfac
-   pmeConv(pu);
-   fftback(pu);
-   fphiUind2(pu, fdip_phi1, fdip_phi2);
+   pmeConvOneSet(pu);
+   fftbackOneSet(pu);
+   fphiUindOneSet(pu, fdip_phi1);
 
    TINKER_FCALL2(acc1, cu1, ufieldEwaldRecipSelfP1, uind, nullptr, field, nullptr);
 }

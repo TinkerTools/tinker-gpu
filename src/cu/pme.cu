@@ -13,7 +13,9 @@
 
 namespace tinker {
 // compute theta values on the fly
-template <class T, int bsorder>
+// ONE_SET: UIND spreads fuind alone, into qgrid as the real input of an
+// in-place real-to-complex FFT (fftfrontOneSet)
+template <class T, int bsorder, bool ONE_SET = false>
 __global__
 void gridPut_cu1(const real* restrict x, const real* restrict y, const real* restrict z, int n, int nfft1, int nfft2,
    int nfft3, const real* restrict ptr1, const real* restrict ptr2, real* restrict qgrid, real3 recip_a, real3 recip_b,
@@ -146,6 +148,8 @@ void gridPut_cu1(const real* restrict x, const real* restrict y, const real* res
       } // end if (MPOLE)
 
       if CONSTEXPR (eq<T, UIND>()) {
+         // ONE_SET: the padded rows of an in-place real FFT
+         const int ldx = 2 * (nfft1 / 2 + 1);
          bsplgen<2, bsorder>(w1, thetai1, array);
          bsplgen<2, bsorder>(w2, thetai2, array);
          bsplgen<2, bsorder>(w3, thetai3, array);
@@ -153,21 +157,24 @@ void gridPut_cu1(const real* restrict x, const real* restrict y, const real* res
          real fuindi0 = fuind[i][0];
          real fuindi1 = fuind[i][1];
          real fuindi2 = fuind[i][2];
-         real fuinpi0 = fuinp[i][0];
-         real fuinpi1 = fuinp[i][1];
-         real fuinpi2 = fuinp[i][2];
+         real fuinpi0 = 0, fuinpi1 = 0, fuinpi2 = 0;
+         if CONSTEXPR (not ONE_SET) {
+            fuinpi0 = fuinp[i][0];
+            fuinpi1 = fuinp[i][1];
+            fuinpi2 = fuinp[i][2];
+         }
          #pragma unroll
          for (int iz = 0; iz < bsorder; ++iz) {
             int zbase = igrid3 + iz;
             zbase -= (zbase >= nfft3 ? nfft3 : 0);
-            zbase *= (nfft1 * nfft2);
+            zbase *= (ONE_SET ? ldx * nfft2 : nfft1 * nfft2);
             real v0 = thetai3[4 * iz];
             real v1 = thetai3[4 * iz + 1];
             #pragma unroll
             for (int iy = 0; iy < bsorder; ++iy) {
                int ybase = igrid2 + iy;
                ybase -= (ybase >= nfft2 ? nfft2 : 0);
-               ybase *= nfft1;
+               ybase *= (ONE_SET ? ldx : nfft1);
                real u0 = thetai2[4 * iy];
                real u1 = thetai2[4 * iy + 1];
                real term01 = fuindi1 * u1 * v0 + fuindi2 * u0 * v1;
@@ -181,8 +188,9 @@ void gridPut_cu1(const real* restrict x, const real* restrict y, const real* res
                   int index = xbase + ybase + zbase;
                   real t0 = thetai1[4 * ix];
                   real t1 = thetai1[4 * ix + 1];
-                  atomic_add(term01 * t0 + term11 * t1, qgrid, 2 * index);
-                  atomic_add(term02 * t0 + term12 * t1, qgrid, 2 * index + 1);
+                  atomic_add(term01 * t0 + term11 * t1, qgrid, ONE_SET ? index : 2 * index);
+                  if CONSTEXPR (not ONE_SET)
+                     atomic_add(term02 * t0 + term12 * t1, qgrid, 2 * index + 1);
                }
             } // end for (int iy)
          }
@@ -191,7 +199,9 @@ void gridPut_cu1(const real* restrict x, const real* restrict y, const real* res
 }
 
 // use pre-computed theta values
-template <class T, int bsorder>
+// ONE_SET: UIND spreads fuind alone, into qgrid as the real input of an
+// in-place real-to-complex FFT (fftfrontOneSet)
+template <class T, int bsorder, bool ONE_SET = false>
 __global__
 void gridPut_cu2(const int* restrict igrid, const real* restrict thetai1, const real* restrict thetai2,
    const real* restrict thetai3, const Spatial::SortedAtom* restrict sorted, int n, int padded_n, int nfft1, int nfft2,
@@ -199,6 +209,8 @@ void gridPut_cu2(const int* restrict igrid, const real* restrict thetai1, const 
 {
    constexpr int bso2 = bsorder * bsorder;
    constexpr int bso3 = bsorder * bso2;
+   // ONE_SET: the padded rows of an in-place real FFT
+   MAYBE_UNUSED const int ldx = 2 * (nfft1 / 2 + 1);
    for (int m = threadIdx.x + blockIdx.x * blockDim.x; m < n * bso3; m += blockDim.x * gridDim.x) {
       // m = i0 * bso3 + j;
       int i0 = m / bso3;
@@ -218,13 +230,13 @@ void gridPut_cu2(const int* restrict igrid, const real* restrict thetai1, const 
       real v1 = thetai3[(4 * iz + 1) * padded_n + i];
       int zbase = igrid3 + iz;
       zbase -= (zbase >= nfft3 ? nfft3 : 0);
-      zbase *= (nfft1 * nfft2);
+      zbase *= (ONE_SET ? ldx * nfft2 : nfft1 * nfft2);
 
       real u0 = thetai2[(4 * iy + 0) * padded_n + i];
       real u1 = thetai2[(4 * iy + 1) * padded_n + i];
       int ybase = igrid2 + iy;
       ybase -= (ybase >= nfft2 ? nfft2 : 0);
-      ybase *= nfft1;
+      ybase *= (ONE_SET ? ldx : nfft1);
 
       real t0 = thetai1[(4 * ix + 0) * padded_n + i];
       real t1 = thetai1[(4 * ix + 1) * padded_n + i];
@@ -255,11 +267,272 @@ void gridPut_cu2(const int* restrict igrid, const real* restrict thetai1, const 
 
       if CONSTEXPR (eq<T, UIND>()) {
          real3 fd = make_real3(ptr1[3 * i + 0], ptr1[3 * i + 1], ptr1[3 * i + 2]);
-         real3 fp = make_real3(ptr2[3 * i + 0], ptr2[3 * i + 1], ptr2[3 * i + 2]);
          real3 tuv = make_real3(t1 * u0 * v0, t0 * u1 * v0, t0 * u0 * v1);
-         atomic_add(dot3(fd, tuv), qgrid, 2 * index);
-         atomic_add(dot3(fp, tuv), qgrid, 2 * index + 1);
+         atomic_add(dot3(fd, tuv), qgrid, ONE_SET ? index : 2 * index);
+         if CONSTEXPR (not ONE_SET) {
+            real3 fp = make_real3(ptr2[3 * i + 0], ptr2[3 * i + 1], ptr2[3 * i + 2]);
+            atomic_add(dot3(fp, tuv), qgrid, 2 * index + 1);
+         }
       }
+   }
+}
+
+__device__
+inline int gridPutWrap(int g, int nfft)
+{
+   while (g < 0)
+      g += nfft;
+   while (g >= nfft)
+      g -= nfft;
+   return g;
+}
+
+// g next to ref on a periodic grid
+__device__
+inline int gridPutUnwrap(int g, int ref, int nfft)
+{
+   int d = g - ref;
+   d -= (d > nfft / 2 ? nfft : 0);
+   d += (d < -nfft / 2 ? nfft : 0);
+   return ref + d;
+}
+
+// For grid point (ix, iy, iz) of an atom, the coefficients of v0, v1 (and v2):
+// its value is cz[0] * v0 + cz[1] * v1 (+ cz[2] * v2). th holds theta and its
+// derivatives, LEVEL of them per point, on the x, y, and z axes; f holds fmp, or
+// fuind and fuinp.
+template <class T, int bsorder>
+__device__
+inline void gridPutColumn(const real* restrict th, const real* restrict f, int ix, int iy, int part,
+   real* restrict cz)
+{
+   constexpr int LEVEL = eq<T, MPOLE>() ? 3 : 2;
+   const real t0 = th[ix * LEVEL + 0], t1 = th[ix * LEVEL + 1];
+   const real u0 = th[(bsorder + iy) * LEVEL + 0], u1 = th[(bsorder + iy) * LEVEL + 1];
+   if CONSTEXPR (eq<T, MPOLE>()) {
+      const real t2 = th[ix * LEVEL + 2], u2 = th[(bsorder + iy) * LEVEL + 2];
+      cz[0] = t0 * (f[MPL_PME_0] * u0 + f[MPL_PME_Y] * u1 + f[MPL_PME_YY] * u2)
+         + t1 * (f[MPL_PME_X] * u0 + f[MPL_PME_XY] * u1) + t2 * f[MPL_PME_XX] * u0;
+      cz[1] = t0 * (f[MPL_PME_Z] * u0 + f[MPL_PME_YZ] * u1) + t1 * f[MPL_PME_XZ] * u0;
+      cz[2] = t0 * f[MPL_PME_ZZ] * u0;
+   } else {
+      cz[0] = f[3 * part + 0] * t1 * u0 + f[3 * part + 1] * t0 * u1;
+      cz[1] = f[3 * part + 2] * t0 * u0;
+   }
+}
+
+// A warp spreads the multipoles or induced dipoles of a few consecutive sorted
+// atoms per pass into its own brick of shared memory spanning their B-spline
+// supports, then flushes the brick to qgrid along its rows, so that a warp of
+// global atomics covers contiguous grid points instead of a few points on each
+// of several grid rows (gridPut_cu1, gridPut_cu2). With two sets of induced
+// dipoles, d and p take turns in the brick. A pass whose brick does not fit adds
+// to qgrid directly.
+// ONE_SET: UIND spreads fuind alone, into qgrid as the real input of an
+// in-place real-to-complex FFT (fftfrontOneSet)
+// CART: with ONE_SET, ptr1 holds the Cartesian dipoles, converted as in
+// cuindToFuind_cu1 while they are staged
+template <class T, int bsorder, bool ONE_SET = false, bool CART = false>
+__global__
+void gridPut_cu3(const real* restrict x, const real* restrict y, const real* restrict z,
+   const Spatial::SortedAtom* restrict sorted, int n, int nfft1, int nfft2, int nfft3, const real* restrict ptr1,
+   const real* restrict ptr2, real* restrict qgrid, real3 recip_a, real3 recip_b, real3 recip_c)
+{
+   static_assert(eq<T, MPOLE>() or eq<T, UIND>(), "");
+   static_assert(not CART or (ONE_SET and eq<T, UIND>()), "");
+   constexpr bool MP = eq<T, MPOLE>();
+   constexpr int NW = BLOCK_DIM / WARP_SIZE;
+   // a lane stages one of 4 parts of an atom
+   constexpr int KW = WARP_SIZE / 8;
+   // 4 KB per warp, as much shared memory per block as the larger pair kernels
+   constexpr int MAXPT = WARP_SIZE * WARP_SIZE;
+   constexpr int bso2 = bsorder * bsorder;
+   constexpr int nplane = (MP or ONE_SET) ? 1 : 2;
+   constexpr int LEVEL = MP ? 3 : 2;             // theta and its derivatives
+   constexpr int nth = 3 * bsorder * LEVEL;      // on each axis
+   constexpr int nf = MP ? 10 : 3 * nplane;      // fmp, or fuind and fuinp
+   static_assert(bso2 <= WARP_SIZE, "");
+   constexpr unsigned column_lanes = (bso2 == WARP_SIZE ? ALL_LANES : (1u << bso2) - 1);
+   // ONE_SET: the padded rows of an in-place real FFT
+   MAYBE_UNUSED const int ldx = 2 * (nfft1 / 2 + 1);
+
+   __shared__ real sbrick[NW][MAXPT];
+   __shared__ real ssth[NW][KW][nth];
+   __shared__ real ssf[NW][KW][nf];
+   __shared__ int ssg[NW][KW][3]; // igrid, then the offset in the brick
+
+   const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
+   const int iwarp = ithread / WARP_SIZE;
+   const int nwarp = blockDim.x * gridDim.x / WARP_SIZE;
+   const int ilane = threadIdx.x & (WARP_SIZE - 1);
+   real* restrict brick = sbrick[threadIdx.x / WARP_SIZE];
+   real(*restrict sth)[nth] = ssth[threadIdx.x / WARP_SIZE];
+   real(*restrict sf)[nf] = ssf[threadIdx.x / WARP_SIZE];
+   int(*restrict sg)[3] = ssg[threadIdx.x / WARP_SIZE];
+
+   const int nwp = (n + KW - 1) / KW;
+   for (int iw = iwarp; iw < nwp; iw += nwarp) {
+      const int a0 = iw * KW;
+      const int na = min(KW, n - a0);
+
+      // lane 4 * a + c stages part c of atom a: the multipoles or dipoles, or
+      // igrid and theta on one axis
+      const int c = ilane % 4;
+      const int ca = ilane / 4;
+      if (ca < na) {
+         int i = sorted[a0 + ca].unsorted;
+         if (c == 0) {
+            if CONSTEXPR (CART) {
+               real a[3][3];
+               a[0][0] = nfft1 * recip_a.x;
+               a[0][1] = nfft2 * recip_b.x;
+               a[0][2] = nfft3 * recip_c.x;
+               a[1][0] = nfft1 * recip_a.y;
+               a[1][1] = nfft2 * recip_b.y;
+               a[1][2] = nfft3 * recip_c.y;
+               a[2][0] = nfft1 * recip_a.z;
+               a[2][1] = nfft2 * recip_b.z;
+               a[2][2] = nfft3 * recip_c.z;
+               const real c0 = ptr1[3 * i], c1 = ptr1[3 * i + 1], c2 = ptr1[3 * i + 2];
+               #pragma unroll
+               for (int j = 0; j < 3; ++j)
+                  sf[ca][j] = a[0][j] * c0 + a[1][j] * c1 + a[2][j] * c2;
+            } else {
+               #pragma unroll
+               for (int j = 0; j < nf; ++j) {
+                  if CONSTEXPR (MP)
+                     sf[ca][j] = ptr1[10 * i + j];
+                  else
+                     sf[ca][j] = (j < 3 ? ptr1[3 * i + j] : ptr2[3 * i + j - 3]);
+               }
+            }
+         } else {
+            const int d = c - 1;
+            const real3 recip = (d == 0 ? recip_a : (d == 1 ? recip_b : recip_c));
+            const int nfft = (d == 0 ? nfft1 : (d == 1 ? nfft2 : nfft3));
+            real w = x[i] * recip.x + y[i] * recip.y + z[i] * recip.z;
+            w = w + 0.5f - REAL_FLOOR(w + 0.5f);
+            real fr = nfft * w;
+            int ig = REAL_FLOOR(fr);
+            w = fr - ig;
+            ig = ig - bsorder + 1;
+            ig += (ig < 0 ? nfft : 0);
+            sg[ca][d] = ig;
+            real thetai[4 * 5];
+            real array[5 * 5];
+            bsplgen<LEVEL, bsorder>(w, thetai, array);
+            #pragma unroll
+            for (int k = 0; k < bsorder; ++k) {
+               #pragma unroll
+               for (int l = 0; l < LEVEL; ++l)
+                  sth[ca][(d * bsorder + k) * LEVEL + l] = thetai[4 * k + l];
+            }
+         }
+      }
+      __syncwarp();
+
+      // unwrap igrid next to the first atom and find the brick
+      const int ref1 = sg[0][0], ref2 = sg[0][1], ref3 = sg[0][2];
+      int lo1 = ref1, lo2 = ref2, lo3 = ref3;
+      int hi1 = ref1, hi2 = ref2, hi3 = ref3;
+      int my1 = ref1, my2 = ref2, my3 = ref3;
+      for (int a = 1; a < na; ++a) {
+         int g1 = gridPutUnwrap(sg[a][0], ref1, nfft1);
+         int g2 = gridPutUnwrap(sg[a][1], ref2, nfft2);
+         int g3 = gridPutUnwrap(sg[a][2], ref3, nfft3);
+         lo1 = min(lo1, g1), lo2 = min(lo2, g2), lo3 = min(lo3, g3);
+         hi1 = max(hi1, g1), hi2 = max(hi2, g2), hi3 = max(hi3, g3);
+         if (a == ilane)
+            my1 = g1, my2 = g2, my3 = g3;
+      }
+      __syncwarp();
+      if (ilane < na) {
+         sg[ilane][0] = my1 - lo1;
+         sg[ilane][1] = my2 - lo2;
+         sg[ilane][2] = my3 - lo3;
+      }
+      __syncwarp();
+
+      const int e1 = hi1 - lo1 + bsorder, e2 = hi2 - lo2 + bsorder, e3 = hi3 - lo3 + bsorder;
+      const int npt = e1 * e2 * e3;
+      lo1 = gridPutWrap(lo1, nfft1);
+      lo2 = gridPutWrap(lo2, nfft2);
+      lo3 = gridPutWrap(lo3, nfft3);
+      // a brick wider than the grid would fold onto itself in the flush
+      const bool use_brick = npt <= MAXPT and e1 <= nfft1 and e2 <= nfft2 and e3 <= nfft3;
+
+      // lane iy * bsorder + ix walks the z column of an atom
+      const int iy = ilane / bsorder;
+      const int ix = ilane - iy * bsorder;
+
+      if (use_brick) {
+         const float inv1 = 1.0f / e1, inv2 = 1.0f / e2;
+         #pragma unroll
+         for (int part = 0; part < nplane; ++part) {
+            for (int q = ilane; q < npt; q += WARP_SIZE)
+               brick[q] = 0;
+            __syncwarp();
+
+            if (ilane < bso2) {
+               for (int a = 0; a < na; ++a) {
+                  real cz[LEVEL];
+                  gridPutColumn<T, bsorder>(sth[a], sf[a], ix, iy, part, cz);
+                  const int base = (sg[a][2] * e2 + sg[a][1] + iy) * e1 + sg[a][0] + ix;
+                  #pragma unroll
+                  for (int iz = 0; iz < bsorder; ++iz) {
+                     real val = 0;
+                     #pragma unroll
+                     for (int l = 0; l < LEVEL; ++l)
+                        val += cz[l] * sth[a][(2 * bsorder + iz) * LEVEL + l];
+                     brick[base + iz * e1 * e2] += val;
+                  }
+                  // the next atom may add to the same points
+                  __syncwarp(column_lanes);
+               }
+            }
+            __syncwarp();
+
+            // consecutive lanes take consecutive points along the rows; the
+            // float quotients are exact for these small integers
+            for (int pt = ilane; pt < npt; pt += WARP_SIZE) {
+               real val = brick[pt];
+               if (val != 0) {
+                  int row = __float2int_rd((pt + 0.5f) * inv1);
+                  int lx = pt - row * e1;
+                  int lz = __float2int_rd((row + 0.5f) * inv2);
+                  int ly = row - lz * e2;
+                  int gx = lo1 + lx, gy = lo2 + ly, gz = lo3 + lz;
+                  gx -= (gx >= nfft1 ? nfft1 : 0);
+                  gy -= (gy >= nfft2 ? nfft2 : 0);
+                  gz -= (gz >= nfft3 ? nfft3 : 0);
+                  int off = ONE_SET ? gx + ldx * (gy + nfft2 * gz) : 2 * (gx + nfft1 * (gy + nfft2 * gz)) + part;
+                  atomic_add(val, qgrid, off);
+               }
+            }
+            __syncwarp();
+         }
+      } else if (ilane < bso2) {
+         for (int a = 0; a < na; ++a) {
+            const int gx = gridPutWrap(lo1 + sg[a][0] + ix, nfft1);
+            const int gy = gridPutWrap(lo2 + sg[a][1] + iy, nfft2);
+            #pragma unroll
+            for (int part = 0; part < nplane; ++part) {
+               real cz[LEVEL];
+               gridPutColumn<T, bsorder>(sth[a], sf[a], ix, iy, part, cz);
+               #pragma unroll
+               for (int iz = 0; iz < bsorder; ++iz) {
+                  const int gz = gridPutWrap(lo3 + sg[a][2] + iz, nfft3);
+                  real val = 0;
+                  #pragma unroll
+                  for (int l = 0; l < LEVEL; ++l)
+                     val += cz[l] * sth[a][(2 * bsorder + iz) * LEVEL + l];
+                  int off = ONE_SET ? gx + ldx * (gy + nfft2 * gz) : 2 * (gx + nfft1 * (gy + nfft2 * gz)) + part;
+                  atomic_add(val, qgrid, off);
+               }
+            }
+         }
+      }
+      __syncwarp();
    }
 }
 
@@ -308,7 +581,12 @@ void gridMpole_cu(PMEUnit pme_u, real (*fmp)[10])
    int nt = n1 * n2 * n3;
 
    darray::zero(g::q0, 2 * nt, st.qgrid);
-   if (TINKER_CU_THETA_ON_THE_FLY_GRID_MPOLE) {
+   if (TINKER_CU_THETA_ON_THE_FLY_GRID_MPOLE and TINKER_CU_GRID_BRICK) {
+      auto ker = gridPut_cu3<MPOLE, 5>;
+      int nwp = (n + WARP_SIZE / 8 - 1) / (WARP_SIZE / 8);
+      launch_k1s(g::s0, nwp * WARP_SIZE, ker, x, y, z, mspatial_v2_unit->sorted, n, n1, n2, n3, (const real*)fmp,
+         nullptr, st.qgrid, recipa, recipb, recipc);
+   } else if (TINKER_CU_THETA_ON_THE_FLY_GRID_MPOLE) {
       auto ker = gridPut_cu1<MPOLE, 5>;
       launch_k2s(g::s0, PME_BLOCKDIM, n, ker, x, y, z, n, n1, n2, n3, (const real*)fmp, nullptr, st.qgrid, recipa,
          recipb, recipc);
@@ -329,7 +607,12 @@ void gridUind_cu(PMEUnit pme_u, real (*fuind)[3], real (*fuinp)[3])
    int nt = n1 * n2 * n3;
 
    darray::zero(g::q0, 2 * nt, st.qgrid);
-   if (TINKER_CU_THETA_ON_THE_FLY_GRID_UIND) {
+   if (TINKER_CU_THETA_ON_THE_FLY_GRID_UIND and TINKER_CU_GRID_BRICK) {
+      auto ker = gridPut_cu3<UIND, 5>;
+      int nwp = (n + WARP_SIZE / 8 - 1) / (WARP_SIZE / 8);
+      launch_k1s(g::s0, nwp * WARP_SIZE, ker, x, y, z, mspatial_v2_unit->sorted, n, n1, n2, n3, (const real*)fuind,
+         (const real*)fuinp, st.qgrid, recipa, recipb, recipc);
+   } else if (TINKER_CU_THETA_ON_THE_FLY_GRID_UIND) {
       auto ker = gridPut_cu1<UIND, 5>;
       launch_k2s(g::s0, PME_BLOCKDIM, n, ker, x, y, z, n, n1, n2, n3, (const real*)fuind, (const real*)fuinp, st.qgrid,
          recipa, recipb, recipc);
@@ -338,6 +621,52 @@ void gridUind_cu(PMEUnit pme_u, real (*fuind)[3], real (*fuinp)[3])
       int npa = 5 * 5 * 5 * n;
       launch_k1s(g::s0, npa, ker, st.igrid, st.thetai1, st.thetai2, st.thetai3, mspatial_v2_unit->sorted, n, padded_n,
          n1, n2, n3, (const real*)fuind, (const real*)fuinp, st.qgrid);
+   }
+}
+
+void gridUindOneSet_cu(PMEUnit pme_u, real (*fuind)[3])
+{
+   auto& st = *pme_u;
+   int n1 = st.nfft1;
+   int n2 = st.nfft2;
+   int n3 = st.nfft3;
+
+   // the real grid of the in-place R2C FFT, with its padded rows
+   darray::zero(g::q0, 2 * (n1 / 2 + 1) * n2 * n3, st.qgrid);
+   if (TINKER_CU_THETA_ON_THE_FLY_GRID_UIND and TINKER_CU_GRID_BRICK) {
+      auto ker = gridPut_cu3<UIND, 5, true>;
+      int nwp = (n + WARP_SIZE / 8 - 1) / (WARP_SIZE / 8);
+      launch_k1s(g::s0, nwp * WARP_SIZE, ker, x, y, z, mspatial_v2_unit->sorted, n, n1, n2, n3, (const real*)fuind,
+         nullptr, st.qgrid, recipa, recipb, recipc);
+   } else if (TINKER_CU_THETA_ON_THE_FLY_GRID_UIND) {
+      auto ker = gridPut_cu1<UIND, 5, true>;
+      launch_k2s(g::s0, PME_BLOCKDIM, n, ker, x, y, z, n, n1, n2, n3, (const real*)fuind, nullptr, st.qgrid,
+         recipa, recipb, recipc);
+   } else {
+      auto ker = gridPut_cu2<UIND, 5, true>;
+      int npa = 5 * 5 * 5 * n;
+      launch_k1s(g::s0, npa, ker, st.igrid, st.thetai1, st.thetai2, st.thetai3, mspatial_v2_unit->sorted, n, padded_n,
+         n1, n2, n3, (const real*)fuind, nullptr, st.qgrid);
+   }
+}
+
+void gridCuindOneSet_cu(PMEUnit pme_u, const real (*cind)[3])
+{
+   if (TINKER_CU_THETA_ON_THE_FLY_GRID_UIND and TINKER_CU_GRID_BRICK) {
+      auto& st = *pme_u;
+      int n1 = st.nfft1;
+      int n2 = st.nfft2;
+      int n3 = st.nfft3;
+
+      // the real grid of the in-place R2C FFT, with its padded rows
+      darray::zero(g::q0, 2 * (n1 / 2 + 1) * n2 * n3, st.qgrid);
+      auto ker = gridPut_cu3<UIND, 5, true, true>;
+      int nwp = (n + WARP_SIZE / 8 - 1) / (WARP_SIZE / 8);
+      launch_k1s(g::s0, nwp * WARP_SIZE, ker, x, y, z, mspatial_v2_unit->sorted, n, n1, n2, n3, (const real*)cind,
+         nullptr, st.qgrid, recipa, recipb, recipc);
+   } else {
+      cuindToFuind(pme_u, cind, nullptr, fuind, nullptr);
+      gridUindOneSet_cu(pme_u, fuind);
    }
 }
 
@@ -390,7 +719,9 @@ void bsplineFill_cu(PMEUnit u, int level)
 }
 
 // compute theta values on the fly
-template <class T, int bsorder>
+// ONE_SET: UIND/UIND2 read fuind's potential from qgrid as the real output of
+// fftbackOneSet and skip fdip_phi2; fdip_sum_phi is the d+p sum with p = d
+template <class T, int bsorder, bool ONE_SET = false>
 __global__
 void fphiGet_cu(int n, int nfft1, int nfft2, int nfft3, const real* restrict x, const real* restrict y,
    const real* restrict z, real* restrict opt1, real* restrict opt2, real* restrict opt3, const real* restrict qgrid,
@@ -400,6 +731,8 @@ void fphiGet_cu(int n, int nfft1, int nfft2, int nfft3, const real* restrict x, 
    real thetai2[4 * 5];
    real thetai3[4 * 5];
    real array[5 * 5];
+   // ONE_SET: the padded rows of an in-place real FFT
+   MAYBE_UNUSED const int ldx = 2 * (nfft1 / 2 + 1);
 
    MAYBE_UNUSED real(*restrict fphi)[20] = (real(*)[20])opt1;
    MAYBE_UNUSED real(*restrict fdip_phi1)[10] = (real(*)[10])opt1;
@@ -598,7 +931,7 @@ void fphiGet_cu(int n, int nfft1, int nfft2, int nfft3, const real* restrict x, 
          for (int iz = 0; iz < bsorder; ++iz) {
             int zbase = igrid3 + iz;
             zbase -= (zbase >= nfft3 ? nfft3 : 0);
-            zbase *= (nfft1 * nfft2);
+            zbase *= (ONE_SET ? ldx * nfft2 : nfft1 * nfft2);
             real v0 = thetai3[4 * iz];
             real v1 = thetai3[4 * iz + 1];
             real v2 = thetai3[4 * iz + 2];
@@ -628,7 +961,7 @@ void fphiGet_cu(int n, int nfft1, int nfft2, int nfft3, const real* restrict x, 
             for (int iy = 0; iy < bsorder; ++iy) {
                int ybase = igrid2 + iy;
                ybase -= (ybase >= nfft2 ? nfft2 : 0);
-               ybase *= nfft1;
+               ybase *= (ONE_SET ? ldx : nfft1);
                real u0 = thetai2[4 * iy];
                real u1 = thetai2[4 * iy + 1];
                real u2 = thetai2[4 * iy + 2];
@@ -643,8 +976,8 @@ void fphiGet_cu(int n, int nfft1, int nfft2, int nfft3, const real* restrict x, 
                for (int ix = 0; ix < bsorder; ++ix) {
                   int xbase = igrid1 + ix;
                   xbase -= (xbase >= nfft1 ? nfft1 : 0);
-                  real tq_1 = qgrid[2 * (xbase + ybase + zbase)];
-                  real tq_2 = qgrid[2 * (xbase + ybase + zbase) + 1];
+                  real tq_1 = ONE_SET ? qgrid[xbase + ybase + zbase] : qgrid[2 * (xbase + ybase + zbase)];
+                  real tq_2 = ONE_SET ? tq_1 : qgrid[2 * (xbase + ybase + zbase) + 1];
                   t0_1 += tq_1 * thetai1[4 * ix];
                   t1_1 += tq_1 * thetai1[4 * ix + 1];
                   t2_1 += tq_1 * thetai1[4 * ix + 2];
@@ -728,16 +1061,18 @@ void fphiGet_cu(int n, int nfft1, int nfft2, int nfft3, const real* restrict x, 
          fdip_phi1[i][7] = tuv110_1;
          fdip_phi1[i][8] = tuv101_1;
          fdip_phi1[i][9] = tuv011_1;
-         fdip_phi2[i][0] = 0;
-         fdip_phi2[i][1] = tuv100_2;
-         fdip_phi2[i][2] = tuv010_2;
-         fdip_phi2[i][3] = tuv001_2;
-         fdip_phi2[i][4] = tuv200_2;
-         fdip_phi2[i][5] = tuv020_2;
-         fdip_phi2[i][6] = tuv002_2;
-         fdip_phi2[i][7] = tuv110_2;
-         fdip_phi2[i][8] = tuv101_2;
-         fdip_phi2[i][9] = tuv011_2;
+         if CONSTEXPR (not ONE_SET) {
+            fdip_phi2[i][0] = 0;
+            fdip_phi2[i][1] = tuv100_2;
+            fdip_phi2[i][2] = tuv010_2;
+            fdip_phi2[i][3] = tuv001_2;
+            fdip_phi2[i][4] = tuv200_2;
+            fdip_phi2[i][5] = tuv020_2;
+            fdip_phi2[i][6] = tuv002_2;
+            fdip_phi2[i][7] = tuv110_2;
+            fdip_phi2[i][8] = tuv101_2;
+            fdip_phi2[i][9] = tuv011_2;
+         }
          fdip_sum_phi[i][0] = tuv000;
          fdip_sum_phi[i][1] = tuv100;
          fdip_sum_phi[i][2] = tuv010;
@@ -782,7 +1117,7 @@ void fphiGet_cu(int n, int nfft1, int nfft2, int nfft3, const real* restrict x, 
          for (int iz = 0; iz < bsorder; ++iz) {
             int zbase = igrid3 + iz;
             zbase -= (zbase >= nfft3 ? nfft3 : 0);
-            zbase *= (nfft1 * nfft2);
+            zbase *= (ONE_SET ? ldx * nfft2 : nfft1 * nfft2);
             real v0 = thetai3[4 * iz];
             real v1 = thetai3[4 * iz + 1];
             real v2 = thetai3[4 * iz + 2];
@@ -801,7 +1136,7 @@ void fphiGet_cu(int n, int nfft1, int nfft2, int nfft3, const real* restrict x, 
             for (int iy = 0; iy < bsorder; ++iy) {
                int ybase = igrid2 + iy;
                ybase -= (ybase >= nfft2 ? nfft2 : 0);
-               ybase *= nfft1;
+               ybase *= (ONE_SET ? ldx : nfft1);
                real u0 = thetai2[4 * iy];
                real u1 = thetai2[4 * iy + 1];
                real u2 = thetai2[4 * iy + 2];
@@ -814,8 +1149,8 @@ void fphiGet_cu(int n, int nfft1, int nfft2, int nfft3, const real* restrict x, 
                for (int ix = 0; ix < bsorder; ++ix) {
                   int xbase = igrid1 + ix;
                   xbase -= (xbase >= nfft1 ? nfft1 : 0);
-                  real tq_1 = qgrid[2 * (xbase + ybase + zbase)];
-                  real tq_2 = qgrid[2 * (xbase + ybase + zbase) + 1];
+                  real tq_1 = ONE_SET ? qgrid[xbase + ybase + zbase] : qgrid[2 * (xbase + ybase + zbase)];
+                  real tq_2 = ONE_SET ? tq_1 : qgrid[2 * (xbase + ybase + zbase) + 1];
                   t0_1 += tq_1 * thetai1[4 * ix];
                   t1_1 += tq_1 * thetai1[4 * ix + 1];
                   t2_1 += tq_1 * thetai1[4 * ix + 2];
@@ -865,16 +1200,18 @@ void fphiGet_cu(int n, int nfft1, int nfft2, int nfft3, const real* restrict x, 
          fdip_phi1[i][7] = tuv110_1;
          fdip_phi1[i][8] = tuv101_1;
          fdip_phi1[i][9] = tuv011_1;
-         fdip_phi2[i][0] = 0;
-         fdip_phi2[i][1] = tuv100_2;
-         fdip_phi2[i][2] = tuv010_2;
-         fdip_phi2[i][3] = tuv001_2;
-         fdip_phi2[i][4] = tuv200_2;
-         fdip_phi2[i][5] = tuv020_2;
-         fdip_phi2[i][6] = tuv002_2;
-         fdip_phi2[i][7] = tuv110_2;
-         fdip_phi2[i][8] = tuv101_2;
-         fdip_phi2[i][9] = tuv011_2;
+         if CONSTEXPR (not ONE_SET) {
+            fdip_phi2[i][0] = 0;
+            fdip_phi2[i][1] = tuv100_2;
+            fdip_phi2[i][2] = tuv010_2;
+            fdip_phi2[i][3] = tuv001_2;
+            fdip_phi2[i][4] = tuv200_2;
+            fdip_phi2[i][5] = tuv020_2;
+            fdip_phi2[i][6] = tuv002_2;
+            fdip_phi2[i][7] = tuv110_2;
+            fdip_phi2[i][8] = tuv101_2;
+            fdip_phi2[i][9] = tuv011_2;
+         }
       }
    }
 }
@@ -915,7 +1252,26 @@ void fphiUind2_cu(PMEUnit pme_u, real (*fdip_phi1)[10], real (*fdip_phi2)[10])
       st.qgrid, recipa, recipb, recipc);
 }
 
-template <bool DO_E, bool DO_V, bool DO_DL>
+void fphiUindOneSet_cu(PMEUnit pme_u, real (*fdip_phi1)[10], real (*fdip_sum_phi)[20])
+{
+   auto& st = *pme_u;
+   int n1 = st.nfft1;
+   int n2 = st.nfft2;
+   int n3 = st.nfft3;
+
+   if (fdip_sum_phi) {
+      auto ker = fphiGet_cu<UIND, 5, true>;
+      launch_k2s(g::s0, PME_BLOCKDIM, n, ker, n, n1, n2, n3, x, y, z, (real*)fdip_phi1, nullptr, (real*)fdip_sum_phi,
+         st.qgrid, recipa, recipb, recipc);
+   } else {
+      auto ker = fphiGet_cu<UIND2, 5, true>;
+      launch_k2s(g::s0, PME_BLOCKDIM, n, ker, n, n1, n2, n3, x, y, z, (real*)fdip_phi1, nullptr, nullptr, st.qgrid,
+         recipa, recipb, recipc);
+   }
+}
+
+// ONE_SET: the half spectrum, k1 <= nfft1/2, of a real grid, fftfrontOneSet
+template <bool DO_E, bool DO_V, bool DO_DL, bool ONE_SET = false>
 __global__
 static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[2], real (*restrict dlqgrid)[2],
    const real* restrict bsmod1, const real* restrict bsmod2, const real* restrict bsmod3, real f, real aewald,
@@ -925,8 +1281,9 @@ static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[
    int ithread = threadIdx.x + blockIdx.x * blockDim.x;
    int stride = blockDim.x * gridDim.x;
 
-   int nff = nfft1 * nfft2;
-   int ntot = nfft1 * nfft2 * nfft3;
+   const int nx = ONE_SET ? nfft1 / 2 + 1 : nfft1;
+   int nff = nx * nfft2;
+   int ntot = nff * nfft3;
    real pterm = pi / aewald;
    pterm *= pterm;
 
@@ -968,8 +1325,8 @@ static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[
 
       int k3 = i / nff;
       int j = i - k3 * nff;
-      int k2 = j / nfft1;
-      int k1 = j - k2 * nfft1;
+      int k2 = j / nx;
+      int k1 = j - k2 * nx;
 
       int r1 = (k1 < (nfft1 + 1) / 2) ? k1 : (k1 - nfft1);
       int r2 = (k2 < (nfft2 + 1) / 2) ? k2 : (k2 - nfft2);
@@ -1054,7 +1411,7 @@ static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[
    }
 }
 
-template <bool DO_E, bool DO_V, bool DO_DL>
+template <bool DO_E, bool DO_V, bool DO_DL, bool ONE_SET = false>
 static void pmeConv_cu2(PMEUnit pme_u, PMEUnit dlpme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir,
    VirialBuffer dl_vir, real wdv = 0)
 {
@@ -1075,7 +1432,7 @@ static void pmeConv_cu2(PMEUnit pme_u, PMEUnit dlpme_u, EnergyBuffer gpu_e, Viri
    real aewald = st.aewald;
    real box_volume = boxVolume();
 
-   auto ker = pmeConv_cu1<DO_E, DO_V, DO_DL>;
+   auto ker = pmeConv_cu1<DO_E, DO_V, DO_DL, ONE_SET>;
    auto stream = use_pme_stream ? g::spme : g::s0;
    int ngrid = gpuGridSize(BLOCK_DIM);
    ker<<<ngrid, BLOCK_DIM, 0, stream>>>(n1, n2, n3, qgrid, dlqgrid, bsmod1, bsmod2, bsmod3, f, aewald,
@@ -1097,6 +1454,11 @@ void pmeConv_cu(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
          pmeConv_cu2<true, true, false>(pme_u, PMEUnit(), gpu_e, gpu_vir, nullptr);
       }
    }
+}
+
+void pmeConvOneSet_cu(PMEUnit pme_u)
+{
+   pmeConv_cu2<false, false, false, true>(pme_u, PMEUnit(), nullptr, nullptr, nullptr);
 }
 
 void pmeConvDlmda_cu(PMEUnit pme_u, PMEUnit dlpme_u, VirialBuffer gpu_vir, VirialBuffer dl_vir, real wdv)
@@ -1297,7 +1659,8 @@ void cuindToFuind_cu1(int n, const real (*restrict cind)[3], const real (*restri
    for (int i = ITHREAD; i < n; i += STRIDE) {
       for (int j = 0; j < 3; ++j) {
          fuind[i][j] = a[0][j] * cind[i][0] + a[1][j] * cind[i][1] + a[2][j] * cind[i][2];
-         fuinp[i][j] = a[0][j] * cinp[i][0] + a[1][j] * cinp[i][1] + a[2][j] * cinp[i][2];
+         if (cinp)
+            fuinp[i][j] = a[0][j] * cinp[i][0] + a[1][j] * cinp[i][1] + a[2][j] * cinp[i][2];
       }
    }
 }

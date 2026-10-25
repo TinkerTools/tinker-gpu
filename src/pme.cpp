@@ -297,6 +297,26 @@ void gridUind(PMEUnit pme_u, real (*fuind)[3], real (*fuinp)[3])
    TINKER_FCALL2(acc1, cu1, gridUind, pme_u, fuind, fuinp);
 }
 
+TINKER_FVOID2(acc1, cu1, gridUindOneSet, PMEUnit, real (*)[3]);
+void gridUindOneSet(PMEUnit pme_u, real (*fuind)[3])
+{
+   int bso = pme_u->bsorder;
+   if (bso != 5)
+      TINKER_THROW(format("gridUindOneSet(): bsorder is %d; must be 5.\n", bso));
+
+   TINKER_FCALL2(acc1, cu1, gridUindOneSet, pme_u, fuind);
+}
+
+TINKER_FVOID2(acc1, cu1, gridCuindOneSet, PMEUnit, const real (*)[3]);
+void gridCuindOneSet(PMEUnit pme_u, const real (*cind)[3])
+{
+   int bso = pme_u->bsorder;
+   if (bso != 5)
+      TINKER_THROW(format("gridCuindOneSet(): bsorder is %d; must be 5.\n", bso));
+
+   TINKER_FCALL2(acc1, cu1, gridCuindOneSet, pme_u, cind);
+}
+
 TINKER_FVOID2(acc1, cu1, gridDisp, PMEUnit, real*, const int*);
 void gridDisp(PMEUnit pme_u, real* csix, const int* part)
 {
@@ -329,6 +349,12 @@ void pmeConv(PMEUnit pme_u, EnergyBuffer gpu_e)
 void pmeConv(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
 {
    TINKER_FCALL2(acc1, cu1, pmeConv, pme_u, gpu_e, gpu_vir);
+}
+
+TINKER_FVOID2(acc1, cu1, pmeConvOneSet, PMEUnit);
+void pmeConvOneSet(PMEUnit pme_u)
+{
+   TINKER_FCALL2(acc1, cu1, pmeConvOneSet, pme_u);
 }
 
 TINKER_FVOID2(acc0, cu1, pmeConvDlmda, PMEUnit, PMEUnit, VirialBuffer, VirialBuffer, real);
@@ -367,6 +393,17 @@ void fphiUind2(PMEUnit pme_u, real (*fdip_phi1)[10], real (*fdip_phi2)[10])
       TINKER_THROW(format("fphiUind2(): bsorder is %d; must be 5.\n", bso));
 
    TINKER_FCALL2(acc1, cu1, fphiUind2, pme_u, fdip_phi1, fdip_phi2);
+}
+
+// the backends skip fdip_sum_phi when it is null
+TINKER_FVOID2(acc1, cu1, fphiUindOneSet, PMEUnit, real (*)[10], real (*)[20]);
+void fphiUindOneSet(PMEUnit pme_u, real (*fdip_phi)[10], real (*fdip_sum_phi)[20])
+{
+   int bso = pme_u->bsorder;
+   if (bso != 5)
+      TINKER_THROW(format("fphiUindOneSet(): bsorder is %d; must be 5.\n", bso));
+
+   TINKER_FCALL2(acc1, cu1, fphiUindOneSet, pme_u, fdip_phi, fdip_sum_phi);
 }
 }
 
