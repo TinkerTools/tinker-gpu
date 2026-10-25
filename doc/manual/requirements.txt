@@ -11,11 +11,11 @@ packaging==23.0
 pybtex==0.26.1
 pybtex-docutils==1.0.3
 pydata-sphinx-theme==0.16.1
-Pygments==2.18.0
+Pygments>=2.20.0
 PyYAML==6.0.3
 six==1.16.0
 snowballstemmer==2.2.0
-soupsieve==2.4
+soupsieve>=2.9.0
 Sphinx==7.3.7
 sphinxcontrib-applehelp==2.0.0
 sphinxcontrib-bibtex==2.6.5
