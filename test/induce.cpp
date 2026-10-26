@@ -1,6 +1,7 @@
 #include "ff/amoeba/induce.h"
 #include "ff/atom.h"
 #include "ff/dlmda.h"
+#include "ff/elec.h"
 #include "ff/energy.h"
 #include "ff/modamoeba.h"
 #include "ff/modhippo.h"
@@ -396,7 +397,250 @@ TEST_CASE("INDUCE-trial-history", "[ff][induce]")
    s.session.end();
 }
 
+namespace {
+// Whether the system solves the second set of induced dipoles: AMOEBA does,
+// and neither AMOEBA+ nor HIPPO does.
+bool twoDipoleSets()
+{
+   return not polpot::use_tholed and not mplpot::use_chgpen;
+}
+
+// The largest induced dipole component on the first nlig atoms.
+real largestDipole(int nlig)
+{
+   real big = 0;
+   for (const real(*u)[3] : {tinker::uind, tinker::uinp}) {
+      if (u == tinker::uinp and not twoDipoleSets())
+         continue;
+      const std::vector<real> v = grab3(u);
+      for (int k = 0; k < 3 * nlig; ++k)
+         big = std::max(big, std::abs(v[k]));
+   }
+   return big;
+}
+
+// Overwrites the first nlig atoms of every predictor slot with a dipole, as a
+// history solved where those atoms were still polarizable would hold. The
+// second set is picked by the model: an earlier system leaves its pointers
+// dangling.
+void plantLigandSlots(int nlig)
+{
+   for (int i = 0; i < maxualt; ++i) {
+      for (real(**slot)[3] : {kUd[i], kUp[i]}) {
+         if (slot == kUp[i] and not twoDipoleSets())
+            continue;
+         std::vector<real> v = grab3(*slot);
+         for (int k = 0; k < 3 * nlig; ++k)
+            v[k] = 0.1;
+         darray::copyin(g::q0, n, *slot, reinterpret_cast<real(*)[3]>(v.data()));
+      }
+   }
+   waitFor(g::q0);
+}
+
+// Zeroes the polarizability of the first nzero atoms, in the state each energy
+// call rebuilds it from as well as in the state it leaves.
+void zeroPolarity(int nzero)
+{
+   std::vector<real> pol(n), inv(n);
+   darray::copyout(g::q0, n, pol.data(), polarity);
+   darray::copyout(g::q0, n, inv.data(), polarity_inv);
+   waitFor(g::q0);
+   for (int i = 0; i < nzero; ++i) {
+      pol[i] = 0;
+      inv[i] = real(1) / real(1.0e-16);
+   }
+   darray::copyin(g::q0, n, polarity, pol.data());
+   darray::copyin(g::q0, n, polarity_inv, inv.data());
+   if (polarityorig)
+      darray::copyin(g::q0, n, polarityorig, pol.data());
+   waitFor(g::q0);
+}
+
+// An atom of zero polarizability keeps no induced dipole, whatever the
+// predictor extrapolates for it: the solve never moves such a dipole, so the
+// predicted guess must not leave one there. This holds in each solver, CUDA or
+// OpenACC, whichever the build runs.
+void zeroPolarityGuess(const std::string& keyextra, const System& sys)
+{
+   Setup s(kMd, keyextra, sys);
+   const int nzero = 3;
+   zeroPolarity(nzero);
+   fillHistory();
+   REQUIRE(largestDipole(nzero) == 0);
+   REQUIRE(largestDipole(n) > 0);
+   plantLigandSlots(nzero);
+   REQUIRE(induceGuess() == UGuess::PREDICT);
+   nudge(19);
+   energy(calc::v1);
+   REQUIRE(largestDipole(nzero) == 0);
+   s.session.end();
+}
+}
+
+TEST_CASE("INDUCE-zero-polarity-guess", "[ff][induce]")
+{
+   zeroPolarityGuess("", kWater);
+}
+
+TEST_CASE("INDUCE-zero-polarity-guess-hippo", "[ff][induce]")
+{
+   zeroPolarityGuess("polar-predict aspc\n", kHippo);
+}
+
+// Lambda dynamics needs the CUDA platform.
 #if TINKER_GPULANG_CUDA
+namespace {
+// nextLmdaWin() reads and advances these.
+struct WindowScope
+{
+   int win, nwin;
+   std::vector<int> ends;
+   std::vector<double> list;
+
+   WindowScope()
+      : win(lmdawin)
+      , nwin(nlmdawin)
+      , ends(lmdawinend)
+      , list(lmdawinlist)
+   {}
+
+   ~WindowScope()
+   {
+      lmdawin = win;
+      nlmdawin = nwin;
+      lmdawinend = ends;
+      lmdawinlist = list;
+   }
+};
+
+// Single topology scales the ligand polarizabilities by the polarization lambda;
+// with a lambda derivative to take, the ligand stays in the solve at zero, with
+// no polarizability and so no induced dipoles. The history holds the dipoles
+// of one polarization lambda: the first solve after lambda moves, whether by a
+// window or any other way, starts over from the direct guess, and the predictor
+// resumes once the history at the new lambda is full. The solve never moves an
+// atom of zero polarizability, so a predicted guess must not leave a dipole
+// there even if the history holds one.
+void lambdaJump(const std::string& keyextra, const System& sys, int nlig)
+{
+   Setup s(kMd, "lambda 1.0\nlambda-deriv\n" + keyextra, sys);
+   REQUIRE_FALSE(use_epdt);
+   REQUIRE(use_dlmda);
+   fillHistory();
+   REQUIRE(plam == 1);
+   REQUIRE(largestDipole(nlig) > 0);
+
+   // Solves at the current lambda from an empty history: each one adds to it,
+   // and the predictor takes over once it is full.
+   auto refill = [nlig](int& step) {
+      for (int k = 1; k < maxualt; ++k) {
+         CAPTURE(k);
+         REQUIRE(induceGuess() == UGuess::DIRECT);
+         nudge(step++);
+         energy(calc::v1);
+         REQUIRE(nualt == k + 1);
+         if (plam == 0)
+            REQUIRE(largestDipole(nlig) == 0);
+      }
+      REQUIRE(induceGuess() == UGuess::PREDICT);
+   };
+
+   int step = 19;
+   SECTION("lambda moves")
+   {
+      lambda = 0;
+      nudge(step++);
+      energy(calc::v1);
+      REQUIRE(plam == 0);
+      REQUIRE(nualt == 1);
+      REQUIRE(largestDipole(nlig) == 0);
+      refill(step);
+      nudge(step++);
+      energy(calc::v1);
+      REQUIRE(largestDipole(nlig) == 0);
+
+      // off zero the ligand is polarizable again, from the direct guess
+      lambda = 0.01;
+      nudge(step++);
+      energy(calc::v1);
+      REQUIRE(nualt == 1);
+      REQUIRE(largestDipole(nlig) > 0);
+      refill(step);
+   }
+
+   SECTION("next window")
+   {
+      WindowScope scope;
+      nlmdawin = 2;
+      lmdawinlist = {1.0, 0.0};
+      lmdawinend = {20, 40};
+      lmdawin = 1;
+      nextLmdaWin();
+      REQUIRE(lambda == 0);
+      nudge(step++);
+      energy(calc::v1);
+      REQUIRE(nualt == 1);
+      REQUIRE(largestDipole(nlig) == 0);
+      refill(step);
+   }
+
+   SECTION("rejected trial at another lambda")
+   {
+      // the history in the first set of slots, which every model keeps
+      auto history = []() {
+         std::vector<std::vector<real>> h;
+         for (int i = 0; i < maxualt; ++i)
+            h.push_back(grab3(*kUd[i]));
+         return h;
+      };
+      const int nu = nualt;
+      const auto before = history();
+      {
+         InducedTrial trial(InducedTrial::History::USE);
+         lambda = 0;
+         nudge(step);
+         energy(calc::v1);
+         REQUIRE(nualt == 1);
+      }
+      lambda = 1;
+      REQUIRE(nualt == nu);
+      REQUIRE(history() == before);
+      // and the solves at the lambda of the history carry on predicting
+      REQUIRE(induceGuess() == UGuess::PREDICT);
+      nudge(step++);
+      energy(calc::v1);
+      REQUIRE(nualt == (nu + 1 > 2 * maxualt ? nu + 1 - maxualt : nu + 1));
+   }
+
+   SECTION("stale ligand slots")
+   {
+      lambda = 0;
+      nudge(step++);
+      energy(calc::v1);
+      refill(step);
+      plantLigandSlots(nlig);
+      nudge(step++);
+      energy(calc::v1);
+      REQUIRE(largestDipole(nlig) == 0);
+   }
+
+   s.session.end();
+}
+}
+
+TEST_CASE("INDUCE-lambda-jump", "[ff][induce]")
+{
+   // the two water molecules of the ligand
+   lambdaJump("", kWater, 6);
+}
+
+TEST_CASE("INDUCE-lambda-jump-hippo", "[ff][induce]")
+{
+   // the first dimethylsulfoxide molecule
+   lambdaJump("polar-predict aspc\n", kHippo, 10);
+}
+
 // Dual topology keeps a predictor history for each endpoint. A trial that asks
 // to use the history bypasses both instead, since putting a rejected trial back
 // would take a slot from each; accepted or not, it leaves them as they were.
@@ -414,7 +658,7 @@ TEST_CASE("INDUCE-trial-dualtopo", "[ff][induce]")
    dtPasses(pass);
    std::vector<Induced> before;
    for (int k : {0, 1}) {
-      induceUseHistory(k, pass[k].mask);
+      REQUIRE(induceLoadHistory(pass[k].mask) >= maxualt);
       before.emplace_back();
       REQUIRE(before.back().nualt >= maxualt);
       REQUIRE(induceGuess() == UGuess::PREDICT);
@@ -432,7 +676,7 @@ TEST_CASE("INDUCE-trial-dualtopo", "[ff][induce]")
       }
       for (int k : {0, 1}) {
          CAPTURE(k);
-         induceUseHistory(k, pass[k].mask);
+         induceLoadHistory(pass[k].mask);
          REQUIRE(sameHistory(Induced(), before[k]));
       }
    }
@@ -441,13 +685,18 @@ TEST_CASE("INDUCE-trial-dualtopo", "[ff][induce]")
 }
 
 // One step at main lambda lmda with energy version vers, and the history
-// lengths of the two dual topology endpoints and the guess the next coupled
-// solve takes.
+// lengths the next solves at the two dual topology endpoints would extrapolate
+// from, with the guesses they would take.
 struct EndpointStep
 {
    int step = 0;
    int env = 0, coupled = 0;
-   UGuess guess = UGuess::ZERO;
+   UGuess envGuess = UGuess::ZERO, guess = UGuess::ZERO;
+
+   static UGuess guessFor(int len)
+   {
+      return len >= maxualt ? UGuess::PREDICT : UGuess::DIRECT;
+   }
 
    void at(double lmda, int vers = calc::v1)
    {
@@ -456,11 +705,10 @@ struct EndpointStep
       energy(vers);
       DtPass pass[2];
       dtPasses(pass);
-      induceUseHistory(0, pass[0].mask);
-      env = nualt;
-      induceUseHistory(1, pass[1].mask);
-      coupled = nualt;
-      guess = induceGuess();
+      env = induceLoadHistory(pass[0].mask);
+      envGuess = guessFor(env);
+      coupled = induceLoadHistory(pass[1].mask);
+      guess = guessFor(coupled);
    }
 };
 
@@ -545,6 +793,132 @@ TEST_CASE("INDUCE-dualtopo-version-skip", "[ff][induce]")
    e.at(0.0);
    REQUIRE(e.coupled == 1);
    REQUIRE(e.guess == UGuess::DIRECT);
+
+   s.session.end();
+}
+
+// An energy alone solves only the environment endpoint at lambda 0 and only the
+// coupled one at lambda 1. The environment endpoint is the lambda 0 state, so
+// while it predicts on its own the ligand keeps no dipoles. Each skipped
+// endpoint starts over from the direct guess when both are solved again and
+// predicts once its history is full.
+TEST_CASE("INDUCE-dualtopo-endpoint-return", "[ff][induce]")
+{
+   Setup s(kMd, "lambda-deriv2\n");
+   REQUIRE(use_epdt);
+   REQUIRE(induceHistoryUsable());
+   const int nlig = 6;
+
+   EndpointStep e;
+   for (int i = 0; i < maxualt + 3; ++i)
+      e.at(0.5);
+   REQUIRE(e.envGuess == UGuess::PREDICT);
+   REQUIRE(e.guess == UGuess::PREDICT);
+
+   // the environment endpoint alone; its pass leaves the dipoles
+   const int env0 = e.env;
+   for (int i = 1; i <= 3; ++i) {
+      e.at(0.0, calc::v0);
+      REQUIRE(e.coupled == 0);
+      REQUIRE(e.env == env0 + i);
+      REQUIRE(e.envGuess == UGuess::PREDICT);
+      REQUIRE(largestDipole(nlig) == 0);
+   }
+
+   // the coupled endpoint alone
+   e.at(1.0, calc::v0);
+   REQUIRE(e.env == 0);
+   REQUIRE(e.coupled == 1);
+   REQUIRE(largestDipole(nlig) > 0);
+
+   // both again: each predicts once its own history is full
+   for (int i = 1; i < maxualt; ++i) {
+      e.at(0.5);
+      REQUIRE(e.env == i);
+      REQUIRE(e.envGuess == UGuess::DIRECT);
+   }
+   REQUIRE(e.coupled == maxualt);
+   REQUIRE(e.guess == UGuess::PREDICT);
+   e.at(0.5);
+   REQUIRE(e.env == maxualt);
+   REQUIRE(e.envGuess == UGuess::PREDICT);
+
+   s.session.end();
+}
+
+// A trial leaves no trace in either endpoint history, even when its energy
+// alone skips one endpoint, as a Monte Carlo barostat trial at lambda 0 does,
+// and even when the two histories are of different lengths.
+TEST_CASE("INDUCE-dualtopo-trial-skip", "[ff][induce]")
+{
+   Setup s(kMd, "lambda-deriv2\n");
+   REQUIRE(use_epdt);
+   REQUIRE(induceHistoryUsable());
+
+   EndpointStep e;
+   for (int i = 0; i < maxualt + 3; ++i)
+      e.at(0.5);
+   // the environment history starts over at lambda 1, the coupled one keeps on
+   e.at(1.0, calc::v0);
+   e.at(0.5);
+   e.at(0.5);
+   const int env0 = e.env, coupled0 = e.coupled;
+   REQUIRE(env0 == 2);
+   REQUIRE(coupled0 >= maxualt);
+
+   for (bool accept : {false, true}) {
+      CAPTURE(accept);
+      {
+         InducedTrial trial(InducedTrial::History::USE);
+         lambda = 0;
+         nudge(e.step++);
+         energy(calc::energy);
+         if (accept)
+            trial.accept();
+      }
+      DtPass pass[2];
+      dtPasses(pass);
+      CHECK(induceLoadHistory(pass[0].mask) == env0);
+      CHECK(induceLoadHistory(pass[1].mask) == coupled0);
+   }
+
+   s.session.end();
+}
+
+// The endpoints of dual topology do not move with lambda, so both histories
+// carry on as lambda leaves zero, and the predicted dipoles at the new lambda
+// are those of a solve from the direct guess.
+TEST_CASE("INDUCE-dualtopo-lambda-move", "[ff][induce]")
+{
+   Setup s(kMd, "lambda-deriv2\n");
+   REQUIRE(use_epdt);
+   REQUIRE(induceHistoryUsable());
+
+   EndpointStep e;
+   for (int i = 0; i < maxualt + 3; ++i)
+      e.at(0.0);
+   const int env0 = e.env, coupled0 = e.coupled;
+   REQUIRE(e.envGuess == UGuess::PREDICT);
+   REQUIRE(e.guess == UGuess::PREDICT);
+
+   e.at(0.01);
+   REQUIRE(e.env == env0 + 1);
+   REQUIRE(e.coupled == coupled0 + 1);
+   // the coupled endpoint is the last pass
+   const std::vector<real> predicted = grab3(uind);
+   std::vector<real> direct;
+   {
+      InducedTrial trial(InducedTrial::History::BYPASS);
+      energy(calc::v1);
+      direct = grab3(uind);
+   }
+   real big = 0, diff = 0;
+   for (size_t k = 0; k < direct.size(); ++k) {
+      big = std::max(big, std::abs(direct[k]));
+      diff = std::max(diff, std::abs(predicted[k] - direct[k]));
+   }
+   REQUIRE(big > 0.01);
+   REQUIRE(diff < 1.0e-5);
 
    s.session.end();
 }

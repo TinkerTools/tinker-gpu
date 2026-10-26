@@ -575,6 +575,7 @@ void polarState(RdtMask mask, const int* group, real factor)
    const bool expol = polpot::use_expol;
    assert(not expol or prepeporig);
    TINKER_FCALL2(acc1, cu1, polarState, mask, group, factor, expol, prepep, prepeporig);
+   inducePolarState(mask, group, factor);
 }
 }
 
@@ -962,11 +963,8 @@ void epolarDtPasses(int vers)
    for (int k = 0; k < npass; ++k) {
       const DtPass& p = pass[k];
       const bool counts = do_a and epolarCounts(k, pass);
-      if (dtPassIsIdle(dvers, p, counts)) {
-         induceForgetHistory(k);
+      if (dtPassIsIdle(dvers, p, counts))
          continue;
-      }
-      induceUseHistory(k, p.mask);
       epolarState(counts ? dvers : dvers & ~calc::analyz, p.mask, group, first, p.wa, p.wb, p.wc);
       first = false;
    }

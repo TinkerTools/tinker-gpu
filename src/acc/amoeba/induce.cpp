@@ -531,7 +531,7 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
       c14 = aspc[(nualt - 15 + 16) % 16];
       c15 = aspc[(nualt - 16 + 16) % 16];
       #pragma acc parallel loop independent async\
-              deviceptr(uind,uinp,\
+              deviceptr(polarity,uind,uinp,\
               udalt_00,udalt_01,udalt_02,udalt_03,udalt_04,udalt_05,udalt_06,\
               udalt_07,udalt_08,udalt_09,udalt_10,udalt_11,udalt_12,udalt_13,\
               udalt_14,udalt_15,upalt_00,upalt_01,upalt_02,upalt_03,upalt_04,\
@@ -562,6 +562,14 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
             + c04 * upalt_04[i][2] + c05 * upalt_05[i][2] + c06 * upalt_06[i][2] + c07 * upalt_07[i][2]
             + c08 * upalt_08[i][2] + c09 * upalt_09[i][2] + c10 * upalt_10[i][2] + c11 * upalt_11[i][2]
             + c12 * upalt_12[i][2] + c13 * upalt_13[i][2] + c14 * upalt_14[i][2] + c15 * upalt_15[i][2];
+         if (polarity[i] == 0) {
+            uind[i][0] = 0;
+            uind[i][1] = 0;
+            uind[i][2] = 0;
+            uinp[i][0] = 0;
+            uinp[i][1] = 0;
+            uinp[i][2] = 0;
+         }
       }
    } else if (polpred == UPred::GEAR and uinp) {
       real c00, c01, c02, c03, c04, c05;
@@ -572,7 +580,7 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
       c04 = gear[(nualt - 5 + 6) % 6];
       c05 = gear[(nualt - 6 + 6) % 6];
       #pragma acc parallel loop independent async\
-              deviceptr(uind,uinp,\
+              deviceptr(polarity,uind,uinp,\
               udalt_00,udalt_01,udalt_02,udalt_03,udalt_04,udalt_05,\
               upalt_00,upalt_01,upalt_02,upalt_03,upalt_04,upalt_05)
       for (int i = 0; i < n; ++i) {
@@ -588,6 +596,14 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
             + c04 * upalt_04[i][1] + c05 * upalt_05[i][1];
          uinp[i][2] = c00 * upalt_00[i][2] + c01 * upalt_01[i][2] + c02 * upalt_02[i][2] + c03 * upalt_03[i][2]
             + c04 * upalt_04[i][2] + c05 * upalt_05[i][2];
+         if (polarity[i] == 0) {
+            uind[i][0] = 0;
+            uind[i][1] = 0;
+            uind[i][2] = 0;
+            uinp[i][0] = 0;
+            uinp[i][1] = 0;
+            uinp[i][2] = 0;
+         }
       }
    } else if (polpred == UPred::LSQR and uinp) {
       real3_ptr ppd[7] = {udalt_00, udalt_01, udalt_02, udalt_03, udalt_04, udalt_05, udalt_06};
@@ -639,7 +655,7 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
       real* bd = udalt_lsqr_b;
       real* bp = upalt_lsqr_b;
       #pragma acc parallel loop independent async\
-                  deviceptr(uind,uinp,bd,bp,\
+                  deviceptr(polarity,uind,uinp,bd,bp,\
                   pd0,pd1,pd2,pd3,pd4,pd5,\
                   pp0,pp1,pp2,pp3,pp4,pp5)
       for (int i = 0; i < n; ++i) {
@@ -655,6 +671,14 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
             + bp[5] * pp5[i][1];
          uinp[i][2] = bp[0] * pp0[i][2] + bp[1] * pp1[i][2] + bp[2] * pp2[i][2] + bp[3] * pp3[i][2] + bp[4] * pp4[i][2]
             + bp[5] * pp5[i][2];
+         if (polarity[i] == 0) {
+            uind[i][0] = 0;
+            uind[i][1] = 0;
+            uind[i][2] = 0;
+            uinp[i][0] = 0;
+            uinp[i][1] = 0;
+            uinp[i][2] = 0;
+         }
       }
    } else if (polpred == UPred::ASPC) {
       real c00, c01, c02, c03, c04, c05, c06, c07;
@@ -676,7 +700,7 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
       c14 = aspc[(nualt - 15 + 16) % 16];
       c15 = aspc[(nualt - 16 + 16) % 16];
       #pragma acc parallel loop independent async\
-              deviceptr(uind,\
+              deviceptr(polarity,uind,\
               udalt_00,udalt_01,udalt_02,udalt_03,udalt_04,udalt_05,udalt_06,\
               udalt_07,udalt_08,udalt_09,udalt_10,udalt_11,udalt_12,udalt_13,\
               udalt_14,udalt_15)
@@ -693,6 +717,11 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
             + c04 * udalt_04[i][2] + c05 * udalt_05[i][2] + c06 * udalt_06[i][2] + c07 * udalt_07[i][2]
             + c08 * udalt_08[i][2] + c09 * udalt_09[i][2] + c10 * udalt_10[i][2] + c11 * udalt_11[i][2]
             + c12 * udalt_12[i][2] + c13 * udalt_13[i][2] + c14 * udalt_14[i][2] + c15 * udalt_15[i][2];
+         if (polarity[i] == 0) {
+            uind[i][0] = 0;
+            uind[i][1] = 0;
+            uind[i][2] = 0;
+         }
       }
    } else if (polpred == UPred::GEAR) {
       real c00, c01, c02, c03, c04, c05;
@@ -703,7 +732,7 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
       c04 = gear[(nualt - 5 + 6) % 6];
       c05 = gear[(nualt - 6 + 6) % 6];
       #pragma acc parallel loop independent async\
-              deviceptr(uind,\
+              deviceptr(polarity,uind,\
               udalt_00,udalt_01,udalt_02,udalt_03,udalt_04,udalt_05)
       for (int i = 0; i < n; ++i) {
          uind[i][0] = c00 * udalt_00[i][0] + c01 * udalt_01[i][0] + c02 * udalt_02[i][0] + c03 * udalt_03[i][0]
@@ -712,6 +741,11 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
             + c04 * udalt_04[i][1] + c05 * udalt_05[i][1];
          uind[i][2] = c00 * udalt_00[i][2] + c01 * udalt_01[i][2] + c02 * udalt_02[i][2] + c03 * udalt_03[i][2]
             + c04 * udalt_04[i][2] + c05 * udalt_05[i][2];
+         if (polarity[i] == 0) {
+            uind[i][0] = 0;
+            uind[i][1] = 0;
+            uind[i][2] = 0;
+         }
       }
    } else if (polpred == UPred::LSQR) {
       real3_ptr ppd[7] = {udalt_00, udalt_01, udalt_02, udalt_03, udalt_04, udalt_05, udalt_06};
@@ -750,7 +784,7 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
       real3_ptr pd5 = pd[5];
       real* bd = udalt_lsqr_b;
       #pragma acc parallel loop independent async\
-                  deviceptr(uind,bd,\
+                  deviceptr(polarity,uind,bd,\
                   pd0,pd1,pd2,pd3,pd4,pd5)
       for (int i = 0; i < n; ++i) {
          uind[i][0] = bd[0] * pd0[i][0] + bd[1] * pd1[i][0] + bd[2] * pd2[i][0] + bd[3] * pd3[i][0] + bd[4] * pd4[i][0]
@@ -759,6 +793,11 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
             + bd[5] * pd5[i][1];
          uind[i][2] = bd[0] * pd0[i][2] + bd[1] * pd1[i][2] + bd[2] * pd2[i][2] + bd[3] * pd3[i][2] + bd[4] * pd4[i][2]
             + bd[5] * pd5[i][2];
+         if (polarity[i] == 0) {
+            uind[i][0] = 0;
+            uind[i][1] = 0;
+            uind[i][2] = 0;
+         }
       }
    }
 }

@@ -928,26 +928,27 @@ TEST_CASE("FEP-predict", "[ff][fep]")
          copyPosToXyz(true);
          energy(calc::v1);
       }
-      // an endpoint the native lambda gives no weight is not solved, and its
-      // history is emptied rather than left to go stale
+      // an endpoint the native lambda gives no weight is not solved, and a
+      // solve there would start over rather than extrapolate a stale history
       DtPass pass[2];
       dtPasses(pass);
       REQUIRE((pass[0].wa == 0) != (pass[1].wa == 0));
       std::vector<State> before;
+      int len[2];
       for (int k : {0, 1}) {
          CAPTURE(k);
-         induceUseHistory(k, pass[k].mask);
+         len[k] = induceLoadHistory(pass[k].mask);
          before.emplace_back();
          if (pass[k].wa != 0)
-            REQUIRE(before.back().nualt >= maxualt);
+            REQUIRE(len[k] >= maxualt);
          else
-            REQUIRE(before.back().nualt == 0);
+            REQUIRE(len[k] == 0);
       }
 
       efepTrial(2, trial, e, en);
       for (int k : {0, 1}) {
          CAPTURE(k);
-         induceUseHistory(k, pass[k].mask);
+         REQUIRE(induceLoadHistory(pass[k].mask) == len[k]);
          requireSame(State(), before[k]);
       }
       s.session.end();

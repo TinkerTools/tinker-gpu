@@ -37,6 +37,8 @@ void sparsePrecondApply(const real (*rsd)[3], const real (*rsdp)[3], real (*zrsd
    TINKER_FCALL2(acc1, cu1, sparsePrecondApply, rsd, rsdp, zrsd, zrsdp);
 }
 
+static void markHistorySaved();
+
 TINKER_FVOID2(acc1, cu1, ulspredSaveP1, real (*)[3], real (*)[3], //
    const real (*)[3], const real (*)[3]);
 void ulspredSave(const real (*uind)[3], const real (*uinp)[3])
@@ -46,6 +48,7 @@ void ulspredSave(const real (*uind)[3], const real (*uinp)[3])
    // a trial that bypasses the history leaves no trace in it
    if (induceHistoryBypassed())
       return;
+   markHistorySaved();
 
    // clang-format off
    real(*ud)[3];
@@ -91,42 +94,69 @@ static real (**udalt[])[3] = {&udalt_00, &udalt_01, &udalt_02, &udalt_03, &udalt
 static real (**upalt[])[3] = {&upalt_00, &upalt_01, &upalt_02, &upalt_03, &upalt_04, &upalt_05, &upalt_06, &upalt_07,
    &upalt_08, &upalt_09, &upalt_10, &upalt_11, &upalt_12, &upalt_13, &upalt_14, &upalt_15};
 
-// The predictor history of the dual topology endpoint the globals do not hold.
 namespace {
+constexpr UHistoryKey kNoState = {RdtMask::ALL, nullptr, 1};
+
+// The second dual topology history, which the globals do not hold.
 struct UHistory
 {
    real (*ud[16])[3];
    real (*up[16])[3];
    int nualt;
-   RdtMask state; // the subsystem it was built for
+   UHistoryMark mark;
 };
 UHistory s_other;
-int s_active = -1;              // the endpoint the globals hold; -1 with a single history
-RdtMask s_state = RdtMask::ALL; // and the subsystem the globals' history was built for
-bool s_twoset = false;
+UHistoryMark s_mark;          // of the history the globals hold
+UHistoryKey s_key = kNoState; // the state of the solves to come
+unsigned long long s_serial;  // energy calls that saved to a history
+unsigned long long s_epoch;   // the xyz_epoch of the last save
+bool s_two = false;           // whether there is a second history
+bool s_twoset = false;        // and whether it keeps uinp as well
 
-// Puts the history of endpoint k into the globals.
-void swapHistory(int k)
+bool sameState(const UHistoryKey& a, const UHistoryKey& b)
 {
-   if (s_active == k)
-      return;
+   return a.mask == b.mask and a.group == b.group and a.factor == b.factor;
+}
+
+// Whether a history may be extrapolated by a solve at state k in energy call
+// `call`: it was built for that state and saved in that call or the one before.
+bool extendable(const UHistoryMark& m, const UHistoryKey& k, unsigned long long call)
+{
+   return sameState(m.key, k) and m.saved + 1 >= call;
+}
+
+// the energy call a save would belong to now
+unsigned long long currentCall()
+{
+   return xyz_epoch == s_epoch ? s_serial : s_serial + 1;
+}
+
+void swapHistory()
+{
    for (int i = 0; i < maxualt; ++i) {
       std::swap(*udalt[i], s_other.ud[i]);
       if (s_twoset)
          std::swap(*upalt[i], s_other.up[i]);
    }
    std::swap(nualt, s_other.nualt);
-   std::swap(s_state, s_other.state);
-   s_active = k;
+   std::swap(s_mark, s_other.mark);
 }
+}
+
+static void markHistorySaved()
+{
+   if (xyz_epoch != s_epoch) {
+      ++s_serial;
+      s_epoch = xyz_epoch;
+   }
+   s_mark.saved = s_serial;
 }
 
 void induceHistoryData(RcOp op, bool two_sets)
 {
    if (op & RcOp::DEALLOC) {
-      if (s_active >= 0) {
-         // the first history goes back into the globals, which are freed there
-         swapHistory(0);
+      if (s_two) {
+         // the epolar data routines free whichever history the globals hold
          for (int i = 0; i < maxualt; ++i) {
             darray::deallocate(s_other.ud[i]);
             if (s_twoset)
@@ -134,14 +164,18 @@ void induceHistoryData(RcOp op, bool two_sets)
          }
       }
       s_other = UHistory{};
-      s_active = -1;
+      s_mark = UHistoryMark{kNoState, 0};
+      s_key = kNoState;
+      s_two = false;
       s_twoset = false;
    }
 
    if (op & RcOp::ALLOC) {
+      s_mark = UHistoryMark{kNoState, 0};
       // LSQR keeps fits of its own beside the dipoles, so it gets no second
       // history and dual topology does not predict with it
       if (use_epdt and (polpred == UPred::ASPC or polpred == UPred::GEAR)) {
+         s_two = true;
          s_twoset = two_sets;
          s_other = UHistory{};
          for (int i = 0; i < maxualt; ++i) {
@@ -152,45 +186,52 @@ void induceHistoryData(RcOp op, bool two_sets)
                darray::zero(g::q0, n, s_other.up[i]);
             }
          }
-         s_other.state = RdtMask::ALL;
-         s_state = RdtMask::ALL;
-         s_active = 0;
+         s_other.mark = UHistoryMark{kNoState, 0};
       }
    }
 }
 
-void induceUseHistory(int k, RdtMask state)
+void inducePolarState(RdtMask mask, const int* group, real factor)
 {
-   if (s_active < 0)
-      return;
-   swapHistory(k);
-   // dipoles of another subsystem predict nothing about this one
-   if (s_state != state) {
-      nualt = 0;
-      s_state = state;
-   }
+   s_key = {mask, group, factor};
 }
 
-void induceForgetHistory(int k)
+void induceSelectHistory()
 {
-   if (s_active < 0)
+   if (not induceHistoryUsable() or induceHistoryBypassed())
       return;
-   if (k == s_active)
+   // the other history if it was built for this state, or else the staler one
+   const bool other = sameState(s_other.mark.key, s_key) or s_other.mark.saved < s_mark.saved;
+   if (s_two and not sameState(s_mark.key, s_key) and other)
+      swapHistory();
+   if (not extendable(s_mark, s_key, currentCall())) {
       nualt = 0;
-   else
-      s_other.nualt = 0;
+      s_mark.key = s_key;
+   }
 }
 
 bool induceHistoryUsable()
 {
-   return polpred != UPred::NONE and (not use_epdt or s_active >= 0);
+   return polpred != UPred::NONE and (not use_epdt or s_two);
+}
+
+int induceLoadHistory(RdtMask mask, real factor)
+{
+   const UHistoryKey key = {mask, emGroup(), factor};
+   if (s_two and not sameState(s_mark.key, key) and sameState(s_other.mark.key, key))
+      swapHistory();
+   // the next energy call is another one
+   return extendable(s_mark, key, s_serial + 1) ? nualt : 0;
 }
 
 InducedSnapshot::InducedSnapshot()
-   : m_ud{nullptr, nullptr}
-   , m_up{nullptr, nullptr}
-   , m_slot(false)
+   : m_ud{}
+   , m_up{}
+   , m_nslot(0)
    , m_nualt(0)
+   , m_mark{kNoState, 0}
+   , m_serial(0)
+   , m_epoch(0)
 {
    // Every buffer is picked by the flags that allocate it, never by its pointer:
    // deallocation leaves the pointers of an earlier system dangling.
@@ -204,14 +245,17 @@ InducedSnapshot::InducedSnapshot()
       m_vec.push_back(c);
    }
 
-   // A solve writes only slot nualt % maxualt of the predictor history and
-   // advances nualt (ulspredSave), so that slot and nualt are all a trial leaves
-   // behind. The history is in use as epolarData allocates it: AMOEBA alone
-   // keeps the second set, and neither AMOEBA+ nor HIPPO does.
+   // A solve writes one slot of the predictor history and advances nualt
+   // (ulspredSave): slot nualt % maxualt, or the first one if it empties the
+   // history first (induceSelectHistory). That slot, nualt and the marks are all
+   // a trial solve leaves behind. The history is in use as epolarData allocates
+   // it: AMOEBA alone keeps the second set, and neither AMOEBA+ nor HIPPO does.
    if (maxualt > 0 and not use_epdt) {
-      darray::allocate(n, &m_ud.copy);
-      if (not polpot::use_tholed and not mplpot::use_chgpen)
-         darray::allocate(n, &m_up.copy);
+      for (int k = 0; k < 2; ++k) {
+         darray::allocate(n, &m_ud[k].copy);
+         if (not polpot::use_tholed and not mplpot::use_chgpen)
+            darray::allocate(n, &m_up[k].copy);
+      }
    }
 
    // exchange polarization, as expolData allocates them
@@ -230,7 +274,8 @@ InducedSnapshot::~InducedSnapshot()
       darray::deallocate(c.copy);
    for (auto& c : m_mat)
       darray::deallocate(c.copy);
-   darray::deallocate(m_ud.copy, m_up.copy);
+   for (int k = 0; k < 2; ++k)
+      darray::deallocate(m_ud[k].copy, m_up[k].copy);
 }
 
 void InducedSnapshot::save(bool history)
@@ -241,16 +286,22 @@ void InducedSnapshot::save(bool history)
    for (auto& c : m_mat)
       darray::copy(g::q0, 9 * n, &c.copy[0][0][0], &(*c.src)[0][0][0]);
    m_nualt = nualt;
+   m_mark = s_mark;
+   m_serial = s_serial;
+   m_epoch = s_epoch;
 
-   // the slot the trial solve will overwrite
-   m_slot = history and m_ud.copy;
-   if (m_slot) {
-      int pos = nualt % maxualt;
-      m_ud.src = udalt[pos];
-      darray::copy(g::q0, n, m_ud.copy, *m_ud.src);
-      if (m_up.copy) {
-         m_up.src = upalt[pos];
-         darray::copy(g::q0, n, m_up.copy, *m_up.src);
+   // the slots the trial solve may overwrite
+   m_nslot = 0;
+   if (history and m_ud[0].copy) {
+      const int slots[2] = {nualt % maxualt, 0};
+      m_nslot = slots[0] == 0 ? 1 : 2;
+      for (int k = 0; k < m_nslot; ++k) {
+         m_ud[k].src = udalt[slots[k]];
+         darray::copy(g::q0, n, m_ud[k].copy, *m_ud[k].src);
+         if (m_up[k].copy) {
+            m_up[k].src = upalt[slots[k]];
+            darray::copy(g::q0, n, m_up[k].copy, *m_up[k].src);
+         }
       }
    }
 }
@@ -262,11 +313,14 @@ void InducedSnapshot::restore()
    for (auto& c : m_mat)
       darray::copy(g::q0, 9 * n, &(*c.src)[0][0][0], &c.copy[0][0][0]);
    nualt = m_nualt;
+   s_mark = m_mark;
+   s_serial = m_serial;
+   s_epoch = m_epoch;
 
-   if (m_slot) {
-      darray::copy(g::q0, n, *m_ud.src, m_ud.copy);
-      if (m_up.copy)
-         darray::copy(g::q0, n, *m_up.src, m_up.copy);
+   for (int k = 0; k < m_nslot; ++k) {
+      darray::copy(g::q0, n, *m_ud[k].src, m_ud[k].copy);
+      if (m_up[k].copy)
+         darray::copy(g::q0, n, *m_up[k].src, m_up[k].copy);
    }
 }
 }
@@ -286,9 +340,9 @@ UPred polarPredictor()
    // The Fortran reader turns prediction off for free energy perturbation and
    // for the adaptive lambda bias methods, so that their trial energies cannot
    // enter the history, and for dual topology polarization (predict.f). Here
-   // the trial solves bypass the predictor (InducedTrial), and dual topology
-   // keeps a history for each endpoint (induceUseHistory), so the dynamics
-   // keeps it.
+   // the trial solves bypass the predictor (InducedTrial), and each history
+   // is extrapolated only at the state it was built for (induceSelectHistory),
+   // so the dynamics keeps it.
    const bool trials = use_fep or use_ost or use_abf or use_meta;
    if ((trials or use_epdt) and (rc_flag & calc::md)) {
       for (int i = 0; i < keys::nkey; ++i) {
@@ -346,6 +400,7 @@ void inducePrint(const real (*ud)[3])
 
 void induce(real (*ud)[3], real (*up)[3])
 {
+   induceSelectHistory();
    induceMutualPcg1(ud, up);
    if (not induceFailed()) {
       ulspredSave(ud, up);

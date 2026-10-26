@@ -869,7 +869,7 @@ TEST_CASE("LMDAMC-predictor", "[ff][lmdamc]")
       dtPasses(pass);
       std::vector<State> before;
       for (int k : {0, 1}) {
-         induceUseHistory(k, pass[k].mask);
+         induceLoadHistory(pass[k].mask);
          before.emplace_back();
          REQUIRE(before.back().nualt >= 3);
       }
@@ -881,7 +881,7 @@ TEST_CASE("LMDAMC-predictor", "[ff][lmdamc]")
       REQUIRE(mcTrial(lambda, 1, e0 + 1.0e6));
       for (int k : {0, 1}) {
          CAPTURE(k);
-         induceUseHistory(k, pass[k].mask);
+         induceLoadHistory(pass[k].mask);
          const State after;
          REQUIRE(after.nualt == before[k].nualt);
          for (size_t i = 0; i < before[k].slots.size(); ++i) {
@@ -891,6 +891,76 @@ TEST_CASE("LMDAMC-predictor", "[ff][lmdamc]")
       }
       s.session.end();
    }
+}
+
+namespace {
+// the history length one more solve leaves (induce.cpp:ulspredSave)
+int nextNualt(int nu)
+{
+   ++nu;
+   return nu > 2 * maxualt ? nu - maxualt : nu;
+}
+}
+
+TEST_CASE("LMDAMC-predictor-restart", "[ff][lmdamc]")
+{
+   // A single topology history holds the dipoles of one polarization lambda.
+   // A rejected move leaves the lambda where it was and the predictor carries
+   // on; an accepted one moves it, and the next solve starts over from the
+   // direct guess.
+   for (const char* mode : {"abf", "meta"}) {
+      CAPTURE(mode);
+      Setup s(kIonwat, mode, kMd, 0., "integrator verlet\n");
+      REQUIRE_FALSE(use_epdt);
+      REQUIRE(use_prst);
+      const double e0 = mcLoad();
+      for (int i = 0; i < maxualt; ++i)
+         energy(calc::v4);
+      REQUIRE(induceGuess() == UGuess::PREDICT);
+
+      const double l0 = lambda;
+      int nu = nualt;
+      REQUIRE_FALSE(mcTrial(l0, 1, -1.0e30));
+      REQUIRE(lambda == l0);
+      energy(calc::v4);
+      REQUIRE(nualt == nextNualt(nu));
+      REQUIRE(induceGuess() == UGuess::PREDICT);
+
+      REQUIRE(mcTrial(l0, 1, e0 + 1.0e6));
+      REQUIRE(lambda != l0);
+      energy(calc::v4);
+      REQUIRE(nualt == 1);
+      REQUIRE(induceGuess() == UGuess::DIRECT);
+      s.session.end();
+   }
+}
+
+TEST_CASE("LMDAMC-predictor-phases", "[ff][lmdamc]")
+{
+   // ABF moves a single topology lambda only in the propagation phase of each
+   // interval and holds it through the equilibration and averaging phases, so
+   // the predictor history starts over with each solve while lambda moves and
+   // fills up while it is held.
+   Setup s(kIonwat, "abf", kMd, 0.,
+      "integrator verlet\nlambda-propagate langevin\nlambda-interval 40\nlambda-eqratio 0.25 0.25\n");
+   REQUIRE_FALSE(use_lmdamc);
+   REQUIRE_FALSE(use_epdt);
+   REQUIRE(lmdanpa == 10);
+   REQUIRE(lmdanpa + lmdanpb + lmdanpc == 40);
+   TestRemoveFileOnExit fdyn("ionwat.dyn");
+   const int oldiwrite = inform::iwrite;
+   inform::iwrite = 1000;
+
+   // lambda moves after each of the first 10 steps, so the force calls of the
+   // next 20 are the ones at the held lambda
+   const double l0 = lambda;
+   mdPropagate(30, 0.001);
+   REQUIRE(lambda != l0);
+   REQUIRE(nualt == 20);
+   REQUIRE(induceGuess() == UGuess::PREDICT);
+
+   inform::iwrite = oldiwrite;
+   s.session.end();
 }
 
 TEST_CASE("LMDAMC-thermostat", "[ff][lmdamc]")

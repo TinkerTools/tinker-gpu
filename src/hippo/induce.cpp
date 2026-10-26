@@ -32,6 +32,7 @@ static void induceMutualPcg2(real (*uind)[3])
 
 void induce2(real (*ud)[3])
 {
+   induceSelectHistory();
    // The same solver takes exchange polarization.
    induceMutualPcg2(ud);
 

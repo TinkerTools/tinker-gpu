@@ -40,26 +40,49 @@ void ulspredSave(const real (*uind)[3], const real (*uinp)[3]);
 /// adaptive lambda bias methods and of dual topology polarization, where the
 /// reader turns prediction off and the POLAR-PREDICT keyword is read again here.
 UPred polarPredictor();
+/// Extrapolates the starting dipoles from the full history. An atom of zero
+/// polarizability gets none: the solve never moves its dipole, and a history
+/// saved while it was polarizable would otherwise leave one there.
 void ulspredSum(real (*uind)[3], real (*uinp)[3]);
 
-/// Dual topology polarization solves two parameter states that do not move with
-/// lambda, so each endpoint keeps a predictor history of its own; the globals
-/// hold the one selected last. Allocates the second history after, and puts
-/// the first back before, the epolar data routines handle the globals;
-/// \c two_sets is whether the system keeps the uinp history too.
+/// The polarization state a solve sees, as polarState() last set it: which
+/// subsystem is polarizable, and the factor its ligand atoms are scaled by.
+struct UHistoryKey
+{
+   RdtMask mask;
+   const int* group;
+   real factor;
+};
+/// What decides whether a predictor history may be extrapolated: the state it
+/// was built for, and the energy call that last saved to it.
+struct UHistoryMark
+{
+   UHistoryKey key;
+   unsigned long long saved;
+};
+
+/// A predictor history is extrapolated only by solves at the polarization state
+/// it was built for, and only if it was saved in the previous energy call that
+/// saved any: lambda windows, a moving lambda particle and accepted Monte Carlo
+/// lambda moves change the single topology state, and a skipped dual topology
+/// pass leaves its endpoint's history behind. Dual topology solves two states
+/// that do not move with lambda and keeps a history for each, picked by state.
+/// Allocates the second history after the epolar data routines allocate the
+/// globals, and frees it before they free them; \c two_sets is whether the
+/// system keeps the uinp history too.
 void induceHistoryData(RcOp op, bool two_sets);
-/// Selects the predictor history of dual topology endpoint \c k for the solves
-/// to come; nothing to do without per-endpoint histories. \c state is the
-/// subsystem the endpoint solves: a staged relative leg changes the charging
-/// ligand, and a history built for another subsystem is emptied rather than
-/// extrapolated from.
-void induceUseHistory(int k, RdtMask state);
-/// Empties the history of endpoint \c k, whose solves were skipped, so that
-/// it is never extrapolated across the gap.
-void induceForgetHistory(int k);
+/// Records the polarization state of the solves to come (polarState()).
+void inducePolarState(RdtMask mask, const int* group, real factor);
+/// Puts the history of the solve at hand in the globals, emptied unless it may
+/// be extrapolated; a trial that bypasses the history leaves it alone.
+void induceSelectHistory();
 /// Whether solves may predict from and save to the history: a predictor is
 /// chosen and, under dual topology, each endpoint has a history of its own.
 bool induceHistoryUsable();
+/// For tests: puts the history of the dual topology endpoint \c mask in the
+/// globals if there is one, and returns the length a solve there in the next
+/// energy call would extrapolate from, zero if it would start over.
+int induceLoadHistory(RdtMask mask, real factor = 1);
 
 /// A copy of the induced dipoles, the predictor history and, with exchange
 /// polarization, its matrices, so that an energy evaluated at a trial geometry
@@ -85,9 +108,11 @@ private:
    };
    std::vector<Copy<real[3]>> m_vec;
    std::vector<Copy<real[3][3]>> m_mat;
-   Copy<real[3]> m_ud, m_up; // the one predictor slot a trial overwrites
-   bool m_slot;              // whether the last save() copied it
+   Copy<real[3]> m_ud[2], m_up[2]; // the predictor slots a trial solve may overwrite
+   int m_nslot;                    // how many of them the last save() copied
    int m_nualt;
+   UHistoryMark m_mark;
+   unsigned long long m_serial, m_epoch;
 };
 
 /// An energy evaluated at a state the dynamics is not in. When it ends the
