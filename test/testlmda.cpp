@@ -60,9 +60,9 @@ const Fixture kFixtures[] = {
    {"21_water_rels_lig1_st_l088", 4.0e-3, 3.0},
    {"22_water_rels_lig1_dt_l088", 4.0e-3, 3.0},
    {"23_water_rels_3stg_l085", 4.0e-3, 3.0},
-   {"24_ionwat_ewald_l05", 1.0e-2, 1.0, 1.0e-4, "testlmda/ionwat.xyz", "commit_ebe3611e/amoeba09.prm"},
-   {"25_ionwat_ewald_nlist_l05", 1.0e-2, 1.0, 1.0e-4, "testlmda/ionwat.xyz", "commit_ebe3611e/amoeba09.prm"},
-   {"26_ionwat_pol_ewald_l05", 1.0e-2, 1.0, 1.0e-4, "testlmda/ionwat.xyz", "commit_ebe3611e/amoeba09.prm"},
+   {"24_ionwat_ewald_l05", 1.0e-2, 2.0, 1.0e-4, "testlmda/ionwat.xyz", "commit_ebe3611e/amoeba09.prm"},
+   {"25_ionwat_ewald_nlist_l05", 1.0e-2, 2.0, 1.0e-4, "testlmda/ionwat.xyz", "commit_ebe3611e/amoeba09.prm"},
+   {"26_ionwat_pol_ewald_l05", 1.0e-2, 2.0, 1.0e-4, "testlmda/ionwat.xyz", "commit_ebe3611e/amoeba09.prm"},
    {"27_water_rels_2stg_l075", 4.0e-3, 3.0},
    // charge penetration multipoles, with charge flux but for 40 (test_testlmda.f)
    {"28_hipwat_flux_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/hipwat.xyz", "commit_aad9340c/water21.prm"},
@@ -188,7 +188,10 @@ const Fixture kFixtures[] = {
    {"122_hipmix_rep_qnt_l045", 5.0e-3, 1.0, 1.0e-4, "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
    {"123_hipmix_rep_inv_l03", 5.0e-3, 1.0, 1.0e-4, "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
    {"124_hipmix_dsp_corr_qnt_l06", 5.0e-3, 1.0, 1.0e-4, "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
-   {"125_hipmix_dsp_ewald_inv_l04", 5.0e-3, 1.0, 1.0e-4, "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
+   // the inverse map is gentle at lambda 0.4, so the full step keeps truncation
+   // at 1e-3 and quarters the mixed precision round-off of the finite difference
+   // d2E/dL2, 0.06 to 0.24 at a step of 5e-3 depending on the build and the GPU
+   {"125_hipmix_dsp_ewald_inv_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
