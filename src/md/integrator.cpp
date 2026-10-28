@@ -161,6 +161,27 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
    m_thermo->control2(dt, save);
    m_baro->control2(dt);
 }
+
+void BasicIntegrator::refreshForces()
+{
+   // The versions of a step, which keep the energy under lambda dynamics: the
+   // bias of OST adds its force only to an energy call.
+   int vers = (calc::grad | calc::virial) & rc_flag;
+   if (use_dlmda)
+      vers |= calc::energy & rc_flag;
+   if (nrespa == 1) {
+      energy(vers);
+   } else {
+      const int vg = vers & ~calc::virial;
+      energy(vg, RESPA_FAST, respaTSConfig());
+      copyGradient(gx1, gy1, gz1, gx, gy, gz);
+      energy(vg, RESPA_SLOW, respaTSConfig());
+      copyGradient(gx2, gy2, gz2, gx, gy, gz);
+      energy(vers);
+   }
+   if ((rc_flag & calc::virial) and not atomic)
+      hcVirial();
+}
 }
 
 namespace tinker {

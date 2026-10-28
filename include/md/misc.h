@@ -73,6 +73,10 @@ void mdrest(int istep);
 void mdrestPrintP1(bool prints, double e1, double e2, double e3, double totmass);
 /// \ingroup mdintg
 void mdPropagate(int nsteps, time_prec dt_ps);
+/// \ingroup mdintg
+/// Finds again the forces the integrator starts its next step from, after the
+/// coordinates were changed between steps.
+void mdRefreshForces();
 
 /// \ingroup mdintg
 constexpr unsigned RESPA_FAST = 1; // 2**0, fast group shall be 0.

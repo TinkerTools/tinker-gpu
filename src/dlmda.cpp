@@ -1,6 +1,7 @@
 #include "ff/dlmda.h"
 #include "ff/ost.h"
 #include "ff/eost.h"
+#include "ff/watermc.h"
 #include "ff/eabf.h"
 #include "ff/ethrmint.h"
 #include "ff/efep.h"
@@ -1036,6 +1037,10 @@ void lmdaWinDyn(int istep)
    // try a Monte Carlo move of an adaptively biased lambda
    if (use_lmdamc and lmdaBiased())
       lmdaMonte(istep);
+
+   // try a Monte Carlo hop of a water near the ligand, once the samples of
+   // the step are taken
+   waterMonte(istep);
 }
 
 // The gradients held by the integrator are not updated for the new lambda, so

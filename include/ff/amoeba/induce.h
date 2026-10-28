@@ -76,6 +76,8 @@ void inducePolarState(RdtMask mask, const int* group, real factor);
 /// Puts the history of the solve at hand in the globals, emptied unless it may
 /// be extrapolated; a trial that bypasses the history leaves it alone.
 void induceSelectHistory();
+/// Empties every history, as for coordinates that jumped since the last save.
+void induceForgetHistory();
 /// Whether solves may predict from and save to the history: a predictor is
 /// chosen and, under dual topology, each endpoint has a history of its own.
 bool induceHistoryUsable();

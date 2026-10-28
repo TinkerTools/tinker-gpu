@@ -40,6 +40,7 @@ void finish()
 #include "ff/energy.h"
 #include "ff/molecule.h"
 #include "ff/nblist.h"
+#include "ff/watermc.h"
 #include "md/misc.h"
 #include "md/pq.h"
 #include "md/rattle.h"
@@ -75,6 +76,7 @@ void deviceData(RcOp op)
    // and will be used in nblist setups.
    RcMan nbl42{nblistData, op};
    RcMan dlmda42{dlmdaData2, op};
+   RcMan wmc42{waterMcData, op};
 
    RcMan rattle42{rattleData, op};
    RcMan vel42{mdVelData, op};

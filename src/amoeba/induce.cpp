@@ -210,6 +210,12 @@ void induceSelectHistory()
    }
 }
 
+void induceForgetHistory()
+{
+   nualt = 0;
+   s_other.nualt = 0;
+}
+
 bool induceHistoryUsable()
 {
    return polpred != UPred::NONE and (not use_epdt or s_two);

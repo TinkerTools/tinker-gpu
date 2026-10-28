@@ -1,4 +1,5 @@
 #include "ff/dlmda.h"
+#include "ff/watermc.h"
 #include "math/pow2.h"
 #include "md/integrator.h"
 #include "md/misc.h"
@@ -124,6 +125,12 @@ void mdIntegrateData(RcOp op)
          }
       }
 
+      // A water hop finds again the forces the next step starts from, which
+      // these integrators cannot do without resetting their own state.
+      if (waterMcOn() and (integrator == IntegratorEnum::NHC1996 or integrator == IntegratorEnum::LEAPFROGLP))
+         TINKER_THROW("DYNAMIC  --  Monte Carlo Water Moves Require the Verlet, RESPA, Stochastic, LP22 or "
+                      "NHC2006 Integrator");
+
       intg = nullptr;
       if (integrator == IntegratorEnum::RESPA)
          intg = new RespaIntegrator(thermostat, barostat);
@@ -143,6 +150,13 @@ void mdIntegrateData(RcOp op)
          TINKER_THROW(format("Integrator \"%s\" is not available.", itg.trim().c_str()));
       intg->printDetail(stdout);
    }
+}
+
+void mdRefreshForces()
+{
+   // nothing holds forces outside of dynamics
+   if (intg)
+      intg->refreshForces();
 }
 }
 

@@ -1,5 +1,6 @@
 #include "ff/dlmda.h"
 #include "ff/ost.h"
+#include "ff/watermc.h"
 #include "tool/tinkersuppl.h"
 
 namespace tinker {
@@ -9,5 +10,6 @@ void mechanic2()
 
    dlmda_mech();
    ost_mech();
+   waterMcMech();
 }
 }

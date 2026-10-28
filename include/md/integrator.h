@@ -428,6 +428,9 @@ public:
    BasicIntegrator();
    virtual ~BasicIntegrator();
    virtual void dynamic(int istep, time_prec dt);
+   /// Finds again the forces the next step starts from, for coordinates that
+   /// were changed between steps.
+   void refreshForces();
 };
 
 /// \ingroup mdintg

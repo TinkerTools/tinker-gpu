@@ -1,5 +1,6 @@
 #include "ff/atom.h"
 #include "ff/efep.h"
+#include "ff/watermc.h"
 #include "ff/ethrmint.h"
 #include "ff/eabf.h"
 #include "md/misc.h"
@@ -163,9 +164,10 @@ void xDynamic(int, char**)
       }
    }
 
-   // Monte Carlo lambda moves are accepted at a set temperature
+   // Monte Carlo lambda moves and water hops are accepted at a set temperature
 
    lmdaMonteCheck();
+   waterMcCheck();
 
    // perform the setup functions needed to run dynamics
 
@@ -205,6 +207,7 @@ void xDynamic(int, char**)
 
    // save lambda dynamics information
    mdsaveLmdaFinal(nstep);
+   waterMcFinal();
 
    auto d_us = std::chrono::duration_cast<std::chrono::microseconds>(t_end - t_start).count();
    double us1 = (dt * 1000.) * nstep * 86400;
