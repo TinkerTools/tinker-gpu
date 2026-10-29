@@ -77,7 +77,8 @@ void elj_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer 
       real r2 = image2(xr, yr, zr);
       if (r2 <= off * off and incl) {
          real r = REAL_SQRT(r2);
-         real invr = REAL_RECIP(r);
+         // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
+         real invr = REAL_RSQRT_V2(r2);
          real rv = radmin[ijvdw * njvdw + kjvdw];
          real eps = epsilon[ijvdw * njvdw + kjvdw];
          real e, de;
@@ -167,7 +168,8 @@ void elj_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer 
          real r2 = image2(xr, yr, zr);
          if (r2 <= off * off and incl) {
             real r = REAL_SQRT(r2);
-            real invr = REAL_RECIP(r);
+            // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
+            real invr = REAL_RSQRT_V2(r2);
             real rv = radmin[ijvdw * njvdw + kjvdw];
             real eps = epsilon[ijvdw * njvdw + kjvdw];
             real e, de;
@@ -260,7 +262,8 @@ void elj_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer 
          real r2 = image2(xr, yr, zr);
          if (r2 <= off * off and incl) {
             real r = REAL_SQRT(r2);
-            real invr = REAL_RECIP(r);
+            // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
+            real invr = REAL_RSQRT_V2(r2);
             real rv = radmin[ijvdw * njvdw + kjvdw];
             real eps = epsilon[ijvdw * njvdw + kjvdw];
             real e, de;

@@ -636,7 +636,7 @@ TEST_CASE("LMDAMC-deposit", "[ff][lmdamc]")
    lmdaavg = lambda;
    metaDeposit(4);
 
-   // any move within two widths of the peak is then downhill
+   // a move of up to two lambda bins leaves the peak, so it is downhill
    lmdamcmove = 2.0 * wlmda;
    const double lold = lambda;
    REQUIRE(mcTrial(lold, 4, e0));
@@ -711,6 +711,7 @@ TEST_CASE("LMDAMC-stale-meta", "[ff][lmdamc]")
    hbias = 1000.0;
    lmdaavg = lpeak;
    metaDeposit(4);
+   // a move of up to two lambda bins leaves the peak, so it is downhill
    lmdamcmove = 2.0 * wlmda;
 
    // after a scaling barostat the old energy is found again

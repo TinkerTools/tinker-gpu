@@ -128,21 +128,30 @@ void emplarast_cu1c(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, EnergyBuffe
       // an annihilated site has no multipole and no induced dipole
       bool weighted = (si != 0 or dsi != 0) and (sk != 0 or dsk != 0);
       if (r2 <= off * off and incl and weighted and grpPairLive(live, gi[klane], gk)) {
-         real pga = thlval[njpolar * jpi[klane] + jpk];
          real e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1;
-         real edl1 = 0;
-         pairMplar<Ver, NON_EWALD, true>(r2, make_real3(xr, yr, zr), scalea - 1, scaleb - 1, scalec - 1, scaled - 1,
-            ci[klane], make_real3(dix[klane], diy[klane], diz[klane]), qixx[klane], qixy[klane], qixz[klane],
-            qiyy[klane], qiyz[klane], qizz[klane], make_real3(uidx[klane], uidy[klane], uidz[klane]),
-            make_real3(uipx[klane], uipy[klane], uipz[klane]), pdi[klane], pga, ck,
-            make_real3(dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x]), qkxx, qkxy, qkxz, qkyy, qkyz, qkzz,
-            make_real3(ukdx, ukdy, ukdz), make_real3(ukpx, ukpy, ukpz), pdk, f, aewald, frcxi, frcyi, frczi, frcxk,
-            frcyk, frczk, trqxi, trqyi, trqzi, trqxk, trqyk, trqzk, e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1, si, sk, dsi,
-            dsk, deldl, &edl1);
+         if CONSTEXPR (do_g) {
+            // the energy comes from pairMplarEnergyAst below
+            constexpr int gv = Ver::value & (calc::grad | calc::virial);
+            using VerGV = calc::Vers<gv>;
+            real pga = thlval[njpolar * jpi[klane] + jpk];
+            pairMplar<VerGV, NON_EWALD, true>(r2, make_real3(xr, yr, zr), scalea - 1, scaleb - 1, scalec - 1,
+               scaled - 1, ci[klane], make_real3(dix[klane], diy[klane], diz[klane]), qixx[klane], qixy[klane],
+               qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], make_real3(uidx[klane], uidy[klane], uidz[klane]),
+               make_real3(uipx[klane], uipy[klane], uipz[klane]), pdi[klane], pga, ck,
+               make_real3(dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x]), qkxx, qkxy, qkxz, qkyy, qkyz, qkzz,
+               make_real3(ukdx, ukdy, ukdz), make_real3(ukpx, ukpy, ukpz), pdk, f, aewald, frcxi, frcyi, frczi, frcxk,
+               frcyk, frczk, trqxi, trqyi, trqzi, trqxk, trqyk, trqzk, e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1, si, sk,
+               dsi, dsk);
+         }
          if CONSTEXPR (do_e) {
-            ebuftl += floatTo<ebuf_prec>(e1);
+            // one out-of-line body for every version, so they agree to the bit
+            real2 e2 = pairMplarEnergyAst<NON_EWALD>(make_real3(xr, yr, zr), scalea - 1, ci[klane],
+               make_real3(dix[klane], diy[klane], diz[klane]), qixx[klane], qixy[klane], qixz[klane], qiyy[klane],
+               qiyz[klane], qizz[klane], ck, make_real3(dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x]), qkxx,
+               qkxy, qkxz, qkyy, qkyz, qkzz, f, aewald, si, sk, dsi, dsk, deldl);
+            ebuftl += floatTo<ebuf_prec>(e2.x);
             if CONSTEXPR (do_dl1)
-               demdltl += floatTo<ebuf_prec>(edl1);
+               demdltl += floatTo<ebuf_prec>(e2.y);
          }
          if CONSTEXPR (do_v) {
             vbuftlxx += floatTo<vbuf_prec>(vxx1);

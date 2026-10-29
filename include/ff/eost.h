@@ -20,6 +20,8 @@ extern std::vector<double> vkernelmax;
 // metadynamics gaussian history (1-based)
 extern std::vector<double> metalhist, metahhist, metawhist;
 extern std::vector<int> metaihist; // lmdastep stamp per deposited metadynamics gaussian
+extern std::vector<int> metanext;  // next metadynamics gaussian in the same lambda bin
+extern std::vector<int> metahead;  // first metadynamics gaussian of each lambda bin, size nlmda+1
 
 // metadynamics bias and its lambda derivative.
 extern std::vector<double> vmetagrid, dvmetagrid;
@@ -78,9 +80,9 @@ void metaDeposit(int istep);
 void buildOstIndex();
 void resizeOstHist();
 void ensureFlambda(double dudl);
-void addKernelPoint(int ilmda, int iflmda, double e, double ldelta, double fldelta, double sigl2, double sigf2);
-void addGkernelHist(int ihist);
-void addKernelHist(int ihist);
+void addKernelPoint(int ilmda, int iflmda, double e, double ldelta, double fldelta, double sigl2, double sigf2,
+   double rt);
+void addKernelHist(int ihist, bool dofkern);
 void buildGkernel();
 void buildKernels();
 void updateGkernel();
@@ -91,8 +93,14 @@ void egkernelInterpolate(double& egbias, double& dgdl, double& dgdfl);
 void eMetaBias(double lmda, double& vbias, double& dvdl);
 void eMetaBiasInterpolate(double lmda, double& vbias, double& dvdl);
 void addMetaGrid(int ihist);
+void buildMetaIndex();
 double metaDeltaG();
 void resizeMeta();
+
+// bins spanned by a cutoff, and the lambda bin and center of a mirror image
+int nbinCut(double cut, double width);
+void lmdaImgBin(int lcenter, int& lcount, int& nimg);
+double lmdaImgSrc(int lcenter, int img, double lsrc);
 
 // hybrid global + local tempering
 double ostVminimax();

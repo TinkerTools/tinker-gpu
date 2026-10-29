@@ -15,6 +15,10 @@
 #include <vector>
 
 namespace tinker {
+// the gaussian prefactors follow eost.f in double precision, and tinker::pi is
+// only a float in a mixed precision build
+static constexpr double dpi = M_PI;
+
 // saved gaussian history (1-based, element 0 unused)
 std::vector<int> osthist;
 std::vector<int> ostnext;
@@ -30,6 +34,8 @@ std::vector<double> vkernelmax;
 // metadynamics gaussian history (1-based)
 std::vector<double> metalhist, metahhist, metawhist;
 std::vector<int> metaihist; // lmdastep stamp per deposited metadynamics gaussian
+std::vector<int> metanext;  // next metadynamics gaussian in the same lambda bin
+std::vector<int> metahead;  // first metadynamics gaussian of each lambda bin, size nlmda+1
 
 // metadynamics bias and dV/dlambda at each lambda bin center, size nlmda+1
 std::vector<double> vmetagrid, dvmetagrid;
@@ -100,7 +106,7 @@ double temperedHeight(double vglobal, double vlocal)
 }
 
 // buildostindex -- rebuild the packed bins and linked-list lookup from the saved
-// real centers (eost.f:1240).
+// real centers (eost.f:buildostindex).
 void buildOstIndex()
 {
    std::fill(osthead.begin(), osthead.end(), 0);
@@ -118,7 +124,7 @@ void buildOstIndex()
 }
 
 // resizeosthist -- double the history storage, preserving saved data
-// (eost.f:1144). std::vector::resize keeps existing elements.
+// (eost.f:resizeosthist). std::vector::resize keeps existing elements.
 void resizeOstHist()
 {
    int newsize = 2 * sizelmdahist;
@@ -134,17 +140,14 @@ void resizeOstHist()
 }
 
 // ensureflambda -- grow the flambda grid (and shift/reallocate the four kernel
-// grids) if the new dU/dlambda falls too near the current edge (eost.f:490).
+// grids) if the new dU/dlambda falls too near the current edge (eost.f:ensureflambda).
 void ensureFlambda(double dudl)
 {
    int iflmda = (int)std::lround(dudl / wflmda) + fli0;
 
    int nchunk = 100;
    int nbuffer = nchunk;
-   int nfcut = (int)(oststdev * maxwfhist / wflmda);
-   if ((double)nfcut * wflmda < oststdev * maxwfhist + wflmda2)
-      nfcut = nfcut + 1;
-   nfcut = nfcut + nbuffer;
+   int nfcut = (int)(oststdev * maxwfhist / wflmda) + 1 + nbuffer;
    if (iflmda - nfcut >= 1 && iflmda + nfcut <= nflmda)
       return;
 
@@ -190,25 +193,28 @@ void ensureFlambda(double dudl)
 }
 
 // addkernelpoint -- update one g kernel cell and the associated f kernel
-// numerator/partition-function accumulators (eost.f:1606).
-void addKernelPoint(int ilmda, int iflmda, double e, double ldelta, double fldelta, double sigl2, double sigf2)
+// numerator/partition-function accumulators, given the thermal energy rt; the
+// caller sets the row mean force (eost.f:addkernelpoint).
+void addKernelPoint(int ilmda, int iflmda, double e, double ldelta, double fldelta, double sigl2, double sigf2,
+   double rt)
 {
-   const double rt = units::gasconst * bath::kelvin;
    int g = gidx(ilmda, iflmda);
    double oldg = gkernel[g];
    double newg = oldg + e;
 
    // the accumulators carry the largest bias in the row as a common factor,
-   // so they are rescaled whenever this point raises it
+   // so they are rescaled whenever this point raises it, and the new point
+   // then has unit weight
    double vmax = vkernelmax[ilmda];
-   if (newg > vmax) {
+   bool raised = (newg > vmax);
+   if (raised) {
       double scale = std::exp((vmax - newg) / rt);
       lmdafsum[ilmda] *= scale;
       lmdafwt[ilmda] *= scale;
       vmax = newg;
    }
    double oldweight = (oldg == 0.0) ? 0.0 : std::exp((oldg - vmax) / rt);
-   double newweight = std::exp((newg - vmax) / rt);
+   double newweight = raised ? 1.0 : std::exp((newg - vmax) / rt);
    double delweight = newweight - oldweight;
    double flmda = (double)(iflmda - fli0) * wflmda;
    double dgdl = -ldelta * e / sigl2;
@@ -221,16 +227,13 @@ void addKernelPoint(int ilmda, int iflmda, double e, double ldelta, double fldel
    glkernel[g] += dgdl;
    lmdafsum[ilmda] += flmda * delweight;
    lmdafwt[ilmda] += delweight;
-   if (lmdafwt[ilmda] == 0.0)
-      lmdafmean[ilmda] = 0.0;
-   else
-      lmdafmean[ilmda] = lmdafsum[ilmda] / lmdafwt[ilmda];
 }
 
-// Spread one saved histogram source over nearby grid bins. When do_f is true the
-// f-kernel accumulators are updated too (addkernelhist); otherwise only the g
-// kernel value is spread (addgkernelhist). eost.f:1409 / 1507.
-void addKernelHistImpl(int ihist, bool do_f)
+// addkernelhist -- spread one saved histogram source over nearby grid bins;
+// when dofkern is set it also updates the g kernel derivatives and the f kernel
+// accumulators, otherwise only the g kernel and its running maxima
+// (eost.f:addkernelhist).
+void addKernelHist(int ihist, bool dofkern)
 {
    int k = osthist[ihist];
    int lsrc, fsrc;
@@ -239,15 +242,12 @@ void addKernelHistImpl(int ihist, bool do_f)
    double sigf = ostwfhist[ihist];
    double sigl2 = sigl * sigl;
    double sigf2 = sigf * sigf;
-   double pref = osthhist[ihist] / (2.0 * pi * sigl * sigf);
+   double pref = osthhist[ihist] / (2.0 * dpi * sigl * sigf);
    double sourcefl = lmdafhist[ihist];
+   const double rt = units::gasconst * bath::kelvin;
 
-   int nlcut = (int)(oststdev * sigl / wlmda);
-   if ((double)nlcut * wlmda < oststdev * sigl + wlmda2)
-      nlcut = nlcut + 1;
-   int nfcut = (int)(oststdev * sigf / wflmda);
-   if ((double)nfcut * wflmda < oststdev * sigf + wflmda2)
-      nfcut = nfcut + 1;
+   int nlcut = nbinCut(oststdev * sigl, wlmda);
+   int nfcut = nbinCut(oststdev * sigf, wflmda);
    int iflmda1 = std::max(1, fsrc - nfcut);
    int iflmda2 = std::min(nflmda, fsrc + nfcut);
 
@@ -266,8 +266,6 @@ void addKernelHistImpl(int ihist, bool do_f)
       }
       int ilmda1 = std::max(1, llog - nlcut);
       int ilmda2 = std::min(nlmda, llog + nlcut);
-      if (ilmda1 > ilmda2)
-         continue;
       for (int ilmda = ilmda1; ilmda <= ilmda2; ++ilmda) {
          double targetl = (double)(ilmda - 1) * wlmda;
          double ldelta = targetl - sourcel;
@@ -283,20 +281,24 @@ void addKernelHistImpl(int ihist, bool do_f)
             double fldelta2 = fldelta * fldelta;
             double expfl = std::exp(-fldelta2 / (2.0 * sigf2));
             double e = pref * expl * expfl;
-            if (do_f) {
-               addKernelPoint(ilmda, iflmda, e, ldelta, fldelta, sigl2, sigf2);
+            if (dofkern) {
+               addKernelPoint(ilmda, iflmda, e, ldelta, fldelta, sigl2, sigf2, rt);
             } else {
                double newg = gkernel[gidx(ilmda, iflmda)] + e;
                gkernel[gidx(ilmda, iflmda)] = newg;
                vkernelmax[ilmda] = std::max(vkernelmax[ilmda], newg);
             }
          }
+
+         // set the mean force of the row once all its points are added
+         if (dofkern)
+            lmdafmean[ilmda] = (lmdafwt[ilmda] == 0.0) ? 0.0 : lmdafsum[ilmda] / lmdafwt[ilmda];
       }
    }
 }
 
 // buildfkernel -- rebuild the mean force at every lambda bin from the g kernel
-// (eost.f:1664).
+// (eost.f:buildfkernel).
 void buildFkernel()
 {
    const double rt = units::gasconst * bath::kelvin;
@@ -320,7 +322,7 @@ void buildFkernel()
 }
 
 // egkernel -- direct linked-list gaussian sum of the g bias and its partials at
-// the current (lambda, dedl) (eost.f:851).
+// the current (lambda, dedl) (eost.f:egkernel).
 void egkernel(double& egbias, double& dgdl, double& dgdfl)
 {
    egbias = 0;
@@ -332,22 +334,14 @@ void egkernel(double& egbias, double& dgdl, double& dgdfl)
    if (iflmda < 1 || iflmda > nflmda)
       return;
 
-   int nlcut = (int)(oststdev * maxwlhist / wlmda);
-   if ((double)nlcut * wlmda < oststdev * maxwlhist)
-      nlcut = nlcut + 1;
-   nlcut = nlcut + 1;
-   int nfcut = (int)(oststdev * maxwfhist / wflmda);
-   if ((double)nfcut * wflmda < oststdev * maxwfhist)
-      nfcut = nfcut + 1;
-   nfcut = nfcut + 1;
+   // use max gaussian widths for conservative bin cutoffs
+   int nlcut = nbinCut(oststdev * maxwlhist, wlmda) + 1;
+   int nfcut = nbinCut(oststdev * maxwfhist, wflmda) + 1;
 
    for (int klmda = -nlcut; klmda <= nlcut; ++klmda) {
       int lcenter = ilmda + klmda;
-      int lcount = lcenter;
-      if (lcount < 1)
-         lcount = 2 - lcount;
-      else if (lcount > nlmda)
-         lcount = 2 * nlmda - lcount;
+      int lcount, nimg;
+      lmdaImgBin(lcenter, lcount, nimg);
       if (lcount < 1 || lcount > nlmda)
          continue;
       for (int kflmda = -nfcut; kflmda <= nfcut; ++kflmda) {
@@ -365,26 +359,19 @@ void egkernel(double& egbias, double& dgdl, double& dgdfl)
                double sigf2 = sigf * sigf;
                double sigl2inv = 1.0 / sigl2;
                double sigf2inv = 1.0 / sigf2;
-               double pref = osthhist[ihist] / (2.0 * pi * sigl * sigf);
-               double fldelta2 = fldelta * fldelta;
-               double expfl = std::exp(-0.5 * fldelta2 * sigf2inv);
-               int nimg = 1;
-               if (lcenter == 1 || lcenter == nlmda)
-                  nimg = 2;
+               double pref = osthhist[ihist] / (2.0 * dpi * sigl * sigf);
+               double expfl = 0;
+               bool getexpfl = true;
                for (int img = 1; img <= nimg; ++img) {
-                  double sourcel;
-                  if (lcenter < 1)
-                     sourcel = -lmdalhist[ihist];
-                  else if (lcenter > nlmda)
-                     sourcel = 2.0 - lmdalhist[ihist];
-                  else if (img == 2 && lcenter == 1)
-                     sourcel = -lmdalhist[ihist];
-                  else if (img == 2 && lcenter == nlmda)
-                     sourcel = 2.0 - lmdalhist[ihist];
-                  else
-                     sourcel = lmdalhist[ihist];
+                  double sourcel = lmdaImgSrc(lcenter, img, lmdalhist[ihist]);
                   double ldelta = lambda - sourcel;
                   if (std::fabs(ldelta) <= oststdev * sigl) {
+                     // the flambda factor is found once, when an image first counts
+                     if (getexpfl) {
+                        double fldelta2 = fldelta * fldelta;
+                        expfl = std::exp(-0.5 * fldelta2 * sigf2inv);
+                        getexpfl = false;
+                     }
                      double ldelta2 = ldelta * ldelta;
                      double expl = std::exp(-0.5 * ldelta2 * sigl2inv);
                      double bias = pref * expl * expfl;
@@ -401,7 +388,7 @@ void egkernel(double& egbias, double& dgdl, double& dgdfl)
 }
 
 // egkernelinterpolate -- bicubic Hermite evaluation of the g kernel and its first
-// derivatives from the grids (eost.f:979).
+// derivatives from the grids (eost.f:egkernelinterpolate).
 void egkernelInterpolate(double& egbias, double& dgdl, double& dgdfl)
 {
    egbias = 0;
@@ -464,15 +451,12 @@ void egkernelInterpolate(double& egbias, double& dgdl, double& dgdfl)
    dgdfl /= wflmda;
 }
 
-static void metaImages(double lmda, double src[3])
-{
-   src[0] = lmda;
-   src[1] = -lmda;
-   src[2] = 2.0 - lmda;
-}
-
 // emetabias -- Vbias(lambda) and dVbias/dlambda for the sum of 1D normalized
-// metadynamics gaussians (eost.f:244).
+// metadynamics gaussians, each counted with its two images reflected at the
+// lambda end points; only gaussians in the lambda bins within the cutoff of
+// oststdev widths are visited, through the bin lookup, and only the first
+// nmetahist are counted, so a history replayed gaussian by gaussian gives the
+// bias at each stage (eost.f:emetabias).
 void eMetaBias(double lmda, double& vbias, double& dvdl)
 {
    vbias = 0;
@@ -483,24 +467,42 @@ void eMetaBias(double lmda, double& vbias, double& dvdl)
       return;
    }
 
-   for (int ihist = 1; ihist <= nmetahist; ++ihist) {
-      double sig = metawhist[ihist];
-      if (sig > 0.0) {
-         double sig2 = sig * sig;
-         double pref = metahhist[ihist] / (sig * std::sqrt(2.0 * pi));
-         double src[3];
-         metaImages(metalhist[ihist], src);
-         for (int img = 0; img < 3; ++img) {
-            double delta = lmda - src[img];
-            double bias = pref * std::exp(-0.5 * delta * delta / sig2);
-            vbias += bias;
-            dvdl -= delta * bias / sig2;
+   // use the largest gaussian width for a conservative bin cutoff
+   int ilmda = lmdaBin(lmda);
+   int nlcut = nbinCut(oststdev * maxwlhist, wlmda) + 1;
+
+   // loop over nearby lambda bins and their mirror images
+   for (int klmda = -nlcut; klmda <= nlcut; ++klmda) {
+      int lcenter = ilmda + klmda;
+      int lcount, nimg;
+      lmdaImgBin(lcenter, lcount, nimg);
+      if (lcount < 1 || lcount > nlmda)
+         continue;
+
+      // add each gaussian of the bin with the image it stands for
+      int ihist = metahead[lcount];
+      while (ihist != 0) {
+         double sig = metawhist[ihist];
+         if (ihist <= nmetahist && sig > 0.0) {
+            double sig2 = sig * sig;
+            double pref = metahhist[ihist] / (sig * std::sqrt(2.0 * dpi));
+            for (int img = 1; img <= nimg; ++img) {
+               double delta = lmda - lmdaImgSrc(lcenter, img, metalhist[ihist]);
+               if (std::fabs(delta) <= oststdev * sig) {
+                  double bias = pref * std::exp(-0.5 * delta * delta / sig2);
+                  vbias += bias;
+                  dvdl -= delta * bias / sig2;
+               }
+            }
          }
+         ihist = metanext[ihist];
       }
    }
 }
 
-// addmetagrid -- accumulate one deposited metadynamics gaussian
+// addmetagrid -- add one deposited metadynamics gaussian and its two reflected
+// images to the bias and slope at the lambda bin centers within the cutoff of
+// oststdev widths (eost.f:addmetagrid).
 void addMetaGrid(int ihist)
 {
    double sig = metawhist[ihist];
@@ -509,17 +511,40 @@ void addMetaGrid(int ihist)
    if ((int)vmetagrid.size() < nlmda + 1 || (int)dvmetagrid.size() < nlmda + 1)
       return;
    double sig2 = sig * sig;
-   double pref = metahhist[ihist] / (sig * std::sqrt(2.0 * pi));
-   double src[3];
-   metaImages(metalhist[ihist], src);
-   for (int il = 1; il <= nlmda; ++il) {
-      double lmda = (double)(il - 1) * wlmda;
-      for (int img = 0; img < 3; ++img) {
+   double pref = metahhist[ihist] / (sig * std::sqrt(2.0 * dpi));
+   double cut = oststdev * sig;
+   double src[3] = {metalhist[ihist], -metalhist[ihist], 2.0 - metalhist[ihist]};
+
+   // spread the gaussian and its images over the bin centers within the cutoff
+   for (int img = 0; img < 3; ++img) {
+      double x1 = (src[img] - cut) / wlmda + 1.0;
+      double x2 = (src[img] + cut) / wlmda + 1.0;
+      if (x1 > (double)nlmda || x2 < 1.0)
+         continue;
+      int il1 = (int)std::max(1.0, x1);
+      int il2 = std::min(nlmda, (int)std::min((double)nlmda, x2) + 1);
+      for (int il = il1; il <= il2; ++il) {
+         double lmda = (double)(il - 1) * wlmda;
          double delta = lmda - src[img];
-         double bias = pref * std::exp(-0.5 * delta * delta / sig2);
-         vmetagrid[il] += bias;
-         dvmetagrid[il] -= delta * bias / sig2;
+         if (std::fabs(delta) <= cut) {
+            double bias = pref * std::exp(-0.5 * delta * delta / sig2);
+            vmetagrid[il] += bias;
+            dvmetagrid[il] -= delta * bias / sig2;
+         }
       }
+   }
+}
+
+// buildmetaindex -- rebuild the linked-list lookup of the saved metadynamics
+// gaussians by lambda bin, in the order deposited (eost.f:buildmetaindex).
+void buildMetaIndex()
+{
+   std::fill(metahead.begin(), metahead.end(), 0);
+   std::fill(metanext.begin(), metanext.end(), 0);
+   for (int ihist = 1; ihist <= nmetahist; ++ihist) {
+      int ilmda = lmdaBin(metalhist[ihist]);
+      metanext[ihist] = metahead[ilmda];
+      metahead[ilmda] = ihist;
    }
 }
 
@@ -560,13 +585,14 @@ void eMetaBiasInterpolate(double lmda, double& vbias, double& dvdl)
    dvdl /= wlmda;
 }
 
-// metadeltag -- G(1) - G(0) = -Vbias(1) + Vbias(0) (eost.f:288).
+// metadeltag -- G(1) - G(0) = -Vbias(1) + Vbias(0), with the end point bias read
+// from the grid, which holds the exact bias at the bin centers for every
+// gaussian added so far (eost.f:metadeltag).
 double metaDeltaG()
 {
-   double v0, v1, dvdl;
-   eMetaBias(0.0, v0, dvdl);
-   eMetaBias(1.0, v1, dvdl);
-   return -v1 + v0;
+   if ((int)vmetagrid.size() < nlmda + 1 || nlmda < 1)
+      return 0.0;
+   return -vmetagrid[nlmda] + vmetagrid[1];
 }
 
 void resizeMeta()
@@ -577,6 +603,49 @@ void resizeMeta()
    metahhist.resize(newsize + 1, 0.0);
    metawhist.resize(newsize + 1, 0.0);
    metaihist.resize(newsize + 1, 0);
+   metanext.resize(newsize + 1, 0);
+}
+
+// nbincut -- smallest number of bins of the given width that together span the
+// given cutoff distance (eost.f:nbincut).
+int nbinCut(double cut, double width)
+{
+   int n = (int)(cut / width);
+   if ((double)n * width < cut)
+      n = n + 1;
+   return n;
+}
+
+// lmdaimgbin -- map a lambda bin index lcenter, which may lie beyond either end
+// of the lambda range, onto the bin lcount whose gaussians have their mirror
+// image in it; nimg is two in each end bin, for the gaussian and its
+// reflection, otherwise one (eost.f:lmdaimgbin).
+void lmdaImgBin(int lcenter, int& lcount, int& nimg)
+{
+   lcount = lcenter;
+   if (lcount < 1)
+      lcount = 2 - lcount;
+   else if (lcount > nlmda)
+      lcount = 2 * nlmda - lcount;
+   nimg = 1;
+   if (lcenter == 1 || lcenter == nlmda)
+      nimg = 2;
+}
+
+// lmdaimgsrc -- lambda center of image img of a gaussian centered at lsrc, as
+// counted in lambda bin lcenter by lmdaImgBin (eost.f:lmdaimgsrc).
+double lmdaImgSrc(int lcenter, int img, double lsrc)
+{
+   if (lcenter < 1)
+      return -lsrc;
+   else if (lcenter > nlmda)
+      return 2.0 - lsrc;
+   else if (img == 2 && lcenter == 1)
+      return -lsrc;
+   else if (img == 2 && lcenter == nlmda)
+      return 2.0 - lsrc;
+   else
+      return lsrc;
 }
 
 // Device scaffold (disabled). A future GPU port of the bicubic-Hermite bias
@@ -584,30 +653,18 @@ void resizeMeta()
 // See src/acc/eost.cpp and src/cu/eost.cu. Enable together with those files.
 //   TINKER_FVOID2(acc0, cu1, eostBiasGrid, /* grid ptrs, sample, outputs */);
 
-// addgkernelhist / addkernelhist -- spread one saved source over the grid; the
-// merged worker is addKernelHistImpl (eost.f:1409 / 1507).
-void addGkernelHist(int ihist)
-{
-   addKernelHistImpl(ihist, false);
-}
-
-void addKernelHist(int ihist)
-{
-   addKernelHistImpl(ihist, true);
-}
-
 // buildgkernel -- clear stale values and rebuild the g kernel from scratch over
-// all saved sources (eost.f:1287).
+// all saved sources (eost.f:buildgkernel).
 void buildGkernel()
 {
    std::fill(gkernel.begin(), gkernel.end(), 0.0);
    std::fill(vkernelmax.begin(), vkernelmax.end(), 0.0);
    for (int ihist = 1; ihist <= nlmdahist; ++ihist)
-      addGkernelHist(ihist);
+      addKernelHist(ihist, false);
 }
 
 // buildkernels -- clear and rebuild both kernels and the free-energy
-// accumulators from scratch over all saved sources (eost.f:1322).
+// accumulators from scratch over all saved sources (eost.f:buildkernels).
 void buildKernels()
 {
    std::fill(gkernel.begin(), gkernel.end(), 0.0);
@@ -619,21 +676,21 @@ void buildKernels()
    std::fill(lmdafwt.begin(), lmdafwt.end(), 0.0);
    std::fill(vkernelmax.begin(), vkernelmax.end(), 0.0);
    for (int ihist = 1; ihist <= nlmdahist; ++ihist)
-      addKernelHist(ihist);
+      addKernelHist(ihist, true);
 }
 
 // updategkernel / updatekernels -- spread only the most recently saved source
-// into the current grids (eost.f:1363 / 1386).
+// into the current grids (eost.f:updategkernel / updatekernels).
 void updateGkernel()
 {
    if (nlmdahist > 0)
-      addGkernelHist(nlmdahist);
+      addKernelHist(nlmdahist, false);
 }
 
 void updateKernels()
 {
    if (nlmdahist > 0)
-      addKernelHist(nlmdahist);
+      addKernelHist(nlmdahist, true);
 }
 
 void eostData(RcOp op)
@@ -665,6 +722,8 @@ void eostData(RcOp op)
       metahhist.clear();
       metawhist.clear();
       metaihist.clear();
+      metanext.clear();
+      metahead.clear();
       vmetagrid.clear();
       dvmetagrid.clear();
    }
@@ -676,7 +735,7 @@ void eostData(RcOp op)
       bostlmda = 0;
       lmdadfdl = 0;
 
-      // Mirror the Fortran mutate allocation/initialization (mutate.f:505).
+      // Mirror the Fortran mutate allocation/initialization (mutate.f:mutate_ost, mutate_meta).
       if (use_ost) {
          sizelmdahist = 10000;
          nlmdahist = 0;
@@ -707,6 +766,8 @@ void eostData(RcOp op)
          metahhist.assign(sizemetahist + 1, 0.0);
          metawhist.assign(sizemetahist + 1, 0.0);
          metaihist.assign(sizemetahist + 1, 0);
+         metanext.assign(sizemetahist + 1, 0);
+         metahead.assign(nlmda + 1, 0);
          lmdallist.assign(lmdaintv, 0.0);
          vmetagrid.assign(nlmda + 1, 0.0);
          dvmetagrid.assign(nlmda + 1, 0.0);
@@ -802,19 +863,28 @@ void ostDeposit(int istep)
 }
 
 // metaDeposit -- records one interval of lambda metadynamics as a gaussian
-// centered on the interval lambda average, then updates the bias grid and the
-// free energy estimate (eost.f:metadeposit).
+// centered on the interval lambda average, then updates the bin lookup, the
+// bias grid and the free energy estimate; only the global tempering factor is
+// applied, since the free energy is read from the bias itself, and a local
+// factor would keep the bias from filling barriers above its threshold
+// (eost.f:metadeposit).
 void metaDeposit(int istep)
 {
-   // save the new gaussian and add it to the bias grid
+   // save the new gaussian with the global tempering factor alone
    nmetahist = nmetahist + 1;
    if (nmetahist > sizemetahist)
       resizeMeta();
+   double vglobal = metaVminimax();
    metalhist[nmetahist] = lmdaavg;
-   double vmm = metaVminimax();
-   metahhist[nmetahist] = temperedHeight(vmm, vmm);
-   metawhist[nmetahist] = wlmda;
+   metahhist[nmetahist] = temperedHeight(vglobal, vglobal);
+   metawhist[nmetahist] = wlhist;
    metaihist[nmetahist] = istep;
+   maxwlhist = std::max(maxwlhist, wlhist);
+
+   // link the gaussian into its lambda bin, then add it to the grid
+   int ilmda = lmdaBin(lmdaavg);
+   metanext[nmetahist] = metahead[ilmda];
+   metahead[ilmda] = nmetahist;
    addMetaGrid(nmetahist);
    lmdadeltag = metaDeltaG();
 }

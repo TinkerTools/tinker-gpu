@@ -684,12 +684,7 @@ add_custom_target (test
    COMMAND
       ./all.tests info
    COMMAND
-      if [ ${GPU_LANG} = CUDA ] \;
-      then
-         ./all.tests -a --durations yes --order rand --rng-seed time ~[noassert]~[mixcuda] \;
-      else
-         ./all.tests -a --durations yes --order rand --rng-seed time ~[noassert] \;
-      fi
+      ./all.tests -a --durations yes --order rand --rng-seed time ~[noassert]
 )
 
 

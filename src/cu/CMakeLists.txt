@@ -33,6 +33,12 @@ target_compile_options (tinker9_cu PRIVATE
    "$<$<CONFIG:RELEASE>:--use_fast_math>"
    "$<$<CONFIG:MINSIZEREL>:--use_fast_math>"
 )
+# nvcc does not say when it compiles with --use_fast_math, so say it here
+target_compile_definitions (tinker9_cu PRIVATE
+   "$<$<CONFIG:RELWITHDEBINFO>:TINKER_CUDA_FAST_MATH>"
+   "$<$<CONFIG:RELEASE>:TINKER_CUDA_FAST_MATH>"
+   "$<$<CONFIG:MINSIZEREL>:TINKER_CUDA_FAST_MATH>"
+)
 target_compile_options (tinker9_cu PRIVATE
    "$<$<CONFIG:DEBUG>:SHELL:--compiler-options;-Wall;--compiler-options;-Wno-unknown-pragmas>"
 )

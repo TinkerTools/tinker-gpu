@@ -674,15 +674,31 @@ TEST_CASE("BAR-mode2-bennett", "[bar]")
    REQUIRE(std::fabs(val - 0.5 * (glo + ghi)) <= 2.0e-4);
 }
 
-// Mode 3 reads FEP files in Tinker's bar program, and Tinker9 says so.
-TEST_CASE("BAR-mode3-message", "[bar]")
+// As in Tinker's bar, which leaves FEP files to analyzelmda, mode 3 is not a
+// choice: the menu offers modes 1 and 2 and asks again until one is given.
+TEST_CASE("BAR-mode3-rejected", "[bar]")
 {
-   const std::string logfile = "bar-mode3.log";
+   const int n = 4;
+   std::vector<double> ua0, ua1, ub0, ub1;
+   for (int i = 0; i < n; ++i) {
+      ua0.push_back(-100.0 + 0.3 * i);
+      ua1.push_back(ua0[i] + 0.5);
+      ub1.push_back(-100.0 + 0.2 * i);
+      ub0.push_back(ub1[i] - 0.5);
+   }
+   const std::string barfile = "bar-mode3.bar", logfile = "bar-mode3.log", infile = "bar-mode3.in";
+   TestFile fbar("", barfile, barBlock(ua0, ua1, {}) + barBlock(ub0, ub1, {}));
    TestRemoveFileOnExit rmlog(logfile);
-   const char* argv[] = {"dummy", "3"};
-   const int argc = 2;
+
+   // mode 3 on the command line and at the first prompt, then mode 2, which
+   // takes the rest of its input from the command line
+   const std::string na = std::to_string(n);
+   const char* argv[] = {"dummy", "3", barfile.c_str(), "1", na.c_str(), "1", "1", na.c_str(), "1"};
+   const int argc = sizeof(argv) / sizeof(argv[0]);
    bool threw = false;
    {
+      TestFile fin("", infile, "3\n2\n");
+      StdinFromFile redirin(infile);
       StdoutToFile redirect(logfile);
       FortranRuntimeScope scope(argc, argv);
       try {
@@ -694,9 +710,16 @@ TEST_CASE("BAR-mode3-message", "[bar]")
    std::ifstream fin(logfile);
    std::stringstream ss;
    ss << fin.rdbuf();
+   const std::string out = ss.str();
    REQUIRE_FALSE(threw);
-   REQUIRE(ss.str().find(" BAR  --  Mode 3 for FEP Files is in Tinker's bar Program") != std::string::npos);
-   REQUIRE(ss.str().find(" Enter the Number of the Desired Choice") == std::string::npos);
+   REQUIRE(out.find("(2) Compute Thermodynamic Values from Tinker BAR File") != std::string::npos);
+   REQUIRE(out.find("(3)") == std::string::npos);
+   REQUIRE(out.find("Mode 3") == std::string::npos);
+   const std::string prompt = " Enter the Number of the Desired Choice";
+   auto first = out.find(prompt);
+   REQUIRE(first != std::string::npos);
+   REQUIRE(out.find(prompt, first + 1) != std::string::npos);
+   REQUIRE(out.find(fepFore) != std::string::npos);
 }
 
 // Mode 2 stops with a message when a frame selection is empty, including a

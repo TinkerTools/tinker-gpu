@@ -747,7 +747,7 @@ void xBar(int, char**)
    auto out = stdout;
    bool exist;
    int mode = 0;
-   auto invalid_mode = [](int m) { return m < 1 or m > 3; };
+   auto invalid_mode = [](int m) { return m < 1 or m > 2; };
    const char* mode_string1 = R"(
  The Tinker Thermodynamic Perturbation Utility Can :
 
@@ -769,10 +769,6 @@ void xBar(int, char**)
       xBarMake();
    if (mode == 2)
       xBarCalc();
-   if (mode == 3)
-      print(out,
-         "\n"
-         " BAR  --  Mode 3 for FEP Files is in Tinker's bar Program\n");
 
    tinker_f_final();
 }

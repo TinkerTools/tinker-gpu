@@ -198,7 +198,7 @@ void pcgP6(int n,                ///< Number of atoms.
 /// \brief Applies the peek step.
 __global__
 void pcgPeek(int n,                ///< Number of atoms.
-             float pcgpeek,        ///< The "peek" parameter.
+             real pcgpeek,         ///< The "peek" parameter.
              const real* polarity, ///< Polarizabilities.
              real (*uind)[3],      ///< [in,out] d-dipoles.
              real (*uinp)[3],      ///< [in,out] p-dipoles.
@@ -209,7 +209,7 @@ void pcgPeek(int n,                ///< Number of atoms.
 /// \brief Applies the peek step.
 __global__
 void pcgPeek1(int n,                ///< Number of atoms.
-              float pcgpeek,        ///< The "peek" parameter.
+              real pcgpeek,         ///< The "peek" parameter.
               const real* polarity, ///< Polarizabilities.
               real (*uind)[3],      ///< [in,out] Dipoles.
               const real (*rsd)[3]  ///< Final residual.

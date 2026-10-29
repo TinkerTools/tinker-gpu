@@ -726,6 +726,9 @@ void waterMcData(RcOp op)
       s_gx = nullptr;
       s_gy = nullptr;
       s_gz = nullptr;
+      // waterMcMech turns the hops back on for the next run that asks for them
+      s_on = false;
+      s_trial = 0;
    }
 
    if (op & RcOp::ALLOC) {

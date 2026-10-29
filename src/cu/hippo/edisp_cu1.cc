@@ -111,7 +111,8 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
       real r2 = image2(xr, yr, zr);
       if (r2 <= off * off and incl) {
          real r = REAL_SQRT(r2);
-         real rr1 = REAL_RECIP(r);
+         // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
+         real rr1 = REAL_RSQRT_V2(r2);
          real e, de, dle, dle2, dlde;
          bool mutik = pair_mutik(vcouple, imut, kmut);
          pair_disp<do_g, DTYP, 0, do_dl1, do_dl2, do_gdl>(r, r2, rr1, scalea, aewald, ci, ai, ck, ak, mutik, ds, cut,
@@ -244,7 +245,8 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
          real r2 = image2(xr, yr, zr);
          if (r2 <= off * off and incl) {
             real r = REAL_SQRT(r2);
-            real rr1 = REAL_RECIP(r);
+            // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
+            real rr1 = REAL_RSQRT_V2(r2);
             real e, de, dle, dle2, dlde;
             bool mutik = pair_mutik(vcouple, imut, kmut);
             pair_disp<do_g, DTYP, 1, do_dl1, do_dl2, do_gdl>(r, r2, rr1, 1, aewald, ci, ai, ck, ak, mutik, ds, cut, off,
@@ -386,7 +388,8 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
          real r2 = image2(xr, yr, zr);
          if (r2 <= off * off and incl) {
             real r = REAL_SQRT(r2);
-            real rr1 = REAL_RECIP(r);
+            // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
+            real rr1 = REAL_RSQRT_V2(r2);
             real e, de, dle, dle2, dlde;
             bool mutik = pair_mutik(vcouple, imut, kmut);
             pair_disp<do_g, DTYP, 1, do_dl1, do_dl2, do_gdl>(r, r2, rr1, 1, aewald, ci, ai, ck, ak, mutik, ds, cut, off,

@@ -92,7 +92,7 @@ static int lmda_snap_mask;
 static bool lmda_snap_active;
 static double s_lambda, s_dedl;
 static bool bias_snap_active;
-static double s_ostdgdl, s_lmdaddgdl, s_lmdadeltag;
+static double s_ostdgdl, s_bdgdl, s_lmdaddgdl, s_lmdadeltag;
 static double s_lmdatheta, s_lmdavtheta;
 static int s_nlmdamctry, s_nlmdamcacc;
 static int s_lmdastep, s_nflmda, s_fli0;
@@ -140,6 +140,7 @@ static void mdsaveDupLmdaBias(int istep)
    s_nflmda = nflmda;
    s_fli0 = fli0;
    s_ostdgdl = ostdgdl;
+   s_bdgdl = bdgdl;
    s_lmdaddgdl = lmdaddgdl;
    s_lmdadeltag = lmdadeltag;
    s_lmdatheta = lmdatheta;
@@ -193,6 +194,7 @@ static void mdsaveWriteLmdaBias()
    ost::nflmda = s_nflmda;
    ost::fli0 = s_fli0;
    ost::ostdgdl = s_ostdgdl;
+   ost::ostbdgdl = s_bdgdl;
    dlmda::lmdaddgdl = s_lmdaddgdl;
    dlmda::lmdadeltag = s_lmdadeltag;
    dlmda::lmdatheta = s_lmdatheta;

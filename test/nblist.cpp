@@ -17,6 +17,7 @@
 
 using namespace tinker;
 
+#if TINKER_GPULANG_OPENACC
 // static const int ans[5][216][70];
 #include "nblist.hh"
 
@@ -146,7 +147,7 @@ static void copyin_arc_file(const std::string& arcfile, int first1, int last1, i
    }
 }
 
-TEST_CASE("NBList-ArBox", "[ff][nblist][arbox][mixcuda]")
+TEST_CASE("NBList-ArBox", "[ff][nblist][arbox]")
 {
    int usage_ = calc::xyz | calc::mass | calc::traj | calc::energy;
 
@@ -194,6 +195,7 @@ TEST_CASE("NBList-ArBox", "[ff][nblist][arbox][mixcuda]")
 
    session.end();
 }
+#endif
 
 #if TINKER_GPULANG_CUDA
 // The kernels reach a pair through a block pair of iakpl or as a neighbor of its lower block in lst. Every pair

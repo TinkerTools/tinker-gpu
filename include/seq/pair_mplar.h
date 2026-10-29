@@ -1,6 +1,7 @@
 #pragma once
 #include "math/realn.h"
 #include "seq/damp.h"
+#include "tool/rcman.h"
 
 // The fused permanent multipole plus polarization pair interaction, in the
 // quasi-internal frame. It lives here rather than in emplar.cu so that the
@@ -514,5 +515,56 @@ void pairMplar(real r2, real3 dR, real mscale, real dscale, real pscale, real us
       voyz = -0.5f * (dR.z * frc.y + dR.y * frc.z);
       vozz = -dR.z * frc.z;
    }
+}
+
+/// \brief Permanent multipole energy of one pair from #pairMplar.
+///
+/// Kept out of line so that every kernel version gets its pair energy from
+/// the same instructions; under fast math, copies inlined into the energy-only
+/// and the gradient versions round differently. For the same reason r2 is
+/// found here from dR rather than taken from the caller. The energy uses
+/// neither the induced dipoles nor the Thole damping, so they are not passed.
+template <class ETYP>
+__device__ __noinline__
+real pairMplarEnergy(real3 dR, real mscale,                                              //
+   real ci, real3 Id, real Iqxx, real Iqxy, real Iqxz, real Iqyy, real Iqyz, real Iqzz, //
+   real ck, real3 Kd, real Kqxx, real Kqxy, real Kqxz, real Kqyy, real Kqyz, real Kqzz, //
+   real f, real aewald)
+{
+   const real r2 = dR.x * dR.x + dR.y * dR.y + dR.z * dR.z;
+   const real3 u0 = make_real3(0, 0, 0);
+   real unused[18];
+   real e;
+   pairMplar<calc::V0, ETYP>(r2, dR, mscale, 0, 0, 0,          //
+      ci, Id, Iqxx, Iqxy, Iqxz, Iqyy, Iqyz, Iqzz, u0, u0, 0, 0, //
+      ck, Kd, Kqxx, Kqxy, Kqxz, Kqyy, Kqyz, Kqzz, u0, u0, 0,    //
+      f, aewald,                                                //
+      unused[0], unused[1], unused[2], unused[3], unused[4], unused[5], unused[6], unused[7], unused[8], unused[9],
+      unused[10], unused[11], e, unused[12], unused[13], unused[14], unused[15], unused[16], unused[17]);
+   return e;
+}
+
+/// \brief Dual topology #pairMplarEnergy: the pair energy weighted by the site
+/// scales, and its lambda derivative, as #pairMplar with DO_AST gives them.
+/// \return The energy in x and its lambda derivative in y.
+template <class ETYP>
+__device__ __noinline__
+real2 pairMplarEnergyAst(real3 dR, real mscale,                                          //
+   real ci, real3 Id, real Iqxx, real Iqxy, real Iqxz, real Iqyy, real Iqyz, real Iqzz, //
+   real ck, real3 Kd, real Kqxx, real Kqxy, real Kqxz, real Kqyy, real Kqyz, real Kqzz, //
+   real f, real aewald, real si, real sk, real dsi, real dsk, real deldl)
+{
+   const real r2 = dR.x * dR.x + dR.y * dR.y + dR.z * dR.z;
+   const real3 u0 = make_real3(0, 0, 0);
+   real unused[18];
+   real e, edl;
+   pairMplar<calc::V0, ETYP, true>(r2, dR, mscale, 0, 0, 0,    //
+      ci, Id, Iqxx, Iqxy, Iqxz, Iqyy, Iqyz, Iqzz, u0, u0, 0, 0, //
+      ck, Kd, Kqxx, Kqxy, Kqxz, Kqyy, Kqyz, Kqzz, u0, u0, 0,    //
+      f, aewald,                                                //
+      unused[0], unused[1], unused[2], unused[3], unused[4], unused[5], unused[6], unused[7], unused[8], unused[9],
+      unused[10], unused[11], e, unused[12], unused[13], unused[14], unused[15], unused[16], unused[17], //
+      si, sk, dsi, dsk, deldl, &edl);
+   return make_real2(e, edl);
 }
 }

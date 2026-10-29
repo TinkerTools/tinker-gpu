@@ -17,6 +17,7 @@ disp.cpp
 dlmda.cpp
 eabf.cpp
 emhippo.cpp
+energyversion.cpp
 eost.cpp
 ephippo.cpp
 expol.cpp

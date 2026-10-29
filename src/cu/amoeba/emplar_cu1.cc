@@ -121,16 +121,26 @@ void emplar_cu1c(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, VirialBuffer r
       // a pair with a dead group has no multipole or induced dipole;
       // grp is null when every group is live
       if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
-         real pga = thlval[njpolar * jpi[klane] + jpk];
          real e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1;
-         pairMplar<Ver, NON_EWALD>(r2, make_real3(xr, yr, zr), scalea - 1, scaleb - 1, scalec - 1, scaled - 1,
-            ci[klane], make_real3(dix[klane], diy[klane], diz[klane]), qixx[klane], qixy[klane], qixz[klane],
-            qiyy[klane], qiyz[klane], qizz[klane], make_real3(uidx[klane], uidy[klane], uidz[klane]),
-            make_real3(uipx[klane], uipy[klane], uipz[klane]), pdi[klane], pga, ck,
-            make_real3(dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x]), qkxx, qkxy, qkxz, qkyy, qkyz, qkzz,
-            make_real3(ukdx, ukdy, ukdz), make_real3(ukpx, ukpy, ukpz), pdk, f, aewald, frcxi, frcyi, frczi, frcxk,
-            frcyk, frczk, trqxi, trqyi, trqzi, trqxk, trqyk, trqzk, e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1);
+         if CONSTEXPR (do_g) {
+            // the energy comes from pairMplarEnergy below
+            constexpr int gv = Ver::value & (calc::grad | calc::virial);
+            using VerGV = calc::Vers<gv>;
+            real pga = thlval[njpolar * jpi[klane] + jpk];
+            pairMplar<VerGV, NON_EWALD>(r2, make_real3(xr, yr, zr), scalea - 1, scaleb - 1, scalec - 1, scaled - 1,
+               ci[klane], make_real3(dix[klane], diy[klane], diz[klane]), qixx[klane], qixy[klane], qixz[klane],
+               qiyy[klane], qiyz[klane], qizz[klane], make_real3(uidx[klane], uidy[klane], uidz[klane]),
+               make_real3(uipx[klane], uipy[klane], uipz[klane]), pdi[klane], pga, ck,
+               make_real3(dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x]), qkxx, qkxy, qkxz, qkyy, qkyz, qkzz,
+               make_real3(ukdx, ukdy, ukdz), make_real3(ukpx, ukpy, ukpz), pdk, f, aewald, frcxi, frcyi, frczi, frcxk,
+               frcyk, frczk, trqxi, trqyi, trqzi, trqxk, trqyk, trqzk, e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1);
+         }
          if CONSTEXPR (do_e) {
+            // one out-of-line body for every version, so they agree to the bit
+            e1 = pairMplarEnergy<NON_EWALD>(make_real3(xr, yr, zr), scalea - 1, ci[klane],
+               make_real3(dix[klane], diy[klane], diz[klane]), qixx[klane], qixy[klane], qixz[klane], qiyy[klane],
+               qiyz[klane], qizz[klane], ck, make_real3(dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x]), qkxx,
+               qkxy, qkxz, qkyy, qkyz, qkzz, f, aewald);
             ebuftl += floatTo<ebuf_prec>(e1);
          }
          if CONSTEXPR (do_v) {

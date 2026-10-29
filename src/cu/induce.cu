@@ -246,7 +246,7 @@ void pcgP6(int n, const real* restrict ksum, const real* restrict ksum1, real (*
 }
 
 __global__
-void pcgPeek(int n, float pcgpeek, const real* restrict polarity, real (*restrict uind)[3], real (*restrict uinp)[3],
+void pcgPeek(int n, real pcgpeek, const real* restrict polarity, real (*restrict uind)[3], real (*restrict uinp)[3],
    const real (*restrict rsd)[3], const real (*restrict rsdp)[3])
 {
    for (int i = ITHREAD; i < n; i += STRIDE) {
@@ -260,7 +260,7 @@ void pcgPeek(int n, float pcgpeek, const real* restrict polarity, real (*restric
 }
 
 __global__
-void pcgPeek1(int n, float pcgpeek, const real* restrict polarity, real (*restrict uind)[3],
+void pcgPeek1(int n, real pcgpeek, const real* restrict polarity, real (*restrict uind)[3],
    const real (*restrict rsd)[3])
 {
    for (int i = ITHREAD; i < n; i += STRIDE) {

@@ -58,7 +58,8 @@ SCALED_PAIRWISE_INTERACTION: |
   real r2 = image2(xr, yr, zr);
   if (r2 <= off * off and incl) {
     real r = REAL_SQRT(r2);
-    real invr = REAL_RECIP(r);
+    // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
+    real invr = REAL_RSQRT_V2(r2);
     real rv = radmin[@ijvdw@ * njvdw + @kjvdw@];
     real eps = epsilon[@ijvdw@ * njvdw + @kjvdw@];
     real e, de;
@@ -101,7 +102,8 @@ FULL_PAIRWISE_INTERACTION: |
   real r2 = image2(xr, yr, zr);
   if (r2 <= off * off and incl) {
     real r = REAL_SQRT(r2);
-    real invr = REAL_RECIP(r);
+    // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
+    real invr = REAL_RSQRT_V2(r2);
     real rv = radmin[@ijvdw@ * njvdw + @kjvdw@];
     real eps = epsilon[@ijvdw@ * njvdw + @kjvdw@];
     real e, de;

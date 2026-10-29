@@ -487,6 +487,9 @@ TEST_CASE("WaterMC-Ligand-Coupling", "[ff][watermc]")
    // leaves the voids alone.
    auto& shell = waterMcShell();
    HostXyz h;
+   // the region is empty until the shell is built at some coordinates
+   shell.scaleLigandClearance(1, 1);
+   shell.build(h.x.data(), h.y.data(), h.z.data());
    const int w = shell.regionWaters().at(0);
    auto nsite = [&](double f1, double f2) {
       shell.scaleLigandClearance(f1, f2);
@@ -608,6 +611,9 @@ TEST_CASE("WaterMC-Reject-Restores", "[ff][watermc]")
    REQUIRE(esum_epoch == xyz_epoch);
    requireSame(State(), before);
    s.session.end();
+   // the hops end with the run, so a later case that steps the lambda windows
+   // without a system does not try one
+   REQUIRE_FALSE(waterMcOn());
 }
 
 TEST_CASE("WaterMC-Accept-Consistent", "[ff][watermc]")
@@ -807,7 +813,8 @@ TEST_CASE("WaterMC-Lambda-Methods", "[ff][watermc]")
          ostDeposit(1);
       } else if (use_meta) {
          hbias = 2.0;
-         lmdaavg = lambda - 0.05;
+         // two widths off, inside the cutoff, so the bias has a slope here
+         lmdaavg = lambda - 2.0 * wlhist;
          metaDeposit(1);
       }
       for (int i = 0; i < 4; ++i)
