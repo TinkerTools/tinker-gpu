@@ -1885,6 +1885,63 @@ TEST_CASE("MUTATE-sampreset", "[ff][mutate]")
    }
 }
 
+// A LAMBDA of zero turns the evenly spaced TI and FEP windows around to climb
+// from zero over the same lambda values as the default descending schedule, a
+// LAMBDA of one keeps the descending schedule (mutate.f:mutate_window), and
+// tinker9 adopts the schedule and the starting lambda as built
+// (test_mutate_lmdastart).
+TEST_CASE("MUTATE-lmdastart", "[ff][mutate]")
+{
+   const int rc = calc::xyz | calc::mass | calc::vmask;
+   {
+      // a zero LAMBDA climbs over the default number of windows
+      Fixture fx = {"mut_ti_reset", "water2", false, false, false, false};
+      Setup s(fx, rc);
+      REQUIRE(use_ti);
+      REQUIRE(nlmdawin == 21);
+      REQUIRE(mutant::lambda == 0.0);
+      REQUIRE(lambda == 0.0);
+      std::vector<double> up(dlmda::lmdawinlist, dlmda::lmdawinlist + 21);
+      REQUIRE(lmdawinlist == up);
+      REQUIRE(up[0] == 0.0);
+      REQUIRE(up[20] == 1.0);
+      for (int i = 1; i < 21; ++i)
+         REQUIRE(up[i] > up[i - 1]);
+
+      // the climbing windows mirror the descending ones exactly
+      int nwin = 0, nwinset = 0;
+      tinker_f_setlmdasched(&nwin, &nwinset);
+      for (int i = 0; i < 21; ++i)
+         REQUIRE(up[i] == dlmda::lmdawinlist[20 - i]);
+      s.session.end();
+   }
+   {
+      // a LAMBDA of one keeps the descending schedule
+      Fixture fx = {"mut_ti_reset", "water2", false, false, false, false};
+      Setup s(fx, rc, "\nlambda 1.0\n");
+      REQUIRE(nlmdawin == 21);
+      REQUIRE(mutant::lambda == 1.0);
+      REQUIRE(lambda == 1.0);
+      REQUIRE(lmdawinlist.size() == 21);
+      REQUIRE(lmdawinlist[0] == 1.0);
+      REQUIRE(lmdawinlist[20] == 0.0);
+      s.session.end();
+   }
+   {
+      // free energy perturbation climbs the same way
+      Fixture fx = {"mut_fep_up", "water2", false, false, false, false};
+      Setup s(fx, rc);
+      REQUIRE(use_fep);
+      REQUIRE(nlmdawin == 3);
+      REQUIRE(lambda == 0.0);
+      REQUIRE(lmdawinlist.size() == 3);
+      REQUIRE(lmdawinlist[0] == 0.0);
+      COMPARE_REALS(lmdawinlist[1], 0.5, 1.0e-12);
+      REQUIRE(lmdawinlist[2] == 1.0);
+      s.session.end();
+   }
+}
+
 TEST_CASE("MUTATE-dspsc", "[ff][mutate][dspsc][disp]")
 {
    const DspscCase deriv[] = {
