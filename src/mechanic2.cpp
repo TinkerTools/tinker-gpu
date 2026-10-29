@@ -1,8 +1,15 @@
-#include "md/osrw.h"
+#include "ff/dlmda.h"
+#include "ff/ost.h"
+#include "ff/watermc.h"
+#include "tool/tinkersuppl.h"
 
 namespace tinker {
 void mechanic2()
 {
-   osrw_mech();
+   tinker_f_flush_output();
+
+   dlmda_mech();
+   ost_mech();
+   waterMcMech();
 }
 }

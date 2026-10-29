@@ -7,6 +7,7 @@
 #include "seq/add.h"
 #include "seq/pair_repel.h"
 #include "tool/gpucard.h"
+#include <cassert>
 
 namespace tinker {
 #define DEVICE_PTRS x, y, z, derx, dery, derz, rrepole, sizpr, dmppr, elepr, nrep, er, vir_er, trqx, trqy, trqz, mut
@@ -28,11 +29,13 @@ static void erepel_acc1()
    size_t bufsize = bufferSize();
 
    PairRepelGrad pgrad;
+   // OpenACC refuses every lambda mode, so only the soft core scaling is needed.
+   const SoftCoreLmda rs = repelSoft(false);
 
    MAYBE_UNUSED int GRID_DIM = gpuGridSize(BLOCK_DIM);
    #pragma acc parallel async num_gangs(GRID_DIM) vector_length(BLOCK_DIM)\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(DEVICE_PTRS,mlst)
+               deviceptr(DEVICE_PTRS,mlst) firstprivate(rs)
    #pragma acc loop gang independent
    for (int i = 0; i < n; ++i) {
       real xi = x[i];
@@ -75,9 +78,9 @@ static void erepel_acc1()
          if (r2 <= off2) {
             real e;
             zero(pgrad);
-            real vlambda = pair_vlambda(vlam, vcouple, imut, kmut);
-            pair_repel<do_g, 1>( //
-               r2, 1, vlambda, cut, off, xr, yr, zr, sizi, dmpi, vali, ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz,
+            bool mutik = pair_mutik(vcouple, imut, kmut);
+            pair_repel<do_g>( //
+               r2, 1, mutik, rs, cut, off, xr, yr, zr, sizi, dmpi, vali, ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz,
                qizz, sizk, dmpk, valk, rrepole[k][MPL_PME_0], rrepole[k][MPL_PME_X], rrepole[k][MPL_PME_Y],
                rrepole[k][MPL_PME_Z], rrepole[k][MPL_PME_XX], rrepole[k][MPL_PME_XY], rrepole[k][MPL_PME_XZ],
                rrepole[k][MPL_PME_YY], rrepole[k][MPL_PME_YZ], rrepole[k][MPL_PME_ZZ], e, pgrad);
@@ -128,7 +131,7 @@ static void erepel_acc1()
 
    #pragma acc parallel async\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(DEVICE_PTRS,repexclude,repexclude_scale)
+               deviceptr(DEVICE_PTRS,repexclude,repexclude_scale) firstprivate(rs)
    #pragma acc loop independent private(pgrad)
    for (int ii = 0; ii < nrepexclude; ++ii) {
       int offset = ii & (bufsize - 1);
@@ -166,9 +169,9 @@ static void erepel_acc1()
       real r2 = image2(xr, yr, zr);
       if (r2 <= off2 and rscale != 0) {
          real e;
-         real vlambda = pair_vlambda(vlam, vcouple, imut, kmut);
-         pair_repel<do_g, 1>( //
-            r2, rscale, vlambda, cut, off, xr, yr, zr, sizi, dmpi, vali, ci, dix, diy, diz, qixx, qixy, qixz, qiyy,
+         bool mutik = pair_mutik(vcouple, imut, kmut);
+         pair_repel<do_g>( //
+            r2, rscale, mutik, rs, cut, off, xr, yr, zr, sizi, dmpi, vali, ci, dix, diy, diz, qixx, qixy, qixz, qiyy,
             qiyz, qizz, sizk, dmpk, valk, rrepole[k][MPL_PME_0], rrepole[k][MPL_PME_X], rrepole[k][MPL_PME_Y],
             rrepole[k][MPL_PME_Z], rrepole[k][MPL_PME_XX], rrepole[k][MPL_PME_XY], rrepole[k][MPL_PME_XZ],
             rrepole[k][MPL_PME_YY], rrepole[k][MPL_PME_YZ], rrepole[k][MPL_PME_ZZ], e, pgrad);
@@ -211,6 +214,8 @@ static void erepel_acc1()
 
 void erepel_acc(int vers)
 {
+   assert(not(vers & calc::dlmda) && "Pauli repulsion lambda derivatives are CUDA only");
+   vers &= ~calc::dlmda;
    if (vers == calc::v0)
       erepel_acc1<calc::V0>();
    else if (vers == calc::v1)

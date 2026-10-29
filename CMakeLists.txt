@@ -163,6 +163,8 @@ endif ()
 !!/ Using a more recent C++ standard to write the source code is unlikely
 !!/ to speed up the performance of Tinker9 and may harm the availability of
 !!/ Tinker9 to older machines.
+!!/ With CUDA 13 or newer, *AUTO* selects *17* because thrust and cub
+!!/ require it.
 !!/
 ]]
 if (DEFINED ENV{std})
@@ -170,8 +172,8 @@ if (DEFINED ENV{std})
 else ()
    set (stdValue AUTO)
 endif ()
-set (STD ${stdValue} CACHE STRING "C++ standard: AUTO, 11, and 14.")
-set_property (CACHE STD PROPERTY STRINGS AUTO 11 14)
+set (STD ${stdValue} CACHE STRING "C++ standard: AUTO, 11, 14, and 17.")
+set_property (CACHE STD PROPERTY STRINGS AUTO 11 14 17)
 
 
 #[[
@@ -450,13 +452,31 @@ enable_language (Fortran)
 
 
 if (STD STREQUAL "AUTO")
-   if ("${CMAKE_CXX_COMPILE_FEATURES}" MATCHES cxx_std_14)
+   # thrust and cub under include/cccl (CUDA 13+) require c++17
+   if (NOT HOST AND EXISTS "${CUDA_DIR}/include/cccl")
+      set (T9_CPPSTD 17)
+   elseif ("${CMAKE_CXX_COMPILE_FEATURES}" MATCHES cxx_std_14)
       set (T9_CPPSTD 14)
    else ()
       set (T9_CPPSTD 11)
    endif ()
 else ()
    set (T9_CPPSTD ${STD})
+endif ()
+
+
+## OpenACC target flag: -gpu= (NVHPC 20.11+) or -ta=tesla: (PGI, older NVHPC)
+## -ta=tesla: does not accept cc89 and newer
+if (NOT HOST AND GPU_LANG STREQUAL "OPENACC")
+   include (CheckCXXSourceCompiles)
+   set (CMAKE_REQUIRED_FLAGS "-acc -gpu=fastmath")
+   check_cxx_source_compiles ("int main() { return 0; }" T9_ACC_HAS_GPU_FLAG)
+   unset (CMAKE_REQUIRED_FLAGS)
+   if (T9_ACC_HAS_GPU_FLAG)
+      set (__T9_ACC_TARGET "-gpu=")
+   else ()
+      set (__T9_ACC_TARGET "-ta=tesla:")
+   endif ()
 endif ()
 
 
@@ -638,6 +658,7 @@ foreach (var
    info9
    minimize9
    testgrad9
+   testlmda9
    testvir9
    )
    add_custom_command (TARGET __t9_symlink POST_BUILD
@@ -663,12 +684,7 @@ add_custom_target (test
    COMMAND
       ./all.tests info
    COMMAND
-      if [ ${GPU_LANG} = CUDA ] \;
-      then
-         ./all.tests -a --durations yes --order rand --rng-seed time ~[noassert]~[mixcuda] \;
-      else
-         ./all.tests -a --durations yes --order rand --rng-seed time ~[noassert] \;
-      fi
+      ./all.tests -a --durations yes --order rand --rng-seed time ~[noassert]
 )
 
 

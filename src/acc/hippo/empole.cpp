@@ -1,4 +1,6 @@
+#include "ff/amoeba/mpolestate.h"
 #include "ff/atom.h"
+#include "ff/dlmda.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/modhippo.h"
@@ -33,6 +35,10 @@ static void empoleChgpen_acc1()
    const real off2 = off * off;
    const int maxnlst = mlist_unit->maxnlst;
    const auto* mlst = mlist_unit.deviceptr();
+   // a pair with a dead group has no multipole or induced dipole;
+   // grp is null when every group is live
+   const int* grp = elecDeadGroups();
+   const RdtMask live = elecLiveMask();
 
    size_t bufsize = bufferSize();
    PairMPoleGrad pgrad;
@@ -40,7 +46,7 @@ static void empoleChgpen_acc1()
    MAYBE_UNUSED int GRID_DIM = gpuGridSize(BLOCK_DIM);
    #pragma acc parallel async num_gangs(GRID_DIM) vector_length(BLOCK_DIM)\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(DEVICE_PTRS,mlst)
+               deviceptr(DEVICE_PTRS,grp,mlst)
    #pragma acc loop gang independent
    for (int i = 0; i < n; ++i) {
       real xi = x[i];
@@ -78,7 +84,7 @@ static void empoleChgpen_acc1()
          real valk = pval[k];
 
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off2) {
+         if (r2 <= off2 and (not grp or grpPairLive(live, grp[i], grp[k]))) {
             MAYBE_UNUSED real e;
             MAYBE_UNUSED real pota, potb;
             pair_mpole_chgpen<do_e, do_g, ETYP, CFLX>(r2, xr, yr, zr, 1, //
@@ -166,7 +172,7 @@ static void empoleChgpen_acc1()
 
    #pragma acc parallel async\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(DEVICE_PTRS,mdwexclude,mdwexclude_scale)
+               deviceptr(DEVICE_PTRS,grp,mdwexclude,mdwexclude_scale)
    #pragma acc loop independent private(pgrad)
    for (int ii = 0; ii < nmdwexclude; ++ii) {
       int offset = ii & (bufsize - 1);
@@ -201,7 +207,7 @@ static void empoleChgpen_acc1()
       real valk = pval[k];
 
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off2 and mscale != 0) {
+      if (r2 <= off2 and mscale != 0 and (not grp or grpPairLive(live, grp[i], grp[k]))) {
 
          MAYBE_UNUSED real e;
          MAYBE_UNUSED real pota, potb;
@@ -270,14 +276,17 @@ static void empoleEwaldRecipGeneric_acc()
    cmpToFmp(pu, cmp, fmp);
    gridMpole(pu, fmp);
    fftfront(pu);
+   bool conv_vir_m = false;
    if CONSTEXPR (do_v) {
       if (vir_m) {
+         darray::zero(g::q0, bufferSize(), vir_m);
          pmeConv(pu, vir_m);
          auto size = bufferSize() * VirialBufferTraits::value;
          #pragma acc parallel loop independent async deviceptr(vir_m,vir_em)
          for (size_t i = 0; i < size; ++i) {
             vir_em[0][i] += vir_m[0][i];
          }
+         conv_vir_m = true;
       } else {
          pmeConv(pu, vir_em);
       }
@@ -285,8 +294,9 @@ static void empoleEwaldRecipGeneric_acc()
       pmeConv(pu);
    }
    fftback(pu);
-   fphiMpole(pu);
+   fphiMpole(pu, fphi);
    fphiToCphi(pu, fphi, cphi);
+   mpoleFphiProduced(pu, conv_vir_m);
 
    auto& st = *pu;
    const int nfft1 = st.nfft1;

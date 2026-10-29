@@ -1,4 +1,4 @@
-// ck.py Version 3.0.2
+// ck.py Version 3.1.0
 template <class ETYP>
 __global__
 void dfieldChgpen_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict dinfo, int nexclude,
@@ -6,7 +6,7 @@ void dfieldChgpen_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* rest
    const real* restrict y, const real* restrict z, const Spatial::SortedAtom* restrict sorted, int nakpl,
    const int* restrict iakpl, int niak, const int* restrict iak, const int* restrict lst, real (*restrict field)[3],
    const real (*restrict rpole)[10], const real* restrict pcore, const real* restrict pval, const real* restrict palpha,
-   real aewald)
+   real aewald, const int* restrict grp, RdtMask live)
 {
    const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
    const int iwarp = ithread / WARP_SIZE;
@@ -16,8 +16,10 @@ void dfieldChgpen_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* rest
    __shared__ real ci[BLOCK_DIM], dix[BLOCK_DIM], diy[BLOCK_DIM], diz[BLOCK_DIM], qixx[BLOCK_DIM], qixy[BLOCK_DIM],
       qixz[BLOCK_DIM], qiyy[BLOCK_DIM], qiyz[BLOCK_DIM], qizz[BLOCK_DIM], corei[BLOCK_DIM], alphai[BLOCK_DIM],
       vali[BLOCK_DIM];
+   __shared__ int gi[BLOCK_DIM];
    real xi, yi, zi;
    real xk, yk, zk, ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, corek, alphak, valk;
+   int gk;
    real fidx, fidy, fidz;
    real fkdx, fkdy, fkdz;
 
@@ -48,6 +50,7 @@ void dfieldChgpen_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* rest
       corei[klane] = pcore[i];
       alphai[klane] = palpha[i];
       vali[klane] = pval[i];
+      gi[klane] = (grp ? grp[i] : 0);
       xi = x[i];
       yi = y[i];
       zi = z[i];
@@ -67,13 +70,16 @@ void dfieldChgpen_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* rest
       corek = pcore[k];
       alphak = palpha[k];
       valk = pval[k];
+      gk = (grp ? grp[k] : 0);
 
       constexpr bool incl = true;
       real xr = xk - xi;
       real yr = yk - yi;
       real zr = zk - zi;
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off * off and incl) {
+      // a pair with a dead group has no multipole or induced dipole;
+      // grp is null when every group is live
+      if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
          pair_dfield_chgpen<ETYP>(r2, xr, yr, zr, scaleb, ci[klane], dix[klane], diy[klane], diz[klane], corei[klane],
             vali[klane], alphai[klane], qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane],
             ck, dkx, dky, dkz, corek, valk, alphak, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, aewald, fidx, fidy, fidz, fkdx,
@@ -120,6 +126,7 @@ void dfieldChgpen_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* rest
       corei[threadIdx.x] = pcore[i];
       alphai[threadIdx.x] = palpha[i];
       vali[threadIdx.x] = pval[i];
+      gi[threadIdx.x] = (grp ? grp[i] : 0);
       xi = sorted[atomi].x;
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
@@ -139,6 +146,7 @@ void dfieldChgpen_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* rest
       corek = pcore[k];
       alphak = palpha[k];
       valk = pval[k];
+      gk = (grp ? grp[k] : 0);
       __syncwarp();
 
       unsigned int dinfo0 = dinfo[iw * WARP_SIZE + ilane];
@@ -153,7 +161,9 @@ void dfieldChgpen_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* rest
          real yr = yk - yi;
          real zr = zk - zi;
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // a pair with a dead group has no multipole or induced dipole;
+         // grp is null when every group is live
+         if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
             pair_dfield_chgpen<ETYP>(r2, xr, yr, zr, scaleb, ci[klane], dix[klane], diy[klane], diz[klane],
                corei[klane], vali[klane], alphai[klane], qixx[klane], qixy[klane], qixz[klane], qiyy[klane],
                qiyz[klane], qizz[klane], ck, dkx, dky, dkz, corek, valk, alphak, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz,
@@ -204,6 +214,7 @@ void dfieldChgpen_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* rest
       corei[threadIdx.x] = pcore[i];
       alphai[threadIdx.x] = palpha[i];
       vali[threadIdx.x] = pval[i];
+      gi[threadIdx.x] = (grp ? grp[i] : 0);
       xi = sorted[atomi].x;
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
@@ -223,6 +234,7 @@ void dfieldChgpen_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* rest
       corek = pcore[k];
       alphak = palpha[k];
       valk = pval[k];
+      gk = (grp ? grp[k] : 0);
       __syncwarp();
 
       for (int j = 0; j < WARP_SIZE; ++j) {
@@ -234,7 +246,9 @@ void dfieldChgpen_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* rest
          real yr = yk - yi;
          real zr = zk - zi;
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // a pair with a dead group has no multipole or induced dipole;
+         // grp is null when every group is live
+         if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
             pair_dfield_chgpen<ETYP>(r2, xr, yr, zr, scaleb, ci[klane], dix[klane], diy[klane], diz[klane],
                corei[klane], vali[klane], alphai[klane], qixx[klane], qixy[klane], qixz[klane], qiyy[klane],
                qiyz[klane], qizz[klane], ck, dkx, dky, dkz, corek, valk, alphak, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz,

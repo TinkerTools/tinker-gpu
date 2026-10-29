@@ -62,4 +62,11 @@ void xMinimizeSetPos_cu(int n, const double* xx, const double* scale)
 
    waitFor(g::q0);
 }
+
+void xMinimizeEnd_cu()
+{
+   // free before exit; cudaFree in the static destructor runs after CUDA shuts down
+   d_xx.release();
+   d_sc.release();
+}
 }

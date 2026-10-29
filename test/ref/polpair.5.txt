@@ -1,0 +1,26 @@
+ polpair.cpp -- Dang-Chang water dimer (tinker/example/dang), all Thole values 0
+
+ Total Potential Energy :             -4.68898003 Kcal/mole
+
+ EngCnt Bond Stretching                        0.00000000                6
+ EngCnt Angle Bending                          0.00000000                6
+ EngCnt Van der Waals                          1.60527835                1
+ EngCnt Atomic Multipoles                     -5.52627154                9
+ EngCnt Polarization                          -0.76798684                5
+
+ Internal Virial Tensor :                  -1.727        0.000        2.536
+                                            0.000       -3.630        0.000
+                                            2.536        0.000      -14.063
+
+ Cartesian Gradient Breakdown over Individual Atoms :
+
+  Type    Atom          dE/dX           dE/dY           dE/dZ           Norm
+
+ Anlyt       1      -3.04703126      0.00000000      9.39714263      9.87879999
+ Anlyt       2       2.78921228      0.00000000    -17.21610179     17.44058101
+ Anlyt       3       1.31562992      0.00000000     -3.33796814      3.58788425
+ Anlyt       4      -1.05771874      0.00000000     11.15665754     11.20668445
+ Anlyt       5       3.04731686      0.00000000     -9.39602403      9.87782403
+ Anlyt       6       3.82406925      2.39789307     -2.90126024      5.36569733
+ Anlyt       7       3.82406925     -2.39789307     -2.90126024      5.36569733
+ Anlyt       8     -10.69554756      0.00000000     15.19881428     18.58490498

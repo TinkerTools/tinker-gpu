@@ -1,4 +1,5 @@
 #include "md/integrator.h"
+#include "ff/dlmda.h"
 #include "ff/energy.h"
 #include "md/lflpiston.h"
 #include "md/misc.h"
@@ -9,6 +10,7 @@
 #include <tinker/detail/inform.hh>
 #include <tinker/detail/mdstuf.hh>
 #include <tinker/detail/units.hh>
+
 
 namespace tinker {
 void BasicIntegrator::plan(int istep)
@@ -28,8 +30,7 @@ void BasicIntegrator::plan(int istep)
    // toggle off virial for MC barostat
    if (mcbaro)
       vers1 &= ~calc::virial;
-   // toggle off energy if neither save nor mcbaro
-   if (not save and not mcbaro)
+   if (not save and not mcbaro and not use_dlmda)
       vers1 &= ~calc::energy;
 }
 
@@ -118,9 +119,7 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
 
       // fast force
       energy(vers1, RESPA_FAST, respaTSConfig());
-      darray::copy(g::q0, n, gx1, gx);
-      darray::copy(g::q0, n, gy1, gy);
-      darray::copy(g::q0, n, gz1, gz);
+      copyGradient(gx1, gy1, gz1, gx, gy, gz);
       copyEnergy(vers1, &esum_f);
       if (vers1 & calc::virial) {
          if (atomic) {
@@ -135,9 +134,7 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
 
       // slow force
       energy(vers1, RESPA_SLOW, respaTSConfig());
-      darray::copy(g::q0, n, gx2, gx);
-      darray::copy(g::q0, n, gy2, gy);
-      darray::copy(g::q0, n, gz2, gz);
+      copyGradient(gx2, gy2, gz2, gx, gy, gz);
       if (vers1 & calc::energy)
          esum += esum_f;
       if (vers1 & calc::virial) {
@@ -163,6 +160,27 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
 
    m_thermo->control2(dt, save);
    m_baro->control2(dt);
+}
+
+void BasicIntegrator::refreshForces()
+{
+   // The versions of a step, which keep the energy under lambda dynamics: the
+   // bias of OST adds its force only to an energy call.
+   int vers = (calc::grad | calc::virial) & rc_flag;
+   if (use_dlmda)
+      vers |= calc::energy & rc_flag;
+   if (nrespa == 1) {
+      energy(vers);
+   } else {
+      const int vg = vers & ~calc::virial;
+      energy(vg, RESPA_FAST, respaTSConfig());
+      copyGradient(gx1, gy1, gz1, gx, gy, gz);
+      energy(vg, RESPA_SLOW, respaTSConfig());
+      copyGradient(gx2, gy2, gz2, gx, gy, gz);
+      energy(vers);
+   }
+   if ((rc_flag & calc::virial) and not atomic)
+      hcVirial();
 }
 }
 
@@ -210,15 +228,11 @@ void RespaIntegrator::KickOff()
 {
    // save fast gradients to gx1 etc.
    energy(calc::grad, RESPA_FAST, respaTSConfig());
-   darray::copy(g::q0, n, gx1, gx);
-   darray::copy(g::q0, n, gy1, gy);
-   darray::copy(g::q0, n, gz1, gz);
+   copyGradient(gx1, gy1, gz1, gx, gy, gz);
 
    // save slow gradients to gx2 etc.
    energy(calc::grad, RESPA_SLOW, respaTSConfig());
-   darray::copy(g::q0, n, gx2, gx);
-   darray::copy(g::q0, n, gy2, gy);
-   darray::copy(g::q0, n, gz2, gz);
+   copyGradient(gx2, gy2, gz2, gx, gy, gz);
 
    energy((calc::grad | calc::virial) & rc_flag);
 }
@@ -320,7 +334,7 @@ static void nhc_npt(int istep, time_prec dt)
 {
    int vers1 = rc_flag & calc::vmask;
    bool save = 0 == (istep % inform::iwrite);
-   if (!save)
+   if (!save and !use_dlmda)
       vers1 &= ~calc::energy;
 
    // set some time values for the dynamics integration

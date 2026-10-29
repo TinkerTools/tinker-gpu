@@ -1,6 +1,6 @@
 OUTPUT_DIR: src/cu/hippo
 KERNEL_NAME: alterpol_cu1
-# TEMPLATE_PARAMS:
+TEMPLATE_PARAMS: template <int MUTPSC>
 # CONSTEXPR_FLAGS:
 
 CUT_DISTANCE: cut
@@ -14,6 +14,8 @@ EXTRA_PARAMS: |
   , const real* restrict kpep, const real* restrict prepep
   , const real* restrict dmppep, const int* restrict lpep
   , ExpolScr scrtyp
+  , real (*restrict dpscdl)[9], const real* restrict prepeporig
+  , const int* restrict grp, GrpScale sc
 # IMPLICIT_PARAMS:
 
 I_VARIABLES:
@@ -24,6 +26,8 @@ I_VARIABLES:
   - shared real sizi    from:prepep
   - shared real alphai  from:dmppep
   - shared int  epli    from:lpep
+  - register real origi from:prepeporig onlyif:MUTPSC
+  - register int  gi    from:grp        onlyif:MUTPSC
 K_VARIABLES:
   - shared real xk      from:x
   - shared real yk      from:y
@@ -32,6 +36,8 @@ K_VARIABLES:
   - shared real sizk    from:prepep
   - shared real alphak  from:dmppep
   - shared int eplk     from:lpep
+  - register real origk from:prepeporig onlyif:MUTPSC
+  - register int  gk    from:grp        onlyif:MUTPSC
 I_FORCE:
   - register real psci00 addto:polscale,0
   - register real psci01 addto:polscale,1
@@ -42,6 +48,15 @@ I_FORCE:
   - register real psci20 addto:polscale,6
   - register real psci21 addto:polscale,7
   - register real psci22 addto:polscale,8
+  - register real dpsci00 addto:dpscdl,0 onlyif:MUTPSC
+  - register real dpsci01 addto:dpscdl,1 onlyif:MUTPSC
+  - register real dpsci02 addto:dpscdl,2 onlyif:MUTPSC
+  - register real dpsci10 addto:dpscdl,3 onlyif:MUTPSC
+  - register real dpsci11 addto:dpscdl,4 onlyif:MUTPSC
+  - register real dpsci12 addto:dpscdl,5 onlyif:MUTPSC
+  - register real dpsci20 addto:dpscdl,6 onlyif:MUTPSC
+  - register real dpsci21 addto:dpscdl,7 onlyif:MUTPSC
+  - register real dpsci22 addto:dpscdl,8 onlyif:MUTPSC
 K_FORCE:
   - register real psck00 addto:polscale,0
   - register real psck01 addto:polscale,1
@@ -52,6 +67,15 @@ K_FORCE:
   - register real psck20 addto:polscale,6
   - register real psck21 addto:polscale,7
   - register real psck22 addto:polscale,8
+  - register real dpsck00 addto:dpscdl,0 onlyif:MUTPSC
+  - register real dpsck01 addto:dpscdl,1 onlyif:MUTPSC
+  - register real dpsck02 addto:dpscdl,2 onlyif:MUTPSC
+  - register real dpsck10 addto:dpscdl,3 onlyif:MUTPSC
+  - register real dpsck11 addto:dpscdl,4 onlyif:MUTPSC
+  - register real dpsck12 addto:dpscdl,5 onlyif:MUTPSC
+  - register real dpsck20 addto:dpscdl,6 onlyif:MUTPSC
+  - register real dpsck21 addto:dpscdl,7 onlyif:MUTPSC
+  - register real dpsck22 addto:dpscdl,8 onlyif:MUTPSC
 
 FULL_PAIRWISE_INTERACTION: |
   real xr = @xk@ - @xi@;
@@ -81,4 +105,36 @@ FULL_PAIRWISE_INTERACTION: |
     @psck20@ += ks2k[2][0];
     @psck21@ += ks2k[2][1];
     @psck22@ += ks2k[2][2];
+    // the overlap with the charging ligand at the unscaled sizes, gathered
+    // crosswise: a site takes it from a mutated partner (alterpol.f)
+    if CONSTEXPR (MUTPSC) {
+      bool muti = sc.ds[@gi@] != 0;
+      bool mutk = sc.ds[@gk@] != 0;
+      if (muti or mutk) {
+        pair_alterpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, @springi@, @origi@, @alphai@,
+          @springk@, @origk@, @alphak@, ks2i, ks2k);
+        if (mutk) {
+          @dpsci00@ += ks2i[0][0];
+          @dpsci01@ += ks2i[0][1];
+          @dpsci02@ += ks2i[0][2];
+          @dpsci10@ += ks2i[1][0];
+          @dpsci11@ += ks2i[1][1];
+          @dpsci12@ += ks2i[1][2];
+          @dpsci20@ += ks2i[2][0];
+          @dpsci21@ += ks2i[2][1];
+          @dpsci22@ += ks2i[2][2];
+        }
+        if (muti) {
+          @dpsck00@ += ks2k[0][0];
+          @dpsck01@ += ks2k[0][1];
+          @dpsck02@ += ks2k[0][2];
+          @dpsck10@ += ks2k[1][0];
+          @dpsck11@ += ks2k[1][1];
+          @dpsck12@ += ks2k[1][2];
+          @dpsck20@ += ks2k[2][0];
+          @dpsck21@ += ks2k[2][1];
+          @dpsck22@ += ks2k[2][2];
+        }
+      }
+    }
   }

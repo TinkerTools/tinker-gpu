@@ -1,3 +1,4 @@
+#include "ff/dlmda.h"
 #include "ff/energy.h"
 #include "math/ou.h"
 #include "math/random.h"
@@ -93,12 +94,21 @@ namespace tinker {
 MonteCarloBarostat::~MonteCarloBarostat()
 {
    darray::deallocate(x_pmonte, y_pmonte, z_pmonte);
+   if (gx_pmonte) {
+      darray::deallocate(gx_pmonte, gy_pmonte, gz_pmonte);
+      gx_pmonte = nullptr;
+      gy_pmonte = nullptr;
+      gz_pmonte = nullptr;
+   }
 }
 
 MonteCarloBarostat::MonteCarloBarostat()
    : BasicBarostat()
 {
    darray::allocate(n, &x_pmonte, &y_pmonte, &z_pmonte);
+   // only an orthogonal space tempering trial evaluates the gradient
+   if (use_ost)
+      darray::allocate(n, &gx_pmonte, &gy_pmonte, &gz_pmonte);
    getKV("VOLUME-TRIAL", m_nbaro, bath::voltrial);
 }
 

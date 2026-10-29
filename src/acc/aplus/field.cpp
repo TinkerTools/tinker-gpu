@@ -1,4 +1,5 @@
 #include "ff/atom.h"
+#include "ff/dlmda.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/nblist.h"
@@ -10,7 +11,7 @@
 
 namespace tinker {
 // see also subroutine udirect2b in induce.f
-#define DFIELD_DPTRS x, y, z, dirdamp, pdamp, field, rpole
+#define DFIELD_DPTRS x, y, z, jpolar, thdval, pdamp, field, rpole
 template <class ETYP>
 static void dfieldAplus_acc1(real (*field)[3])
 {
@@ -28,11 +29,15 @@ static void dfieldAplus_acc1(real (*field)[3])
    const real off2 = off * off;
    const int maxnlst = mlist_unit->maxnlst;
    const auto* mlst = mlist_unit.deviceptr();
+   // a pair with a dead group has no multipole or induced dipole;
+   // grp is null when every group is live
+   const int* grp = elecDeadGroups();
+   const RdtMask live = elecLiveMask();
 
    MAYBE_UNUSED int GRID_DIM = gpuGridSize(BLOCK_DIM);
    #pragma acc parallel async num_gangs(GRID_DIM) vector_length(BLOCK_DIM)\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(DFIELD_DPTRS,mlst)
+               deviceptr(DFIELD_DPTRS,grp,mlst)
    #pragma acc loop gang independent
    for (int i = 0; i < n; ++i) {
       real xi = x[i];
@@ -49,7 +54,7 @@ static void dfieldAplus_acc1(real (*field)[3])
       real qiyz = rpole[i][MPL_PME_YZ];
       real qizz = rpole[i][MPL_PME_ZZ];
       real pdi = pdamp[i];
-      real ddi = dirdamp[i];
+      int jpi = jpolar[i];
       real gxi = 0, gyi = 0, gzi = 0;
 
       int nmlsti = mlst->nlst[i];
@@ -63,14 +68,15 @@ static void dfieldAplus_acc1(real (*field)[3])
          real zr = z[k] - zi;
 
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off2) {
+         if (r2 <= off2 and (not grp or grpPairLive(live, grp[i], grp[k]))) {
             real3 fid = make_real3(0, 0, 0);
             real3 fkd = make_real3(0, 0, 0);
+            real pgd = thdval[njpolar * jpi + jpolar[k]];
             pair_dfield_aplus<ETYP>( //
-               r2, xr, yr, zr, 1, ci, dix, diy, diz, pdi, ddi, qixx, qixy, qixz, qiyy, qiyz, qizz, rpole[k][MPL_PME_0],
-               rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], pdamp[k], dirdamp[k],
-               rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY],
-               rpole[k][MPL_PME_YZ], rpole[k][MPL_PME_ZZ], aewald, fid.x, fid.y, fid.z, fkd.x, fkd.y, fkd.z);
+               r2, xr, yr, zr, 1, ci, dix, diy, diz, pdi, pgd, qixx, qixy, qixz, qiyy, qiyz, qizz, rpole[k][MPL_PME_0],
+               rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], pdamp[k], rpole[k][MPL_PME_XX],
+               rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY], rpole[k][MPL_PME_YZ],
+               rpole[k][MPL_PME_ZZ], aewald, fid.x, fid.y, fid.z, fkd.x, fkd.y, fkd.z);
 
             gxi += fid.x;
             gyi += fid.y;
@@ -89,7 +95,7 @@ static void dfieldAplus_acc1(real (*field)[3])
 
    #pragma acc parallel async\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(DFIELD_DPTRS,dpexclude,dpexclude_scale)
+               deviceptr(DFIELD_DPTRS,grp,dpexclude,dpexclude_scale)
    #pragma acc loop independent
    for (int ii = 0; ii < ndpexclude; ++ii) {
       int i = dpexclude[ii][0];
@@ -110,19 +116,19 @@ static void dfieldAplus_acc1(real (*field)[3])
       real qiyz = rpole[i][MPL_PME_YZ];
       real qizz = rpole[i][MPL_PME_ZZ];
       real pdi = pdamp[i];
-      real ddi = dirdamp[i];
+      real pgd = thdval[njpolar * jpolar[i] + jpolar[k]];
 
       real xr = x[k] - xi;
       real yr = y[k] - yi;
       real zr = z[k] - zi;
 
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off2) {
+      if (r2 <= off2 and (not grp or grpPairLive(live, grp[i], grp[k]))) {
          real3 fid = make_real3(0, 0, 0);
          real3 fkd = make_real3(0, 0, 0);
-         pair_dfield_aplus<NON_EWALD>(r2, xr, yr, zr, pscale, ci, dix, diy, diz, pdi, ddi, qixx, qixy, qixz, qiyy, qiyz,
+         pair_dfield_aplus<NON_EWALD>(r2, xr, yr, zr, pscale, ci, dix, diy, diz, pdi, pgd, qixx, qixy, qixz, qiyy, qiyz,
             qizz, rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], pdamp[k],
-            dirdamp[k], rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY],
+            rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY],
             rpole[k][MPL_PME_YZ], rpole[k][MPL_PME_ZZ], 0, fid.x, fid.y, fid.z, fkd.x, fkd.y, fkd.z);
 
          atomic_add(fid.x, &field[i][0]);
@@ -146,7 +152,7 @@ void dfieldAplusEwaldReal_acc(real (*field)[3])
    dfieldAplus_acc1<EWALD>(field);
 }
 
-#define UFIELD_DPTRS x, y, z, pdamp, thole, field, uind
+#define UFIELD_DPTRS x, y, z, pdamp, jpolar, thlval, field, uind
 template <class ETYP>
 static void ufieldAplus_acc1(const real (*uind)[3], real (*field)[3])
 {
@@ -164,11 +170,15 @@ static void ufieldAplus_acc1(const real (*uind)[3], real (*field)[3])
    const real off2 = off * off;
    const int maxnlst = mlist_unit->maxnlst;
    const auto* mlst = mlist_unit.deviceptr();
+   // a pair with a dead group has no multipole or induced dipole;
+   // grp is null when every group is live
+   const int* grp = elecDeadGroups();
+   const RdtMask live = elecLiveMask();
 
    MAYBE_UNUSED int GRID_DIM = gpuGridSize(BLOCK_DIM);
    #pragma acc parallel async num_gangs(GRID_DIM) vector_length(BLOCK_DIM)\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(UFIELD_DPTRS,mlst)
+               deviceptr(UFIELD_DPTRS,grp,mlst)
    #pragma acc loop gang independent
    for (int i = 0; i < n; ++i) {
       real xi = x[i];
@@ -178,7 +188,7 @@ static void ufieldAplus_acc1(const real (*uind)[3], real (*field)[3])
       real uindi1 = uind[i][1];
       real uindi2 = uind[i][2];
       real pdi = pdamp[i];
-      real pti = thole[i];
+      int jpi = jpolar[i];
       real gxi = 0, gyi = 0, gzi = 0;
 
       int nmlsti = mlst->nlst[i];
@@ -191,11 +201,12 @@ static void ufieldAplus_acc1(const real (*uind)[3], real (*field)[3])
          real zr = z[k] - zi;
 
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off2) {
+         if (r2 <= off2 and (not grp or grpPairLive(live, grp[i], grp[k]))) {
             real3 fid = make_real3(0, 0, 0);
             real3 fkd = make_real3(0, 0, 0);
-            pair_ufield_aplus<ETYP>(r2, xr, yr, zr, 1, uindi0, uindi1, uindi2, pdi, pti, uind[k][0], uind[k][1],
-               uind[k][2], pdamp[k], thole[k], aewald, fid.x, fid.y, fid.z, fkd.x, fkd.y, fkd.z);
+            real pga = thlval[njpolar * jpi + jpolar[k]];
+            pair_ufield_aplus<ETYP>(r2, xr, yr, zr, 1, uindi0, uindi1, uindi2, pdi, pga, uind[k][0], uind[k][1],
+               uind[k][2], pdamp[k], aewald, fid.x, fid.y, fid.z, fkd.x, fkd.y, fkd.z);
 
             gxi += fid.x;
             gyi += fid.y;
@@ -214,7 +225,7 @@ static void ufieldAplus_acc1(const real (*uind)[3], real (*field)[3])
 
    #pragma acc parallel async\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(UFIELD_DPTRS,uexclude,uexclude_scale)
+               deviceptr(UFIELD_DPTRS,grp,uexclude,uexclude_scale)
    #pragma acc loop independent
    for (int ii = 0; ii < nuexclude; ++ii) {
       int i = uexclude[ii][0];
@@ -228,18 +239,18 @@ static void ufieldAplus_acc1(const real (*uind)[3], real (*field)[3])
       real uindi1 = uind[i][1];
       real uindi2 = uind[i][2];
       real pdi = pdamp[i];
-      real pti = thole[i];
+      real pga = thlval[njpolar * jpolar[i] + jpolar[k]];
 
       real xr = x[k] - xi;
       real yr = y[k] - yi;
       real zr = z[k] - zi;
 
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off2) {
+      if (r2 <= off2 and (not grp or grpPairLive(live, grp[i], grp[k]))) {
          real3 fid = make_real3(0, 0, 0);
          real3 fkd = make_real3(0, 0, 0);
-         pair_ufield_aplus<NON_EWALD>(r2, xr, yr, zr, uscale, uindi0, uindi1, uindi2, pdi, pti, uind[k][0], uind[k][1],
-            uind[k][2], pdamp[k], thole[k], 0, fid.x, fid.y, fid.z, fkd.x, fkd.y, fkd.z);
+         pair_ufield_aplus<NON_EWALD>(r2, xr, yr, zr, uscale, uindi0, uindi1, uindi2, pdi, pga, uind[k][0], uind[k][1],
+            uind[k][2], pdamp[k], 0, fid.x, fid.y, fid.z, fkd.x, fkd.y, fkd.z);
 
          atomic_add(fid.x, &field[i][0]);
          atomic_add(fid.y, &field[i][1]);

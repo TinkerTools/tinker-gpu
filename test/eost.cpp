@@ -1,0 +1,1687 @@
+#include "ff/eost.h"
+#include "ff/ost.h"
+#include "math/const.h"
+#include "test.h"
+#include "testrt.h"
+#include <tinker/detail/bath.hh>
+#include <tinker/detail/dlmda.hh>
+#include <tinker/detail/ost.hh>
+#include <tinker/detail/units.hh>
+#include <tinker/routines.h>
+
+#include <algorithm>
+#include <cmath>
+#include <string>
+#include <vector>
+
+// Faithful 1:1 port of the Fortran OST unit-test suite tinker/test/test_eost.f.
+// It seeds the OST histogram/kernel state (namespace tinker) with
+// deterministic inputs and checks each engine routine against hand-computed
+// values. Pure host math -- no molecular system, no GPU; only kelvin is set.
+//
+// The expected values and tolerances are copied verbatim from test_eost.f. A
+// failing REQUIRE indicates a real discrepancy in src/eost.cpp, to be fixed
+// there -- do not adjust the expected values.
+
+using namespace tinker;
+
+namespace {
+// 2-D accessors so the port reads like the Fortran gkernel(i,j) etc.
+double& GK(int i, int j) { return gkernel[gidx(i, j)]; }
+double& GF(int i, int j) { return gfkernel[gidx(i, j)]; }
+double& GL(int i, int j) { return glkernel[gidx(i, j)]; }
+double& GLF(int i, int j) { return glfkernel[gidx(i, j)]; }
+int& HEAD(int i, int j) { return osthead[gidx(i, j)]; }
+
+// resetost -- allocate OST arrays and set scalar state to unit-test defaults
+// (test_eost.f:resetost).
+void resetost(int nl, int nf, int nhist)
+{
+   nlmda = nl;
+   nflmda = nf;
+   fli0 = (nflmda + 1) / 2;
+   wlmda = 1.0 / (double)(nlmda - 1);
+   wflmda = 1.0;
+   wlmda2 = 0.5 * wlmda;
+   wflmda2 = 0.5 * wflmda;
+   wlhist = 0.005;
+   wfhist = 1.0;
+   maxwlhist = wlhist;
+   maxwfhist = wfhist;
+   nlmdahist = 0;
+   sizelmdahist = nhist;
+   lmdathmap = LmdaThMap::SIN;
+   lmdathalpha = 0.999999999;
+   lmdaintv = 10;
+   lmdanpa = 3;
+   lmdanpb = 3;
+   lmdanpc = 4;
+   lambda = 0.0;
+   lmdaavg = 0.0;
+   lmdastd = 0.0;
+   dedl = 0.0;
+   dedlavg = 0.0;
+   dedlstd = 0.0;
+   deffdl = 0.0;
+   plmdamap.type = Lmdamap::QNT;
+   elmdamap.type = Lmdamap::QNT;
+   vlmdamap.type = Lmdamap::QNT;
+   plmdamap.exp = 1;
+   elmdamap.exp = 1;
+   vlmdamap.exp = 1;
+   plmdamap.invn = 1;
+   elmdamap.invn = 1;
+   vlmdamap.invn = 1;
+   plmdamap.inveps = 0.0;
+   elmdamap.inveps = 0.0;
+   vlmdamap.inveps = 0.0;
+   lmdaparatio = 0.3;
+   lmdapbratio = 0.3;
+   hbias = 0.0;
+   lmdadeltag = 0.0;
+   oststdev = 1.0;
+   ostinterpol = false;
+   // tempering off by default, so every pre-existing case keeps the untempered
+   // behavior regardless of the (randomized) case order.
+   use_ostgtemp = false;
+   use_ostltemp = false;
+   ostgthresh = 1.0;
+   ostgtempgamma = 1.0;
+   ostlthresh = 1.0;
+   ostltempgamma = 1.0;
+
+   osthist.assign(sizelmdahist + 1, 0);
+   lmdaihist.assign(sizelmdahist + 1, 0);
+   ostnext.assign(sizelmdahist + 1, 0);
+   lmdalhist.assign(sizelmdahist + 1, 0.0);
+   lmdafhist.assign(sizelmdahist + 1, 0.0);
+   osthhist.assign(sizelmdahist + 1, 0.0);
+   ostwlhist.assign(sizelmdahist + 1, 0.0);
+   ostwfhist.assign(sizelmdahist + 1, 0.0);
+   lmdallist.assign(lmdaintv, 0.0);
+   lmdaflist.assign(lmdaintv, 0.0);
+   osthead.assign((size_t)nlmda * nflmda, 0);
+   gkernel.assign((size_t)nlmda * nflmda, 0.0);
+   gfkernel.assign((size_t)nlmda * nflmda, 0.0);
+   glfkernel.assign((size_t)nlmda * nflmda, 0.0);
+   glkernel.assign((size_t)nlmda * nflmda, 0.0);
+   lmdafmean.assign(nlmda + 1, 0.0);
+   lmdafsum.assign(nlmda + 1, 0.0);
+   lmdafwt.assign(nlmda + 1, 0.0);
+   vkernelmax.assign(nlmda + 1, 0.0);
+
+   use_lmdacv = false;
+   lmdacvstd = 0.0;
+   lmdacvrat = 0.0;
+   use_ost = false;
+   use_meta = false;
+   use_abf = false;
+}
+
+// resetmeta -- allocate metadynamics history arrays and the bin lookup
+// (test_eost.f:resetmeta).
+void resetmeta(int nhist)
+{
+   sizemetahist = nhist;
+   nmetahist = 0;
+   metalhist.assign(sizemetahist + 1, 0.0);
+   metahhist.assign(sizemetahist + 1, 0.0);
+   metawhist.assign(sizemetahist + 1, 0.0);
+   metaihist.assign(sizemetahist + 1, 0);
+   metanext.assign(sizemetahist + 1, 0);
+   // sized off nlmda, so resetost must run first
+   metahead.assign(nlmda + 1, 0);
+   vmetagrid.assign(nlmda + 1, 0.0);
+   dvmetagrid.assign(nlmda + 1, 0.0);
+}
+
+// sethist -- store one gaussian history entry and its packed bin
+// (test_eost.f:sethist).
+void sethist(int ihist, double lambda, double flmda, double height, double sigl, double sigf)
+{
+   int ilmda = lmdaBin(lambda);
+   int iflmda = flambdaBin(flmda);
+   int k;
+   ijToK(ilmda, iflmda, nlmda, k);
+   osthist[ihist] = k;
+   lmdalhist[ihist] = lambda;
+   lmdafhist[ihist] = flmda;
+   osthhist[ihist] = height;
+   ostwlhist[ihist] = sigl;
+   ostwfhist[ihist] = sigf;
+   maxwlhist = std::max(maxwlhist, sigl);
+   maxwfhist = std::max(maxwfhist, sigf);
+   ostnext[ihist] = 0;
+}
+
+// brutevkmax -- max of the g kernel over the whole flambda axis for one lambda
+// bin, computed the slow way. Seeded at 0 to match vkernelmax, whose untouched
+// bins stay 0 (deposited heights are positive, so no cell is ever negative).
+double brutevkmax(int i)
+{
+   double m = 0.0;
+   for (int j = 1; j <= nflmda; ++j)
+      m = std::max(m, GK(i, j));
+   return m;
+}
+
+// kerneltag -- unique numeric tag for a kernel array and bin (test_eost.f:kerneltag).
+double kerneltag(int ikern, int i, int j)
+{
+   return 1000.0 * (double)ikern + 10.0 * (double)i + (double)j;
+}
+
+// seedkernels -- fill each flambda-dependent kernel with index tags
+// (test_eost.f:seedkernels).
+void seedkernels()
+{
+   for (int i = 1; i <= nlmda; ++i) {
+      for (int j = 1; j <= nflmda; ++j) {
+         GK(i, j) = kerneltag(1, i, j);
+         GF(i, j) = kerneltag(2, i, j);
+         GL(i, j) = kerneltag(3, i, j);
+         GLF(i, j) = kerneltag(4, i, j);
+      }
+   }
+}
+
+// checkkernels -- compare resized kernels against references whose seeded block
+// has shifted by offset bins (test_eost.f:checkkernels).
+void checkkernels(const std::string& label, int nold, int offset)
+{
+   INFO(label);
+   for (int i = 1; i <= nlmda; ++i) {
+      for (int j = 1; j <= nold; ++j) {
+         CAPTURE(i, j);
+         COMPARE_REALS(GK(i, j + offset), kerneltag(1, i, j), 1.0e-12);
+         COMPARE_REALS(GF(i, j + offset), kerneltag(2, i, j), 1.0e-12);
+         COMPARE_REALS(GL(i, j + offset), kerneltag(3, i, j), 1.0e-12);
+         COMPARE_REALS(GLF(i, j + offset), kerneltag(4, i, j), 1.0e-12);
+      }
+   }
+   // bins outside the copied block must be zero after the resize
+   for (int i = 1; i <= nlmda; ++i) {
+      for (int j = 1; j <= nflmda; ++j) {
+         bool inblock = (j > offset && j - offset <= nold);
+         if (!inblock) {
+            CAPTURE(i, j);
+            COMPARE_REALS(GK(i, j), 0.0, 1.0e-12);
+            COMPARE_REALS(GF(i, j), 0.0, 1.0e-12);
+            COMPARE_REALS(GL(i, j), 0.0, 1.0e-12);
+            COMPARE_REALS(GLF(i, j), 0.0, 1.0e-12);
+         }
+      }
+   }
+}
+}
+
+TEST_CASE("EOST-index", "[ff][eost]")
+{
+   int i, j, k;
+   ijToK(3, 4, 7, k);
+   COMPARE_INTS(k, 24);
+   kToIj(24, 7, i, j);
+   COMPARE_INTS(i, 3);
+   COMPARE_INTS(j, 4);
+}
+
+TEST_CASE("EOST-resize", "[ff][eost]")
+{
+   resetost(5, 5, 2);
+   nlmdahist = 2;
+   for (int i = 1; i <= 2; ++i) {
+      osthist[i] = 10 + i;
+      lmdaihist[i] = 100 + i;
+      ostnext[i] = i - 1;
+      lmdalhist[i] = 0.25 * (double)i;
+      lmdafhist[i] = -3.0 + 2.0 * (double)i;
+      osthhist[i] = 1.0 + (double)i;
+      ostwlhist[i] = 0.25;
+      ostwfhist[i] = 1.0;
+   }
+   resizeOstHist();
+   COMPARE_INTS(sizelmdahist, 4);
+   for (int i = 1; i <= 4; ++i) {
+      CAPTURE(i);
+      if (i <= 2) {
+         COMPARE_INTS(osthist[i], 10 + i);
+         COMPARE_INTS(lmdaihist[i], 100 + i);
+         COMPARE_INTS(ostnext[i], i - 1);
+         COMPARE_REALS(lmdalhist[i], 0.25 * (double)i, 1.0e-12);
+         COMPARE_REALS(lmdafhist[i], -3.0 + 2.0 * (double)i, 1.0e-12);
+         COMPARE_REALS(osthhist[i], 1.0 + (double)i, 1.0e-12);
+         COMPARE_REALS(ostwlhist[i], 0.25, 1.0e-12);
+         COMPARE_REALS(ostwfhist[i], 1.0, 1.0e-12);
+      } else {
+         COMPARE_INTS(osthist[i], 0);
+         COMPARE_INTS(lmdaihist[i], 0);
+         COMPARE_INTS(ostnext[i], 0);
+         COMPARE_REALS(lmdalhist[i], 0.0, 1.0e-12);
+         COMPARE_REALS(lmdafhist[i], 0.0, 1.0e-12);
+         COMPARE_REALS(osthhist[i], 0.0, 1.0e-12);
+         COMPARE_REALS(ostwlhist[i], 0.0, 1.0e-12);
+         COMPARE_REALS(ostwfhist[i], 0.0, 1.0e-12);
+      }
+   }
+}
+
+TEST_CASE("EOST-buildindex", "[ff][eost]")
+{
+   resetost(5, 5, 3);
+   nlmdahist = 3;
+   sethist(1, 0.50, 0.0, 1.0, wlmda, wflmda);
+   sethist(2, 0.50, 0.0, 2.0, wlmda, wflmda);
+   sethist(3, 0.75, 1.0, 3.0, wlmda, wflmda);
+   buildOstIndex();
+   int ilmda = 3, iflmda = 3, k;
+   ijToK(ilmda, iflmda, nlmda, k);
+   COMPARE_INTS(osthist[1], k);
+   COMPARE_INTS(HEAD(ilmda, iflmda), 2);
+   COMPARE_INTS(ostnext[2], 1);
+   COMPARE_INTS(ostnext[1], 0);
+}
+
+TEST_CASE("EOST-ensure", "[ff][eost]")
+{
+   int k, nold, oldfli0, ilmda, iflmda;
+
+   // high-side expansion preserves fli0 and old gkernel values
+   resetost(3, 5, 1);
+   GK(2, 3) = 7.0;
+   ensureFlambda(2000.0);
+   COMPARE_INTS(nflmda, 2105);
+   COMPARE_INTS(fli0, 3);
+   COMPARE_REALS(GK(2, 3), 7.0, 1.0e-12);
+
+   // low-side expansion shifts fli0 and old gkernel values
+   resetost(3, 5, 1);
+   GK(2, 3) = 7.0;
+   ensureFlambda(-2000.0);
+   COMPARE_INTS(nflmda, 2105);
+   COMPARE_INTS(fli0, 2103);
+   COMPARE_REALS(GK(2, 2103), 7.0, 1.0e-12);
+
+   // low-side expansion also rebuilds osthead, ostnext and osthist
+   resetost(3, 5, 2);
+   nlmdahist = 2;
+   sethist(1, 0.50, 0.0, 1.0, wlmda, wflmda);
+   sethist(2, 0.50, 0.0, 2.0, wlmda, wflmda);
+   buildOstIndex();
+   ensureFlambda(-2000.0);
+   ilmda = 2;
+   iflmda = 2103;
+   ijToK(ilmda, iflmda, nlmda, k);
+   COMPARE_INTS(osthist[1], k);
+   COMPARE_INTS(osthist[2], k);
+   COMPARE_INTS(HEAD(ilmda, iflmda), 2);
+   COMPARE_INTS(ostnext[2], 1);
+   COMPARE_INTS(ostnext[1], 0);
+
+   // the resize copies four separate kernels; seed all, then require every
+   // entry to land where it belongs
+   resetost(3, 5, 1);
+   nold = nflmda;
+   oldfli0 = fli0;
+   seedkernels();
+   ensureFlambda(2000.0);
+   checkkernels("ensureflambda high", nold, fli0 - oldfli0);
+   resetost(3, 5, 1);
+   nold = nflmda;
+   oldfli0 = fli0;
+   seedkernels();
+   ensureFlambda(-2000.0);
+   checkkernels("ensureflambda low", nold, fli0 - oldfli0);
+}
+
+TEST_CASE("EOST-gkernels", "[ff][eost]")
+{
+   double egbias, dgdl, dgdfl, expected, height;
+
+   // choose height so the normalized gaussian prefactor is one
+   resetost(5, 5, 3);
+   height = 2.0 * M_PI * wlmda * wflmda;
+   nlmdahist = 1;
+   sethist(1, 0.50, 0.0, height, wlmda, wflmda);
+   buildOstIndex();
+
+   // addkernelhist g from a single interior gaussian
+   addKernelHist(1, false);
+   COMPARE_REALS(GK(3, 3), 1.0, 1.0e-12);
+   expected = std::exp(-1.0);
+   COMPARE_REALS(GK(4, 4), expected, 1.0e-12);
+
+   // addkernelhist g includes left-boundary mirror image
+   resetost(5, 5, 3);
+   height = 2.0 * M_PI * wlmda * wflmda;
+   nlmdahist = 1;
+   sethist(1, 0.0, 0.0, height, wlmda, wflmda);
+   buildOstIndex();
+   addKernelHist(1, false);
+   COMPARE_REALS(GK(1, 3), 2.0, 1.0e-12);
+   expected = 2.0 * std::exp(-0.5);
+   COMPARE_REALS(GK(2, 3), expected, 1.0e-12);
+
+   // addkernelhist g includes right-boundary mirror image
+   resetost(5, 5, 3);
+   height = 2.0 * M_PI * wlmda * wflmda;
+   nlmdahist = 1;
+   sethist(1, 1.0, 0.0, height, wlmda, wflmda);
+   buildOstIndex();
+   addKernelHist(1, false);
+   COMPARE_REALS(GK(5, 3), 2.0, 1.0e-12);
+   expected = 2.0 * std::exp(-0.5);
+   COMPARE_REALS(GK(4, 3), expected, 1.0e-12);
+
+   // rebuild the original interior gaussian for later checks
+   resetost(5, 5, 3);
+   height = 2.0 * M_PI * wlmda * wflmda;
+   nlmdahist = 1;
+   sethist(1, 0.50, 0.0, height, wlmda, wflmda);
+   buildOstIndex();
+
+   // buildgkernel rebuilds the same full grid
+   buildGkernel();
+   COMPARE_REALS(GK(3, 3), 1.0, 1.0e-12);
+   expected = std::exp(-1.0);
+   COMPARE_REALS(GK(4, 4), expected, 1.0e-12);
+
+   // updategkernel adds only the newest gaussian to current grid
+   std::fill(gkernel.begin(), gkernel.end(), 0.0);
+   updateGkernel();
+   COMPARE_REALS(GK(3, 3), 1.0, 1.0e-12);
+
+   // adding a taller gaussian updates only from the new history entry
+   nlmdahist = 2;
+   sethist(2, 0.75, 1.0, 2.0 * height, wlmda, wflmda);
+   buildOstIndex();
+   updateGkernel();
+   expected = 2.0 + std::exp(-1.0);
+   COMPARE_REALS(GK(4, 4), expected, 1.0e-12);
+   expected = 1.0 + 2.0 * std::exp(-1.0);
+   COMPARE_REALS(GK(3, 3), expected, 1.0e-12);
+
+   // egkernel evaluates the continuous gaussian and derivatives
+   lambda = 0.75;
+   dedl = 1.0;
+   egkernel(egbias, dgdl, dgdfl);
+   expected = 2.0 + std::exp(-1.0);
+   COMPARE_REALS(egbias, expected, 1.0e-12);
+   COMPARE_REALS(dgdl, -4.0 * std::exp(-1.0), 1.0e-12);
+   COMPARE_REALS(dgdfl, -std::exp(-1.0), 1.0e-12);
+
+   // two gaussians in the same bin are both followed by ostnext
+   resetost(5, 5, 3);
+   height = 2.0 * M_PI * wlmda * wflmda;
+   nlmdahist = 2;
+   sethist(1, 0.50, 0.0, height, wlmda, wflmda);
+   sethist(2, 0.50, 0.0, height, wlmda, wflmda);
+   buildOstIndex();
+   lambda = 0.50;
+   dedl = 0.0;
+   egkernel(egbias, dgdl, dgdfl);
+   COMPARE_REALS(egbias, 2.0, 1.0e-12);
+   COMPARE_REALS(dgdl, 0.0, 1.0e-12);
+   COMPARE_REALS(dgdfl, 0.0, 1.0e-12);
+
+   // multiple bins are found through osthead lookup
+   resetost(5, 5, 4);
+   height = 2.0 * M_PI * wlmda * wflmda;
+   nlmdahist = 3;
+   sethist(1, 0.50, 0.0, 1.0 * height, wlmda, wflmda);
+   sethist(2, 0.50, 0.0, 2.0 * height, wlmda, wflmda);
+   sethist(3, 0.75, 1.0, 3.0 * height, wlmda, wflmda);
+   buildOstIndex();
+   lambda = 0.75;
+   dedl = 1.0;
+   egkernel(egbias, dgdl, dgdfl);
+   expected = 3.0 + 3.0 * std::exp(-1.0);
+   COMPARE_REALS(egbias, expected, 1.0e-12);
+   COMPARE_REALS(dgdl, -12.0 * std::exp(-1.0), 1.0e-12);
+   COMPARE_REALS(dgdfl, -3.0 * std::exp(-1.0), 1.0e-12);
+
+   // left endpoint includes both real and mirror gaussian images
+   resetost(5, 5, 3);
+   height = 2.0 * M_PI * wlmda * wflmda;
+   nlmdahist = 1;
+   sethist(1, 0.0, 0.0, height, wlmda, wflmda);
+   buildOstIndex();
+   lambda = 0.0;
+   dedl = 0.0;
+   egkernel(egbias, dgdl, dgdfl);
+   COMPARE_REALS(egbias, 2.0, 1.0e-12);
+   COMPARE_REALS(dgdl, 0.0, 1.0e-12);
+
+   // right endpoint includes both real and mirror gaussian images
+   resetost(5, 5, 3);
+   height = 2.0 * M_PI * wlmda * wflmda;
+   nlmdahist = 1;
+   sethist(1, 1.0, 0.0, height, wlmda, wflmda);
+   buildOstIndex();
+   lambda = 1.0;
+   dedl = 0.0;
+   egkernel(egbias, dgdl, dgdfl);
+   COMPARE_REALS(egbias, 2.0, 1.0e-12);
+   COMPARE_REALS(dgdl, 0.0, 1.0e-12);
+
+   // wide histogram widths are used for both grid and continuous bias
+   resetost(41, 81, 3);
+   wlhist = 0.05;
+   wfhist = 10.0;
+   maxwlhist = wlhist;
+   maxwfhist = wfhist;
+   height = 2.0 * M_PI * wlhist * wfhist;
+   {
+      double targetl = 0.525;
+      double targetf = 5.0;
+      nlmdahist = 1;
+      sethist(1, 0.50, 0.0, height, wlhist, wfhist);
+      buildOstIndex();
+      buildGkernel();
+      expected = std::exp(-0.25);
+      COMPARE_REALS(GK(22, 46), expected, 1.0e-12);
+      lambda = targetl;
+      dedl = targetf;
+      egkernel(egbias, dgdl, dgdfl);
+      COMPARE_REALS(egbias, expected, 1.0e-12);
+      COMPARE_REALS(dgdl, -10.0 * expected, 1.0e-12);
+      COMPARE_REALS(dgdfl, -0.05 * expected, 1.0e-12);
+   }
+
+   // if dU/dlambda is outside the current flambda grid, egkernel returns zero
+   resetost(5, 5, 3);
+   height = 2.0 * M_PI * wlmda * wflmda;
+   nlmdahist = 1;
+   sethist(1, 0.50, 0.0, height, wlmda, wflmda);
+   buildOstIndex();
+   lambda = 0.50;
+   dedl = 100.0;
+   egkernel(egbias, dgdl, dgdfl);
+   COMPARE_REALS(egbias, 0.0, 1.0e-12);
+   COMPARE_REALS(dgdl, 0.0, 1.0e-12);
+   COMPARE_REALS(dgdfl, 0.0, 1.0e-12);
+}
+
+TEST_CASE("EOST-fkernel", "[ff][eost]")
+{
+   bath::kelvin = 300.0;
+   double rt, expected, height;
+
+   // two nonzero gkernel weights at flambda=-1 and +1
+   resetost(5, 5, 1);
+   rt = units::gasconst * bath::kelvin;
+   GK(3, 2) = std::log(2.0) * rt;
+   GK(3, 4) = std::log(4.0) * rt;
+   vkernelmax[3] = std::log(4.0) * rt;
+   buildFkernel();
+   expected = 1.0 / 3.0;
+   COMPARE_REALS(lmdafmean[3], expected, 1.0e-12);
+   COMPARE_REALS(lmdafmean[1], 0.0, 1.0e-12);
+
+   // build gkernel incrementally from multiple gaussians, then build f kernel
+   resetost(5, 5, 4);
+   rt = units::gasconst * bath::kelvin;
+   height = 2.0 * M_PI * wlmda * wflmda;
+
+   nlmdahist = 1;
+   sethist(1, 0.25, -1.0, 1.0 * height, wlmda, wflmda);
+   buildOstIndex();
+   updateGkernel();
+
+   nlmdahist = 2;
+   sethist(2, 0.50, 0.0, 2.0 * height, wlmda, wflmda);
+   buildOstIndex();
+   updateGkernel();
+
+   nlmdahist = 3;
+   sethist(3, 0.75, 1.0, 3.0 * height, wlmda, wflmda);
+   buildOstIndex();
+   updateGkernel();
+
+   buildFkernel();
+
+   double w1 = std::exp(GK(3, 1) / rt);
+   double w2 = std::exp(GK(3, 2) / rt);
+   double w3 = std::exp(GK(3, 3) / rt);
+   double w4 = std::exp(GK(3, 4) / rt);
+   double w5 = std::exp(GK(3, 5) / rt);
+   expected = (-2.0 * w1 - w2 + w4 + 2.0 * w5) / (w1 + w2 + w3 + w4 + w5);
+   COMPARE_REALS(lmdafmean[3], expected, 1.0e-12);
+
+   // a deeply filled bin overflows exp(g/kT) unless the largest bias in the
+   // row is factored out; unshifted this returns a NaN
+   resetost(5, 5, 1);
+   rt = units::gasconst * bath::kelvin;
+   GK(3, 2) = 500.0;
+   GK(3, 4) = 499.0;
+   vkernelmax[3] = 500.0;
+   buildFkernel();
+   double wratio = std::exp((499.0 - 500.0) / rt);
+   expected = (-1.0 + wratio) / (1.0 + wratio);
+   COMPARE_REALS(lmdafmean[3], expected, 1.0e-12);
+}
+
+TEST_CASE("EOST-kernelbuilds", "[ff][eost]")
+{
+   bath::kelvin = 300.0;
+   double rt, height;
+   int nhist;
+
+   // build a mixed history with overlapping gaussians, endpoint mirror images,
+   // and multiple gaussian widths
+   resetost(9, 9, 8);
+   rt = units::gasconst * bath::kelvin;
+   nhist = 6;
+   nlmdahist = nhist;
+   height = 2.0 * M_PI * wlmda * wflmda;
+   sethist(1, 0.00, 0.0, 0.7 * height, wlmda, wflmda);
+   sethist(2, 0.25, -1.0, 1.1 * height, wlmda, wflmda);
+   sethist(3, 0.50, 0.0, 1.6 * height, wlmda, wflmda);
+   sethist(4, 0.50, 0.0, 0.4 * height, wlmda, wflmda);
+   sethist(5, 0.75, 1.0, 2.3 * height, wlmda, wflmda);
+   sethist(6, 1.00, 0.0, 0.9 * height, wlmda, wflmda);
+   ostwlhist[5] = 2.0 * wlmda;
+   ostwfhist[5] = 2.0 * wflmda;
+   buildOstIndex();
+
+   // buildgkernel must clear stale values before rebuilding
+   std::fill(gkernel.begin(), gkernel.end(), -123.0);
+   buildGkernel();
+   buildFkernel();
+
+   std::vector<double> gref = gkernel;
+   std::vector<double> fref(nlmda + 1, 0.0);
+   for (int i = 1; i <= nlmda; ++i)
+      fref[i] = lmdafmean[i];
+   COMPARE_REALS(GK(1, 1), 0.0, 1.0e-12);
+
+   // compute the buildfkernel result independently from gkernel
+   std::vector<double> fmanual(nlmda + 1, 0.0);
+   std::vector<double> fsumref(nlmda + 1, 0.0);
+   std::vector<double> pfref(nlmda + 1, 0.0);
+   for (int i = 1; i <= nlmda; ++i) {
+      double partfunc = 0.0, fsum = 0.0;
+      // the accumulators factor out the largest bias in the row, so the
+      // reference has to be built with the same shift
+      double vmaxref = brutevkmax(i);
+      for (int j = 1; j <= nflmda; ++j) {
+         if (gref[gidx(i, j)] != 0.0) {
+            double flmda = (double)(j - fli0) * wflmda;
+            double weight = std::exp((gref[gidx(i, j)] - vmaxref) / rt);
+            fsum += flmda * weight;
+            partfunc += weight;
+         }
+      }
+      fmanual[i] = (partfunc == 0.0) ? 0.0 : fsum / partfunc;
+      fsumref[i] = fsum;
+      pfref[i] = partfunc;
+   }
+   for (int i = 1; i <= nlmda; ++i) {
+      CAPTURE(i);
+      COMPARE_REALS(lmdafmean[i], fmanual[i], 1.0e-12);
+   }
+
+   // buildkernels must reproduce gkernel, lmdafmean and the accumulators
+   std::fill(gkernel.begin(), gkernel.end(), -123.0);
+   for (int i = 1; i <= nlmda; ++i) {
+      lmdafmean[i] = -123.0;
+      lmdafsum[i] = -123.0;
+      lmdafwt[i] = -123.0;
+   }
+   buildKernels();
+   for (int j = 1; j <= nflmda; ++j) {
+      for (int i = 1; i <= nlmda; ++i) {
+         CAPTURE(i, j);
+         COMPARE_REALS(GK(i, j), gref[gidx(i, j)], 1.0e-12);
+      }
+   }
+   for (int i = 1; i <= nlmda; ++i) {
+      CAPTURE(i);
+      COMPARE_REALS(lmdafmean[i], fref[i], 1.0e-12);
+      COMPARE_REALS(lmdafsum[i], fsumref[i], 1.0e-12);
+      COMPARE_REALS(lmdafwt[i], pfref[i], 1.0e-12);
+   }
+
+   // incremental updates one history at a time must match a full rebuild
+   resetost(9, 9, 8);
+   height = 2.0 * M_PI * wlmda * wflmda;
+   for (int ihist = 1; ihist <= nhist; ++ihist) {
+      nlmdahist = ihist;
+      if (ihist == 1)
+         sethist(ihist, 0.00, 0.0, 0.7 * height, wlmda, wflmda);
+      else if (ihist == 2)
+         sethist(ihist, 0.25, -1.0, 1.1 * height, wlmda, wflmda);
+      else if (ihist == 3)
+         sethist(ihist, 0.50, 0.0, 1.6 * height, wlmda, wflmda);
+      else if (ihist == 4)
+         sethist(ihist, 0.50, 0.0, 0.4 * height, wlmda, wflmda);
+      else if (ihist == 5) {
+         sethist(ihist, 0.75, 1.0, 2.3 * height, wlmda, wflmda);
+         ostwlhist[ihist] = 2.0 * wlmda;
+         ostwfhist[ihist] = 2.0 * wflmda;
+      } else
+         sethist(ihist, 1.00, 0.0, 0.9 * height, wlmda, wflmda);
+      buildOstIndex();
+      updateKernels();
+   }
+   for (int j = 1; j <= nflmda; ++j) {
+      for (int i = 1; i <= nlmda; ++i) {
+         CAPTURE(i, j);
+         COMPARE_REALS(GK(i, j), gref[gidx(i, j)], 1.0e-12);
+      }
+   }
+   for (int i = 1; i <= nlmda; ++i) {
+      CAPTURE(i);
+      COMPARE_REALS(lmdafmean[i], fref[i], 1.0e-12);
+      COMPARE_REALS(lmdafsum[i], fsumref[i], 1.0e-12);
+      COMPARE_REALS(lmdafwt[i], pfref[i], 1.0e-12);
+   }
+}
+
+TEST_CASE("EOST-depcriteria", "[ff][eost]")
+{
+   TestLmdaFlagGuard guard;
+
+   // with the gate off every interval is accepted
+   use_lmdacv = false;
+   lmdacvstd = 0.0;
+   lmdacvrat = 0.0;
+   REQUIRE(depcriteria(0.0, 1.0e6));
+
+   // the tolerance is lmdacvstd plus lmdacvrat times the average
+   use_lmdacv = true;
+   lmdacvstd = 10.0;
+   lmdacvrat = 0.2;
+
+   REQUIRE(depcriteria(0.0, 9.9));
+   REQUIRE_FALSE(depcriteria(0.0, 10.0));
+   REQUIRE(depcriteria(50.0, 19.9));
+   REQUIRE_FALSE(depcriteria(50.0, 20.0));
+   REQUIRE(depcriteria(-50.0, 19.9));
+   REQUIRE_FALSE(depcriteria(-50.0, 20.0));
+
+   // a vanishing tolerance rejects every interval
+   lmdacvstd = 0.0;
+   lmdacvrat = 0.0;
+   REQUIRE_FALSE(depcriteria(1.0, 0.0));
+}
+
+TEST_CASE("EOST-eginterpolate", "[ff][eost]")
+{
+   bath::kelvin = 300.0;
+   double egbias0, dgdl0, dgdfl0;
+   double egbias1, dgdl1, dgdfl1;
+   double height, sigl, sigf;
+
+   // grid-point interpolation reproduces the analytic gaussian sum to roundoff
+   resetost(9, 9, 4);
+   sigl = 2.0 * wlmda;
+   sigf = 2.0 * wflmda;
+   height = 2.0 * M_PI * sigl * sigf;
+   oststdev = 4.0;
+   nlmdahist = 3;
+   sethist(1, 0.25, -1.0, 1.1 * height, sigl, sigf);
+   sethist(2, 0.50, 0.0, 1.6 * height, sigl, sigf);
+   sethist(3, 0.75, 1.0, 2.3 * height, sigl, sigf);
+   buildOstIndex();
+   buildKernels();
+   lambda = 0.50;
+   dedl = 0.0;
+   ostinterpol = false;
+   egkernel(egbias0, dgdl0, dgdfl0);
+   egkernelInterpolate(egbias1, dgdl1, dgdfl1);
+   COMPARE_REALS(egbias1, egbias0, 1.0e-12);
+   COMPARE_REALS(dgdl1, dgdl0, 1.0e-12);
+   COMPARE_REALS(dgdfl1, dgdfl0, 1.0e-12);
+
+   // off-grid interpolation is approximate; wide gaussians keep errors small
+   resetost(17, 17, 4);
+   sigl = 4.0 * wlmda;
+   sigf = 4.0 * wflmda;
+   height = 2.0 * M_PI * sigl * sigf;
+   oststdev = 4.0;
+   nlmdahist = 3;
+   sethist(1, 0.25, -2.0, 0.8 * height, sigl, sigf);
+   sethist(2, 0.50, 0.0, 1.2 * height, sigl, sigf);
+   sethist(3, 0.75, 2.0, 1.6 * height, sigl, sigf);
+   buildOstIndex();
+   buildKernels();
+   lambda = 0.53125;
+   dedl = 0.25;
+   ostinterpol = false;
+   egkernel(egbias0, dgdl0, dgdfl0);
+   egkernelInterpolate(egbias1, dgdl1, dgdfl1);
+   COMPARE_REALS(egbias1, egbias0, 1.0e-3);
+   COMPARE_REALS(dgdl1, dgdl0, 2.0e-2);
+   COMPARE_REALS(dgdfl1, dgdfl0, 2.0e-2);
+}
+
+TEST_CASE("EOST-efkernel", "[ff][eost]")
+{
+   double eostlmda, dfdl, expected;
+
+   // use lmdafmean(lambda)=lambda and integrate to lambda=0.375
+   resetost(5, 5, 1);
+   for (int i = 1; i <= nlmda; ++i)
+      lmdafmean[i] = (double)(i - 1) * wlmda;
+   lambda = 0.375;
+   efreeLmda(lambda, eostlmda, dfdl);
+   expected = 0.5 * lambda * lambda;
+   COMPARE_REALS(eostlmda, expected, 1.0e-12);
+   COMPARE_REALS(dfdl, lambda, 1.0e-12);
+
+   // use lmdafmean(lambda)=1+lambda so endpoint mean forces are nonzero
+   resetost(5, 5, 1);
+   for (int i = 1; i <= nlmda; ++i)
+      lmdafmean[i] = 1.0 + (double)(i - 1) * wlmda;
+
+   lambda = 0.0;
+   efreeLmda(lambda, eostlmda, dfdl);
+   COMPARE_REALS(eostlmda, 0.0, 1.0e-12);
+   COMPARE_REALS(dfdl, 1.0, 1.0e-12);
+   lambda = -0.25;
+   efreeLmda(lambda, eostlmda, dfdl);
+   COMPARE_REALS(eostlmda, 0.0, 1.0e-12);
+   COMPARE_REALS(dfdl, 1.0, 1.0e-12);
+
+   lambda = 1.0;
+   efreeLmda(lambda, eostlmda, dfdl);
+   COMPARE_REALS(eostlmda, 1.5, 1.0e-12);
+   COMPARE_REALS(dfdl, 2.0, 1.0e-12);
+   lambda = 1.25;
+   efreeLmda(lambda, eostlmda, dfdl);
+   COMPARE_REALS(eostlmda, 1.5, 1.0e-12);
+   COMPARE_REALS(dfdl, 2.0, 1.0e-12);
+
+   COMPARE_REALS(efreeTot(), 1.5, 1.0e-12);
+
+   for (int i = 1; i <= nlmda; ++i)
+      lmdafmean[i] = 2.5;
+   COMPARE_REALS(efreeTot(), 2.5, 1.0e-12);
+
+   for (int i = 1; i <= nlmda; ++i)
+      lmdafmean[i] = 0.0;
+   COMPARE_REALS(efreeTot(), 0.0, 1.0e-12);
+}
+
+TEST_CASE("EOST-meta", "[ff][eost]")
+{
+   double vbias, dvdl, pref, expected;
+
+   // one normalized 1D gaussian centered at lambda=0.5
+   resetost(5, 5, 1);
+   resetmeta(2);
+   nmetahist = 1;
+   metalhist[1] = 0.5;
+   metahhist[1] = 2.0;
+   metawhist[1] = 0.25;
+   pref = metahhist[1] / (metawhist[1] * std::sqrt(2.0 * M_PI));
+
+   // a cutoff of many widths keeps every image term
+   oststdev = 100.0;
+   maxwlhist = metawhist[1];
+   buildMetaIndex();
+
+   // the three reflecting images sit at lambda = 0.5, -0.5 and 1.5; sig2 = 0.0625.
+   // at the center the two images are equidistant, so they cancel in dvdl.
+   eMetaBias(0.5, vbias, dvdl);
+   expected = pref * (1.0 + 2.0 * std::exp(-8.0));
+   COMPARE_REALS(vbias, expected, 1.0e-12);
+   COMPARE_REALS(dvdl, 0.0, 1.0e-12);
+
+   // off center the image offsets are 0.25, 1.25 and -0.75
+   eMetaBias(0.75, vbias, dvdl);
+   double b1 = pref * std::exp(-0.5);
+   double b2 = pref * std::exp(-12.5);
+   double b3 = pref * std::exp(-4.5);
+   COMPARE_REALS(vbias, b1 + b2 + b3, 1.0e-12);
+   COMPARE_REALS(dvdl, -(0.25 * b1 + 1.25 * b2 - 0.75 * b3) / 0.0625, 1.0e-12);
+
+   // symmetric gaussian has zero endpoint free energy difference, read from
+   // the end points of the bias grid
+   addMetaGrid(1);
+   COMPARE_REALS(vmetagrid[1], pref * (2.0 * std::exp(-2.0) + std::exp(-18.0)), 1.0e-12);
+   COMPARE_REALS(metaDeltaG(), 0.0, 1.0e-12);
+
+   // a four width cutoff drops the image five widths away
+   oststdev = 4.0;
+   eMetaBias(0.75, vbias, dvdl);
+   expected = pref * (std::exp(-0.5) + std::exp(-4.5));
+   COMPARE_REALS(vbias, expected, 1.0e-12);
+   expected = -16.0 * pref * (0.25 * std::exp(-0.5) - 0.75 * std::exp(-4.5));
+   COMPARE_REALS(dvdl, expected, 1.0e-12);
+
+   // resizing preserves old history and zeros new slots
+   nmetahist = 2;
+   metalhist[2] = 0.25;
+   metahhist[2] = 3.0;
+   metawhist[2] = 0.125;
+   metaihist[2] = 42;
+   resizeMeta();
+   COMPARE_INTS(sizemetahist, 4);
+   COMPARE_REALS(metalhist[2], 0.25, 1.0e-12);
+   COMPARE_REALS(metalhist[3], 0.0, 1.0e-12);
+   COMPARE_INTS(metaihist[2], 42);
+   COMPARE_INTS(metaihist[3], 0);
+   COMPARE_INTS((int)metanext.size(), sizemetahist + 1); // the bin links grow too
+}
+
+TEST_CASE("EOST-metadyn", "[ff][eost]")
+{
+   // drive elmdaDyn across two intervals and check the deposited gaussian,
+   // and that metadynamics ignores the convergence gate and moves lambda on
+   // every step.
+   TestLmdaFlagGuard guard;
+   resetost(5, 5, 1);
+   use_meta = true;
+   resetmeta(2);
+   lmdaintv = 4;
+   lmdanpa = 1;
+   lmdanpb = 1;
+   lmdanpc = 2;
+   hbias = 2.0;
+   wlmda = 0.25;
+   wlhist = 0.3;
+   maxwlhist = wlhist;
+   dedl = 0.0;
+   lmdadt = 0.0; // no-op lmdaLangevin, so the sampled lambda values stay controlled
+
+   // sampled lambda per step (lam is indexed by istep, not by buffer slot);
+   // elmdaDyn averages the fixed-lambda slice, indices
+   // lmdanpa+lmdanpb..lmdaintv-1 = 2..3, holding the last two samples.
+   double lam[5] = {0.0, 0.1, 0.2, 0.4, 0.6};
+   for (int istep = 1; istep <= lmdaintv; ++istep) {
+      lambda = lam[istep];
+      elmdaDyn(istep);
+      if (istep < lmdaintv)
+         COMPARE_INTS(nmetahist, 0); // no deposit before the interval boundary
+   }
+
+   double avgref = (lam[3] + lam[4]) / (double)lmdanpc; // 0.5
+   COMPARE_INTS(nmetahist, 1);
+   COMPARE_REALS(metalhist[1], avgref, 1.0e-12);
+   COMPARE_REALS(metahhist[1], hbias, 1.0e-12);
+   COMPARE_REALS(metawhist[1], wlhist, 1.0e-12);
+   COMPARE_INTS(metaihist[1], lmdaintv); // step stamp at the deposit boundary
+
+   // meta ignores the convergence gate and moves a deterministic frictionless
+   // lambda particle on every step of the interval
+   use_lmdacv = true;
+   lmdacvstd = 1.0;
+   lmdacvrat = 0.0;
+   lmdadt = 0.1;
+   lmdamass = 1.0;
+   lmdafric = 0.0;
+   lmdatheta = 0.25 * M_PI;
+   lmdavtheta = 0.0;
+   bdgdl = 0.0;
+   double lmv[5] = {0.0};
+   for (int istep = lmdaintv + 1; istep <= 2 * lmdaintv; ++istep) {
+      dedl = 1.0;
+      if (istep % 2 == 0)
+         dedl = 11.0;
+      elmdaDyn(istep);
+      lmv[istep - lmdaintv] = lambda;
+   }
+   COMPARE_INTS(nmetahist, 2); // a noisy interval still deposits
+   for (int k = 2; k <= lmdaintv; ++k) {
+      CAPTURE(k);
+      REQUIRE(lmv[k] != lmv[k - 1]);
+   }
+}
+
+TEST_CASE("EOST-vkernelmax", "[ff][eost]")
+{
+   // vkernelmax must hold max_j gkernel(i,j) for every lambda bin, however the
+   // kernel was filled, and ostVminimax must be the minimum of it over lambda.
+   bath::kelvin = 300.0;
+   resetost(5, 5, 4);
+
+   nlmdahist = 2;
+   sethist(1, 0.25, 0.0, 1.0, 0.25, 1.0);
+   sethist(2, 0.75, 1.0, 2.0, 0.25, 1.0);
+   buildOstIndex();
+   buildKernels();
+
+   double vmin = 1.0e30;
+   for (int i = 1; i <= nlmda; ++i) {
+      CAPTURE(i);
+      COMPARE_REALS(vkernelmax[i], brutevkmax(i), 1.0e-12);
+      vmin = std::min(vmin, brutevkmax(i));
+   }
+   COMPARE_REALS(ostVminimax(), vmin, 1.0e-12);
+   REQUIRE(vmin > 0.0); // the two sources reach every lambda bin
+
+   // the incremental update through updateKernels must stay exact
+   nlmdahist = 3;
+   sethist(3, 0.5, -1.0, 1.5, 0.25, 1.0);
+   buildOstIndex();
+   updateKernels();
+   for (int i = 1; i <= nlmda; ++i) {
+      CAPTURE(i);
+      COMPARE_REALS(vkernelmax[i], brutevkmax(i), 1.0e-12);
+   }
+
+   // buildGkernel takes the other gkernel write path (do_f false); it must
+   // reproduce both the kernel and the running max
+   std::vector<double> gsave = gkernel;
+   buildGkernel();
+   for (size_t k = 0; k < gsave.size(); ++k) {
+      CAPTURE(k);
+      COMPARE_REALS(gkernel[k], gsave[k], 1.0e-12);
+   }
+   for (int i = 1; i <= nlmda; ++i) {
+      CAPTURE(i);
+      COMPARE_REALS(vkernelmax[i], brutevkmax(i), 1.0e-12);
+   }
+}
+
+TEST_CASE("EOST-tempering", "[ff][eost]")
+{
+   bath::kelvin = 300.0;
+   resetost(5, 5, 1);
+   hbias = 1.0e-5;
+   double rt = units::gasconst * bath::kelvin;
+
+   // disabled: the height is hbias no matter how filled or uneven the path is
+   use_ostgtemp = false;
+   use_ostltemp = false;
+   ostgthresh = 1.0;
+   ostgtempgamma = 1.0;
+   ostlthresh = 1.0;
+   ostltempgamma = 1.0;
+   COMPARE_REALS(temperedHeight(0.0, 0.0), hbias, 1.0e-18);
+   COMPARE_REALS(temperedHeight(50.0, 50.0), hbias, 1.0e-18);
+   COMPARE_REALS(temperedHeight(50.0, 500.0), hbias, 1.0e-18);
+
+   // both enabled, at or below both thresholds: still exactly hbias
+   use_ostgtemp = true;
+   use_ostltemp = true;
+   COMPARE_REALS(temperedHeight(0.0, 0.0), hbias, 1.0e-18);
+   COMPARE_REALS(temperedHeight(1.0, 1.0), hbias, 1.0e-18);
+   COMPARE_REALS(temperedHeight(1.0, 2.0), hbias, 1.0e-18);
+   COMPARE_REALS(temperedHeight(0.5, 1.5), hbias, 1.0e-18);
+
+   // the global factor alone decays with the path bias level and ignores how
+   // far the deposit bin is ahead of that level
+   use_ostltemp = false;
+   double vstar[4] = {1.5, 2.0, 3.0, 5.0};
+   double prev = hbias;
+   for (int k = 0; k < 4; ++k) {
+      CAPTURE(vstar[k]);
+      double h = temperedHeight(vstar[k], vstar[k]);
+      COMPARE_REALS(h, hbias * std::exp(-(vstar[k] - 1.0) / rt), 1.0e-18);
+      COMPARE_REALS(temperedHeight(vstar[k], vstar[k] + 50.0), h, 1.0e-18);
+      REQUIRE(h < prev);
+      prev = h;
+   }
+
+   // a larger global gamma decays more slowly at the same level
+   ostgtempgamma = 1.0;
+   double h1 = temperedHeight(3.0, 3.0);
+   ostgtempgamma = 2.0;
+   double h2 = temperedHeight(3.0, 3.0);
+   REQUIRE(h2 > h1);
+   COMPARE_REALS(h2, hbias * std::exp(-2.0 / (2.0 * rt)), 1.0e-18);
+
+   // the local factor alone depends only on the excess of the deposit bin over
+   // the path bias level
+   use_ostgtemp = false;
+   use_ostltemp = true;
+   ostgtempgamma = 1.0;
+   double delta[5] = {0.0, 1.0, 1.5, 3.0, 5.0};
+   prev = hbias;
+   for (int k = 0; k < 5; ++k) {
+      CAPTURE(delta[k]);
+      double h = temperedHeight(50.0, 50.0 + delta[k]);
+      COMPARE_REALS(h, hbias * std::exp(-std::max(0.0, delta[k] - 1.0) / rt), 1.0e-18);
+      COMPARE_REALS(temperedHeight(0.0, delta[k]), h, 1.0e-18);
+      REQUIRE(h <= prev);
+      prev = h;
+   }
+   COMPARE_REALS(temperedHeight(50.0, 50.0), hbias, 1.0e-18);
+
+   // both factors multiply, so with equal settings the path bias level cancels
+   // and only the deposit bin bias level remains
+   use_ostgtemp = true;
+   use_ostltemp = true;
+   ostgthresh = 1.0;
+   ostlthresh = 1.0;
+   ostgtempgamma = 2.0;
+   ostltempgamma = 2.0;
+   double h = temperedHeight(3.0, 6.0);
+   double hg = std::exp(-2.0 / (2.0 * rt));
+   double hl = std::exp(-2.0 / (2.0 * rt));
+   COMPARE_REALS(h, hbias * hg * hl, 1.0e-18);
+   COMPARE_REALS(h, hbias * std::exp((2.0 - 6.0) / (2.0 * rt)), 1.0e-18);
+   ostltempgamma = 0.5;
+   hl = std::exp(-2.0 / (0.5 * rt));
+   COMPARE_REALS(temperedHeight(3.0, 6.0), hbias * hg * hl, 1.0e-18);
+
+   // over a sweep of levels the height stays positive, never exceeds the full
+   // height, and never grows with either level
+   double vgrid[6] = {0.0, 0.5, 1.0, 2.0, 5.0, 20.0};
+   double dgrid[6] = {0.0, 0.5, 1.0, 2.0, 5.0, 20.0};
+   double gpair[3][2] = {{1.0, 1.0}, {2.0, 0.5}, {0.5, 2.0}};
+   double hgrid[6][6];
+   for (int p = 0; p < 3; ++p) {
+      ostgtempgamma = gpair[p][0];
+      ostltempgamma = gpair[p][1];
+      for (int i = 0; i < 6; ++i) {
+         for (int j = 0; j < 6; ++j) {
+            CAPTURE(p, i, j);
+            double hij = temperedHeight(vgrid[i], vgrid[i] + dgrid[j]);
+            hgrid[i][j] = hij;
+            REQUIRE(hij > 0.0);
+            REQUIRE(hij <= hbias);
+            if (i > 0) {
+               REQUIRE(hij <= hgrid[i - 1][j]);
+            }
+            if (j > 0) {
+               REQUIRE(hij <= hgrid[i][j - 1]);
+            }
+         }
+      }
+   }
+
+   // a non-positive gamma disables its factor rather than dividing by zero
+   ostgtempgamma = 0.0;
+   ostltempgamma = 0.0;
+   COMPARE_REALS(temperedHeight(50.0, 500.0), hbias, 1.0e-18);
+   ostgtempgamma = -1.0;
+   ostltempgamma = -1.0;
+   COMPARE_REALS(temperedHeight(50.0, 500.0), hbias, 1.0e-18);
+}
+
+TEST_CASE("EOST-ostphase", "[ff][eost]")
+{
+   // setLmdaPhase divides the deposit interval into propagation, equilibration
+   // and averaging phases; the clamps keep a propagation step and enough
+   // samples to average without ever losing a sample from the interval.
+
+   // the requested ratios divide the interval by truncation
+   lmdaintv = 10;
+   lmdaparatio = 0.3;
+   lmdapbratio = 0.3;
+   setLmdaPhase();
+   COMPARE_INTS(lmdanpa, 3);
+   COMPARE_INTS(lmdanpb, 3);
+   COMPARE_INTS(lmdanpc, 4);
+   COMPARE_INTS(lmdanpa + lmdanpb + lmdanpc, lmdaintv);
+
+   // a zero propagation ratio still keeps one propagation step
+   lmdaintv = 10;
+   lmdaparatio = 0.0;
+   lmdapbratio = 0.3;
+   setLmdaPhase();
+   COMPARE_INTS(lmdanpa, 1);
+   COMPARE_INTS(lmdanpa + lmdanpb + lmdanpc, lmdaintv);
+
+   // a crowded interval gives back samples to the averaging phase, taking
+   // them from the equilibration phase first
+   lmdaintv = 10;
+   lmdaparatio = 0.4;
+   lmdapbratio = 0.5;
+   setLmdaPhase();
+   COMPARE_INTS(lmdanpc, 2);
+   COMPARE_INTS(lmdanpa, 4);
+   COMPARE_INTS(lmdanpb, 4);
+   COMPARE_INTS(lmdanpa + lmdanpb + lmdanpc, lmdaintv);
+
+   // the shortest usable interval still holds all three phases
+   lmdaintv = 3;
+   lmdaparatio = 0.4;
+   lmdapbratio = 0.4;
+   setLmdaPhase();
+   COMPARE_INTS(lmdanpa, 1);
+   COMPARE_INTS(lmdanpc, 2);
+   COMPARE_INTS(lmdanpa + lmdanpb + lmdanpc, lmdaintv);
+}
+
+TEST_CASE("EOST-ostdyn", "[ff][eost]")
+{
+   // drive elmdaDyn over three deposit intervals and check that a settled
+   // interval deposits, an unsettled one is rejected, and only the averaging
+   // phase samples are averaged.
+   TestLmdaFlagGuard guard;
+
+   // a settled interval deposits one gaussian at the interval end
+   bath::kelvin = 300.0;
+   resetost(5, 5, 4);
+   use_ost = true;
+   lmdaintv = 4;
+   lmdanpa = 0;
+   lmdanpb = 0;
+   lmdanpc = 4;
+   use_lmdacv = true;
+   lmdacvstd = 1.0;
+   lmdacvrat = 0.0;
+   hbias = 1.0;
+   lmdadt = 0.0;
+   fastkernel = true;
+   d2edl2 = 0.0;
+   bdgdl = 0.0;
+   bdgdfl = 0.0;
+   lmdadfdl = 0.0;
+   for (int istep = 1; istep <= lmdaintv; ++istep) {
+      lambda = 0.5;
+      dedl = 1.0;
+      elmdaDyn(istep);
+      if (istep < lmdaintv)
+         COMPARE_INTS(nlmdahist, 0); // waits for the interval end
+   }
+   COMPARE_INTS(nlmdahist, 1);
+   COMPARE_INTS(lmdaihist[1], lmdaintv);
+   COMPARE_REALS(lmdalhist[1], 0.5, 1.0e-12);
+   COMPARE_REALS(lmdafhist[1], 1.0, 1.0e-12);
+   COMPARE_REALS(osthhist[1], hbias, 1.0e-12);
+   COMPARE_REALS(ostwlhist[1], wlhist, 1.0e-12);
+
+   // an unsettled interval is rejected and changes nothing
+   double eostsave = lmdadeltag;
+   for (int istep = lmdaintv + 1; istep <= 2 * lmdaintv; ++istep) {
+      lambda = 0.5;
+      dedl = 1.0;
+      if (istep % 2 == 0)
+         dedl = 11.0;
+      elmdaDyn(istep);
+   }
+   COMPARE_REALS(dedlavg, 6.0, 1.0e-12);
+   COMPARE_REALS(dedlstd, 5.0, 1.0e-12);
+   COMPARE_INTS(nlmdahist, 1);
+   COMPARE_REALS(lmdadeltag, eostsave, 1.0e-12);
+
+   // only the samples after the equilibration prefix are averaged
+   lmdanpa = 1;
+   lmdanpb = 1;
+   lmdanpc = 2;
+   for (int istep = 2 * lmdaintv + 1; istep <= 3 * lmdaintv; ++istep) {
+      int isamp = (istep - 1) % lmdaintv + 1;
+      lambda = 0.1;
+      dedl = 50.0;
+      if (isamp > lmdanpa + lmdanpb) {
+         lambda = 0.5;
+         dedl = 2.0;
+      }
+      elmdaDyn(istep);
+   }
+   COMPARE_INTS(nlmdahist, 2);
+   COMPARE_REALS(lmdalhist[2], 0.5, 1.0e-12);
+   COMPARE_REALS(lmdafhist[2], 2.0, 1.0e-12);
+}
+
+TEST_CASE("EOST-ostgate", "[ff][eost]")
+{
+   // drive elmdaDyn over one deposit interval and check that the lambda
+   // particle moves only during the leading propagation phase, that lambda is
+   // then held exactly fixed, and that the deposited gaussian sits on it.
+   TestLmdaFlagGuard guard;
+   bath::kelvin = 300.0;
+   resetost(5, 5, 4);
+   use_ost = true;
+   lmdaintv = 6;
+   lmdanpa = 2;
+   lmdanpb = 2;
+   lmdanpc = 2;
+   use_lmdacv = true;
+   lmdacvstd = 1.0;
+   lmdacvrat = 0.0;
+   hbias = 1.0;
+
+   // a deterministic frictionless lambda particle, so that any lambda motion
+   // comes from the gate alone
+   lmdadt = 0.1;
+   lmdamass = 1.0;
+   lmdafric = 0.0;
+   lmdatheta = 0.25 * M_PI;
+   lmdavtheta = 0.0;
+   lambda = 0.5;
+   fastkernel = true;
+   d2edl2 = 0.0;
+   bdgdl = 0.0;
+   bdgdfl = 0.0;
+   lmdadfdl = 0.0;
+
+   double lam[7] = {0.0};
+   for (int istep = 1; istep <= lmdaintv; ++istep) {
+      dedl = 1.0;
+      elmdaDyn(istep);
+      lam[istep] = lambda;
+   }
+
+   // the particle moves while the interval is in its first phase
+   REQUIRE(lam[1] != lam[2]);
+
+   // lambda is then bit identical for the rest of the interval
+   double frozen = lam[2];
+   for (int istep = 3; istep <= lmdaintv; ++istep) {
+      CAPTURE(istep);
+      REQUIRE(lam[istep] == frozen);
+   }
+
+   // the averaged lambda is the frozen value, not a smear, so the gaussian is
+   // deposited exactly on it
+   COMPARE_INTS(nlmdahist, 1);
+   REQUIRE(lmdaavg == frozen);
+   REQUIRE(lmdalhist[1] == frozen);
+   COMPARE_REALS(lmdafhist[1], 1.0, 1.0e-12);
+}
+
+TEST_CASE("EOST-ostlocal", "[ff][eost]")
+{
+   // deposit into an unevenly filled kernel with both tempering factors on:
+   // elmdaDyn takes the height from the pre-deposit bias levels, the least
+   // filled lambda bin deposits at the global height alone, and growing the
+   // flambda grid keeps the bin bias levels.
+   TestLmdaFlagGuard guard;
+   bath::kelvin = 300.0;
+   double rt = units::gasconst * bath::kelvin;
+
+   // fill the kernel much higher near lambda of zero
+   resetost(5, 5, 8);
+   use_ost = true;
+   oststdev = 4.0;
+   nlmdahist = 2;
+   sethist(1, 0.0, 0.0, 5.0, 0.25, 1.0);
+   sethist(2, 0.75, 0.0, 1.0, 0.25, 1.0);
+   buildOstIndex();
+   buildKernels();
+
+   // settle each deposit interval with both tempering factors on
+   lmdaintv = 4;
+   lmdanpa = 0;
+   lmdanpb = 0;
+   lmdanpc = 4;
+   use_lmdacv = true;
+   lmdacvstd = 1.0;
+   lmdacvrat = 0.0;
+   hbias = 1.0;
+   lmdadt = 0.0;
+   fastkernel = true;
+   d2edl2 = 0.0;
+   bdgdl = 0.0;
+   bdgdfl = 0.0;
+   lmdadfdl = 0.0;
+   use_ostgtemp = true;
+   use_ostltemp = true;
+   ostgthresh = 0.1;
+   ostlthresh = 0.1;
+   ostgtempgamma = 1.0;
+   ostltempgamma = 1.0;
+
+   // a deposit in the most filled bin is tempered by both factors
+   int imax = 1;
+   for (int i = 2; i <= nlmda; ++i) {
+      if (brutevkmax(i) > brutevkmax(imax))
+         imax = i;
+   }
+   double gmin = ostVminimax();
+   double gl = vkernelmax[imax];
+   REQUIRE(gmin > ostgthresh);      // the global factor is active
+   REQUIRE(gl - gmin > ostlthresh); // the local factor is active
+   for (int istep = 1; istep <= lmdaintv; ++istep) {
+      lambda = (double)(imax - 1) * wlmda;
+      dedl = 0.0;
+      elmdaDyn(istep);
+   }
+   double hglobal = hbias * std::exp(-(gmin - ostgthresh) / rt);
+   COMPARE_INTS(nlmdahist, 3);
+   COMPARE_REALS(osthhist[3], temperedHeight(gmin, gl), 1.0e-12);
+   REQUIRE(osthhist[3] < hglobal);
+
+   // a deposit in the least filled bin sees no local excess
+   int imin = 1;
+   for (int i = 2; i <= nlmda; ++i) {
+      if (vkernelmax[i] < vkernelmax[imin])
+         imin = i;
+   }
+   gmin = ostVminimax();
+   for (int istep = lmdaintv + 1; istep <= 2 * lmdaintv; ++istep) {
+      lambda = (double)(imin - 1) * wlmda;
+      dedl = 0.0;
+      elmdaDyn(istep);
+   }
+   hglobal = hbias * std::exp(-std::max(0.0, gmin - ostgthresh) / rt);
+   COMPARE_INTS(nlmdahist, 4);
+   COMPARE_REALS(osthhist[4], hglobal, 1.0e-12);
+
+   // growing the flambda grid keeps the running bin maxima
+   ensureFlambda(500.0);
+   for (int i = 1; i <= nlmda; ++i) {
+      CAPTURE(i);
+      COMPARE_REALS(vkernelmax[i], brutevkmax(i), 1.0e-12);
+   }
+}
+
+TEST_CASE("EOST-temperkeys", "[ff][eost]")
+{
+   // ost_mech must mirror the tempering settings parsed by the Fortran
+   // mutate_ost; the keyword parsing itself is covered by test_eost.f.
+   int fg0 = ost::use_ostgtemp, fl0 = ost::use_ostltemp;
+   double fgt0 = ost::ostgthresh, fgg0 = ost::ostgtempgamma;
+   double flt0 = ost::ostlthresh, flg0 = ost::ostltempgamma;
+
+   // ost_mech also copies state that resetost does not restore
+   double theta0 = lmdatheta, vtheta0 = lmdavtheta;
+   double mass0 = lmdamass, friction0 = lmdafric, dt0 = lmdadt;
+   bool fast0 = fastkernel;
+
+   ost::use_ostgtemp = 1;
+   ost::use_ostltemp = 0;
+   ost::ostgthresh = 2.0;
+   ost::ostgtempgamma = 3.0;
+   ost::ostlthresh = 0.5;
+   ost::ostltempgamma = 0.25;
+   ost_mech();
+   REQUIRE(use_ostgtemp);
+   REQUIRE_FALSE(use_ostltemp);
+   COMPARE_REALS(ostgthresh, 2.0, 1.0e-12);
+   COMPARE_REALS(ostgtempgamma, 3.0, 1.0e-12);
+   COMPARE_REALS(ostlthresh, 0.5, 1.0e-12);
+   COMPARE_REALS(ostltempgamma, 0.25, 1.0e-12);
+
+   ost::use_ostgtemp = 0;
+   ost::use_ostltemp = 1;
+   ost_mech();
+   REQUIRE_FALSE(use_ostgtemp);
+   REQUIRE(use_ostltemp);
+
+   // restore the Fortran settings and a clean OST state
+   ost::use_ostgtemp = fg0;
+   ost::use_ostltemp = fl0;
+   ost::ostgthresh = fgt0;
+   ost::ostgtempgamma = fgg0;
+   ost::ostlthresh = flt0;
+   ost::ostltempgamma = flg0;
+   resetost(5, 5, 1);
+   lmdatheta = theta0;
+   lmdavtheta = vtheta0;
+   lmdamass = mass0;
+   lmdafric = friction0;
+   lmdadt = dt0;
+   fastkernel = fast0;
+}
+
+TEST_CASE("EOST-metaimage", "[ff][eost]")
+{
+   // eMetaBias sums the same three reflecting lambda images as the g kernel.
+   double vbias, dvdl;
+   resetost(5, 5, 1);
+   resetmeta(2);
+   nmetahist = 1;
+   metalhist[1] = 0.1;
+   metahhist[1] = 2.0;
+   metawhist[1] = 0.25;
+   oststdev = 100.0;
+   maxwlhist = metawhist[1];
+   buildMetaIndex();
+   double pref = metahhist[1] / (metawhist[1] * std::sqrt(2.0 * M_PI));
+   double sig2 = metawhist[1] * metawhist[1];
+   double src[3] = {0.1, -0.1, 1.9};
+
+   double lam[4] = {0.0, 0.1, 0.5, 1.0};
+   for (int t = 0; t < 4; ++t) {
+      CAPTURE(lam[t]);
+      double vr = 0.0, dr = 0.0;
+      for (int m = 0; m < 3; ++m) {
+         double delta = lam[t] - src[m];
+         double b = pref * std::exp(-0.5 * delta * delta / sig2);
+         vr += b;
+         dr -= delta * b / sig2;
+      }
+      eMetaBias(lam[t], vbias, dvdl);
+      COMPARE_REALS(vbias, vr, 1.0e-12);
+      COMPARE_REALS(dvdl, dr, 1.0e-12);
+   }
+
+   // right at the lambda = 0 wall the nearby image doubles the bias
+   double single = pref * std::exp(-0.5 * 0.01 / sig2);
+   double far = pref * std::exp(-0.5 * 1.9 * 1.9 / sig2);
+   eMetaBias(0.0, vbias, dvdl);
+   COMPARE_REALS(vbias, 2.0 * single + far, 1.0e-12);
+   REQUIRE(vbias > single);
+}
+
+TEST_CASE("EOST-metatemper", "[ff][eost]")
+{
+   // drive elmdaDyn across several deposit intervals with tempering on.
+   TestLmdaFlagGuard guard;
+   bath::kelvin = 300.0;
+   resetost(5, 5, 1);
+   use_meta = true;
+   resetmeta(8);
+   lmdaintv = 4;
+   lmdanpa = 1;
+   lmdanpb = 1;
+   lmdanpc = 2;
+   hbias = 2.0;
+   dedl = 0.0;
+   lmdadt = 0.0; // no-op lmdaLangevin, so the sampled lambda values stay controlled
+   use_ostgtemp = true;
+   ostgthresh = 0.5;
+   ostgtempgamma = 1.0;
+   wlhist = 0.3;
+   maxwlhist = wlhist;
+   oststdev = 100.0;
+
+   // a low local threshold would lower the heights if it were used
+   use_ostltemp = true;
+   ostlthresh = 0.01;
+   ostltempgamma = 1.0;
+
+   // V* over the deposits already stored, summed independently of vmetagrid
+   auto refVstar = [&](int upto) {
+      double vmin = 1.0e30;
+      for (int il = 1; il <= nlmda; ++il) {
+         double lambda = (double)(il - 1) * wlmda;
+         double v = 0.0;
+         for (int j = 1; j <= upto; ++j) {
+            double sig = metawhist[j];
+            double sig2 = sig * sig;
+            double pref = metahhist[j] / (sig * std::sqrt(2.0 * M_PI));
+            double src[3] = {metalhist[j], -metalhist[j], 2.0 - metalhist[j]};
+            for (int m = 0; m < 3; ++m) {
+               double delta = lambda - src[m];
+               v += pref * std::exp(-0.5 * delta * delta / sig2);
+            }
+         }
+         vmin = std::min(vmin, v);
+      }
+      return vmin;
+   };
+
+   const int ndep = 5;
+   for (int istep = 1; istep <= ndep * lmdaintv; ++istep) {
+      lambda = 0.5;
+      elmdaDyn(istep);
+   }
+   COMPARE_INTS(nmetahist, ndep);
+
+   // the first deposit sees an empty bias, so it is untempered
+   COMPARE_REALS(metahhist[1], hbias, 1.0e-12);
+   REQUIRE(refVstar(1) > ostgthresh); // the threshold really is crossed
+
+   // every later height follows the rule applied to the pre-deposit V*, the
+   // sequence decays monotonically, and each width is wlhist
+   for (int k = 2; k <= ndep; ++k) {
+      CAPTURE(k);
+      COMPARE_REALS(metahhist[k], temperedHeight(refVstar(k - 1), refVstar(k - 1)), 1.0e-12);
+      REQUIRE(metahhist[k] < metahhist[k - 1]);
+      COMPARE_REALS(metawhist[k], wlhist, 1.0e-12);
+   }
+   use_ostltemp = false;
+
+   // the accumulated grid matches the direct sum at every bin center, and the
+   // Hermite evaluation reproduces it exactly at those nodes
+   for (int il = 1; il <= nlmda; ++il) {
+      CAPTURE(il);
+      double lambda = (double)(il - 1) * wlmda;
+      double vd, dd, vi, di;
+      ostinterpol = false;
+      eMetaBias(lambda, vd, dd);
+      COMPARE_REALS(vmetagrid[il], vd, 1.0e-12);
+      COMPARE_REALS(dvmetagrid[il], dd, 1.0e-12);
+      ostinterpol = true;
+      eMetaBias(lambda, vi, di);
+      COMPARE_REALS(vi, vd, 1.0e-12);
+      COMPARE_REALS(di, dd, 1.0e-12);
+   }
+   ostinterpol = false;
+}
+
+namespace {
+// six gaussians of several widths, including the end bins, on a grid of 21
+// lambda bins with a cutoff of three widths (test_eost.f:test_eost_metacut)
+const int metacutNg = 6;
+const double metacutCen[6] = {0.0, 0.02, 0.33, 0.5, 0.97, 1.0};
+const double metacutHgt[6] = {1.0, 2.0, 0.5, 3.0, 1.5, 0.7};
+const double metacutWid[6] = {0.05, 0.1, 0.2, 0.08, 0.15, 0.03};
+
+void setmetacut()
+{
+   resetost(21, 5, 1);
+   resetmeta(metacutNg);
+   nmetahist = metacutNg;
+   maxwlhist = 0.0;
+   for (int i = 1; i <= metacutNg; ++i) {
+      metalhist[i] = metacutCen[i - 1];
+      metahhist[i] = metacutHgt[i - 1];
+      metawhist[i] = metacutWid[i - 1];
+      metaihist[i] = i;
+      maxwlhist = std::max(maxwlhist, metacutWid[i - 1]);
+   }
+   oststdev = 3.0;
+   ostinterpol = false;
+   buildMetaIndex();
+}
+
+// brutemeta -- sum the first upto saved metadynamics gaussians and their two
+// images directly at one lambda, keeping only the terms within the cutoff of
+// oststdev widths (test_eost.f:brutemeta).
+void brutemeta(double lmda, int upto, double& v, double& d)
+{
+   v = 0.0;
+   d = 0.0;
+   for (int j = 1; j <= upto; ++j) {
+      double sig = metawhist[j];
+      double sig2 = sig * sig;
+      double pref = metahhist[j] / (sig * std::sqrt(2.0 * M_PI));
+      double src[3] = {metalhist[j], -metalhist[j], 2.0 - metalhist[j]};
+      for (int m = 0; m < 3; ++m) {
+         double delta = lmda - src[m];
+         if (std::fabs(delta) <= oststdev * sig) {
+            double bias = pref * std::exp(-0.5 * delta * delta / sig2);
+            v += bias;
+            d -= delta * bias / sig2;
+         }
+      }
+   }
+}
+}
+
+TEST_CASE("EOST-metacut", "[ff][eost]")
+{
+   // the bias found through the bin lookup, the grid built bin by bin and the
+   // bias of a partly replayed history all match a direct sum over every
+   // gaussian and image within the cutoff
+   setmetacut();
+
+   // the lookup sum matches the direct sum across lambda
+   double dvmax = 0.0, ddmax = 0.0;
+   for (int t = 0; t <= 40; ++t) {
+      double lmda = 0.025 * t, vbias, dvdl, vref, dref;
+      eMetaBias(lmda, vbias, dvdl);
+      brutemeta(lmda, metacutNg, vref, dref);
+      dvmax = std::max(dvmax, std::fabs(vbias - vref));
+      ddmax = std::max(ddmax, std::fabs(dvdl - dref));
+   }
+   REQUIRE(dvmax <= 1.0e-11);
+   REQUIRE(ddmax <= 1.0e-10);
+
+   // the grid built within the cutoff matches the direct sum
+   for (int i = 1; i <= metacutNg; ++i)
+      addMetaGrid(i);
+   dvmax = 0.0, ddmax = 0.0;
+   for (int il = 1; il <= nlmda; ++il) {
+      double vref, dref;
+      brutemeta((il - 1) * wlmda, metacutNg, vref, dref);
+      dvmax = std::max(dvmax, std::fabs(vmetagrid[il] - vref));
+      ddmax = std::max(ddmax, std::fabs(dvmetagrid[il] - dref));
+   }
+   REQUIRE(dvmax <= 1.0e-11);
+   REQUIRE(ddmax <= 1.0e-10);
+
+   // a partly replayed history counts only its first gaussians
+   nmetahist = 3;
+   dvmax = 0.0;
+   for (int t = 0; t <= 40; ++t) {
+      double lmda = 0.025 * t, vbias, dvdl, vref, dref;
+      eMetaBias(lmda, vbias, dvdl);
+      brutemeta(lmda, 3, vref, dref);
+      dvmax = std::max(dvmax, std::fabs(vbias - vref));
+   }
+   REQUIRE(dvmax <= 1.0e-11);
+   nmetahist = metacutNg;
+}
+
+TEST_CASE("EOST-meta-matches-fortran", "[ff][eost]")
+{
+   // Both engines are linked into this binary, so hold the C++ metadynamics
+   // bias, grid and free energy against eost.f on the same history.
+   struct FortranMetaScope
+   {
+      int nlmda = dlmda::nlmda, lmdaintv = dlmda::lmdaintv, use_meta = dlmda::use_meta;
+      double wlmda = dlmda::wlmda, wlmda2 = dlmda::wlmda2;
+      double oststdev = ost::oststdev, maxwlhist = ost::maxwlhist;
+      int ostinterpol = ost::ostinterpol, nmetahist = ost::nmetahist, nmethistsave = ost::nmethistsave;
+      ~FortranMetaScope()
+      {
+         // the arrays stay allocated at the size mutate_meta gave them, so
+         // sizemetahist is left to match them
+         dlmda::nlmda = nlmda, dlmda::lmdaintv = lmdaintv, dlmda::use_meta = use_meta;
+         dlmda::wlmda = wlmda, dlmda::wlmda2 = wlmda2;
+         ost::oststdev = oststdev, ost::maxwlhist = maxwlhist;
+         ost::ostinterpol = ostinterpol, ost::nmetahist = nmetahist, ost::nmethistsave = nmethistsave;
+      }
+   } fscope;
+
+   setmetacut();
+   for (int i = 1; i <= metacutNg; ++i)
+      addMetaGrid(i);
+
+   // allocate the Fortran history, bin lookup and grid, then fill them alike
+   dlmda::nlmda = nlmda;
+   dlmda::wlmda = wlmda;
+   dlmda::wlmda2 = wlmda2;
+   dlmda::lmdaintv = lmdaintv;
+   dlmda::use_meta = 1;
+   tinker_f_mutate_meta();
+   ost::oststdev = oststdev;
+   ost::maxwlhist = maxwlhist;
+   ost::ostinterpol = 0;
+   ost::nmetahist = metacutNg;
+   for (int i = 1; i <= metacutNg; ++i) {
+      ost::metalhist[i - 1] = metalhist[i];
+      ost::metahhist[i - 1] = metahhist[i];
+      ost::metawhist[i - 1] = metawhist[i];
+      ost::metaihist[i - 1] = metaihist[i];
+   }
+   tinker_f_buildmetaindex();
+   for (int i = 1; i <= metacutNg; ++i)
+      tinker_f_addmetagrid(&i);
+
+   for (int t = 0; t <= 40; ++t) {
+      double lmda = 0.025 * t, v9, d9, vf, df;
+      eMetaBias(lmda, v9, d9);
+      tinker_f_emetabias(&lmda, &vf, &df);
+      CAPTURE(lmda);
+      REQUIRE(std::fabs(v9 - vf) <= 1.0e-13);
+      REQUIRE(std::fabs(d9 - df) <= 1.0e-12);
+   }
+   for (int il = 1; il <= nlmda; ++il) {
+      CAPTURE(il);
+      REQUIRE(std::fabs(vmetagrid[il] - ost::vmetagrid[il - 1]) <= 1.0e-13);
+      REQUIRE(std::fabs(dvmetagrid[il] - ost::dvmetagrid[il - 1]) <= 1.0e-12);
+   }
+   REQUIRE(metaDeltaG() != 0.0);
+   REQUIRE(std::fabs(metaDeltaG() - tinker_f_metadeltag()) <= 1.0e-13);
+}

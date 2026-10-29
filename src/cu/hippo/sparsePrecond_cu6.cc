@@ -1,19 +1,24 @@
-// ck.py Version 3.0.2
+// ck.py Version 3.1.0
 __global__
 void sparsePrecond_cu6(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict uinfo, int nexclude,
    const int (*restrict exclude)[2], const real* restrict exclude_scale, const real* restrict x, const real* restrict y,
    const real* restrict z, const Spatial::SortedAtom* restrict sorted, int nakpl, const int* restrict iakpl, int niak,
    const int* restrict iak, const int* restrict lst, const real (*restrict rsd)[3], real (*restrict zrsd)[3],
-   const real* restrict pdamp, const real* restrict thole, const real* restrict polarity)
+   const real* restrict pdamp, const real* restrict polarity, const int* restrict grp, RdtMask live)
 {
+   using d::jpolar;
+   using d::njpolar;
+   using d::thlval;
    const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
    const int iwarp = ithread / WARP_SIZE;
    const int nwarp = blockDim.x * gridDim.x / WARP_SIZE;
    const int ilane = threadIdx.x & (WARP_SIZE - 1);
 
-   __shared__ real uidx[BLOCK_DIM], uidy[BLOCK_DIM], uidz[BLOCK_DIM], pdi[BLOCK_DIM], pti[BLOCK_DIM], poli[BLOCK_DIM];
+   __shared__ real uidx[BLOCK_DIM], uidy[BLOCK_DIM], uidz[BLOCK_DIM], pdi[BLOCK_DIM], poli[BLOCK_DIM];
+   __shared__ int jpi[BLOCK_DIM], gi[BLOCK_DIM];
    real xi, yi, zi;
-   real xk, yk, zk, ukdx, ukdy, ukdz, pdk, ptk, polk;
+   real xk, yk, zk, ukdx, ukdy, ukdz, pdk, polk;
+   int jpk, gk;
    real fidx, fidy, fidz;
    real fkdx, fkdy, fkdz;
 
@@ -35,8 +40,9 @@ void sparsePrecond_cu6(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* res
       uidy[klane] = rsd[i][1];
       uidz[klane] = rsd[i][2];
       pdi[klane] = pdamp[i];
-      pti[klane] = thole[i];
       poli[klane] = polarity[i];
+      jpi[klane] = jpolar[i];
+      gi[klane] = (grp ? grp[i] : 0);
       xi = x[i];
       yi = y[i];
       zi = z[i];
@@ -47,18 +53,22 @@ void sparsePrecond_cu6(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* res
       ukdy = rsd[k][1];
       ukdz = rsd[k][2];
       pdk = pdamp[k];
-      ptk = thole[k];
       polk = polarity[k];
+      jpk = jpolar[k];
+      gk = (grp ? grp[k] : 0);
 
       constexpr bool incl = true;
       real xr = xk - xi;
       real yr = yk - yi;
       real zr = zk - zi;
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off * off and incl) {
+      // a pair with a dead group has no multipole or induced dipole;
+      // grp is null when every group is live
+      if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
          real r = REAL_SQRT(r2);
          real scale3, scale5;
-         damp_thole2(r, pdi[klane], pti[klane], pdk, ptk, scale3, scale5);
+         real pga = thlval[njpolar * jpi[klane] + jpk];
+         dmpthole2_a(r, pga, pdi[klane], pdk, scale3, scale5);
          scale3 *= scalea;
          scale5 *= scalea;
 
@@ -109,8 +119,9 @@ void sparsePrecond_cu6(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* res
       uidy[threadIdx.x] = rsd[i][1];
       uidz[threadIdx.x] = rsd[i][2];
       pdi[threadIdx.x] = pdamp[i];
-      pti[threadIdx.x] = thole[i];
       poli[threadIdx.x] = polarity[i];
+      jpi[threadIdx.x] = jpolar[i];
+      gi[threadIdx.x] = (grp ? grp[i] : 0);
       xi = sorted[atomi].x;
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
@@ -121,8 +132,9 @@ void sparsePrecond_cu6(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* res
       ukdy = rsd[k][1];
       ukdz = rsd[k][2];
       pdk = pdamp[k];
-      ptk = thole[k];
       polk = polarity[k];
+      jpk = jpolar[k];
+      gk = (grp ? grp[k] : 0);
       __syncwarp();
 
       unsigned int uinfo0 = uinfo[iw * WARP_SIZE + ilane];
@@ -137,10 +149,13 @@ void sparsePrecond_cu6(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* res
          real yr = yk - yi;
          real zr = zk - zi;
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // a pair with a dead group has no multipole or induced dipole;
+         // grp is null when every group is live
+         if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
             real r = REAL_SQRT(r2);
             real scale3, scale5;
-            damp_thole2(r, pdi[klane], pti[klane], pdk, ptk, scale3, scale5);
+            real pga = thlval[njpolar * jpi[klane] + jpk];
+            dmpthole2_a(r, pga, pdi[klane], pdk, scale3, scale5);
             scale3 *= scalea;
             scale5 *= scalea;
 
@@ -195,8 +210,9 @@ void sparsePrecond_cu6(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* res
       uidy[threadIdx.x] = rsd[i][1];
       uidz[threadIdx.x] = rsd[i][2];
       pdi[threadIdx.x] = pdamp[i];
-      pti[threadIdx.x] = thole[i];
       poli[threadIdx.x] = polarity[i];
+      jpi[threadIdx.x] = jpolar[i];
+      gi[threadIdx.x] = (grp ? grp[i] : 0);
       xi = sorted[atomi].x;
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
@@ -207,8 +223,9 @@ void sparsePrecond_cu6(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* res
       ukdy = rsd[k][1];
       ukdz = rsd[k][2];
       pdk = pdamp[k];
-      ptk = thole[k];
       polk = polarity[k];
+      jpk = jpolar[k];
+      gk = (grp ? grp[k] : 0);
       __syncwarp();
 
       for (int j = 0; j < WARP_SIZE; ++j) {
@@ -220,10 +237,13 @@ void sparsePrecond_cu6(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* res
          real yr = yk - yi;
          real zr = zk - zi;
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // a pair with a dead group has no multipole or induced dipole;
+         // grp is null when every group is live
+         if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
             real r = REAL_SQRT(r2);
             real scale3, scale5;
-            damp_thole2(r, pdi[klane], pti[klane], pdk, ptk, scale3, scale5);
+            real pga = thlval[njpolar * jpi[klane] + jpk];
+            dmpthole2_a(r, pga, pdi[klane], pdk, scale3, scale5);
             scale3 *= scalea;
             scale5 *= scalea;
 

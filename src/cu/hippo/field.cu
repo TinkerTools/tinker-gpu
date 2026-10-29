@@ -1,3 +1,6 @@
+#include "ff/amoeba/mpolestate.h"
+#include "ff/cumodamoeba.h"
+#include "ff/dlmda.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/modhippo.h"
@@ -33,7 +36,7 @@ static void dfieldChgpen_cu(real (*field)[3])
    int ngrid = gpuGridSize(BLOCK_DIM);
    dfieldChgpen_cu1<ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, off, st.si1.bit0, nmdwexclude,
       mdwexclude, mdwexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, field,
-      rpole, pcore, pval, palpha, aewald);
+      rpole, mpoleCore(), mpoleVal(), palpha, aewald, elecDeadGroups(), elecLiveMask());
 }
 
 void dfieldChgpenEwaldReal_cu(real (*field)[3])
@@ -69,7 +72,7 @@ static void ufieldChgpen_cu(const real (*uind)[3], real (*field)[3])
    int ngrid = gpuGridSize(BLOCK_DIM);
    ufieldChgpen_cu1<ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, off, st.si1.bit0, nmdwexclude,
       mdwexclude, mdwexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, uind,
-      field, pcore, pval, palpha, aewald);
+      field, mpoleCore(), mpoleVal(), palpha, aewald, elecDeadGroups(), elecLiveMask());
 }
 
 void ufieldChgpenEwaldReal_cu(const real (*uind)[3], real (*field)[3])
@@ -108,7 +111,7 @@ static void dfieldAplus_cu(real (*field)[3])
    int ngrid = gpuGridSize(BLOCK_DIM);
    dfieldAplus_cu1<ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, off, st.si1.bit0, nmdwexclude,
       mdwexclude, mdwexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, field,
-      rpole, pdamp, dirdamp, aewald);
+      rpole, pdamp, aewald, elecDeadGroups(), elecLiveMask());
 }
 
 void dfieldAplusEwaldReal_cu(real (*field)[3])
@@ -143,7 +146,7 @@ static void ufieldAplus_cu(const real (*uind)[3], real (*field)[3])
    int ngrid = gpuGridSize(BLOCK_DIM);
    ufieldAplus_cu1<ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, off, st.si3.bit0, nuexclude, uexclude,
       uexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, uind, field, pdamp,
-      thole, aewald);
+      aewald, elecDeadGroups(), elecLiveMask());
 }
 
 void ufieldAplusEwaldReal_cu(const real (*uind)[3], real (*field)[3])

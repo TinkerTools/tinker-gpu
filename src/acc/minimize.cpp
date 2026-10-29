@@ -26,4 +26,6 @@ void xMinimizeSetPos_acc(int n, const double* xx, const double* scale)
    }
    #pragma acc wait
 }
+
+void xMinimizeEnd_acc() {}
 }

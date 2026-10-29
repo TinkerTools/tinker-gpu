@@ -1,6 +1,12 @@
+#include "ff/amoeba/empole.h"
+#include "ff/dlmda.h"
 #include "ff/energy.h"
+#include "ff/eost.h"
+#include "ff/efep.h"
+#include "ff/ethrmint.h"
 #include "ff/modamoeba.h"
 #include "ff/modhippo.h"
+#include "ff/ost.h"
 #include "ff/potent.h"
 #include "md/misc.h"
 #include "md/pq.h"
@@ -13,13 +19,18 @@
 #include <tinker/detail/atoms.hh>
 #include <tinker/detail/couple.hh>
 #include <tinker/detail/deriv.hh>
+#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/expol.hh>
 #include <tinker/detail/files.hh>
 #include <tinker/detail/moldyn.hh>
 #include <tinker/detail/mpole.hh>
+#include <tinker/detail/mutant.hh>
+#include <tinker/detail/ost.hh>
 #include <tinker/detail/output.hh>
 #include <tinker/detail/polar.hh>
 #include <tinker/detail/polpot.hh>
+#include <tinker/detail/fep.hh>
+#include <tinker/detail/thrmint.hh>
 #include <tinker/detail/titles.hh>
 #include <tinker/detail/units.hh>
 #include <tinker/routines.h>
@@ -77,6 +88,232 @@ static Box dup_buf_box;
 static pos_prec *dup_buf_x, *dup_buf_y, *dup_buf_z;
 static vel_prec *dup_buf_vx, *dup_buf_vy, *dup_buf_vz;
 static grad_prec *dup_buf_gx, *dup_buf_gy, *dup_buf_gz;
+static int lmda_snap_mask;
+static bool lmda_snap_active;
+static double s_lambda, s_dedl;
+static bool bias_snap_active;
+static double s_ostdgdl, s_bdgdl, s_lmdaddgdl, s_lmdadeltag;
+static double s_lmdatheta, s_lmdavtheta;
+static int s_nlmdamctry, s_nlmdamcacc;
+static int s_lmdastep, s_nflmda, s_fli0;
+static int s_nlmdahist, s_sizelmdahist, s_hist_first;
+static std::vector<int> s_khist, s_ihist;
+static std::vector<double> s_lhist, s_fhist, s_hhist, s_wlhist, s_wfhist;
+static int s_nmetahist, s_sizemetahist, s_meta_first;
+static std::vector<double> s_mlhist, s_mhhist, s_mwhist;
+static std::vector<int> s_mihist;
+static bool ti_snap_active;
+static int s_tinbcount, s_ti_first;
+static std::vector<double> s_tihist, s_tidedl, s_tisd;
+
+static void mdsaveDupLmda()
+{
+   lmda_snap_mask = lmdaDerivMask(rc_flag, use_dlmda);
+   // free energy perturbation has no lambda derivative, but each frame still
+   // prints the lambda of its window
+   lmda_snap_active = lmda_snap_mask or use_fep;
+   if (not lmda_snap_active)
+      return;
+
+   s_lambda = lambda;
+   if (lmda_snap_mask & calc::energy_dlmda1)
+      s_dedl = dedl;
+}
+
+static void mdsaveWriteLmda()
+{
+   if (not lmda_snap_active)
+      return;
+
+   mutant::lambda = s_lambda;
+   if (lmda_snap_mask & calc::energy_dlmda1)
+      dlmda::dedl = s_dedl;
+}
+
+static void mdsaveDupLmdaBias(int istep)
+{
+   bias_snap_active = use_ost or use_meta or use_abf;
+   if (not bias_snap_active)
+      return;
+
+   s_lmdastep = istep;
+   s_nflmda = nflmda;
+   s_fli0 = fli0;
+   s_ostdgdl = ostdgdl;
+   s_bdgdl = bdgdl;
+   s_lmdaddgdl = lmdaddgdl;
+   s_lmdadeltag = lmdadeltag;
+   s_lmdatheta = lmdatheta;
+   s_lmdavtheta = lmdavtheta;
+   s_nlmdamctry = nlmdamctry;
+   s_nlmdamcacc = nlmdamcacc;
+
+   s_khist.clear(), s_ihist.clear(), s_lhist.clear(), s_fhist.clear();
+   s_hhist.clear(), s_wlhist.clear(), s_wfhist.clear();
+   s_nlmdahist = nlmdahist;
+   s_sizelmdahist = sizelmdahist;
+   s_hist_first = dlmda::nlmdasave + 1; // saves are serialized, so this is stable
+   if (use_ost) {
+      for (int k = s_hist_first; k <= s_nlmdahist; ++k) {
+         s_khist.push_back(osthist[k]);
+         s_ihist.push_back(lmdaihist[k]);
+         s_lhist.push_back(lmdalhist[k]);
+         s_fhist.push_back(lmdafhist[k]);
+         s_hhist.push_back(osthhist[k]);
+         s_wlhist.push_back(ostwlhist[k]);
+         s_wfhist.push_back(ostwfhist[k]);
+      }
+   } else if (use_abf) {
+      for (int k = s_hist_first; k <= s_nlmdahist; ++k) {
+         s_ihist.push_back(lmdaihist[k]);
+         s_lhist.push_back(lmdalhist[k]);
+         s_fhist.push_back(lmdafhist[k]);
+      }
+   }
+
+   s_mlhist.clear(), s_mhhist.clear(), s_mwhist.clear(), s_mihist.clear();
+   s_nmetahist = nmetahist;
+   s_sizemetahist = sizemetahist;
+   s_meta_first = ost::nmethistsave + 1; // saves are serialized, so this is stable
+   if (use_meta) {
+      for (int k = s_meta_first; k <= s_nmetahist; ++k) {
+         s_mlhist.push_back(metalhist[k]);
+         s_mhhist.push_back(metahhist[k]);
+         s_mwhist.push_back(metawhist[k]);
+         s_mihist.push_back(metaihist[k]);
+      }
+   }
+}
+
+static void mdsaveWriteLmdaBias()
+{
+   if (not bias_snap_active)
+      return;
+
+   dlmda::lmdastep = s_lmdastep;
+   ost::nflmda = s_nflmda;
+   ost::fli0 = s_fli0;
+   ost::ostdgdl = s_ostdgdl;
+   ost::ostbdgdl = s_bdgdl;
+   dlmda::lmdaddgdl = s_lmdaddgdl;
+   dlmda::lmdadeltag = s_lmdadeltag;
+   dlmda::lmdatheta = s_lmdatheta;
+   dlmda::lmdavtheta = s_lmdavtheta;
+   dlmda::nlmdamctry = s_nlmdamctry;
+   dlmda::nlmdamcacc = s_nlmdamcacc;
+
+   if (use_ost) {
+      // grow the Fortran arrays to match the engine, preserving existing entries
+      while (dlmda::sizelmdahist < s_sizelmdahist)
+         tinker_f_resizeosthist();
+      dlmda::nlmdahist = s_nlmdahist;
+      for (int i = 0; i < (int)s_khist.size(); ++i) {
+         int j = s_hist_first - 1 + i;
+         ost::osthist[j] = s_khist[i];
+         dlmda::lmdaihist[j] = s_ihist[i];
+         dlmda::lmdalhist[j] = s_lhist[i];
+         dlmda::lmdafhist[j] = s_fhist[i];
+         ost::osthhist[j] = s_hhist[i];
+         ost::ostwlhist[j] = s_wlhist[i];
+         ost::ostwfhist[j] = s_wfhist[i];
+      }
+      // Fortran saveost advances nlmdasave after appending this slice.
+   } else if (use_abf) {
+      // grow the Fortran arrays to match the engine, preserving existing entries
+      while (dlmda::sizelmdahist < s_sizelmdahist)
+         tinker_f_resizeabfhist();
+      dlmda::nlmdahist = s_nlmdahist;
+      for (int i = 0; i < (int)s_ihist.size(); ++i) {
+         int j = s_hist_first - 1 + i;
+         dlmda::lmdaihist[j] = s_ihist[i];
+         dlmda::lmdalhist[j] = s_lhist[i];
+         dlmda::lmdafhist[j] = s_fhist[i];
+      }
+      // Fortran saveabf advances nlmdasave after appending this slice.
+   }
+
+   if (use_meta) {
+      while (ost::sizemetahist < s_sizemetahist)
+         tinker_f_resizemeta();
+      ost::nmetahist = s_nmetahist;
+      for (int i = 0; i < (int)s_mlhist.size(); ++i) {
+         int j = s_meta_first - 1 + i;
+         ost::metalhist[j] = s_mlhist[i];
+         ost::metahhist[j] = s_mhhist[i];
+         ost::metawhist[j] = s_mwhist[i];
+         ost::metaihist[j] = s_mihist[i];
+      }
+   }
+}
+
+static void mdsaveDupTi()
+{
+   ti_snap_active = use_ti and not tilmdadedl.empty();
+   if (not ti_snap_active)
+      return;
+
+   s_tihist.clear(), s_tidedl.clear(), s_tisd.clear();
+   s_tinbcount = tinbcount;
+   s_ti_first = thrmint::tinbsave; // saves are serialized, so this is stable
+   for (int i = s_ti_first; i < s_tinbcount; ++i) {
+      s_tihist.push_back(tilmdahist[i]);
+      s_tidedl.push_back(tilmdadedl[i]);
+      s_tisd.push_back(tilmdadedlstd[i]);
+   }
+}
+
+static void mdsaveWriteTi()
+{
+   if (not ti_snap_active)
+      return;
+
+   for (int i = 0; i < (int)s_tihist.size(); ++i) {
+      int j = s_ti_first + i;
+      thrmint::tilmdahist[j] = s_tihist[i];
+      thrmint::tilmdadedl[j] = s_tidedl[i];
+      thrmint::tilmdadedlstd[j] = s_tisd[i];
+   }
+   thrmint::tinbcount = s_tinbcount;
+}
+
+static bool fep_snap_active;
+static int s_nfep, s_fep_first;
+static std::vector<int> s_fepstep;
+static std::vector<double> s_fepene, s_feplmda, s_feptrial, s_fepvol;
+
+static void mdsaveDupFep()
+{
+   fep_snap_active = use_fep and not fepene.empty();
+   if (not fep_snap_active)
+      return;
+
+   s_fepstep.clear(), s_fepene.clear(), s_feplmda.clear(), s_feptrial.clear(), s_fepvol.clear();
+   s_nfep = nfep;
+   s_fep_first = fep::nfepsave; // saves are serialized, so this is stable
+   for (int i = s_fep_first; i < s_nfep; ++i) {
+      s_fepstep.push_back(fepstep[i]);
+      s_fepene.push_back(fepene[i]);
+      s_feplmda.push_back(feplmda[i]);
+      s_feptrial.push_back(feptrial[i]);
+      s_fepvol.push_back(fepvol[i]);
+   }
+}
+
+static void mdsaveWriteFep()
+{
+   if (not fep_snap_active)
+      return;
+
+   for (int i = 0; i < (int)s_fepene.size(); ++i) {
+      int j = s_fep_first + i;
+      fep::fepstep[j] = s_fepstep[i];
+      fep::fepene[j] = s_fepene[i];
+      fep::feplmda[j] = s_feplmda[i];
+      fep::feptrial[j] = s_feptrial[i];
+      fep::fepvol[j] = s_fepvol[i];
+   }
+   fep::nfep = s_nfep;
+}
 
 static void mdsaveDupThenWrite(int istep, time_prec dt)
 {
@@ -119,6 +356,11 @@ static void mdsaveDupThenWrite(int istep, time_prec dt)
 
    if (mdsaveUseExpolTef())
       darray::copy(g::q0, 9 * n, &dup_buf_polscale[0][0][0], &polscale[0][0][0]);
+
+   mdsaveDupLmda();
+   mdsaveDupLmdaBias(istep);
+   mdsaveDupTi();
+   mdsaveDupFep();
 
       // Record mdsave_begin_event when g::s0 is available.
       // g::s1 will wait until mdsave_begin_event is recorded.
@@ -230,6 +472,11 @@ static void mdsaveDupThenWrite(int istep, time_prec dt)
    check_rt(cudaStreamWaitEvent(g::s0, mdsave_end_event, 0));
 #endif
 
+   mdsaveWriteLmda();
+   mdsaveWriteLmdaBias();
+   mdsaveWriteTi();
+   mdsaveWriteFep();
+
    double dt1 = dt;
    double epot1 = epot;
    double eksum1 = eksum;
@@ -249,6 +496,12 @@ void mdsaveAsync(int istep, time_prec dt)
    cv_write.wait(lck_write, [=]() { return idle_write; });
    idle_write = false;
 
+   // The terms leave rpole in whatever state they last needed; the saved
+   // dipoles are the physical ones. Done here, on the thread that owns the
+   // multipole state, before the copy is queued behind it.
+   if (mdsaveUseUstc() and (use(Potent::MPOLE) or use(Potent::POLAR)))
+      mpoleEnsurePhysical();
+
    fut_dup_then_write = std::async(std::launch::async, mdsaveDupThenWrite, istep, dt);
 
    std::unique_lock<std::mutex> lck_copy(mtx_dup);
@@ -260,6 +513,29 @@ void mdsaveSynchronize()
 {
    if (fut_dup_then_write.valid())
       fut_dup_then_write.get();
+}
+
+void mdsaveLmdaFinal(int istep)
+{
+   mdsaveDupLmda();
+   mdsaveWriteLmda();
+   mdsaveDupLmdaBias(istep);
+   mdsaveWriteLmdaBias();
+   mdsaveDupTi();
+   mdsaveWriteTi();
+   mdsaveDupFep();
+   mdsaveWriteFep();
+
+   if (dlmda::use_ostdyn)
+      tinker_f_saveost();
+   if (dlmda::use_metadyn)
+      tinker_f_savemeta();
+   if (dlmda::use_abfdyn)
+      tinker_f_saveabf();
+   if (dlmda::use_ti)
+      tinker_f_saveti();
+   if (dlmda::use_fep)
+      tinker_f_savefep();
 }
 
 void mdsaveData(RcOp op)
@@ -288,6 +564,14 @@ void mdsaveData(RcOp op)
       darray::deallocate(dup_buf_x, dup_buf_y, dup_buf_z);
       darray::deallocate(dup_buf_vx, dup_buf_vy, dup_buf_vz);
       darray::deallocate(dup_buf_gx, dup_buf_gy, dup_buf_gz);
+
+      bias_snap_active = false;
+      lmda_snap_mask = 0;
+      s_khist.clear(), s_ihist.clear(), s_lhist.clear(), s_fhist.clear();
+      s_hhist.clear(), s_wlhist.clear(), s_wfhist.clear();
+      s_mlhist.clear(), s_mhhist.clear(), s_mwhist.clear(), s_mihist.clear();
+      ti_snap_active = false;
+      s_tihist.clear(), s_tidedl.clear(), s_tisd.clear();
    }
 
    if (op & RcOp::ALLOC) {
@@ -334,6 +618,9 @@ void mdsaveData(RcOp op)
    if (op & RcOp::INIT) {
       idle_dup = false;
       idle_write = true;
+      lmda_snap_mask = 0;
+      bias_snap_active = false;
+      ti_snap_active = false;
    }
 }
 }

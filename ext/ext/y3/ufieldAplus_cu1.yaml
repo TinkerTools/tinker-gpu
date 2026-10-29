@@ -18,9 +18,12 @@ EXTRA_PARAMS: |
   , const real(*restrict uind)[3]
   , real(*restrict field)[3]
   , const real *restrict pdamp
-  , const real *restrict thole
   , real aewald
-# IMPLICIT_PARAMS:
+  , const int* restrict grp, RdtMask live
+IMPLICIT_PARAMS:
+  - d::jpolar
+  - d::njpolar
+  - d::thlval
 
 I_VARIABLES:
   - register real xi   from:x
@@ -30,7 +33,8 @@ I_VARIABLES:
   - shared real uidy   from:uind,1
   - shared real uidz   from:uind,2
   - shared real pdi    from:pdamp
-  - shared real pti    from:thole
+  - shared int  jpi    from:jpolar
+  - shared int  gi     from:grp ifset:grp
 K_VARIABLES:
   - register real xk   from:x
   - register real yk   from:y
@@ -39,7 +43,8 @@ K_VARIABLES:
   - register real ukdy from:uind,1
   - register real ukdz from:uind,2
   - register real pdk  from:pdamp
-  - register real ptk  from:thole
+  - register int  jpk  from:jpolar
+  - register int  gk   from:grp ifset:grp
 I_FORCE:
   - register real fidx addto:field,0
   - register real fidy addto:field,1
@@ -55,9 +60,12 @@ FULL_PAIRWISE_INTERACTION: |
   real yr = @yk@ - @yi@;
   real zr = @zk@ - @zi@;
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  // a pair with a dead group has no multipole or induced dipole;
+  // grp is null when every group is live
+  if (r2 <= off * off and incl and (not grp or grpPairLive(live, @gi@, @gk@))) {
+    real pga = thlval[njpolar * jpi[klane] + jpk];
     pair_ufield_aplus_v2<ETYP>(
-      r2, xr, yr, zr, scalea, @uidx@, @uidy@, @uidz@, @pdi@, @pti@,
-      @ukdx@, @ukdy@, @ukdz@, @pdk@, @ptk@, aewald,
+      r2, xr, yr, zr, scalea, @uidx@, @uidy@, @uidz@, @pdi@, pga,
+      @ukdx@, @ukdy@, @ukdz@, @pdk@, aewald,
       @fidx@, @fidy@, @fidz@, @fkdx@, @fkdy@, @fkdz@);
   } // end if (include)

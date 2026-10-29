@@ -29,11 +29,11 @@ TEST_CASE("TinkerNIST-NODYN", "[ff][tinkerNIST]")
 
    const char* argv[] = {"dummy", xn};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(0.0, 0.0);
 
    rc_flag = mask;
-   initialize();
+   session.init();
 
    // NVE
    const double dt_ps = 0.001;
@@ -63,8 +63,7 @@ TEST_CASE("TinkerNIST-NODYN", "[ff][tinkerNIST]")
    REQUIRE(arcExists == true);
    REQUIRE(dynExists == false);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("TinkerNIST-NOCOORD", "[ff][tinkerNIST]")
@@ -81,11 +80,11 @@ TEST_CASE("TinkerNIST-NOCOORD", "[ff][tinkerNIST]")
 
    const char* argv[] = {"dummy", xn};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(0.0, 0.0);
 
    rc_flag = mask;
-   initialize();
+   session.init();
 
    // NVE
    const double dt_ps = 0.001;
@@ -115,8 +114,7 @@ TEST_CASE("TinkerNIST-NOCOORD", "[ff][tinkerNIST]")
    REQUIRE(arcExists == false);
    REQUIRE(dynExists == true);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("TinkerNIST-DCD", "[ff][tinkerNIST]")
@@ -142,11 +140,11 @@ TEST_CASE("TinkerNIST-DCD", "[ff][tinkerNIST]")
 
    const char* argv[] = {"dummy", xn};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(0.0, 0.0);
 
    rc_flag = mask;
-   initialize();
+   session.init();
 
    // NVE
    const double dt_ps = 0.001;
@@ -188,8 +186,7 @@ TEST_CASE("TinkerNIST-DCD", "[ff][tinkerNIST]")
    REQUIRE(dcddeExists == true);
    REQUIRE(dcdteExists == true);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("TinkerNIST-SAVE1", "[ff][tinkerNIST]")
@@ -232,11 +229,11 @@ TEST_CASE("TinkerNIST-SAVE1", "[ff][tinkerNIST]")
 
    const char* argv[] = {"dummy", xn};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(0.0, 0.0);
 
    rc_flag = mask;
-   initialize();
+   session.init();
 
    // NVE
    const double dt_ps = 0.001;
@@ -360,8 +357,7 @@ TEST_CASE("TinkerNIST-SAVE1", "[ff][tinkerNIST]")
    REQUIRE(defExists == true);
    REQUIRE(tefExists == true);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("TinkerNIST-SAVE2", "[ff][tinkerNIST]")
@@ -404,11 +400,11 @@ TEST_CASE("TinkerNIST-SAVE2", "[ff][tinkerNIST]")
 
    const char* argv[] = {"dummy", xn};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(0.0, 0.0);
 
    rc_flag = mask;
-   initialize();
+   session.init();
 
    // NVE
    const double dt_ps = 0.001;
@@ -532,8 +528,7 @@ TEST_CASE("TinkerNIST-SAVE2", "[ff][tinkerNIST]")
    REQUIRE(defExists == true);
    REQUIRE(tefExists == true);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("TinkerNIST-SAVE-ONLY", "[ff][tinkerNIST]")
@@ -560,11 +555,11 @@ TEST_CASE("TinkerNIST-SAVE-ONLY", "[ff][tinkerNIST]")
 
    const char* argv[] = {"dummy", xn};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(0.0, 0.0);
 
    rc_flag = mask;
-   initialize();
+   session.init();
 
    // NVE
    const double dt_ps = 0.001;
@@ -626,8 +621,7 @@ TEST_CASE("TinkerNIST-SAVE-ONLY", "[ff][tinkerNIST]")
    REQUIRE(defExists == true);
    REQUIRE(tefExists == true);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 std::vector<std::array<double, 3>> read_logfile_1(const std::string& filename, const std::string& label)
@@ -686,11 +680,11 @@ TEST_CASE("TinkerNIST-SAVE-SYSTEM", "[ff][tinkerNIST]")
 
    const char* argv[] = {"dummy", xn};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(0.0, 0.0);
 
    rc_flag = mask;
-   initialize();
+   session.init();
 
    int saved_stdout_fd = dup(fileno(stdout));
    if (saved_stdout_fd == -1) {
@@ -726,8 +720,7 @@ TEST_CASE("TinkerNIST-SAVE-SYSTEM", "[ff][tinkerNIST]")
    mdsaveSynchronize();
    inform::iwrite = old;
 
-   finish();
-   testEnd();
+   session.end();
 
    // run after testEnd(); to flush fortran buffer
    fflush(stdout);
@@ -824,11 +817,11 @@ TEST_CASE("TinkerNIST-EXC-MOMENT", "[ff][tinkerNIST]")
 
    const char* argv[] = {"dummy", xn};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(0.0, 0.0);
 
    rc_flag = mask;
-   initialize();
+   session.init();
 
    int saved_stdout_fd = dup(fileno(stdout));
    if (saved_stdout_fd == -1) {
@@ -864,8 +857,7 @@ TEST_CASE("TinkerNIST-EXC-MOMENT", "[ff][tinkerNIST]")
    mdsaveSynchronize();
    inform::iwrite = old;
 
-   finish();
-   testEnd();
+   session.end();
 
    // run after testEnd(); to flush fortran buffer
    fflush(stdout);

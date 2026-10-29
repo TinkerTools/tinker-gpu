@@ -27,6 +27,20 @@ void pcgUdirV2(int n, const real* restrict polarity, real (*restrict udir)[3], r
       }
    }
 }
+
+__global__
+void pcgUdirGuessV3(int n, const real* restrict polarity, real (*restrict uind)[3], const real (*restrict field)[3],
+   const real (*restrict polinv)[3][3])
+{
+   for (int i = ITHREAD; i < n; i += STRIDE) {
+      real poli = polarity[i];
+      #pragma unroll
+      for (int j = 0; j < 3; ++j) {
+         uind[i][j] = poli
+            * (polinv[i][0][j] * field[i][0] + polinv[i][1][j] * field[i][1] + polinv[i][2][j] * field[i][2]);
+      }
+   }
+}
 }
 
 namespace tinker {
@@ -130,6 +144,20 @@ void pcgP4(int n, const real* restrict polarity_inv, real (*restrict vec)[3], co
 }
 
 __global__
+void pcgP4V3(int n, const real* restrict polarity_inv, real (*restrict vec)[3], const real (*restrict conj)[3],
+   const real (*restrict field)[3], const real (*restrict polscale)[3][3])
+{
+   for (int i = ITHREAD; i < n; i += STRIDE) {
+      real poli_inv = polarity_inv[i];
+      #pragma unroll
+      for (int j = 0; j < 3; ++j)
+         vec[i][j] = poli_inv
+               * (conj[i][0] * polscale[i][0][j] + conj[i][1] * polscale[i][1][j] + conj[i][2] * polscale[i][2][j])
+            - field[i][j];
+   }
+}
+
+__global__
 void pcgP2(int n, const real* restrict polarity, const real* restrict ka, const real* restrict kap,
    const real* restrict ksum, const real* restrict ksump, real (*restrict uind)[3], real (*restrict uinp)[3],
    const real (*restrict conj)[3], const real (*restrict conjp)[3], real (*restrict rsd)[3], real (*restrict rsdp)[3],
@@ -218,7 +246,7 @@ void pcgP6(int n, const real* restrict ksum, const real* restrict ksum1, real (*
 }
 
 __global__
-void pcgPeek(int n, float pcgpeek, const real* restrict polarity, real (*restrict uind)[3], real (*restrict uinp)[3],
+void pcgPeek(int n, real pcgpeek, const real* restrict polarity, real (*restrict uind)[3], real (*restrict uinp)[3],
    const real (*restrict rsd)[3], const real (*restrict rsdp)[3])
 {
    for (int i = ITHREAD; i < n; i += STRIDE) {
@@ -232,7 +260,7 @@ void pcgPeek(int n, float pcgpeek, const real* restrict polarity, real (*restric
 }
 
 __global__
-void pcgPeek1(int n, float pcgpeek, const real* restrict polarity, real (*restrict uind)[3],
+void pcgPeek1(int n, real pcgpeek, const real* restrict polarity, real (*restrict uind)[3],
    const real (*restrict rsd)[3])
 {
    for (int i = ITHREAD; i < n; i += STRIDE) {

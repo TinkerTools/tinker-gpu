@@ -1,3 +1,5 @@
+#include "ff/cumodamoeba.h"
+#include "ff/dlmda.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/modhippo.h"
@@ -27,7 +29,7 @@ void sparsePrecond_cu3(const real (*restrict rsd)[3], real (*restrict zrsd)[3], 
 void sparsePrecondApply2_cu(const real (*rsd)[3], real (*zrsd)[3])
 {
    const auto& st = *uspatial_v2_unit;
-   const real off = switchOff(Switch::USOLVE) + st.buffer;
+   const real off = switchOff(Switch::USOLVE);
 
    launch_k1s(g::s0, n, sparsePrecond_cu3, //
       rsd, zrsd, polarity, n, udiag);
@@ -35,7 +37,7 @@ void sparsePrecondApply2_cu(const real (*rsd)[3], real (*zrsd)[3])
    int ngrid = gpuGridSize(BLOCK_DIM);
    sparsePrecond_cu4<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, off, st.si1.bit0, nwexclude, wexclude,
       wexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, rsd, zrsd, palpha,
-      polarity);
+      polarity, elecDeadGroups(), elecLiveMask());
 }
 
 #include "sparsePrecond_cu6.cc"
@@ -43,14 +45,14 @@ void sparsePrecondApply2_cu(const real (*rsd)[3], real (*zrsd)[3])
 void sparsePrecondApply3_cu(const real (*rsd)[3], real (*zrsd)[3])
 {
    const auto& st = *uspatial_v2_unit;
-   const real off = switchOff(Switch::USOLVE) + st.buffer;
+   const real off = switchOff(Switch::USOLVE);
 
    launch_k1s(g::s0, n, sparsePrecond_cu3, //
       rsd, zrsd, polarity, n, udiag);
 
    int ngrid = gpuGridSize(BLOCK_DIM);
    sparsePrecond_cu6<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, off, st.si1.bit0, nuexclude, uexclude,
-      uexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, rsd, zrsd, pdamp, thole,
-      polarity);
+      uexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, rsd, zrsd, pdamp,
+      polarity, elecDeadGroups(), elecLiveMask());
 }
 }

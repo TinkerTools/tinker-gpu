@@ -1,11 +1,11 @@
-// ck.py Version 3.0.2
+// ck.py Version 3.1.0
 template <class ETYP>
 __global__
 void dfield_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict dpinfo, int nexclude,
    const int (*restrict exclude)[2], const real (*restrict exclude_scale)[2], const real* restrict x,
    const real* restrict y, const real* restrict z, const Spatial::SortedAtom* restrict sorted, int nakpl,
    const int* restrict iakpl, int niak, const int* restrict iak, const int* restrict lst, real (*restrict field)[3],
-   real (*restrict fieldp)[3], real aewald)
+   real (*restrict fieldp)[3], real aewald, const int* restrict grp, RdtMask live)
 {
    using d::jpolar;
    using d::njpolar;
@@ -19,10 +19,10 @@ void dfield_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict d
 
    __shared__ real ci[BLOCK_DIM], dix[BLOCK_DIM], diy[BLOCK_DIM], diz[BLOCK_DIM], qixx[BLOCK_DIM], qixy[BLOCK_DIM],
       qixz[BLOCK_DIM], qiyy[BLOCK_DIM], qiyz[BLOCK_DIM], qizz[BLOCK_DIM], pdi[BLOCK_DIM];
-   __shared__ int jpi[BLOCK_DIM];
+   __shared__ int jpi[BLOCK_DIM], gi[BLOCK_DIM];
    real xi, yi, zi;
    real xk, yk, zk, ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, pdk;
-   int jpk;
+   int jpk, gk;
    real fidx, fidy, fidz, fipx, fipy, fipz;
    real fkdx, fkdy, fkdz, fkpx, fkpy, fkpz;
 
@@ -59,6 +59,7 @@ void dfield_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict d
       qizz[klane] = rpole[i][MPL_PME_ZZ];
       pdi[klane] = pdamp[i];
       jpi[klane] = jpolar[i];
+      gi[klane] = (grp ? grp[i] : 0);
       xi = x[i];
       yi = y[i];
       zi = z[i];
@@ -77,18 +78,21 @@ void dfield_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict d
       qkzz = rpole[k][MPL_PME_ZZ];
       pdk = pdamp[k];
       jpk = jpolar[k];
+      gk = (grp ? grp[k] : 0);
 
       constexpr bool incl = true;
       real xr = xk - xi;
       real yr = yk - yi;
       real zr = zk - zi;
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off * off and incl) {
+      // a pair with a dead group has no multipole or induced dipole;
+      // grp is null when every group is live
+      if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
          real pga = thlval[njpolar * jpi[klane] + jpk];
          pair_dfield_v2<ETYP>(r2, xr, yr, zr, scalea, scaleb, aewald, ci[klane], dix[klane], diy[klane], diz[klane],
             qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], pdi[klane], pga, ck, dkx, dky,
-            dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, pdk, pga, fidx, fidy, fidz, fipx, fipy, fipz, fkdx, fkdy, fkdz,
-            fkpx, fkpy, fkpz);
+            dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, pdk, fidx, fidy, fidz, fipx, fipy, fipz, fkdx, fkdy, fkdz, fkpx,
+            fkpy, fkpz);
       } // end if (include)
 
       atomic_add(fidx, &field[i][0]);
@@ -142,6 +146,7 @@ void dfield_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict d
       qizz[threadIdx.x] = rpole[i][MPL_PME_ZZ];
       pdi[threadIdx.x] = pdamp[i];
       jpi[threadIdx.x] = jpolar[i];
+      gi[threadIdx.x] = (grp ? grp[i] : 0);
       xi = sorted[atomi].x;
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
@@ -160,6 +165,7 @@ void dfield_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict d
       qkzz = rpole[k][MPL_PME_ZZ];
       pdk = pdamp[k];
       jpk = jpolar[k];
+      gk = (grp ? grp[k] : 0);
       __syncwarp();
 
       unsigned int dpinfo0 = dpinfo[iw * WARP_SIZE + ilane];
@@ -175,12 +181,14 @@ void dfield_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict d
          real yr = yk - yi;
          real zr = zk - zi;
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // a pair with a dead group has no multipole or induced dipole;
+         // grp is null when every group is live
+         if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
             real pga = thlval[njpolar * jpi[klane] + jpk];
             pair_dfield_v2<ETYP>(r2, xr, yr, zr, scalea, scaleb, aewald, ci[klane], dix[klane], diy[klane], diz[klane],
                qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], pdi[klane], pga, ck, dkx,
-               dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, pdk, pga, fidx, fidy, fidz, fipx, fipy, fipz, fkdx, fkdy,
-               fkdz, fkpx, fkpy, fkpz);
+               dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, pdk, fidx, fidy, fidz, fipx, fipy, fipz, fkdx, fkdy, fkdz,
+               fkpx, fkpy, fkpz);
          } // end if (include)
 
          iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
@@ -241,6 +249,7 @@ void dfield_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict d
       qizz[threadIdx.x] = rpole[i][MPL_PME_ZZ];
       pdi[threadIdx.x] = pdamp[i];
       jpi[threadIdx.x] = jpolar[i];
+      gi[threadIdx.x] = (grp ? grp[i] : 0);
       xi = sorted[atomi].x;
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
@@ -259,6 +268,7 @@ void dfield_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict d
       qkzz = rpole[k][MPL_PME_ZZ];
       pdk = pdamp[k];
       jpk = jpolar[k];
+      gk = (grp ? grp[k] : 0);
       __syncwarp();
 
       for (int j = 0; j < WARP_SIZE; ++j) {
@@ -271,12 +281,14 @@ void dfield_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict d
          real yr = yk - yi;
          real zr = zk - zi;
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // a pair with a dead group has no multipole or induced dipole;
+         // grp is null when every group is live
+         if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
             real pga = thlval[njpolar * jpi[klane] + jpk];
             pair_dfield_v2<ETYP>(r2, xr, yr, zr, scalea, scaleb, aewald, ci[klane], dix[klane], diy[klane], diz[klane],
                qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], pdi[klane], pga, ck, dkx,
-               dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, pdk, pga, fidx, fidy, fidz, fipx, fipy, fipz, fkdx, fkdy,
-               fkdz, fkpx, fkpy, fkpz);
+               dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, pdk, fidx, fidy, fidz, fipx, fipy, fipz, fkdx, fkdy, fkdz,
+               fkpx, fkpy, fkpz);
          } // end if (include)
 
          xi = __shfl_sync(ALL_LANES, xi, ilane + 1);

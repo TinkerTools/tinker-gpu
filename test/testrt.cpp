@@ -1,13 +1,17 @@
 #include "tool/error.h"
 #include <tinker/detail/bath.hh>
+#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/inform.hh>
+#include <tinker/detail/mutant.hh>
 #include <tinker/routines.h>
 
 #include "testrt.h"
 #include "tinker9.h"
 
+#include <cctype>
 #include <fstream>
 #include <map>
+#include <sstream>
 #include <tuple>
 
 namespace tinker {
@@ -66,14 +70,41 @@ TestRemoveFileOnExit::~TestRemoveFileOnExit()
 }
 
 namespace tinker {
+static bool isAtomIndex(const std::string& s)
+{
+   if (s.empty())
+      return false;
+   for (char c : s)
+      if (!std::isdigit(static_cast<unsigned char>(c)))
+         return false;
+   return true;
+}
+
+// Reads a 3x3 tensor whose first row ends the header line \c l and whose other
+// two rows end the next two lines.
+static void readTensor(std::istream& fr, std::string& l, double (&m)[3][3])
+{
+   for (int i = 0; i < 3; ++i) {
+      if (i > 0)
+         std::getline(fr, l);
+      auto vs = Text::split(l);
+      m[i][0] = std::stod(vs.end()[-3]);
+      m[i][1] = std::stod(vs.end()[-2]);
+      m[i][2] = std::stod(vs.end()[-1]);
+   }
+}
+
 class TestReference::Impl
 {
 public:
    std::vector<double> gradient;
+   std::vector<double> ngradient;
    std::map<std::string, std::tuple<double, int>> engcnt;
-   double virial[3][3];
-   double energy;
-   int count;
+   TestLmdaReference lmda;
+   double virial[3][3] = {};
+   double nvirial[3][3] = {};
+   double energy = 0;
+   int count = 0;
 };
 
 TestReference::~TestReference()
@@ -103,29 +134,21 @@ TestReference::TestReference(std::string fname)
          auto vs = Text::split(l);
          pimpl->energy = std::stod(vs.end()[-2]);
          pimpl->count = std::stoi(vs.end()[-1]);
-      } else if (l.find("INTERNAL VIRIAL TENSOR :") != end) {
+      } else if (l.find("INTERNAL VIRIAL TENSOR :") != end || l.find("ANALYTICAL VIRIAL TENSOR :") != end) {
+         readTensor(fr, l, pimpl->virial);
+      } else if (l.find("NUMERICAL VIRIAL TENSOR :") != end) {
+         readTensor(fr, l, pimpl->nvirial);
+      } else if (l.find("ANLYT ") != end || l.find("NUMER ") != end) {
+         // Skip the "Anlyt  Total Gradient Norm Value ..." summary lines that
+         // testgrad-style output appends after the per-atom table; only rows
+         // whose second token is an atom index carry a gradient.
          auto vs = Text::split(l);
-         pimpl->virial[0][0] = std::stod(vs.end()[-3]);
-         pimpl->virial[0][1] = std::stod(vs.end()[-2]);
-         pimpl->virial[0][2] = std::stod(vs.end()[-1]);
-         std::getline(fr, l);
-         vs = Text::split(l);
-         pimpl->virial[1][0] = std::stod(vs.end()[-3]);
-         pimpl->virial[1][1] = std::stod(vs.end()[-2]);
-         pimpl->virial[1][2] = std::stod(vs.end()[-1]);
-         std::getline(fr, l);
-         vs = Text::split(l);
-         pimpl->virial[2][0] = std::stod(vs.end()[-3]);
-         pimpl->virial[2][1] = std::stod(vs.end()[-2]);
-         pimpl->virial[2][2] = std::stod(vs.end()[-1]);
-      } else if (l.find("ANLYT ") != end) {
-         auto vs = Text::split(l);
-         double g1 = std::stod(vs[2]);
-         double g2 = std::stod(vs[3]);
-         double g3 = std::stod(vs[4]);
-         pimpl->gradient.push_back(g1);
-         pimpl->gradient.push_back(g2);
-         pimpl->gradient.push_back(g3);
+         if (vs.size() < 5 || !isAtomIndex(vs[1]))
+            continue;
+         auto& g = (vs[0] == "ANLYT") ? pimpl->gradient : pimpl->ngradient;
+         g.push_back(std::stod(vs[2]));
+         g.push_back(std::stod(vs[3]));
+         g.push_back(std::stod(vs[4]));
       } else if (l.find("ENGCNT ") != end) {
          auto vs = Text::split(l);
          std::string name = vs[1];
@@ -136,6 +159,37 @@ TestReference::TestReference(std::string fname)
          double eng = std::stod(vs.end()[-2]);
          int cnt = std::stoi(vs.end()[-1]);
          pimpl->engcnt[name] = std::make_tuple(eng, cnt);
+      }
+
+      // Lambda-derivative blocks, written by testlmda-style output. These are checked
+      // separately from the chain above: "Analytical Lambda Derivatives" would
+      // otherwise be swallowed by the per-atom "LAMBDA " test below it.
+      if (l.find("ANALYTICAL LAMBDA DERIVATIVES") != end) {
+         // The four values sit on the line after the column labels.
+         std::getline(fr, l);
+         auto vs = Text::split(l);
+         for (int k = 0; k < 4 && k < (int)vs.size(); ++k)
+            pimpl->lmda.dedl[k] = std::stod(vs[k]);
+      } else if (l.find("ANALYTICAL 2ND LAMBDA DERIVATIVES") != end) {
+         std::getline(fr, l);
+         auto vs = Text::split(l);
+         for (int k = 0; k < 4 && k < (int)vs.size(); ++k)
+            pimpl->lmda.d2edl2[k] = std::stod(vs[k]);
+      } else if (l.find("ANALYTICAL DV/DL") != end) {
+         // As with the virial tensor, the first row shares the header line.
+         readTensor(fr, l, pimpl->lmda.dvdl);
+      } else if (l.find("LAMBDA ") != end) {
+         // Per-atom dF/dL rows, tagged "Lambda" in column one. Matching on the token
+         // rather than the substring keeps the "... LAMBDA DERIVATIVES" headers out.
+         auto vs = Text::split(l);
+         if (vs.size() < 5 || vs[0] != "LAMBDA" || !isAtomIndex(vs[1]))
+            continue;
+         int idx = std::stoi(vs[1]);
+         if (idx < 1)
+            continue;
+         if ((int)pimpl->lmda.lgrad.size() < idx)
+            pimpl->lmda.lgrad.resize(idx, {0.0, 0.0, 0.0});
+         pimpl->lmda.lgrad[idx - 1] = {std::stod(vs[2]), std::stod(vs[3]), std::stod(vs[4])};
       }
    }
 }
@@ -163,9 +217,34 @@ const double (*TestReference::getVirial() const)[3]
    return pimpl->virial;
 }
 
+const double (*TestReference::getNumerVirial() const)[3]
+{
+   return pimpl->nvirial;
+}
+
 const double (*TestReference::getGradient() const)[3]
 {
    return reinterpret_cast<const double(*)[3]>(pimpl->gradient.data());
+}
+
+const double (*TestReference::getNumerGradient() const)[3]
+{
+   return reinterpret_cast<const double(*)[3]>(pimpl->ngradient.data());
+}
+
+int TestReference::getGradientCount() const
+{
+   return (int)pimpl->gradient.size() / 3;
+}
+
+int TestReference::getNumerGradientCount() const
+{
+   return (int)pimpl->ngradient.size() / 3;
+}
+
+const TestLmdaReference& TestReference::getLmda() const
+{
+   return pimpl->lmda;
 }
 
 double testGetEps(double eps_single, double eps_double)
@@ -198,13 +277,77 @@ void testEnd()
    tinkerFortranRuntimeEnd();
 }
 
+void testResetLmdaFlags()
+{
+   dlmda::use_dlmda = 0;
+   dlmda::use_d2lmda = 0;
+   dlmda::use_edlmda = 0;
+   dlmda::use_pdlmda = 0;
+   dlmda::use_vdlmda = 0;
+   use_dlmda = false;
+   use_d2lmda = false;
+   use_edlmda = false;
+   use_pdlmda = false;
+   use_vdlmda = false;
+   use_emast = false;
+   use_epast = false;
+   use_ost = false;
+   use_meta = false;
+   use_ti = false;
+   dlmda::use_lmdamc = 0;
+   use_lmdamc = false;
+   dlmda::use_fep = 0;
+   use_fep = false;
+   use_mainlmda = false;
+   mutant::use_rel = 0;
+   use_rel = false;
+}
+
+std::string testBaseName(const std::string& path)
+{
+   return path.substr(path.find_last_of('/') + 1);
+}
+
+TestSession::TestSession(int argc, const char** argv)
+{
+   testBeginWithArgs(argc, argv);
+}
+
+void TestSession::init()
+{
+   initialize();
+   m_init = true;
+}
+
+void TestSession::end()
+{
+   if (m_ended)
+      return;
+   m_ended = true;
+   if (m_init)
+      finish();
+   testEnd();
+}
+
+TestSession::~TestSession()
+{
+   // This runs while a failed check unwinds the case, where a second throw,
+   // such as a CUDA error the failure left behind, would terminate the run.
+   try {
+      end();
+   } catch (...) {
+   }
+}
+
 void testMdInit(double t, double atm)
 {
    if (t > 0) {
       bath::kelvin = t;
       bath::isothermal = 1;
-   } else
+   } else {
+      bath::kelvin = 0;
       bath::isothermal = 0;
+   }
 
    if (atm > 0) {
       bath::atmsph = atm;

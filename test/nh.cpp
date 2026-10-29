@@ -42,11 +42,11 @@ TEST_CASE("NPT-NoseHoover-ArBox", "[ff][npt][nosehoover][arbox]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 1.);
 
    rc_flag = usage_;
-   initialize();
+   session.init();
 
    const double dt_ps = 0.001;
    const int nsteps = 20;
@@ -62,8 +62,7 @@ TEST_CASE("NPT-NoseHoover-ArBox", "[ff][npt][nosehoover][arbox]")
    }
    inform::iwrite = old;
 
-   finish();
-   testEnd();
+   session.end();
 
    for (int i = 0; i < nsteps; ++i) {
       REQUIRE(epots[i] == Approx(arbox_pot[i]).margin(eps_e));

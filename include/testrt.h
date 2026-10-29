@@ -1,8 +1,10 @@
 #pragma once
+#include "ff/dlmda.h"
 #include "ff/energy.h"
 
 #include "tinker9.h"
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -38,6 +40,57 @@ public:
    ~TestRemoveFileOnExit();                        ///< Removes the file in the destructor.
 };
 
+/// \brief Begins a test with testBeginWithArgs(), and ends it with end() or,
+/// failing that, in its destructor. A failed REQUIRE throws past the end of the
+/// case; without this the teardown is skipped, and the device state left
+/// behind breaks the cases that run after it (zero energies, then a sticky
+/// cudaErrorIllegalAddress, or the evdwData assert in a Debug build). Declare
+/// it after the TestFile objects, so that the files outlive the teardown.
+class TestSession
+{
+public:
+   TestSession(int argc, const char** argv); ///< Calls testBeginWithArgs().
+   ~TestSession();                           ///< Calls end() unless it has run.
+   TestSession(const TestSession&) = delete;
+   TestSession& operator=(const TestSession&) = delete;
+   void init(); ///< Calls initialize().
+   void end();  ///< Calls finish() after init(), then testEnd(); only the first call does anything.
+
+private:
+   bool m_init = false;
+   bool m_ended = false;
+};
+
+/// \brief Restores the lambda method flags and the interval convergence gate in
+/// its destructor, so that a failed check cannot leave them set for the cases
+/// that run after it.
+struct TestLmdaFlagGuard
+{
+   bool ost = use_ost, meta = use_meta, abf = use_abf, cv = use_lmdacv, mc = use_lmdamc;
+   ~TestLmdaFlagGuard()
+   {
+      use_ost = ost;
+      use_meta = meta;
+      use_abf = abf;
+      use_lmdacv = cv;
+      use_lmdamc = mc;
+   }
+};
+
+/// \brief The lambda-derivative sections of a reference file.
+///
+/// Filled from the \c "Analytical Lambda Derivatives", \c "Analytical 2nd Lambda
+/// Derivatives", \c "Lambda Gradient Breakdown" (rows tagged \c Lambda), and
+/// \c "Analytical dV/dL" blocks. Sections absent from the file stay zeroed, so a
+/// reference without lambda data simply reads back as all zeros.
+struct TestLmdaReference
+{
+   double dedl[4] = {};                      ///< dE/dL, dEV/dL, dEM/dL, dEP/dL.
+   double d2edl2[4] = {};                    ///< d2E/dL2, d2EV/dL2, d2EM/dL2, d2EP/dL2.
+   std::vector<std::array<double, 3>> lgrad; ///< Per-atom dF/dL, sized by the atom indices read.
+   double dvdl[3][3] = {};                   ///< dV/dL tensor.
+};
+
 /// \brief Reads reference values from a text file.
 class TestReference
 {
@@ -50,9 +103,16 @@ public:
    TestReference(std::string pathToRefFile);
    int getCount() const;
    double getEnergy() const;
-   const double (*getVirial() const)[3];
-   const double (*getGradient() const)[3];
+   const double (*getVirial() const)[3];        ///< \c Internal or \c Analytical \c Virial \c Tensor.
+   const double (*getNumerVirial() const)[3];   ///< \c Numerical \c Virial \c Tensor.
+   const double (*getGradient() const)[3];      ///< Per-atom rows tagged \c Anlyt.
+   const double (*getNumerGradient() const)[3]; ///< Per-atom rows tagged \c Numer.
+   int getGradientCount() const;                ///< Number of atoms read from the \c Anlyt rows.
+   int getNumerGradientCount() const;           ///< Number of atoms read from the \c Numer rows.
    void getEnergyCountByName(std::string name, double& energy, int& count);
+
+   /// \brief The lambda-derivative blocks, all zero if the file has none.
+   const TestLmdaReference& getLmda() const;
 };
 
 /// \brief Returns tolerance eps depending on the predefined floating-point precision.
@@ -65,6 +125,25 @@ void testBeginWithArgs(int argc, const char** argv);
 
 /// \brief Ends the test.
 void testEnd();
+
+/// \brief Switches the lambda derivative machinery, the lambda methods and the
+/// relative mutation flag back off, in both the Fortran modules and tinker9, so
+/// that a lambda fixture cannot leave them set for the cases that run after it.
+void testResetLmdaFlags();
+
+/// \brief Calls testResetLmdaFlags() in its destructor. Declared before the
+/// TestSession of a case, it runs after the session ends, including when a
+/// failed check unwinds the case.
+struct TestLmdaFlagReset
+{
+   ~TestLmdaFlagReset()
+   {
+      testResetLmdaFlags();
+   }
+};
+
+/// \brief Returns the file name part of a path.
+std::string testBaseName(const std::string& path);
 
 /// \brief Initializes MD in the test.
 void testMdInit(double t = 0,  ///< Temperature in Kelvin.
@@ -192,4 +271,16 @@ std::vector<std::vector<AtomData>> readAmoebaCoordinateFile(const std::string& f
       }                                                                   \
    }
 #define COMPARE_GRADIENT(ref_grad, eps) COMPARE_GRADIENT2(ref_grad, eps, [](int, int) { return true; })
+
+/// \def COMPARE_GRADIENT_FLAT
+/// \brief Compares an interleaved 3n host gradient to a [n][3] reference.
+///
+/// The device-side #COMPARE_GRADIENT copies the gradient out itself; this one takes a
+/// gradient already on the host, in the interleaved layout the \c x*test* drivers use.
+#define COMPARE_GRADIENT_FLAT(g, ref_grad, eps)                          \
+   {                                                                     \
+      for (int i = 0; i < n; ++i)                                        \
+         for (int j = 0; j < 3; ++j)                                     \
+            REQUIRE(g[3 * i + j] == Approx(ref_grad[i][j]).margin(eps)); \
+   }
 /// \}

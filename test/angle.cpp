@@ -27,9 +27,9 @@ TEST_CASE("Angle-Trpcage", "[ff][eangle][trpcage]")
 
    const char* argv[] = {"dummy", x1};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    rc_flag = calc::xyz | calc::vmask;
-   initialize();
+   session.init();
 
    energy(calc::v3);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -55,8 +55,7 @@ TEST_CASE("Angle-Trpcage", "[ff][eangle][trpcage]")
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("Angle-2-fourier", "[ff][eangle][fourier][anglef]")
@@ -80,9 +79,9 @@ TEST_CASE("Angle-2-fourier", "[ff][eangle][fourier][anglef]")
 
    const char* argv[] = {"dummy", x1};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    rc_flag = calc::xyz | calc::vmask;
-   initialize();
+   session.init();
 
    energy(calc::v3);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -108,6 +107,5 @@ TEST_CASE("Angle-2-fourier", "[ff][eangle][fourier][anglef]")
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }

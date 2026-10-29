@@ -1,23 +1,33 @@
 #include "ff/evdw.h"
+#include "ff/dlmda.h"
 #include "ff/energy.h"
 #include "ff/nblist.h"
+#include "ff/ost.h"
 #include "ff/potent.h"
+#include "ff/termbuf.h"
 #include "math/zero.h"
+#include "tool/error.h"
 #include "tool/externfunc.h"
 #include "tool/iofortstr.h"
+#include "tool/platform.h"
 #include "tool/iotext.h"
 #include <tinker/detail/atomid.hh>
 #include <tinker/detail/atoms.hh>
+#include <tinker/detail/bound.hh>
 #include <tinker/detail/couple.hh>
+#include <tinker/detail/kdsp.hh>
 #include <tinker/detail/keys.hh>
 #include <tinker/detail/mutant.hh>
 #include <tinker/detail/params.hh>
+#include <tinker/detail/shunt.hh>
 #include <tinker/detail/sizes.hh>
 #include <tinker/detail/vdw.hh>
 #include <tinker/detail/vdwpot.hh>
 #include <tinker/routines.h>
 
+#include <algorithm>
 #include <cassert>
+#include <cmath>
 
 namespace tinker {
 inline namespace v1 {
@@ -29,9 +39,15 @@ static std::vector<new_type> jvec;
 static std::vector<new_type> jvdwbuf;
 static int jcount;
 
+// The class sums of the long-range correction.
+static LrcSums vdw_lrc;
+
 void vdwSoftcoreData(RcOp op)
 {
-   if ((not use(Potent::VDW)) and (not use(Potent::REPULS)) and (not use(Potent::DISP)) and (not use(Potent::CHGTRN)))
+   // mpoleScale() reads the ligand groups whenever poleorig exists, and the
+   // multipole and polarization pair kernels read them to skip dead groups.
+   if ((not use(Potent::VDW)) and (not use(Potent::REPULS)) and (not use(Potent::DISP)) and (not use(Potent::CHGTRN))
+      and (not use(Potent::MPOLE)) and (not use(Potent::POLAR)) and (not usePoleorig()))
       return;
 
    if (op & RcOp::DEALLOC)
@@ -48,7 +64,7 @@ void vdwSoftcoreData(RcOp op)
          vcouple = Vdw::ANNIHILATE;
       std::vector<int> mutvec(n);
       for (int i = 0; i < n; ++i) {
-         if (mutant::mut[i]) {
+         if (mutant::mutg[i] != 0) {
             mutvec[i] = 1;
          } else {
             mutvec[i] = 0;
@@ -73,32 +89,32 @@ void evdwData(RcOp op)
       jvdwbuf.clear();
       jcount = 0;
 
-      if (vdwtyp == Vdw::HAL)
+      if (vdwtyp == Vdw::HAL) {
          darray::deallocate(ired, kred, xred, yred, zred, gxred, gyred, gzred);
+         darray::deallocate(gxred_dlmda, gyred_dlmda, gzred_dlmda);
+      }
 
       darray::deallocate(jvdw, radmin, epsilon);
 
       nvexclude = 0;
-      darray::deallocate(vexclude, vexclude_scale);
+      nvexclude_scaled = 0;
+      darray::deallocate(vexclude, vexclude_scale, vexclude14);
+      vexclude14 = nullptr;
 
       if (nvdw14 > 0) {
          darray::deallocate(radmin4, epsilon4, vdw14ik);
          nvdw14 = 0;
       }
 
-      if (rc_a) {
+      if (rc_a)
          bufferDeallocate(rc_flag, nev);
-         bufferDeallocate(rc_flag, ev, vir_ev, devx, devy, devz);
-      }
+      ev_buf.manage(op, rc_flag, {}, {}, false);
       nev = nullptr;
-      ev = nullptr;
-      vir_ev = nullptr;
-      devx = nullptr;
-      devy = nullptr;
-      devz = nullptr;
+      gxred_dlmda = nullptr;
+      gyred_dlmda = nullptr;
+      gzred_dlmda = nullptr;
 
-      elrc_vol = 0;
-      vlrc_vol = 0;
+      vdw_lrc = {};
    }
 
    if (op & RcOp::ALLOC) {
@@ -115,6 +131,7 @@ void evdwData(RcOp op)
          vdwtyp = Vdw::GAUSS;
       else
          assert(false);
+
 
       FstrView str1 = vdwpot::vdwindex;
       if (str1 == "CLASS")
@@ -148,14 +165,20 @@ void evdwData(RcOp op)
       else
          assert(false);
 
+      const int dlmask = lmdaDerivMask(rc_flag, use_vdlmda);
       if (vdwtyp == Vdw::HAL) {
          darray::allocate(n, &ired, &kred, &xred, &yred, &zred);
          if (rc_flag & calc::grad) {
             darray::allocate(n, &gxred, &gyred, &gzred);
+            if (dlmask & calc::grad_dlmda)
+               darray::allocate(n, &gxred_dlmda, &gyred_dlmda, &gzred_dlmda);
          } else {
             gxred = nullptr;
             gyred = nullptr;
             gzred = nullptr;
+            gxred_dlmda = nullptr;
+            gyred_dlmda = nullptr;
+            gzred_dlmda = nullptr;
          }
       }
 
@@ -264,13 +287,8 @@ void evdwData(RcOp op)
             }
          }
       }
-      nvexclude = excls.size();
-      darray::allocate(nvexclude, &vexclude, &vexclude_scale);
-      darray::copyin(g::q0, nvexclude, vexclude, exclik.data());
-      darray::copyin(g::q0, nvexclude, vexclude_scale, excls.data());
-      waitFor(g::q0);
-
       // check VDW14 interations
+      std::vector<int> excl14;
       nvdw14 = 0;
       if (v4scale != 0) {
          // otherwise, there is no reason to worry about vdw14 energies
@@ -365,18 +383,74 @@ void evdwData(RcOp op)
             darray::copyin(g::q0, nvdw14, vdw14ik, v14ikbuf.data());
             waitFor(g::q0);
          }
+
+         // The buffered 14-7 kernels take the vdw14 values inside their
+         // exclusion loop (ehal1.f), so every 1-4 pair that has them joins the
+         // exclusion list, at a 1-4 scale of one too, flagged to use them.
+         if (vdwtyp == Vdw::HAL and nvdw14 > 0) {
+            std::map<std::pair<int, int>, size_t> where;
+            for (size_t ie = 0; ie < excls.size(); ++ie)
+               where[{exclik[2 * ie], exclik[2 * ie + 1]}] = ie;
+            excl14.assign(excls.size(), 0);
+            for (int ip = 0; ip < nvdw14; ++ip) {
+               int i = v14ikbuf[2 * ip];
+               int k = v14ikbuf[2 * ip + 1];
+               auto iter = where.find({i, k});
+               if (iter != where.end()) {
+                  excl14[iter->second] = 1;
+               } else {
+                  exclik.push_back(i);
+                  exclik.push_back(k);
+                  excls.push_back(v4scale);
+                  excl14.push_back(1);
+               }
+            }
+         }
       }
 
-      nev = nullptr;
-      ev = eng_buf_vdw;
-      vir_ev = vir_buf_vdw;
-      devx = gx_vdw;
-      devy = gy_vdw;
-      devz = gz_vdw;
-      if (rc_a) {
-         bufferAllocate(rc_flag, &nev);
-         bufferAllocate(rc_flag, &ev, &vir_ev, &devx, &devy, &devz);
+      // Put the pairs that still interact first. The scale-0 pairs after them
+      // only mask the neighbor list, so the CUDA HAL kernel skips them.
+      {
+         std::vector<int> ik2;
+         std::vector<real> s2;
+         std::vector<int> v142;
+         for (int pass = 0; pass < 2; ++pass) {
+            for (size_t ie = 0; ie < excls.size(); ++ie) {
+               bool scaled = excls[ie] != 0 or (excl14.size() and excl14[ie]);
+               if (scaled == (pass == 0)) {
+                  ik2.push_back(exclik[2 * ie]);
+                  ik2.push_back(exclik[2 * ie + 1]);
+                  s2.push_back(excls[ie]);
+                  if (excl14.size())
+                     v142.push_back(excl14[ie]);
+               }
+            }
+            if (pass == 0)
+               nvexclude_scaled = s2.size();
+         }
+         exclik.swap(ik2);
+         excls.swap(s2);
+         excl14.swap(v142);
       }
+
+      nvexclude = excls.size();
+      darray::allocate(nvexclude, &vexclude, &vexclude_scale);
+      darray::copyin(g::q0, nvexclude, vexclude, exclik.data());
+      darray::copyin(g::q0, nvexclude, vexclude_scale, excls.data());
+      if (excl14.size()) {
+         darray::allocate(nvexclude, &vexclude14);
+         darray::copyin(g::q0, nvexclude, vexclude14, excl14.data());
+      } else {
+         vexclude14 = nullptr;
+      }
+      waitFor(g::q0);
+
+      nev = nullptr;
+      ev_buf.manage(op, rc_flag, {&ev, &vir_ev, &devx, &devy, &devz},
+         {eng_buf_vdw, vir_buf_vdw, gx_vdw, gy_vdw, gz_vdw}, rc_a, //
+         {&energy_ev, &virial_ev}, {&energy_vdw, &virial_vdw});
+      if (rc_a)
+         bufferAllocate(rc_flag, &nev);
    }
 
    if (op & RcOp::INIT) {
@@ -385,7 +459,9 @@ void evdwData(RcOp op)
          ghal = vdwpot::ghal;
          dhal = vdwpot::dhal;
          scexp = mutant::scexp;
-         scalpha = mutant::scalpha;
+         scalphav = mutant::scalphav;
+         scexpm = mutant::scexpm;
+         scexpp = mutant::scexpp;
 
          std::vector<int> iredbuf(n);
          std::vector<double> kredbuf(n);
@@ -440,40 +516,201 @@ void evdwData(RcOp op)
          waitFor(g::q0);
       }
 
-      // Initialize elrc and vlrc.
-      if (vdwpot::use_vcorr) {
-         double elrc = 0, vlrc = 0;
-         tinker_f_evcorr1({const_cast<char*>("VDW"), 3}, &elrc, &vlrc);
-         elrc_vol = elrc * boxVolume();
-         vlrc_vol = vlrc * boxVolume();
-      } else {
-         elrc_vol = 0;
-         vlrc_vol = 0;
+      vdw_lrc = {};
+      if (vdwpot::use_vcorr)
+         lrcSetup(vdw_lrc, false);
+   }
+}
+
+void lrcSetup(LrcSums& ls, bool dsp)
+{
+   // dispersion has no relative free energy treatment (mutate.f), so it never
+   // has a ligand 2
+   assert(not(dsp and use_rel));
+   ls = {0, 0, 0, 1, 1};
+   if (not bound::use_bounds)
+      return;
+
+   // The soft core buffered 14-7 potential scales a mutated pair by the soft
+   // core power of its group lambda, its softening being negligible against the
+   // buffered distance beyond the cutoff; beyond its switch radius the soft core
+   // of the damped dispersion leaves only its lambda power on a mutated pair.
+   if (dsp) {
+      ls.nw = mutant::scexpd;
+   } else if (vdwtyp == Vdw::HAL) {
+      ls.nw = mutant::scexp;
+      ls.nb = mutant::scexp;
+   }
+
+   // The coefficients of the switching function.
+   if (dsp)
+      tinker_f_switch({const_cast<char*>("DISP  "), 6});
+   else
+      tinker_f_switch({const_cast<char*>("VDW   "), 6});
+   const double cut = shunt::cut, off = shunt::off;
+   const double c0 = shunt::c0, c1 = shunt::c1, c2 = shunt::c2;
+   const double c3 = shunt::c3, c4 = shunt::c4, c5 = shunt::c5;
+
+   // The number of steps and range of the numerical integration.
+   const int nstep = 2;
+   const double range = 100.0;
+   const int ndelta = (int)((double)nstep * (range - cut));
+   const double rdelta = (range - cut) / (double)ndelta;
+   const double offset = cut - 0.5 * rdelta;
+
+   // Count the types, or the classes for dispersion, of the environment and
+   // each ligand group.
+   std::vector<int> ivt;
+   std::vector<double> jvt, avt, bvt;
+   for (int i = 0; i < n; ++i) {
+      int it = dsp ? atomid::class_[i] : vdw::jvdw[i];
+      int k = std::find(ivt.begin(), ivt.end(), it) - ivt.begin();
+      if (k == (int)ivt.size()) {
+         ivt.push_back(it);
+         jvt.push_back(0);
+         avt.push_back(0);
+         bvt.push_back(0);
+      }
+      jvt[k] += 1;
+      if (mutant::mutg[i] == 1)
+         avt[k] += 1;
+      if (mutant::mutg[i] == 2)
+         bvt[k] += 1;
+   }
+
+   // Sum the pairs of each class, with ligand 2 coupling as the complement of
+   // vlambda and no interaction between the two ligand groups.
+   const int nvt = ivt.size();
+   const double ghal = vdwpot::ghal, dhal = vdwpot::dhal;
+   const double abuck = vdwpot::abuck, bbuck = vdwpot::bbuck, cbuck = vdwpot::cbuck;
+   for (int i = 0; i < nvt; ++i) {
+      int it = ivt[i];
+      double fi = 4 * M_PI * jvt[i];
+      double fia = 4 * M_PI * avt[i];
+      double fib = 4 * M_PI * bvt[i];
+      double fie = fi - fia - fib;
+      for (int k = i; k < nvt; ++k) {
+         int kt = ivt[k];
+         double fka = avt[k];
+         double fkb = bvt[k];
+         double fke = jvt[k] - fka - fkb;
+         double ee = fie * fke;
+         double ea = fie * fka + fia * fke;
+         double eb = fie * fkb + fib * fke;
+         double aa = fia * fka;
+         double bb = fib * fkb;
+         double f0, f1, f2;
+         if (mutant::vcouple == 0) {
+            f0 = ee + aa + bb, f1 = ea, f2 = eb;
+         } else {
+            f0 = ee, f1 = ea + aa, f2 = eb + bb;
+         }
+         if (k == i)
+            f0 *= 0.5, f1 *= 0.5, f2 *= 0.5;
+
+         double cik = 0, rv = 0, eps = 0, rv2 = 0, rv6 = 0, rv7 = 0;
+         if (dsp) {
+            cik = kdsp::dspsix[it - 1] * kdsp::dspsix[kt - 1];
+         } else {
+            int offs = (it - 1) * njvdw + (kt - 1);
+            rv = vdw::radmin[offs];
+            eps = vdw::epsilon[offs];
+            rv2 = rv * rv;
+            rv6 = rv2 * rv2 * rv2;
+            rv7 = rv6 * rv;
+         }
+         double etot = 0;
+         for (int j = 1; j <= ndelta; ++j) {
+            double r = offset + j * rdelta;
+            double r2 = r * r;
+            double r3 = r2 * r;
+            double r6 = r3 * r3;
+            double r7 = r6 * r;
+            double e = 0;
+            if (dsp) {
+               e = -cik / r6;
+            } else if (vdwtyp == Vdw::LJ) {
+               double p6 = rv6 / r6;
+               double p12 = p6 * p6;
+               e = eps * (p12 - 2 * p6);
+            } else if (vdwtyp == Vdw::HAL) {
+               double rho = r7 + ghal * rv7;
+               double tau = (dhal + 1) / (r + dhal * rv);
+               double tau7 = std::pow(tau, 7);
+               e = eps * rv7 * tau7 * ((ghal + 1) * rv7 / rho - 2);
+            } else if (vdwtyp == Vdw::BUCK or vdwtyp == Vdw::MM3HB) {
+               double p = std::sqrt(rv2 / r2);
+               double p6 = rv6 / r6;
+               double expterm = abuck * std::exp(-bbuck / p);
+               e = eps * (expterm - cbuck * p6);
+            }
+            if (r < off) {
+               double r4 = r2 * r2;
+               double r5 = r2 * r3;
+               double taper = c5 * r5 + c4 * r4 + c3 * r3 + c2 * r2 + c1 * r + c0;
+               e = e * (1 - taper);
+            }
+            etot += e * rdelta * r2;
+         }
+         ls.s0 += f0 * etot;
+         ls.s1 += f1 * etot;
+         ls.s2 += f2 * etot;
       }
    }
 }
 
-void evdw(int vers)
+LmdaFn lrcEval(const LrcSums& ls, double vl, double dl, double d2l)
 {
-   auto rc_a = rc_flag & calc::analyz;
-   auto do_a = vers & calc::analyz;
+   const bool dodl = dl != 0 or d2l != 0;
+   const LmdaFn w = lmdaPwrChain(vl, ls.nw, dl, d2l, dodl);
+   const LmdaFn b = lmdaPwrChain(1 - vl, ls.nb, -dl, -d2l, dodl);
+   return {ls.s0 + w.f * ls.s1 + b.f * ls.s2, w.d1 * ls.s1 + b.d1 * ls.s2, w.d2 * ls.s1 + b.d2 * ls.s2};
+}
+
+void lrcApply(int vers, int dlvers, const LrcSums& ls, energy_prec& eterm, virial_prec (&vterm)[9])
+{
    auto do_e = vers & calc::energy;
    auto do_v = vers & calc::virial;
-   auto do_g = vers & calc::grad;
+   const bool dodl = dlvers & calc::energy_dlmda1;
+   const LmdaFn e = lrcEval(ls, vlam, dodl ? dvldlmda : 0, dodl ? d2vldlmda2 : 0);
+   const double vol = boxVolume();
 
-   zeroOnHost(energy_ev, virial_ev);
-   size_t bsize = bufferSize();
-   if (rc_a) {
-      if (do_a)
-         darray::zero(g::q0, bsize, nev);
-      if (do_e)
-         darray::zero(g::q0, bsize, ev);
-      if (do_v)
-         darray::zero(g::q0, bsize, vir_ev);
-      if (do_g)
-         darray::zero(g::q0, n, devx, devy, devz);
+   if (do_e) {
+      if (e.f != 0) {
+         energy_prec corr = e.f / vol;
+         eterm += corr;
+         energy_vdw += corr;
+      }
+      if ((dlvers & calc::energy_dlmda1) and e.d1 != 0) {
+         energy_prec corr = e.d1 / vol;
+         devdl += corr;
+         dedl += corr;
+      }
+      if ((dlvers & calc::energy_dlmda2) and e.d2 != 0) {
+         energy_prec corr = e.d2 / vol;
+         d2evdl2 += corr;
+         d2edl2 += corr;
+      }
    }
+   // the virial of a constant over the volume is minus its energy
+   if (do_v) {
+      if (e.f != 0) {
+         virial_prec term = -e.f / vol;
+         for (int k : {0, 4, 8}) {
+            vterm[k] += term;
+            virial_vdw[k] += term;
+         }
+      }
+      if ((dlvers & calc::virial_dlmda) and e.d1 != 0) {
+         virial_prec term = -e.d1 / vol;
+         for (int k : {0, 4, 8})
+            dvirdl[k] += term;
+      }
+   }
+}
 
+static void evdwKernel(int vers)
+{
    if (vdwtyp == Vdw::LJ)
       elj(vers);
    else if (vdwtyp == Vdw::BUCK)
@@ -486,44 +723,31 @@ void evdw(int vers)
       egauss(vers);
    else
       assert(false);
+}
 
-   if (do_e) {
-      if (elrc_vol != 0) {
-         energy_prec corr = elrc_vol / boxVolume();
-         energy_ev += corr;
-         energy_vdw += corr;
-      }
-   }
-   if (do_v) {
-      if (vlrc_vol != 0) {
-         virial_prec term = vlrc_vol / boxVolume();
-         virial_ev[0] += term; // xx
-         virial_ev[4] += term; // yy
-         virial_ev[8] += term; // zz
-         virial_vdw[0] += term;
-         virial_vdw[4] += term;
-         virial_vdw[8] += term;
-      }
-   }
-   if (rc_a) {
-      if (do_e) {
-         EnergyBuffer u = ev;
-         energy_prec e = energyReduce(u);
-         energy_ev += e;
-         energy_vdw += e;
-      }
-      if (do_v) {
-         VirialBuffer u = vir_ev;
-         virial_prec v[9];
-         virialReduce(v, u);
-         for (int iv = 0; iv < 9; ++iv) {
-            virial_ev[iv] += v[iv];
-            virial_vdw[iv] += v[iv];
-         }
-      }
-      if (do_g)
-         sumGradient(gx_vdw, gy_vdw, gz_vdw, devx, devy, devz);
-   }
+void evdw(int vers)
+{
+   auto rc_a = rc_flag & calc::analyz;
+   auto do_a = vers & calc::analyz;
+
+   zeroOnHost(energy_ev, virial_ev);
+   if (rc_a and do_a)
+      darray::zero(g::q0, bufferSize(), nev);
+   ev_buf.zero(vers);
+   vdwLmdaZero(vers);
+
+   evdwKernel(vers);
+   lrcApply(vers, lmdaDerivVers(vers, vdlmdaActive()), vdw_lrc, energy_ev, virial_ev);
+
+   ev_buf.flush(vers);
+   vdwLmdaFlush(vers);
+}
+
+void evdwLrcVol(energy_prec& elrc, virial_prec& vlrc)
+{
+   const LmdaFn e = lrcEval(vdw_lrc, vlam, 0, 0);
+   elrc = e.f;
+   vlrc = -e.f;
 }
 }
 
@@ -561,7 +785,7 @@ void egauss(int vers)
 TINKER_FVOID2(acc1, cu1, ehal, int);
 void ehal(int vers)
 {
-   TINKER_FCALL2(acc1, cu1, ehal, vers);
+   TINKER_FCALL2(acc1, cu1, ehal, lmdaDerivVers(vers, vdlmdaActive()));
 }
 
 TINKER_FVOID2(acc1, cu1, ehalReduceXyz);
@@ -570,9 +794,11 @@ void ehalReduceXyz()
    TINKER_FCALL2(acc1, cu1, ehalReduceXyz);
 }
 
-TINKER_FVOID2(acc1, cu1, ehalResolveGradient);
-void ehalResolveGradient()
+TINKER_FVOID2(acc1, cu1, ehalResolveGradient, const grad_prec*, const grad_prec*, const grad_prec*, grad_prec*,
+   grad_prec*, grad_prec*);
+void ehalResolveGradient(const grad_prec* gxred, const grad_prec* gyred, const grad_prec* gzred, grad_prec* devx,
+   grad_prec* devy, grad_prec* devz)
 {
-   TINKER_FCALL2(acc1, cu1, ehalResolveGradient);
+   TINKER_FCALL2(acc1, cu1, ehalResolveGradient, gxred, gyred, gzred, devx, devy, devz);
 }
 }

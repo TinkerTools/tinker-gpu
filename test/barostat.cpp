@@ -1,11 +1,26 @@
+#include "ff/amoeba/induce.h"
+#include "ff/atom.h"
+#include "ff/dlmda.h"
+#include "ff/energy.h"
+#include "ff/eost.h"
+#include "ff/modamoeba.h"
+#include "ff/ost.h"
+#include "ff/potent.h"
 #include "md/integrator.h"
 #include "md/misc.h"
+#include "tool/iofortstr.h"
 #include <tinker/detail/bath.hh>
 #include <tinker/detail/boxes.hh>
 #include <tinker/detail/inform.hh>
+#include <tinker/detail/polpot.hh>
 
 #include "test.h"
 #include "testrt.h"
+
+#include <cmath>
+#include <memory>
+#include <string>
+#include <vector>
 
 using namespace tinker;
 
@@ -44,11 +59,11 @@ TEST_CASE("NPT-Berendsen-Iso", "[ff][npt][Berendsen][iso]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 1.);
 
    rc_flag = usage_;
-   initialize();
+   session.init();
 
    const double dt_ps = 0.002;
    const int nsteps = 5;
@@ -79,8 +94,7 @@ TEST_CASE("NPT-Berendsen-Iso", "[ff][npt][Berendsen][iso]")
 
    delete intg;
    intg = nullptr;
-   finish();
-   testEnd();
+   session.end();
 
    for (int i = 0; i < nsteps; ++i) {
       REQUIRE(epots[i] == Approx(ref_epot[i]).margin(eps_e));
@@ -130,11 +144,11 @@ TEST_CASE("NPT-Berendsen-Semiiso", "[ff][npt][Berendsen][semiiso]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 1.);
 
    rc_flag = usage_;
-   initialize();
+   session.init();
 
    const double dt_ps = 0.002;
    const int nsteps = 5;
@@ -165,8 +179,7 @@ TEST_CASE("NPT-Berendsen-Semiiso", "[ff][npt][Berendsen][semiiso]")
 
    delete intg;
    intg = nullptr;
-   finish();
-   testEnd();
+   session.end();
 
    for (int i = 0; i < nsteps; ++i) {
       REQUIRE(epots[i] == Approx(ref_epot[i]).margin(eps_e));
@@ -216,11 +229,11 @@ TEST_CASE("NPT-Berendsen-Aniso", "[ff][npt][Berendsen][aniso]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 1.);
 
    rc_flag = usage_;
-   initialize();
+   session.init();
 
    const double dt_ps = 0.002;
    const int nsteps = 5;
@@ -251,8 +264,7 @@ TEST_CASE("NPT-Berendsen-Aniso", "[ff][npt][Berendsen][aniso]")
 
    delete intg;
    intg = nullptr;
-   finish();
-   testEnd();
+   session.end();
 
    for (int i = 0; i < nsteps; ++i) {
       REQUIRE(epots[i] == Approx(ref_epot[i]).margin(eps_e));
@@ -302,11 +314,11 @@ TEST_CASE("NPT-Bussi-Iso", "[ff][npt][Bussi][iso]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 1.);
 
    rc_flag = usage_;
-   initialize();
+   session.init();
 
    const double dt_ps = 0.002;
    const int nsteps = 5;
@@ -337,8 +349,7 @@ TEST_CASE("NPT-Bussi-Iso", "[ff][npt][Bussi][iso]")
 
    delete intg;
    intg = nullptr;
-   finish();
-   testEnd();
+   session.end();
 
    for (int i = 0; i < nsteps; ++i) {
       REQUIRE(epots[i] == Approx(ref_epot[i]).margin(eps_e));
@@ -389,11 +400,11 @@ TEST_CASE("NPT-Bussi-Semiiso", "[ff][npt][Bussi][semiiso]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 1.);
 
    rc_flag = usage_;
-   initialize();
+   session.init();
 
    const double dt_ps = 0.002;
    const int nsteps = 5;
@@ -424,8 +435,7 @@ TEST_CASE("NPT-Bussi-Semiiso", "[ff][npt][Bussi][semiiso]")
 
    delete intg;
    intg = nullptr;
-   finish();
-   testEnd();
+   session.end();
 
    for (int i = 0; i < nsteps; ++i) {
       REQUIRE(epots[i] == Approx(ref_epot[i]).margin(eps_e));
@@ -476,11 +486,11 @@ TEST_CASE("NPT-Bussi-Aniso", "[ff][npt][Bussi][aniso]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 1.);
 
    rc_flag = usage_;
-   initialize();
+   session.init();
 
    const double dt_ps = 0.002;
    const int nsteps = 5;
@@ -511,8 +521,7 @@ TEST_CASE("NPT-Bussi-Aniso", "[ff][npt][Bussi][aniso]")
 
    delete intg;
    intg = nullptr;
-   finish();
-   testEnd();
+   session.end();
 
    for (int i = 0; i < nsteps; ++i) {
       REQUIRE(epots[i] == Approx(ref_epot[i]).margin(eps_e));
@@ -562,11 +571,11 @@ TEST_CASE("NPT-Monte-Iso", "[ff][npt][Monte][iso]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 1.);
 
    rc_flag = usage_ & ~calc::md;
-   initialize();
+   session.init();
    rc_flag = usage_;
 
    const double dt_ps = 0.002;
@@ -599,8 +608,7 @@ TEST_CASE("NPT-Monte-Iso", "[ff][npt][Monte][iso]")
    delete intg;
    intg = nullptr;
    rc_flag = usage_ & ~calc::md;
-   finish();
-   testEnd();
+   session.end();
 
    for (int i = 0; i < nsteps; ++i) {
       REQUIRE(epots[i] == Approx(ref_epot[i]).margin(eps_e));
@@ -651,11 +659,11 @@ TEST_CASE("NPT-Monte-Semiiso", "[ff][npt][Monte][semiiso]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 1.);
 
    rc_flag = usage_ & ~calc::md;
-   initialize();
+   session.init();
    rc_flag = usage_;
 
    const double dt_ps = 0.002;
@@ -688,8 +696,7 @@ TEST_CASE("NPT-Monte-Semiiso", "[ff][npt][Monte][semiiso]")
    delete intg;
    intg = nullptr;
    rc_flag = usage_ & ~calc::md;
-   finish();
-   testEnd();
+   session.end();
 
    for (int i = 0; i < nsteps; ++i) {
       REQUIRE(epots[i] == Approx(ref_epot[i]).margin(eps_e));
@@ -740,11 +747,11 @@ TEST_CASE("NPT-Monte-Aniso", "[ff][npt][Monte][aniso]")
 
    const char* argv[] = {"dummy", x};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(298., 1.);
 
    rc_flag = usage_ & ~calc::md;
-   initialize();
+   session.init();
    rc_flag = usage_;
 
    const double dt_ps = 0.002;
@@ -777,8 +784,7 @@ TEST_CASE("NPT-Monte-Aniso", "[ff][npt][Monte][aniso]")
    delete intg;
    intg = nullptr;
    rc_flag = usage_ & ~calc::md;
-   finish();
-   testEnd();
+   session.end();
 
    for (int i = 0; i < nsteps; ++i) {
       REQUIRE(epots[i] == Approx(ref_epot[i]).margin(eps_e));
@@ -796,3 +802,314 @@ TEST_CASE("NPT-Monte-Aniso", "[ff][npt][Monte][aniso]")
    bath::isothermal = 0;
    bath::isobaric = 0;
 }
+
+namespace {
+// The shared Fortran/C++ rejection fixture uses 19 solves at the same perturbed
+// geometries. ASPC stores 17 slots in Fortran (the last coefficient is zero) and
+// 16 here; both histories are full and prediction is active before the trial.
+// The caller ends the returned session.
+std::unique_ptr<TestSession> loadWater30Predictor()
+{
+   const char* k = "test_water30.key";
+   const char* x = "test_water30.xyz";
+   TestFile fke(TINKER9_DIRSTR "/test/file/barostat/water30.key", k);
+   TestFile fx(TINKER9_DIRSTR "/test/file/barostat/water30.xyz", x);
+   TestFile fp(TINKER9_DIRSTR "/test/file/commit_6fe8e913/water03.prm");
+
+   const char* argv[] = {"dummy", x};
+   int argc = 2;
+   auto session = std::make_unique<TestSession>(argc, argv);
+   testMdInit(298., 1.);
+   rc_flag = usage_;
+   session->init();
+   REQUIRE(n == 2700);
+   REQUIRE(use(Potent::POLAR));
+   REQUIRE(polpred == UPred::ASPC);
+   REQUIRE_FALSE(polpot::use_tholed);
+   REQUIRE(bath::kelvin == 298.);
+   REQUIRE(bath::atmsph == 1.);
+   REQUIRE(bath::voltrial == 1);
+   REQUIRE(bath::volmove == 10.);
+   REQUIRE(FstrView(bath::volscale) == "MOLECULAR");
+
+   std::vector<pos_prec> xb(n);
+   for (int step = 0; step < 19; ++step) {
+      darray::copyout(g::q0, n, xb.data(), xpos);
+      waitFor(g::q0);
+      for (int i = 0; i < n; ++i)
+         xb[i] += 0.01 * ((i + step) % 3 - 1);
+      darray::copyin(g::q0, n, xpos, xb.data());
+      waitFor(g::q0);
+      copyPosToXyz(true);
+      energy(calc::v1);
+   }
+   return session;
+}
+
+std::vector<real> grab(real (*dev)[3])
+{
+   std::vector<real> v(3 * n);
+   darray::copyout(g::q0, n, reinterpret_cast<real(*)[3]>(v.data()), dev);
+   waitFor(g::q0);
+   return v;
+}
+
+// A rejected Monte Carlo volume move: the trial energy solves the induced
+// dipoles at the trial geometry and adds them to the predictor history, and the
+// reject restores both along with the coordinates.
+void checkRejectKeepsInduced()
+{
+   real(*slots[])[3] = {udalt_00, udalt_01, udalt_02, udalt_03, udalt_04, udalt_05, udalt_06, udalt_07, udalt_08,
+      udalt_09, udalt_10, udalt_11, udalt_12, udalt_13, udalt_14, udalt_15};
+   real(*pslots[])[3] = {upalt_00, upalt_01, upalt_02, upalt_03, upalt_04, upalt_05, upalt_06, upalt_07, upalt_08,
+      upalt_09, upalt_10, upalt_11, upalt_12, upalt_13, upalt_14, upalt_15};
+   REQUIRE(nualt >= maxualt);
+   const auto uind0 = grab(uind);
+   const auto uinp0 = grab(uinp);
+   const auto udir0 = grab(udir);
+   const auto udirp0 = grab(udirp);
+   std::vector<std::vector<real>> slots0, pslots0;
+   for (int i = 0; i < maxualt; ++i) {
+      slots0.push_back(grab(slots[i]));
+      pslots0.push_back(grab(pslots[i]));
+   }
+   const int nualt0 = nualt;
+   std::vector<pos_prec> xb(n), yb(n), zb(n);
+   darray::copyout(g::q0, n, xb.data(), xpos);
+   darray::copyout(g::q0, n, yb.data(), ypos);
+   darray::copyout(g::q0, n, zb.data(), zpos);
+   waitFor(g::q0);
+   Box box0;
+   boxGetCurrent(box0);
+   constexpr energy_prec rejectEnergy = -1.0e30;
+
+   {
+      MonteCarloBarostat mc;
+      // an old energy far below any trial energy rejects the move for certain
+      monteCarloBarostat(rejectEnergy, 298., false, false);
+   }
+
+   std::vector<pos_prec> xa(n), ya(n), za(n);
+   darray::copyout(g::q0, n, xa.data(), xpos);
+   darray::copyout(g::q0, n, ya.data(), ypos);
+   darray::copyout(g::q0, n, za.data(), zpos);
+   waitFor(g::q0);
+   REQUIRE(xa == xb);
+   REQUIRE(ya == yb);
+   REQUIRE(za == zb);
+   REQUIRE(esum == rejectEnergy);
+   Box box1;
+   boxGetCurrent(box1);
+   REQUIRE(box1.box_shape == box0.box_shape);
+   const real3 vectors0[] = {box0.lvec1, box0.lvec2, box0.lvec3, box0.recipa, box0.recipb, box0.recipc};
+   const real3 vectors1[] = {box1.lvec1, box1.lvec2, box1.lvec3, box1.recipa, box1.recipb, box1.recipc};
+   for (int i = 0; i < 6; ++i) {
+      REQUIRE(vectors1[i].x == vectors0[i].x);
+      REQUIRE(vectors1[i].y == vectors0[i].y);
+      REQUIRE(vectors1[i].z == vectors0[i].z);
+   }
+   REQUIRE(grab(uind) == uind0);
+   REQUIRE(grab(uinp) == uinp0);
+   REQUIRE(grab(udir) == udir0);
+   REQUIRE(grab(udirp) == udirp0);
+   REQUIRE(nualt == nualt0);
+   for (int i = 0; i < maxualt; ++i) {
+      REQUIRE(grab(slots[i]) == slots0[i]);
+      REQUIRE(grab(pslots[i]) == pslots0[i]);
+   }
+}
+}
+
+TEST_CASE("NPT-Monte-Reject-Keeps-Induced", "[ff][npt][Monte][reject]")
+{
+   auto session = loadWater30Predictor();
+   checkRejectKeepsInduced();
+   session->end();
+}
+
+TEST_CASE("NPT-Monte-Reject-After-Expol", "[ff][npt][Monte][reject]")
+{
+   // A HIPPO system with exchange polarization first. Its polinv and polscale
+   // stay dangling after finish(), so a snapshot that picked its buffers by
+   // pointer rather than by use_expol read freed memory in the AMOEBA system.
+   {
+      const char* x = "water30_2.xyz";
+      TestFile fx(TINKER9_DIRSTR "/test/file/tinkernist/water30_2.xyz", x);
+      TestFile fk(TINKER9_DIRSTR "/test/file/tinkernist/water30_2.key");
+      TestFile fp(TINKER9_DIRSTR "/test/file/commit_aad9340c/water21.prm");
+
+      const char* argv[] = {"dummy", x};
+      int argc = 2;
+      TestSession session(argc, argv);
+      rc_flag = calc::xyz | calc::vmask;
+      session.init();
+      REQUIRE(polpot::use_expol);
+      energy(calc::v0);
+      session.end();
+   }
+
+   auto session = loadWater30Predictor();
+   REQUIRE_FALSE(polpot::use_expol);
+   checkRejectKeepsInduced();
+   session->end();
+}
+
+#if TINKER_GPULANG_CUDA
+namespace {
+// The six atom ion and water box of the Fortran case (test_barostat.f:
+// test_barostat_ost): periodic, no polarization, with orthogonal space
+// tempering at a main lambda of one half. The caller ends the returned session.
+std::unique_ptr<TestSession> loadIonwatOst()
+{
+   const std::string files = TINKER9_DIRSTR "/test/file/";
+   const char* x = "ionwat.xyz";
+   const char* k = "24_ionwat_ewald_l05.key";
+   TestFile fx(files + "testlmda/ionwat.xyz", x);
+   TestFile fk(files + "testlmda/24_ionwat_ewald_l05.key", k);
+   TestFile fp(files + "commit_ebe3611e/amoeba09.prm");
+
+   const char* argv[] = {"dummy", x, "-k", k};
+   int argc = 4;
+   auto session = std::make_unique<TestSession>(argc, argv);
+   testMdInit(298., 1.);
+   rc_flag = usage_ & ~calc::md;
+   session->init();
+   REQUIRE(n == 6);
+   REQUIRE(use_ost);
+   REQUIRE(bath::kelvin == 298.);
+   return session;
+}
+
+template <class T>
+std::vector<T> grab1(const T* dev)
+{
+   std::vector<T> v(n);
+   darray::copyout(g::q0, n, v.data(), dev);
+   waitFor(g::q0);
+   return v;
+}
+}
+
+TEST_CASE("NPT-Monte-OST", "[ff][npt][Monte][ost]")
+{
+   // The bias of orthogonal space tempering follows dU/dlambda and so changes
+   // with the box: a rejected volume move leaves the lambda derivatives, the
+   // saved bias and the forces as they were, and an accepted move returns the
+   // energy, lambda derivative and bias of the new box while the forces of the
+   // step stay in place (test_barostat.f:test_barostat_ost).
+   TestLmdaFlagGuard guard;
+   auto session = loadIonwatOst();
+   const int voltrial0 = bath::voltrial;
+   const double volmove0 = bath::volmove;
+   FstrView volscale = bath::volscale;
+   const std::string volscale0 = volscale.trim();
+   bath::voltrial = 1;
+   bath::volmove = 200.;
+   volscale = "MOLECULAR";
+   const T_prec temp = 298.;
+
+   // deposit one gaussian off center in dU/dlambda, so the bias has a slope
+   // along dU/dlambda at the current configuration
+   energy(calc::v4);
+   lmdaavg = lambda;
+   dedlavg = dedl + 0.5 * wfhist;
+   ostDeposit(1);
+   energy(calc::v4);
+   const energy_prec e0 = esum;
+   REQUIRE(std::fabs(bdgdfl) > 1.0e-6);
+
+   const auto x0 = grab1(xpos), y0 = grab1(ypos), z0 = grab1(zpos);
+   const auto gx0 = grab1(gx), gy0 = grab1(gy), gz0 = grab1(gz);
+   Box box0;
+   boxGetCurrent(box0);
+   const energy_prec dedl0 = dedl, d2edl20 = d2edl2;
+   const double bgbias0 = bgbias, bdgdl0 = bdgdl, bdgdfl0 = bdgdfl;
+   const double bostlmda0 = bostlmda, lmdadfdl0 = lmdadfdl;
+
+   // the barostat owns device arrays, so it has to go before the session ends
+   {
+      MonteCarloBarostat mc;
+
+      // an old energy far below any trial energy rejects the move
+      constexpr energy_prec rejectEnergy = -1.0e30;
+      monteCarloBarostat(rejectEnergy, temp, false, false);
+      REQUIRE(esum == rejectEnergy);
+      Box box1;
+      boxGetCurrent(box1);
+      REQUIRE(box1.lvec1.x == box0.lvec1.x);
+      REQUIRE(grab1(xpos) == x0);
+      REQUIRE(grab1(ypos) == y0);
+      REQUIRE(grab1(zpos) == z0);
+      REQUIRE(grab1(gx) == gx0);
+      REQUIRE(grab1(gy) == gy0);
+      REQUIRE(grab1(gz) == gz0);
+      REQUIRE(dedl == dedl0);
+      REQUIRE(d2edl2 == d2edl20);
+      REQUIRE(bgbias == bgbias0);
+      REQUIRE(bdgdl == bdgdl0);
+      REQUIRE(bdgdfl == bdgdfl0);
+      REQUIRE(bostlmda == bostlmda0);
+      REQUIRE(lmdadfdl == lmdadfdl0);
+
+      // an old energy far above the trial energy accepts the move
+      monteCarloBarostat(e0 + 200., temp, false, false);
+      boxGetCurrent(box1);
+      REQUIRE(box1.lvec1.x != box0.lvec1.x);
+      REQUIRE(grab1(gx) == gx0);
+      REQUIRE(grab1(gy) == gy0);
+      REQUIRE(grab1(gz) == gz0);
+      const energy_prec eacc = esum, dedlacc = dedl;
+      const double biasacc = bgbias - bostlmda;
+      REQUIRE(std::fabs(dedlacc - dedl0) > 1.0e-6);
+      energy(calc::v4);
+      CAPTURE(eacc, esum, dedlacc, dedl, biasacc, bgbias - bostlmda);
+      REQUIRE(std::fabs(dedlacc - dedl) <= 1.0e-6);
+      REQUIRE(std::fabs(biasacc - (bgbias - bostlmda)) <= 1.0e-8);
+      REQUIRE(std::fabs(eacc - esum) <= 1.0e-6);
+   }
+
+   bath::voltrial = voltrial0;
+   bath::volmove = volmove0;
+   volscale = volscale0;
+   session->end();
+   bath::kelvin = 0.;
+   bath::atmsph = 0.;
+   bath::isothermal = 0;
+   bath::isobaric = 0;
+}
+
+TEST_CASE("OST-Update-At-Step-End", "[ff][npt][ost]")
+{
+   // The integrator leaves the adaptive bias and the lambda particle alone;
+   // they are advanced by lmdaWinDyn() once the step is complete, so a Monte
+   // Carlo box change in the step sees the lambda and bias of its force call.
+   TestLmdaFlagGuard guard;
+   auto session = loadIonwatOst();
+   int old = inform::iwrite;
+   inform::iwrite = 1;
+   rc_flag = usage_;
+   intg = new VerletIntegrator(ThermostatEnum::NONE, BarostatEnum::NONE);
+
+   const double sentinel = 12345.;
+   const double lmda0 = lambda;
+   deffdl = sentinel;
+   intg->dynamic(1, 0.001);
+   REQUIRE(deffdl == sentinel);
+   REQUIRE(lambda == lmda0);
+
+   const double eff = dedl + bdgdl + bdgdfl * d2edl2 - lmdadfdl;
+   lmdaWinDyn(1);
+   REQUIRE(std::fabs(deffdl - eff) <= 1.0e-10);
+   REQUIRE(deffdl != sentinel);
+
+   inform::iwrite = old;
+   delete intg;
+   intg = nullptr;
+   rc_flag = usage_ & ~calc::md;
+   session->end();
+   bath::kelvin = 0.;
+   bath::atmsph = 0.;
+   bath::isothermal = 0;
+   bath::isobaric = 0;
+}
+#endif

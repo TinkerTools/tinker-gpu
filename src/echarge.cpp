@@ -166,6 +166,7 @@ void echargeEwaldRecipSelf(int vers)
    // fphi_pchg, recip, self
 
    TINKER_FCALL2(acc1, cu1, echargeEwaldFphiSelf, vers);
+   echargeEwaldBackground(vers);
 
    pmeStreamFinishRecord(use_pme_stream);
 }
@@ -192,10 +193,16 @@ void echarge(int vers)
          darray::zero(g::q0, n, decx, decy, decz);
    }
 
+   pchgEnsureElec();
    if (useEwald()) {
+      // The analysis buffers are zeroed and reduced inside this function, on
+      // the main stream. The PME stream must not start before the zeroing and
+      // must have finished before the reduction, whatever "vers" is.
+      const bool pme_stream_a = use_pme_stream and rc_a;
+      pmeStreamStartRecord(pme_stream_a);
       echargeEwaldRecipSelf(vers);
       TINKER_FCALL2(acc1, cu1, echargeEwaldReal, vers);
-      pmeStreamFinishWait(use_pme_stream and static_cast<bool>(vers & calc::analyz));
+      pmeStreamFinishWait(pme_stream_a);
    } else {
       echargeNonEwald(vers);
    }

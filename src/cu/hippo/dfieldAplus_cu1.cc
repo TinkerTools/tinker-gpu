@@ -1,21 +1,26 @@
-// ck.py Version 3.0.2
+// ck.py Version 3.1.0
 template <class ETYP>
 __global__
 void dfieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict dpinfo, int nexclude,
    const int (*restrict exclude)[2], const real (*restrict exclude_scale)[3], const real* restrict x,
    const real* restrict y, const real* restrict z, const Spatial::SortedAtom* restrict sorted, int nakpl,
    const int* restrict iakpl, int niak, const int* restrict iak, const int* restrict lst, real (*restrict field)[3],
-   const real (*restrict rpole)[10], const real* restrict pdamp, const real* restrict dirdamp, real aewald)
+   const real (*restrict rpole)[10], const real* restrict pdamp, real aewald, const int* restrict grp, RdtMask live)
 {
+   using d::jpolar;
+   using d::njpolar;
+   using d::thdval;
    const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
    const int iwarp = ithread / WARP_SIZE;
    const int nwarp = blockDim.x * gridDim.x / WARP_SIZE;
    const int ilane = threadIdx.x & (WARP_SIZE - 1);
 
    __shared__ real ci[BLOCK_DIM], dix[BLOCK_DIM], diy[BLOCK_DIM], diz[BLOCK_DIM], qixx[BLOCK_DIM], qixy[BLOCK_DIM],
-      qixz[BLOCK_DIM], qiyy[BLOCK_DIM], qiyz[BLOCK_DIM], qizz[BLOCK_DIM], pdi[BLOCK_DIM], ddi[BLOCK_DIM];
+      qixz[BLOCK_DIM], qiyy[BLOCK_DIM], qiyz[BLOCK_DIM], qizz[BLOCK_DIM], pdi[BLOCK_DIM];
+   __shared__ int jpi[BLOCK_DIM], gi[BLOCK_DIM];
    real xi, yi, zi;
-   real xk, yk, zk, ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, pdk, ddk;
+   real xk, yk, zk, ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, pdk;
+   int jpk, gk;
    real fidx, fidy, fidz;
    real fkdx, fkdy, fkdz;
 
@@ -44,7 +49,8 @@ void dfieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
       qiyz[klane] = rpole[i][MPL_PME_YZ];
       qizz[klane] = rpole[i][MPL_PME_ZZ];
       pdi[klane] = pdamp[i];
-      ddi[klane] = dirdamp[i];
+      jpi[klane] = jpolar[i];
+      gi[klane] = (grp ? grp[i] : 0);
       xi = x[i];
       yi = y[i];
       zi = z[i];
@@ -62,17 +68,21 @@ void dfieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
       qkyz = rpole[k][MPL_PME_YZ];
       qkzz = rpole[k][MPL_PME_ZZ];
       pdk = pdamp[k];
-      ddk = dirdamp[k];
+      jpk = jpolar[k];
+      gk = (grp ? grp[k] : 0);
 
       constexpr bool incl = true;
       real xr = xk - xi;
       real yr = yk - yi;
       real zr = zk - zi;
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off * off and incl) {
+      // a pair with a dead group has no multipole or induced dipole;
+      // grp is null when every group is live
+      if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
+         real pgd = thdval[njpolar * jpi[klane] + jpk];
          pair_dfield_aplus_v2<ETYP>(r2, xr, yr, zr, scaleb, ci[klane], dix[klane], diy[klane], diz[klane], pdi[klane],
-            ddi[klane], qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], ck, dkx, dky, dkz,
-            pdk, ddk, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
+            pgd, qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], ck, dkx, dky, dkz, pdk,
+            qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
       } // end if (include)
 
       atomic_add(fidx, &field[i][0]);
@@ -113,7 +123,8 @@ void dfieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
       qiyz[threadIdx.x] = rpole[i][MPL_PME_YZ];
       qizz[threadIdx.x] = rpole[i][MPL_PME_ZZ];
       pdi[threadIdx.x] = pdamp[i];
-      ddi[threadIdx.x] = dirdamp[i];
+      jpi[threadIdx.x] = jpolar[i];
+      gi[threadIdx.x] = (grp ? grp[i] : 0);
       xi = sorted[atomi].x;
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
@@ -131,7 +142,8 @@ void dfieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
       qkyz = rpole[k][MPL_PME_YZ];
       qkzz = rpole[k][MPL_PME_ZZ];
       pdk = pdamp[k];
-      ddk = dirdamp[k];
+      jpk = jpolar[k];
+      gk = (grp ? grp[k] : 0);
       __syncwarp();
 
       unsigned int dpinfo0 = dpinfo[iw * WARP_SIZE + ilane];
@@ -146,10 +158,13 @@ void dfieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
          real yr = yk - yi;
          real zr = zk - zi;
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // a pair with a dead group has no multipole or induced dipole;
+         // grp is null when every group is live
+         if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
+            real pgd = thdval[njpolar * jpi[klane] + jpk];
             pair_dfield_aplus_v2<ETYP>(r2, xr, yr, zr, scaleb, ci[klane], dix[klane], diy[klane], diz[klane],
-               pdi[klane], ddi[klane], qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], ck,
-               dkx, dky, dkz, pdk, ddk, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
+               pdi[klane], pgd, qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], ck, dkx,
+               dky, dkz, pdk, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
          } // end if (include)
 
          iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
@@ -194,7 +209,8 @@ void dfieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
       qiyz[threadIdx.x] = rpole[i][MPL_PME_YZ];
       qizz[threadIdx.x] = rpole[i][MPL_PME_ZZ];
       pdi[threadIdx.x] = pdamp[i];
-      ddi[threadIdx.x] = dirdamp[i];
+      jpi[threadIdx.x] = jpolar[i];
+      gi[threadIdx.x] = (grp ? grp[i] : 0);
       xi = sorted[atomi].x;
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
@@ -212,7 +228,8 @@ void dfieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
       qkyz = rpole[k][MPL_PME_YZ];
       qkzz = rpole[k][MPL_PME_ZZ];
       pdk = pdamp[k];
-      ddk = dirdamp[k];
+      jpk = jpolar[k];
+      gk = (grp ? grp[k] : 0);
       __syncwarp();
 
       for (int j = 0; j < WARP_SIZE; ++j) {
@@ -224,10 +241,13 @@ void dfieldAplus_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restr
          real yr = yk - yi;
          real zr = zk - zi;
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // a pair with a dead group has no multipole or induced dipole;
+         // grp is null when every group is live
+         if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
+            real pgd = thdval[njpolar * jpi[klane] + jpk];
             pair_dfield_aplus_v2<ETYP>(r2, xr, yr, zr, scaleb, ci[klane], dix[klane], diy[klane], diz[klane],
-               pdi[klane], ddi[klane], qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], ck,
-               dkx, dky, dkz, pdk, ddk, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
+               pdi[klane], pgd, qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], ck, dkx,
+               dky, dkz, pdk, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, aewald, fidx, fidy, fidz, fkdx, fkdy, fkdz);
          } // end if (include)
 
          xi = __shfl_sync(ALL_LANES, xi, ilane + 1);

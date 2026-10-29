@@ -6,6 +6,13 @@
 
 namespace tinker {
 /// \ingroup repel
+/// The soft core scaling of a mutated Pauli repulsion pair at the current vlam,
+/// \f$ s = \lambda^n r / \sqrt{\alpha \lambda^m (1-\lambda)^p + r^2} \f$
+/// (erepsc.f:repsc), with its main lambda derivative coefficients only if
+/// \c dodl (erepsc.f:repsc4).
+SoftCoreLmda repelSoft(bool dodl);
+
+/// \ingroup repel
 void erepelData(RcOp);
 /// \ingroup repel
 void erepel(int vers);
@@ -43,4 +50,9 @@ TINKER_EXTERN real r2scale;
 TINKER_EXTERN real r3scale;
 TINKER_EXTERN real r4scale;
 TINKER_EXTERN real r5scale;
+
+TINKER_EXTERN double scalphar;
+TINKER_EXTERN double scexpr;
+TINKER_EXTERN double scexprm;
+TINKER_EXTERN double scexprp;
 }

@@ -55,5 +55,8 @@ private:
 public:
    using Base::data;
    using Base::reserve;
+
+   /// \brief Frees the device memory now instead of in the destructor.
+   void release() { Base().swap(*this); }
 };
 }

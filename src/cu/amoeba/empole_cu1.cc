@@ -1,4 +1,4 @@
-// ck.py Version 3.0.2
+// ck.py Version 3.1.0
 template <class Ver, class ETYP>
 __global__
 void empole_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, EnergyBuffer restrict em,
@@ -7,7 +7,7 @@ void empole_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, EnergyBuff
    const real (*restrict exclude_scale)[4], const real* restrict x, const real* restrict y, const real* restrict z,
    const Spatial::SortedAtom* restrict sorted, int nakpl, const int* restrict iakpl, int niak, const int* restrict iak,
    const int* restrict lst, real* restrict trqx, real* restrict trqy, real* restrict trqz,
-   const real (*restrict rpole)[10], real f, real aewald)
+   const real (*restrict rpole)[10], real f, real aewald, const int* restrict grp, RdtMask live)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;
@@ -40,9 +40,11 @@ void empole_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, EnergyBuff
    __shared__ real xi[BLOCK_DIM], yi[BLOCK_DIM], zi[BLOCK_DIM], ci[BLOCK_DIM], dix[BLOCK_DIM], diy[BLOCK_DIM],
       diz[BLOCK_DIM], qixx[BLOCK_DIM], qixy[BLOCK_DIM], qixz[BLOCK_DIM], qiyy[BLOCK_DIM], qiyz[BLOCK_DIM],
       qizz[BLOCK_DIM];
+   __shared__ int gi[BLOCK_DIM];
    __shared__ real xk[BLOCK_DIM], yk[BLOCK_DIM], zk[BLOCK_DIM], ck[BLOCK_DIM], dkx[BLOCK_DIM], dky[BLOCK_DIM],
       dkz[BLOCK_DIM];
    real qkxx, qkxy, qkxz, qkyy, qkyz, qkzz;
+   int gk;
    real frcxi, frcyi, frczi, trqxi, trqyi, trqzi;
    real frcxk, frcyk, frczk, trqxk, trqyk, trqzk;
 
@@ -81,6 +83,7 @@ void empole_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, EnergyBuff
       qiyy[klane] = rpole[i][MPL_PME_YY];
       qiyz[klane] = rpole[i][MPL_PME_YZ];
       qizz[klane] = rpole[i][MPL_PME_ZZ];
+      gi[klane] = (grp ? grp[i] : 0);
       xk[threadIdx.x] = x[k];
       yk[threadIdx.x] = y[k];
       zk[threadIdx.x] = z[k];
@@ -94,13 +97,16 @@ void empole_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, EnergyBuff
       qkyy = rpole[k][MPL_PME_YY];
       qkyz = rpole[k][MPL_PME_YZ];
       qkzz = rpole[k][MPL_PME_ZZ];
+      gk = (grp ? grp[k] : 0);
 
       constexpr bool incl = true;
       real xr = xk[threadIdx.x] - xi[klane];
       real yr = yk[threadIdx.x] - yi[klane];
       real zr = zk[threadIdx.x] - zi[klane];
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off * off and incl) {
+      // a pair with a dead group has no multipole or induced dipole;
+      // grp is null when every group is live
+      if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
          real e, vxx, vyx, vzx, vyy, vzy, vzz;
          real e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1;
          pair_mpole_v2<Ver, ETYP>(r2, xr, yr, zr, 1, ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane],
@@ -186,6 +192,7 @@ void empole_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, EnergyBuff
       qiyy[threadIdx.x] = rpole[i][MPL_PME_YY];
       qiyz[threadIdx.x] = rpole[i][MPL_PME_YZ];
       qizz[threadIdx.x] = rpole[i][MPL_PME_ZZ];
+      gi[threadIdx.x] = (grp ? grp[i] : 0);
       xk[threadIdx.x] = sorted[atomk].x;
       yk[threadIdx.x] = sorted[atomk].y;
       zk[threadIdx.x] = sorted[atomk].z;
@@ -199,6 +206,7 @@ void empole_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, EnergyBuff
       qkyy = rpole[k][MPL_PME_YY];
       qkyz = rpole[k][MPL_PME_YZ];
       qkzz = rpole[k][MPL_PME_ZZ];
+      gk = (grp ? grp[k] : 0);
       __syncwarp();
 
       unsigned int mdpuinfo0 = mdpuinfo[iw * WARP_SIZE + ilane];
@@ -212,7 +220,9 @@ void empole_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, EnergyBuff
          real yr = yk[threadIdx.x] - yi[klane];
          real zr = zk[threadIdx.x] - zi[klane];
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // a pair with a dead group has no multipole or induced dipole;
+         // grp is null when every group is live
+         if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
             real e, vxx, vyx, vzx, vyy, vzy, vzz;
             pair_mpole_v2<Ver, ETYP>(r2, xr, yr, zr, 1, ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane],
                qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], ck[threadIdx.x], dkx[threadIdx.x],
@@ -297,6 +307,7 @@ void empole_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, EnergyBuff
       qiyy[threadIdx.x] = rpole[i][MPL_PME_YY];
       qiyz[threadIdx.x] = rpole[i][MPL_PME_YZ];
       qizz[threadIdx.x] = rpole[i][MPL_PME_ZZ];
+      gi[threadIdx.x] = (grp ? grp[i] : 0);
       xk[threadIdx.x] = sorted[atomk].x;
       yk[threadIdx.x] = sorted[atomk].y;
       zk[threadIdx.x] = sorted[atomk].z;
@@ -310,6 +321,7 @@ void empole_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, EnergyBuff
       qkyy = rpole[k][MPL_PME_YY];
       qkyz = rpole[k][MPL_PME_YZ];
       qkzz = rpole[k][MPL_PME_ZZ];
+      gk = (grp ? grp[k] : 0);
       __syncwarp();
 
       for (int j = 0; j < WARP_SIZE; ++j) {
@@ -320,7 +332,9 @@ void empole_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nem, EnergyBuff
          real yr = yk[threadIdx.x] - yi[klane];
          real zr = zk[threadIdx.x] - zi[klane];
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // a pair with a dead group has no multipole or induced dipole;
+         // grp is null when every group is live
+         if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
             real e, vxx, vyx, vzx, vyy, vzy, vzz;
             pair_mpole_v2<Ver, ETYP>(r2, xr, yr, zr, 1, ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane],
                qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], ck[threadIdx.x], dkx[threadIdx.x],

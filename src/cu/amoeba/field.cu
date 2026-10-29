@@ -1,4 +1,5 @@
 #include "ff/cumodamoeba.h"
+#include "ff/dlmda.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/pme.h"
@@ -48,7 +49,7 @@ void dfieldEwaldReal_cu(real (*field)[3], real (*fieldp)[3])
    nparallel = std::max(nparallel, ngrid);
    launch_k1s(g::s0, nparallel, dfield_cu1<EWALD>, //
       st.n, TINKER_IMAGE_ARGS, off, st.si3.bit0, ndpexclude, dpexclude, dpexclude_scale, st.x, st.y, st.z, st.sorted,
-      st.nakpl, st.iakpl, st.niak, st.iak, st.lst, field, fieldp, aewald);
+      st.nakpl, st.iakpl, st.niak, st.iak, st.lst, field, fieldp, aewald, elecDeadGroups(), elecLiveMask());
 }
 
 void dfieldNonEwald_cu(real (*field)[3], real (*fieldp)[3])
@@ -63,7 +64,7 @@ void dfieldNonEwald_cu(real (*field)[3], real (*fieldp)[3])
    nparallel = std::max(nparallel, ngrid);
    launch_k1s(g::s0, nparallel, dfield_cu1<NON_EWALD>, //
       st.n, TINKER_IMAGE_ARGS, off, st.si3.bit0, ndpexclude, dpexclude, dpexclude_scale, st.x, st.y, st.z, st.sorted,
-      st.nakpl, st.iakpl, st.niak, st.iak, st.lst, field, fieldp, 0);
+      st.nakpl, st.iakpl, st.niak, st.iak, st.lst, field, fieldp, 0, elecDeadGroups(), elecLiveMask());
 }
 }
 
@@ -133,7 +134,7 @@ void ufieldEwaldReal_cu(const real (*uind)[3], const real (*uinp)[3], real (*fie
    nparallel = std::max(nparallel, ngrid);
    launch_k1s(g::s0, nparallel, ufield_cu1<EWALD>, //
       st.n, TINKER_IMAGE_ARGS, off, st.si4.bit0, nuexclude, uexclude, uexclude_scale, st.x, st.y, st.z, st.sorted,
-      st.nakpl, st.iakpl, st.niak, st.iak, st.lst, uind, uinp, field, fieldp, aewald);
+      st.nakpl, st.iakpl, st.niak, st.iak, st.lst, uind, uinp, field, fieldp, aewald, elecDeadGroups(), elecLiveMask());
 }
 
 void ufieldNonEwald_cu(const real (*uind)[3], const real (*uinp)[3], real (*field)[3], real (*fieldp)[3])
@@ -148,6 +149,6 @@ void ufieldNonEwald_cu(const real (*uind)[3], const real (*uinp)[3], real (*fiel
    nparallel = std::max(nparallel, ngrid);
    launch_k1s(g::s0, nparallel, ufield_cu1<NON_EWALD>, //
       st.n, TINKER_IMAGE_ARGS, off, st.si4.bit0, nuexclude, uexclude, uexclude_scale, st.x, st.y, st.z, st.sorted,
-      st.nakpl, st.iakpl, st.niak, st.iak, st.lst, uind, uinp, field, fieldp, 0);
+      st.nakpl, st.iakpl, st.niak, st.iak, st.lst, uind, uinp, field, fieldp, 0, elecDeadGroups(), elecLiveMask());
 }
 }

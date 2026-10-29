@@ -1,8 +1,11 @@
 #include "math/libfunc.h"
 #include "math/lu.h"
 #include "math/pow2.h"
+#include "math/sinhc.h"
 
 #include "test.h"
+
+#include <cmath>
 
 using namespace tinker;
 
@@ -161,4 +164,65 @@ TEST_CASE("LUSolve", "[util][math]")
    for (int i = 0; i < 3; ++i)
       REQUIRE(x[i] == b[i]);
 #endif
+}
+
+namespace {
+// fk(d) = sum_n d^(2n) / ((2n)!! (2k+2n-1)!!), summed in long double.
+long double sinhcExact(int k, long double d)
+{
+   long double d2 = d * d, df = 1;
+   for (int j = 1; j <= 2 * k - 1; j += 2)
+      df *= j;
+   long double term = 1 / df, sum = term;
+   for (int n = 1; n < 80; ++n) {
+      term *= d2 / ((2.0L * n) * (2.0L * k + 2.0L * n - 1));
+      sum += term;
+   }
+   return sum;
+}
+
+template <class T>
+void checkSinhc(const double (&tol)[7])
+{
+   double maxerr[7] = {0};
+   for (int i = -2048; i <= 2048; ++i) {
+      T d = (T)i / 256; // |d| <= 8
+      T f[8][7];
+      fsinhc1(d, f[1][0]);
+      fsinhc2(d, f[2][0], f[2][1]);
+      fsinhc3(d, f[3][0], f[3][1], f[3][2]);
+      fsinhc4(d, f[4][0], f[4][1], f[4][2], f[4][3]);
+      fsinhc5(d, f[5][0], f[5][1], f[5][2], f[5][3], f[5][4]);
+      fsinhc6(d, f[6][0], f[6][1], f[6][2], f[6][3], f[6][4], f[6][5]);
+      fsinhc7(d, f[7][0], f[7][1], f[7][2], f[7][3], f[7][4], f[7][5], f[7][6]);
+      for (int k = 0; k < 7; ++k) {
+         // the same fk however many orders are asked for
+         for (int n = k + 2; n <= 7; ++n) {
+            CAPTURE(d, k + 1, n);
+            REQUIRE(f[n][k] == f[k + 1][k]);
+         }
+         double err = std::fabs((double)(f[k + 1][k] / sinhcExact(k + 1, d) - 1));
+         maxerr[k] = std::fmax(maxerr[k], err);
+      }
+   }
+   for (int k = 0; k < 7; ++k) {
+      CAPTURE(k + 1, maxerr[k]);
+      REQUIRE(maxerr[k] < tol[k]);
+   }
+}
+}
+
+TEST_CASE("MathFuncSinhc", "[util][math]")
+{
+   // about ten times the largest relative error of the host build
+   SECTION("float")
+   {
+      const double tol[7] = {2e-6, 2e-6, 4e-6, 2e-5, 1e-4, 5e-4, 1.5e-3};
+      checkSinhc<float>(tol);
+   }
+   SECTION("double")
+   {
+      const double tol[7] = {1e-14, 2e-13, 3e-12, 6e-11, 6e-10, 6e-9, 4e-8};
+      checkSinhc<double>(tol);
+   }
 }

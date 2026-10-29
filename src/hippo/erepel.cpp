@@ -1,14 +1,18 @@
 #include "ff/hippo/erepel.h"
 #include "ff/amoeba/empole.h"
+#include "ff/dlmda.h"
 #include "ff/energy.h"
+#include "ff/evdw.h"
 #include "ff/modamoeba.h"
 #include "ff/potent.h"
 #include "math/zero.h"
 #include "tool/externfunc.h"
 #include <tinker/detail/couple.hh>
 #include <tinker/detail/mpole.hh>
+#include <tinker/detail/mutant.hh>
 #include <tinker/detail/repel.hh>
 #include <tinker/detail/reppot.hh>
+#include <cmath>
 
 namespace tinker {
 void erepelData(RcOp op)
@@ -128,6 +132,12 @@ void erepelData(RcOp op)
    }
 
    if (op & RcOp::INIT) {
+      // mutate.f has already reset any value outside its allowed range.
+      scalphar = mutant::scalphar;
+      scexpr = mutant::scexpr;
+      scexprm = mutant::scexprm;
+      scexprp = mutant::scexprp;
+
       darray::copyin(g::q0, n, sizpr, repel::sizpr);
       darray::copyin(g::q0, n, dmppr, repel::dmppr);
       darray::copyin(g::q0, n, elepr, repel::elepr);
@@ -157,10 +167,9 @@ void erepelData(RcOp op)
    }
 }
 
-TINKER_FVOID2(acc1, cu1, chkrepole);
-static void chkrepole()
+SoftCoreLmda repelSoft(bool dodl)
 {
-   TINKER_FCALL2(acc1, cu1, chkrepole);
+   return softCoreLmda(vlam, scexpr, scalphar, scexprm, scexprp, dvldlmda, d2vldlmda2, dodl);
 }
 
 TINKER_FVOID2(acc1, cu1, rotrepole);
@@ -173,10 +182,12 @@ void repoleInit(int vers)
 {
    if (vers & calc::grad)
       darray::zero(g::q0, n, trqx, trqy, trqz);
+   if (vers & (calc::grad_dlmda | calc::virial_dlmda))
+      darray::zero(g::q0, n, dltrqx, dltrqy, dltrqz);
    if (vers & calc::virial)
       darray::zero(g::q0, bufferSize(), vir_trq);
 
-   chkrepole();
+   chkpole();
    rotrepole();
 }
 
@@ -202,11 +213,18 @@ void erepel(int vers)
          darray::zero(g::q0, n, derx, dery, derz);
    }
 
-   repoleInit(vers);
+   // The lambda derivatives follow vlambda and go to the van der Waals
+   // channels, while its map has slope or curvature (erepel1.f).
+   const int dlvers = lmdaDerivVers(vers, vdlmdaActive());
+   vdwLmdaZero(vers);
+   repoleInit(dlvers);
 
-   TINKER_FCALL2(acc1, cu1, erepel, vers);
+   TINKER_FCALL2(acc1, cu1, erepel, dlvers);
 
    torque(vers, derx, dery, derz);
+   if (dlvers & (calc::grad_dlmda | calc::virial_dlmda))
+      torque(vers, dfdlx, dfdly, dfdlz, dltrqx, dltrqy, dltrqz, dvirdl_buf);
+   vdwLmdaFlush(vers);
    if (do_v) {
       VirialBuffer u2 = vir_trq;
       virial_prec v2[9];

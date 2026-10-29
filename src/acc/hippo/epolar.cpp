@@ -1,4 +1,6 @@
+#include "ff/amoeba/mpolestate.h"
 #include "ff/atom.h"
+#include "ff/dlmda.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/modhippo.h"
@@ -34,6 +36,10 @@ static void epolarChgpen_acc1(const real (*uind)[3])
    const real off2 = off * off;
    const int maxnlst = mlist_unit->maxnlst;
    const auto* mlst = mlist_unit.deviceptr();
+   // a pair with a dead group has no multipole or induced dipole;
+   // grp is null when every group is live
+   const int* grp = elecDeadGroups();
+   const RdtMask live = elecLiveMask();
 
    size_t bufsize = bufferSize();
    PairPolarGrad pgrad;
@@ -43,7 +49,7 @@ static void epolarChgpen_acc1(const real (*uind)[3])
    MAYBE_UNUSED int GRID_DIM = gpuGridSize(BLOCK_DIM);
    #pragma acc parallel async num_gangs(GRID_DIM) vector_length(BLOCK_DIM)\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(POLAR_DPTRS,mlst)
+               deviceptr(POLAR_DPTRS,grp,mlst)
    #pragma acc loop gang independent
    for (int i = 0; i < n; ++i) {
       real xi = x[i];
@@ -85,7 +91,7 @@ static void epolarChgpen_acc1(const real (*uind)[3])
 
          zero(pgrad);
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off2) {
+         if (r2 <= off2 and (not grp or grpPairLive(live, grp[i], grp[k]))) {
             MAYBE_UNUSED real e;
             MAYBE_UNUSED real pota, potb;
 
@@ -112,7 +118,8 @@ static void epolarChgpen_acc1(const real (*uind)[3])
                aewald, e, pota, potb, pgrad);
 
             if CONSTEXPR (do_a)
-               atomic_add(1, nep, offset);
+               if (e != 0)
+                  atomic_add(1, nep, offset);
             if CONSTEXPR (do_e)
                atomic_add(e, ep, offset);
             if CONSTEXPR (do_g) {
@@ -183,7 +190,7 @@ static void epolarChgpen_acc1(const real (*uind)[3])
 
    #pragma acc parallel async\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(POLAR_DPTRS,mdwexclude,mdwexclude_scale)
+               deviceptr(POLAR_DPTRS,grp,mdwexclude,mdwexclude_scale)
    #pragma acc loop independent private(pgrad)
    for (int ii = 0; ii < nmdwexclude; ++ii) {
       int offset = ii & (bufsize - 1);
@@ -224,7 +231,7 @@ static void epolarChgpen_acc1(const real (*uind)[3])
       bool incl = dscale != 0 or wscale != 0;
 
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off2 and incl) {
+      if (r2 <= off2 and incl and (not grp or grpPairLive(live, grp[i], grp[k]))) {
 
          MAYBE_UNUSED real e;
          MAYBE_UNUSED real pota, potb;
@@ -340,7 +347,7 @@ static void epolarChgpenEwaldRecipSelf_acc1(const real (*gpu_uind)[3], bool use_
 
    auto* fphid = fdip_phi1;
 
-   cuindToFuind(pu, gpu_uind, gpu_uind, fuind, fuind);
+   cuindToFuind(pu, gpu_uind, nullptr, fuind, nullptr);
    if CONSTEXPR (do_e) {
       #pragma acc parallel loop independent async deviceptr(fuind,fphi,ep)
       for (int i = 0; i < n; ++i) {
@@ -349,12 +356,12 @@ static void epolarChgpenEwaldRecipSelf_acc1(const real (*gpu_uind)[3], bool use_
          atomic_add(e, ep, offset);
       }
    }
-   gridUind(pu, fuind, fuind);
-   fftfront(pu);
+   gridUindOneSet(pu, fuind);
+   fftfrontOneSet(pu);
    // TODO: store vs. recompute qfac
-   pmeConv(pu);
-   fftback(pu);
-   fphiUind(pu, fphid, fphid, fphidp);
+   pmeConvOneSet(pu);
+   fftbackOneSet(pu);
+   fphiUindOneSet(pu, fphid, fphidp);
 
    // increment the dipole polarization gradient contributions
 
@@ -546,6 +553,8 @@ static void epolarChgpenEwaldRecipSelf_acc1(const real (*gpu_uind)[3], bool use_
 
       // qgrip: pvu_qgrid
       const PMEUnit pvu = pvpme_unit;
+      // the induced dipoles are added into cmp in place
+      mpoleCmpClobbered();
       #pragma acc parallel loop independent async deviceptr(cmp,gpu_uind)
       for (int i = 0; i < n; ++i) {
          cmp[i][1] += gpu_uind[i][0];

@@ -13,6 +13,20 @@
 
 
 #ifdef TINKER_SUPPL_DECL
+      void suppl_flush_(int* unit);
+#endif
+#ifdef TINKER_SUPPL_IMPL
+      subroutine suppl_flush (unit)
+      implicit none
+      integer unit
+      flush (unit=unit)
+      return
+      end
+#endif
+
+
+
+#ifdef TINKER_SUPPL_DECL
       void suppl_close_(int* unit);
 #endif
 #ifdef TINKER_SUPPL_IMPL

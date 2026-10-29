@@ -29,9 +29,9 @@ TEST_CASE("ALA-1", "[ff][eimptor][ala]")
    const char* argv[] = {"dummy", x};
    int argc = 2;
    int usage = calc::xyz | calc::vmask;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    rc_flag = usage;
-   initialize();
+   session.init();
 
    energy(calc::v3);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -57,6 +57,5 @@ TEST_CASE("ALA-1", "[ff][eimptor][ala]")
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }

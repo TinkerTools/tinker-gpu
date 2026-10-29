@@ -1,3 +1,4 @@
+#include "ff/dlmda.h"
 #include "ff/energy.h"
 #include "math/zero.h"
 #include "tool/externfunc.h"
@@ -6,38 +7,75 @@ namespace tinker {
 void zeroEGV(int vers)
 {
    size_t bsize = bufferSize();
+   const int dvers = lmdaDerivVers(vers, use_dlmda);
+   const int dlkeep = lmdaDerivMask(rc_flag, use_dlmda) & ~dvers;
+
    if (vers & calc::energy) {
-      zeroOnHost(esum, energy_valence, energy_vdw, energy_elec, energy_nnintermol);
-      // zeroOnDevice3Async(bsize, eng_buf, eng_buf_vdw, eng_buf_elec);
-      zeroOnDevice4Async(bsize, eng_buf, eng_buf_vdw, eng_buf_elec, eng_buf_nnintermol);
+      zeroOnHost(esum, energy_valence, energy_vdw, energy_elec);
+      zeroOnDevice3Async(bsize, eng_buf, eng_buf_vdw, eng_buf_elec);
+
+      if (useEnergyINN()) {
+         zeroOnHost(energy_nnintermol);
+         zeroOnDeviceAsync(bsize, eng_buf_nnintermol);
+      }
+
+      if (not(dlkeep & calc::energy_dlmda1))
+         zeroOnHost(dedl, demdl, depdl, devdl);
+      if (not(dlkeep & calc::energy_dlmda2))
+         zeroOnHost(d2edl2, d2emdl2, d2epdl2, d2evdl2);
+      if (dvers & calc::energy_dlmda1)
+         zeroOnDeviceAsync(bsize, dedl_buf);
+      if (dvers & calc::energy_dlmda2)
+         zeroOnDeviceAsync(bsize, d2edl2_buf);
    }
 
    if (vers & calc::virial) {
       zeroOnHost(vir, virial_valence, virial_vdw, virial_elec, virial_nnintermol);
-      // zeroOnDevice3Async(bsize, vir_buf, vir_buf_vdw, vir_buf_elec);
-      zeroOnDevice4Async(bsize, vir_buf, vir_buf_vdw, vir_buf_elec, vir_buf_nnintermol);
+      zeroOnDevice3Async(bsize, vir_buf, vir_buf_vdw, vir_buf_elec);
+      
+      if (useEnergyINN()) {
+         zeroOnHost(virial_nnintermol);
+         zeroOnDeviceAsync(bsize, vir_buf_nnintermol);
+      }
+
+      if (not(dlkeep & calc::virial_dlmda))
+         zeroOnHost(dvirdl);
+      if (dvers & calc::virial_dlmda)
+         zeroOnDeviceAsync(bsize, dvirdl_buf);
    }
 
    if (vers & calc::grad) {
-      // zeroOnDevice9Async(n, gx, gy, gz, gx_vdw, gy_vdw, gz_vdw, gx_elec, gy_elec, gz_elec);
-      zeroOnDevice12Async(n, gx, gy, gz, gx_vdw, gy_vdw, gz_vdw, gx_elec, gy_elec, gz_elec, gx_nnintermol,
-         gy_nnintermol, gz_nnintermol);
+      zeroOnDevice9Async(n, gx, gy, gz, gx_vdw, gy_vdw, gz_vdw, gx_elec, gy_elec, gz_elec);
+
+      if (useEnergyINN()) {
+         zeroOnDevice3Async(n, gx_nnintermol, gy_nnintermol, gz_nnintermol);
+      }
+
+      // Also clear dF/dL once no channel keeps it, so that switching the
+      // second lambda derivatives off does not leave a stale one behind.
+      constexpr int fdl = calc::grad_dlmda | calc::virial_dlmda;
+      if ((dvers & fdl) or (dfdlx and not(dlkeep & fdl))) {
+         zeroOnDevice3Async(n, dfdlx, dfdly, dfdlz);
+      }
    }
 }
 }
 
 namespace tinker {
-TINKER_FVOID2(acc1, cu0, scaleGradient, double, grad_prec*, grad_prec*, grad_prec*);
-void scaleGradient(double scale, grad_prec* g0x, grad_prec* g0y, grad_prec* g0z)
+TINKER_FVOID2(acc0, cu1, sumEnergyBuffer, size_t, EnergyBuffer, const EnergyBufferTraits::type*);
+void sumEnergyBuffer(size_t size, EnergyBuffer dst, const EnergyBufferTraits::type* src)
 {
-   if (scale == 1)
-      return;
-   else if (scale == 0) {
-      darray::zero(g::q0, n, g0x, g0y, g0z);
-   } else
-      TINKER_FCALL2(acc1, cu0, scaleGradient, scale, g0x, g0y, g0z);
+   TINKER_FCALL2(acc0, cu1, sumEnergyBuffer, size, dst, src);
 }
 
+TINKER_FVOID2(acc0, cu1, sumVirialBuffer, size_t, VirialBuffer, const VirialBuffer);
+void sumVirialBuffer(size_t size, VirialBuffer dst, const VirialBuffer src)
+{
+   TINKER_FCALL2(acc0, cu1, sumVirialBuffer, size, dst, src);
+}
+}
+
+namespace tinker {
 TINKER_FVOID2(acc1, cu1, sumGradientV1, grad_prec*, grad_prec*, grad_prec*, const grad_prec*, const grad_prec*,
    const grad_prec*);
 void sumGradient(grad_prec* g0x, grad_prec* g0y, grad_prec* g0z, const grad_prec* g1x, const grad_prec* g1y,
@@ -57,6 +95,14 @@ void sumGradient(double s, grad_prec* g0x, grad_prec* g0y, grad_prec* g0z, const
       sumGradient(g0x, g0y, g0z, g1x, g1y, g1z);
    else
       TINKER_FCALL2(acc1, cu1, sumGradientV2, s, g0x, g0y, g0z, g1x, g1y, g1z);
+}
+
+void copyGradient(grad_prec* g0x, grad_prec* g0y, grad_prec* g0z, const grad_prec* g1x, const grad_prec* g1y,
+   const grad_prec* g1z)
+{
+   darray::copy(g::q0, n, g0x, g1x);
+   darray::copy(g::q0, n, g0y, g1y);
+   darray::copy(g::q0, n, g0z, g1z);
 }
 }
 

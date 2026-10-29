@@ -3,6 +3,7 @@
 #include "ff/box.h"
 #include "math/maxmin.h"
 #include "tool/iofortstr.h"
+#include "tool/error.h"
 #include "tool/ioprint.h"
 #include <tinker/detail/atomid.hh>
 #include <tinker/detail/atoms.hh>
@@ -23,6 +24,7 @@ class CrdR
 protected:
    std::ifstream ipt;
    virtual void read() = 0; // read xyz from file and save them in atoms::x,y,z
+   virtual bool atEnd() { return ipt.peek() == std::char_traits<char>::eof(); }
 
 public:
    static CrdR* create(std::string crdfile, CrdFormat crdformat);
@@ -32,7 +34,7 @@ public:
    {
       this->read();
       xyzData(RcOp::INIT);
-      if (ipt.peek() == std::char_traits<char>::eof())
+      if (this->atEnd())
          return 1;
       else
          return 0;
@@ -202,6 +204,7 @@ class CrdRTxyz : public CrdR
 {
 private:
    bool m_usepbc;
+   std::string m_name;
 
    void read() override
    {
@@ -216,17 +219,27 @@ private:
          boxSetCurrent(p);
       }
 
-      int index;
+      int index = 0;
       char name[32];
       double xr, yr, zr;
       for (int ir = 0; ir < n; ++ir) {
          std::getline(ipt, line);
-         std::sscanf(line.data(), "%d%s%lf%lf%lf", &index, name, &xr, &yr, &zr);
+         int nread = std::sscanf(line.data(), "%d%31s%lf%lf%lf", &index, name, &xr, &yr, &zr);
+         if (nread != 5 or index < 1 or index > n)
+            TINKER_THROW(format("Unreadable Atom Line in Coordinate File %s :\n%s", m_name, line));
          index -= 1;
          atoms::x[index] = xr;
          atoms::y[index] = yr;
          atoms::z[index] = zr;
       }
+   }
+
+   // blank lines after the last frame are not another frame; skipping the
+   // leading blanks of the next header line is harmless, as read() drops it
+   bool atEnd() override
+   {
+      ipt >> std::ws;
+      return ipt.peek() == std::char_traits<char>::eof();
    }
 
 public:
@@ -238,6 +251,7 @@ public:
    CrdRTxyz(std::string crdfile, bool usepbc)
       : CrdR()
       , m_usepbc(usepbc)
+      , m_name(crdfile)
    {
       ipt.open(crdfile, std::ios::in);
    }

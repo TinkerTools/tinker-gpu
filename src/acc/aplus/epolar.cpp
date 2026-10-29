@@ -1,4 +1,5 @@
 #include "ff/atom.h"
+#include "ff/dlmda.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/modhippo.h"
@@ -9,7 +10,8 @@
 #include "tool/gpucard.h"
 
 namespace tinker {
-#define POLAR_DPTRS x, y, z, depx, depy, depz, rpole, thole, dirdamp, pdamp, pot, uind, nep, ep, vir_ep, ufld, dufld
+#define POLAR_DPTRS \
+   x, y, z, depx, depy, depz, rpole, jpolar, thlval, thdval, pdamp, pot, uind, nep, ep, vir_ep, ufld, dufld
 template <class Ver, class ETYP, bool CFLX>
 static void epolarAplus_acc1(const real (*uind)[3])
 {
@@ -34,6 +36,10 @@ static void epolarAplus_acc1(const real (*uind)[3])
    const real off2 = off * off;
    const int maxnlst = mlist_unit->maxnlst;
    const auto* mlst = mlist_unit.deviceptr();
+   // a pair with a dead group has no multipole or induced dipole;
+   // grp is null when every group is live
+   const int* grp = elecDeadGroups();
+   const RdtMask live = elecLiveMask();
 
    size_t bufsize = bufferSize();
    PairPolarGrad pgrad;
@@ -43,7 +49,7 @@ static void epolarAplus_acc1(const real (*uind)[3])
    MAYBE_UNUSED int GRID_DIM = gpuGridSize(BLOCK_DIM);
    #pragma acc parallel async num_gangs(GRID_DIM) vector_length(BLOCK_DIM)\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(POLAR_DPTRS,mlst)
+               deviceptr(POLAR_DPTRS,grp,mlst)
    #pragma acc loop gang independent
    for (int i = 0; i < n; ++i) {
       real xi = x[i];
@@ -63,8 +69,7 @@ static void epolarAplus_acc1(const real (*uind)[3])
       real uiy = uind[i][1];
       real uiz = uind[i][2];
       real pdi = pdamp[i];
-      real pti = thole[i];
-      real ddi = dirdamp[i];
+      int jpi = jpolar[i];
 
       MAYBE_UNUSED real gxi = 0, gyi = 0, gzi = 0;
       MAYBE_UNUSED real txi = 0, tyi = 0, tzi = 0;
@@ -85,8 +90,8 @@ static void epolarAplus_acc1(const real (*uind)[3])
 
          zero(pgrad);
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off2) {
-            MAYBE_UNUSED real e;
+         if (r2 <= off2 and (not grp or grpPairLive(live, grp[i], grp[k]))) {
+            MAYBE_UNUSED real e, edamp;
             MAYBE_UNUSED real pota, potb;
 
             real ck = rpole[k][MPL_PME_0];
@@ -102,17 +107,19 @@ static void epolarAplus_acc1(const real (*uind)[3])
             real ukx = uind[k][0];
             real uky = uind[k][1];
             real ukz = uind[k][2];
-            real ptk = thole[k];
             real pdk = pdamp[k];
-            real ddk = dirdamp[k];
+            int jpk = jpolar[k];
+            real pga = thlval[njpolar * jpi + jpk];
+            real pgd = thdval[njpolar * jpi + jpk];
 
-            pair_polar_aplus<do_e, do_g, ETYP, CFLX>( //
-               r2, xr, yr, zr, 1, 1, ci, dix, diy, diz, pdi, pti, ddi, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy,
-               uiz, ck, dkx, dky, dkz, pdk, ptk, ddk, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, f, aewald, e,
-               pota, potb, pgrad);
+            pair_polar_aplus<do_e, do_a, do_g, ETYP, CFLX>( //
+               r2, xr, yr, zr, 1, 1, ci, dix, diy, diz, pdi, pga, pgd, qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy,
+               uiz, ck, dkx, dky, dkz, pdk, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, ukx, uky, ukz, f, aewald, e,
+               edamp, pota, potb, pgrad);
 
             if CONSTEXPR (do_a)
-               atomic_add(1, nep, offset);
+               if (edamp != 0)
+                  atomic_add(1, nep, offset);
             if CONSTEXPR (do_e)
                atomic_add(e, ep, offset);
             if CONSTEXPR (do_g) {
@@ -183,7 +190,7 @@ static void epolarAplus_acc1(const real (*uind)[3])
 
    #pragma acc parallel async\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(POLAR_DPTRS,dpuexclude,dpuexclude_scale)
+               deviceptr(POLAR_DPTRS,grp,dpuexclude,dpuexclude_scale)
    #pragma acc loop independent private(pgrad)
    for (int ii = 0; ii < ndpuexclude; ++ii) {
       int offset = ii & (bufsize - 1);
@@ -209,36 +216,35 @@ static void epolarAplus_acc1(const real (*uind)[3])
       real uix = uind[i][0];
       real uiy = uind[i][1];
       real uiz = uind[i][2];
-      real pti = thole[i];
       real pdi = pdamp[i];
-      real ddi = dirdamp[i];
 
       real xr = x[k] - xi;
       real yr = y[k] - yi;
       real zr = z[k] - zi;
 
-      real ptk = thole[k];
       real pdk = pdamp[k];
-      real ddk = dirdamp[k];
+      real pga = thlval[njpolar * jpolar[i] + jpolar[k]];
+      real pgd = thdval[njpolar * jpolar[i] + jpolar[k]];
 
       bool incl = pscale != 0 or uscale != 0;
 
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off2 and incl) {
+      if (r2 <= off2 and incl and (not grp or grpPairLive(live, grp[i], grp[k]))) {
 
-         MAYBE_UNUSED real e;
+         MAYBE_UNUSED real e, edamp;
          MAYBE_UNUSED real pota, potb;
 
-         pair_polar_aplus<do_e, do_g, NON_EWALD, CFLX>(        //
+         pair_polar_aplus<do_e, do_a, do_g, NON_EWALD, CFLX>(  //
             r2, xr, yr, zr, pscale, uscale,                    //
-            ci, dix, diy, diz, pdi, pti, ddi,                  //
+            ci, dix, diy, diz, pdi, pga, pgd,                  //
             qixx, qixy, qixz, qiyy, qiyz, qizz, uix, uiy, uiz, //
-            rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], pdk, ptk, ddk,
+            rpole[k][MPL_PME_0], rpole[k][MPL_PME_X], rpole[k][MPL_PME_Y], rpole[k][MPL_PME_Z], pdk,
             rpole[k][MPL_PME_XX], rpole[k][MPL_PME_XY], rpole[k][MPL_PME_XZ], rpole[k][MPL_PME_YY],
-            rpole[k][MPL_PME_YZ], rpole[k][MPL_PME_ZZ], uind[k][0], uind[k][1], uind[k][2], f, 0, e, pota, potb, pgrad);
+            rpole[k][MPL_PME_YZ], rpole[k][MPL_PME_ZZ], uind[k][0], uind[k][1], uind[k][2], f, 0, e, edamp, pota, potb,
+            pgrad);
 
          if CONSTEXPR (do_a)
-            if (pscale == -1 and e != 0)
+            if (pscale == -1 and edamp != 0)
                atomic_add(-1, nep, offset);
 
          if CONSTEXPR (do_e)

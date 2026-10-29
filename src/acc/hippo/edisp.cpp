@@ -5,15 +5,20 @@
 #include "ff/pme.h"
 #include "ff/switch.h"
 #include "seq/bsplgen.h"
+#include "seq/dspsplit.h"
 #include "seq/pair_disp.h"
 #include "tool/gpucard.h"
+#include <cassert>
 
 namespace tinker {
 template <bool DO_E, bool DO_V>
-static void pmeConvDisp_acc1(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_v)
+static void pmeConvDisp_acc1(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_v, DispSplit ds)
 {
    auto& st = *pme_u;
    real(*restrict qgrid)[2] = reinterpret_cast<real(*)[2]>(st.qgrid);
+   const real(*qfwd)[2] = ds.qfwd;
+   const bool split = ds.split;
+   const real wel = ds.wel, wll = ds.wll;
    const real* bsmod1 = st.bsmod1;
    const real* bsmod2 = st.bsmod2;
    const real* bsmod3 = st.bsmod3;
@@ -35,7 +40,7 @@ static void pmeConvDisp_acc1(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu
    size_t bufsize = bufferSize();
    #pragma acc parallel loop independent async\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(gpu_e,gpu_v,qgrid,bsmod1,bsmod2,bsmod3)
+               deviceptr(gpu_e,gpu_v,qgrid,qfwd,bsmod1,bsmod2,bsmod3)
    for (int i = 0; i < ntot; ++i) {
       if (i == 0) {
          qgrid[0][0] = 0;
@@ -57,8 +62,16 @@ static void pmeConvDisp_acc1(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu
       real h3 = recipa.z * r1 + recipb.z * r2 + recipc.z * r3;
       real hsq = h1 * h1 + h2 * h2 + h3 * h3;
 
-      real gridx = qgrid[i][0];
-      real gridy = qgrid[i][1];
+      // With the ligand in the imaginary part, the environment and ligand
+      // transforms at k come from the packed one at k and -k (edisp.f:dspsplit).
+      real gridx = 0, gridy = 0;
+      DspGridK sk = {};
+      if (split) {
+         sk = dspGridK(qfwd, i, k1, k2, k3, nfft1, nfft2, nfft3);
+      } else {
+         gridx = qgrid[i][0];
+         gridy = qgrid[i][1];
+      }
       real h = REAL_SQRT(hsq);
       real b = h * bfac;
       real hhh = h * hsq;
@@ -79,7 +92,11 @@ static void pmeConvDisp_acc1(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu
             } // end if ((k1 + k2 + k3) % 2 != 0)
          }
 
-         real struc2 = gridx * gridx + gridy * gridy;
+         real struc2;
+         if (split)
+            struc2 = dspStruc(sk, 1, wel, wll);
+         else
+            struc2 = gridx * gridx + gridy * gridy;
          eterm = (-fac1 * erfcterm * hhh - expterm * (fac2 + fac3 * hsq)) * REAL_RECIP(denom);
          real e = eterm * struc2;
          if CONSTEXPR (DO_E) {
@@ -97,29 +114,36 @@ static void pmeConvDisp_acc1(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu
          }
       }
 
-      qgrid[i][0] = eterm * gridx;
-      qgrid[i][1] = eterm * gridy;
+      // the potentials of the environment and of the ligand, packed the same way
+      if (split) {
+         dspPot(sk, eterm, 1, wel, wll, qgrid[i]);
+      } else {
+         qgrid[i][0] = eterm * gridx;
+         qgrid[i][1] = eterm * gridy;
+      }
    }
 }
 
-void pmeConvDisp_acc(int vers)
+void pmeConvDisp_acc(int vers, DispSplit ds)
 {
+   assert(not(vers & calc::dlmda) && "damped dispersion lambda derivatives are CUDA only");
+   vers &= ~calc::dlmda;
    bool do_e = vers & calc::energy;
    bool do_v = vers & calc::virial;
    PMEUnit u = dpme_unit;
 
    if (do_e and do_v)
-      pmeConvDisp_acc1<true, true>(u, edsp, vir_edsp);
+      pmeConvDisp_acc1<true, true>(u, edsp, vir_edsp, ds);
    else if (do_e and not do_v)
-      pmeConvDisp_acc1<true, false>(u, edsp, nullptr);
+      pmeConvDisp_acc1<true, false>(u, edsp, nullptr, ds);
    else if (not do_e and do_v)
-      pmeConvDisp_acc1<false, true>(u, nullptr, vir_edsp);
+      pmeConvDisp_acc1<false, true>(u, nullptr, vir_edsp, ds);
    else if (not do_e and not do_v)
-      pmeConvDisp_acc1<false, false>(u, nullptr, nullptr);
+      pmeConvDisp_acc1<false, false>(u, nullptr, nullptr, ds);
 }
 
 template <class Ver, class DTYP>
-static void edisp_acc1()
+static void edisp_acc1(DispSoft ds)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;
@@ -144,7 +168,7 @@ static void edisp_acc1()
 
    #pragma acc parallel async present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
                deviceptr(x,y,z,dedspx,dedspy,dedspz,ndisp,edsp,vir_edsp,\
-               csix,adisp,dspexclude,dspexclude_scale,mut)
+               csix,adisp,dspexclude,dspexclude_scale,mut) firstprivate(ds)
    #pragma acc loop independent
    for (int ii = 0; ii < ndspexclude; ++ii) {
       int offset = ii & (bufsize - 1);
@@ -169,9 +193,9 @@ static void edisp_acc1()
          real r = REAL_SQRT(r2);
          real rr1 = REAL_RECIP(r);
          real e0, de0, e1, de1;
-         real vlambda = pair_vlambda(vlam, vcouple, imut, kmut);
-         pair_disp<do_g, DTYP, 0, 1>(r, r2, rr1, scalea, aewald, ci, ai, ck, ak, vlambda, cut, off, e0, de0);
-         pair_disp<do_g, DTYP, 1, 1>(r, r2, rr1, 1, aewald, ci, ai, ck, ak, vlambda, cut, off, e1, de1);
+         bool mutik = pair_mutik(vcouple, imut, kmut);
+         pair_disp<do_g, DTYP, 0>(r, r2, rr1, scalea, aewald, ci, ai, ck, ak, mutik, ds, cut, off, e0, de0);
+         pair_disp<do_g, DTYP, 1>(r, r2, rr1, 1, aewald, ci, ai, ck, ak, mutik, ds, cut, off, e1, de1);
          real e, de;
          e = e0 - e1;
          if CONSTEXPR (do_e) {
@@ -179,8 +203,9 @@ static void edisp_acc1()
                atomic_add(e, edsp, offset);
             }
          }
+         // The neighbor loop counted this pair only if its energy was nonzero.
          if CONSTEXPR (do_a) {
-            if (scalea == 0) {
+            if (scalea == 0 and e1 != 0) {
                atomic_add(-1, ndisp, offset);
             }
          }
@@ -213,7 +238,8 @@ static void edisp_acc1()
    MAYBE_UNUSED int ngrid = gpuGridSize(BLOCK_DIM);
    #pragma acc parallel async present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
                deviceptr(x,y,z,dedspx,dedspy,dedspz,ndisp,edsp,vir_edsp,\
-               csix,adisp,nlst,lst,mut) num_gangs(ngrid) vector_length(BLOCK_DIM)
+               csix,adisp,nlst,lst,mut) firstprivate(ds)\
+               num_gangs(ngrid) vector_length(BLOCK_DIM)
    #pragma acc loop gang independent
    for (int i = 0; i < n; ++i) {
       int offset = i & (bufsize - 1);
@@ -243,8 +269,8 @@ static void edisp_acc1()
             real r = REAL_SQRT(r2);
             real rr1 = REAL_RECIP(r);
             real e, de;
-            real vlambda = pair_vlambda(vlam, vcouple, imut, kmut);
-            pair_disp<do_g, DTYP, 1, 1>(r, r2, rr1, 1, aewald, ci, ai, ck, ak, vlambda, cut, off, e, de);
+            bool mutik = pair_mutik(vcouple, imut, kmut);
+            pair_disp<do_g, DTYP, 1>(r, r2, rr1, 1, aewald, ci, ai, ck, ak, mutik, ds, cut, off, e, de);
             if CONSTEXPR (do_e) {
                etl += e;
             }
@@ -294,40 +320,44 @@ static void edisp_acc1()
    }
 }
 
-void edispNonEwald_acc(int vers)
+void edispNonEwald_acc(int vers, DispSoft ds)
 {
+   assert(not(vers & calc::dlmda) && "damped dispersion lambda derivatives are CUDA only");
+   vers &= ~calc::dlmda;
    if (vers == calc::v0)
-      edisp_acc1<calc::V0, NON_EWALD_TAPER>();
+      edisp_acc1<calc::V0, NON_EWALD_TAPER>(ds);
    else if (vers == calc::v1)
-      edisp_acc1<calc::V1, NON_EWALD_TAPER>();
+      edisp_acc1<calc::V1, NON_EWALD_TAPER>(ds);
    else if (vers == calc::v3)
-      edisp_acc1<calc::V3, NON_EWALD_TAPER>();
+      edisp_acc1<calc::V3, NON_EWALD_TAPER>(ds);
    else if (vers == calc::v4)
-      edisp_acc1<calc::V4, NON_EWALD_TAPER>();
+      edisp_acc1<calc::V4, NON_EWALD_TAPER>(ds);
    else if (vers == calc::v5)
-      edisp_acc1<calc::V5, NON_EWALD_TAPER>();
+      edisp_acc1<calc::V5, NON_EWALD_TAPER>(ds);
    else if (vers == calc::v6)
-      edisp_acc1<calc::V6, NON_EWALD_TAPER>();
+      edisp_acc1<calc::V6, NON_EWALD_TAPER>(ds);
 }
 
-void edispEwaldReal_acc(int vers)
+void edispEwaldReal_acc(int vers, DispSoft ds)
 {
+   assert(not(vers & calc::dlmda) && "damped dispersion lambda derivatives are CUDA only");
+   vers &= ~calc::dlmda;
    if (vers == calc::v0)
-      edisp_acc1<calc::V0, DEWALD>();
+      edisp_acc1<calc::V0, DEWALD>(ds);
    else if (vers == calc::v1)
-      edisp_acc1<calc::V1, DEWALD>();
+      edisp_acc1<calc::V1, DEWALD>(ds);
    else if (vers == calc::v3)
-      edisp_acc1<calc::V3, DEWALD>();
+      edisp_acc1<calc::V3, DEWALD>(ds);
    else if (vers == calc::v4)
-      edisp_acc1<calc::V4, DEWALD>();
+      edisp_acc1<calc::V4, DEWALD>(ds);
    else if (vers == calc::v5)
-      edisp_acc1<calc::V5, DEWALD>();
+      edisp_acc1<calc::V5, DEWALD>(ds);
    else if (vers == calc::v6)
-      edisp_acc1<calc::V6, DEWALD>();
+      edisp_acc1<calc::V6, DEWALD>(ds);
 }
 
 template <class Ver, int bsorder>
-static void edisp_acc2()
+static void edisp_acc2(DispSplit ds)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;
@@ -339,15 +369,20 @@ static void edisp_acc2()
    int nfft2 = dpme_unit->nfft2;
    int nfft3 = dpme_unit->nfft3;
    const auto* qgrid = dpme_unit->qgrid;
+   const bool split = ds.split;
+   const int* part = ds.part;
+   const real wll = ds.wll;
 
    #pragma acc parallel async\
            present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-           deviceptr(csix,adisp,ndisp,edsp,dedspx,dedspy,dedspz,x,y,z,qgrid)
+           deviceptr(csix,adisp,ndisp,edsp,dedspx,dedspy,dedspz,x,y,z,qgrid,part)
    #pragma acc loop independent
    for (int ii = 0; ii < n; ++ii) {
       real icsix = csix[ii];
       if (icsix == 0)
          continue;
+      // a site of the mutated ligand reads its own part of the grid
+      int ip = (split and part[ii]) ? 1 : 0;
 
       // self energy
       if CONSTEXPR (do_e) {
@@ -356,6 +391,8 @@ static void edisp_acc2()
          fs *= fs * fs;
          fs /= 12;
          real e = fs * icsix * icsix;
+         if (ip)
+            e *= wll;
          atomic_add(e, edsp, offset);
          if CONSTEXPR (do_a) {
             atomic_add(1, ndisp, offset);
@@ -420,7 +457,7 @@ static void edisp_acc2()
                   int index = xbase + ybase + zbase;
                   real t1 = thetai1[4 * ix];
                   real dt1 = nfft1 * thetai1[1 + 4 * ix];
-                  real term = qgrid[2 * index];
+                  real term = qgrid[2 * index + ip];
                   de1 += 2 * term * dt1 * t2 * t3;
                   de2 += 2 * term * dt2 * t1 * t3;
                   de3 += 2 * term * dt3 * t1 * t2;
@@ -438,21 +475,23 @@ static void edisp_acc2()
    }
 }
 
-void edispEwaldRecipSelf_acc(int vers)
+void edispEwaldRecipSelf_acc(int vers, DispSplit ds)
 {
+   assert(not(vers & calc::dlmda) && "damped dispersion lambda derivatives are CUDA only");
+   vers &= ~calc::dlmda;
    constexpr int order = 4;
    assert(dpme_unit->bsorder == order);
    if (vers == calc::v0)
-      edisp_acc2<calc::V0, order>();
+      edisp_acc2<calc::V0, order>(ds);
    else if (vers == calc::v1)
-      edisp_acc2<calc::V1, order>();
+      edisp_acc2<calc::V1, order>(ds);
    else if (vers == calc::v3)
-      edisp_acc2<calc::V3, order>();
+      edisp_acc2<calc::V3, order>(ds);
    else if (vers == calc::v4)
-      edisp_acc2<calc::V4, order>();
+      edisp_acc2<calc::V4, order>(ds);
    else if (vers == calc::v5)
-      edisp_acc2<calc::V5, order>();
+      edisp_acc2<calc::V5, order>(ds);
    else if (vers == calc::v6)
-      edisp_acc2<calc::V6, order>();
+      edisp_acc2<calc::V6, order>(ds);
 }
 }

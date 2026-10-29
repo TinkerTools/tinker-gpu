@@ -91,9 +91,6 @@ void mdrest_acc(int istep)
       xtot /= totmass;
       ytot /= totmass;
       ztot /= totmass;
-      mang1 -= (ytot * vtot3 - ztot * vtot2) * totmass;
-      mang2 -= (ztot * vtot1 - xtot * vtot3) * totmass;
-      mang3 -= (xtot * vtot2 - ytot * vtot1) * totmass;
 
       // calculate the moment of inertia tensor
 

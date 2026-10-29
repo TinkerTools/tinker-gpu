@@ -165,40 +165,35 @@ SEQ_CUDA
 inline void fsinhcImpl(T d, T& restrict f1d, T& restrict f2d, T& restrict f3d, T& restrict f4d, T& restrict f5d, T& restrict f6d, T& restrict f7d)
 {
    fsinhcCheck<N>();
-   constexpr int M = N - 1;
 
-   // (x, Approx. |Analyt - Taylor|)
+   // Each fk takes the Taylor series up to its own |d| threshold and the
+   // analytic form above it, so fk does not depend on how many orders are
+   // requested; the energy-only and gradient versions of a kernel ask for
+   // different orders and must agree. A threshold minimizes the largest
+   // relative error of fk over |d| <= 8 against the exact series
+   // fk = sum_n d^(2n) / ((2n)!! (2k+2n-1)!!); the analytic forms cancel
+   // badly at small |d|, more so for higher k.
    //
-   // f1   (0.90, 1e-8)   (0.35, 1e-12)   (0.28, 1e-13)
-   // f2   (1.15, 1e-8)   (0.45, 1e-12)   (0.37, 1e-13)
-   // f3   (1.5,  1e-8)   (0.6,  1e-12)   (0.48, 1e-13)
-   // f4   (2.0,  1e-8)   (0.8,  1e-12)   (0.64, 1e-13)
-   // f5   (2.7,  1e-8)   (1.1,  1e-12)   (0.87, 1e-13)
-   // f6   (3.7,  1e-8)   (1.5,  1e-12)   (1.16, 1e-13)
-   // f7   (5.0,  1e-8)   (2.0,  1e-12)   (1.60, 1e-13)
-
-   // double epsd[] = {0.35, 0.45, 0.60, 0.80, 1.10, 1.50, 2.00};
-   // double epsd[] = {0.28, 0.37, 0.48, 0.64, 0.87, 1.16, 1.60};
-   // float epsfl[] = {0.90, 1.15, 1.50, 2.00, 2.70, 3.70, 5.00};
-
-   // (x, Approx. relative error)
-   //
-   // f1   (0.92, 1e-8)   (0.28, 1e-13)
-   // f2   (1.06, 1e-8)   (0.33, 1e-13)
-   // f3   (1.19, 1e-8)   (0.37, 1e-13)
-   // f4   (1.30, 1e-8)   (0.40, 1e-13)
-   // f5   (1.40, 1e-8)   (0.43, 1e-13)
-   // f6   (1.49, 1e-8)   (0.46, 1e-13)
-   // f7   (1.58, 1e-8)   (0.49, 1e-13)
-
-   double epsd[] = {0.28, 0.33, 0.37, 0.40, 0.43, 0.46, 0.49};
-   float epsfl[] = {0.92, 1.06, 1.19, 1.30, 1.40, 1.49, 1.58};
-   T absd, eps, expmd, exppd;
+   //        float           double
+   // f1   (0.89, 1.6e-7)   (0.15, 5e-16)
+   // f2   (0.95, 2.1e-7)   (0.26, 2e-14)
+   // f3   (1.64, 4.2e-7)   (0.41, 3e-13)
+   // f4   (2.23, 1.9e-6)   (0.61, 6e-12)
+   // f5   (2.79, 9.4e-6)   (0.84, 6e-11)
+   // f6   (3.56, 4.2e-5)   (1.09, 6e-10)
+   // f7   (4.22, 1.2e-4)   (1.42, 4e-9)
+   double epsd[] = {0.15, 0.26, 0.41, 0.61, 0.84, 1.09, 1.42};
+   float epsfl[] = {0.89, 0.95, 1.64, 2.23, 2.79, 3.56, 4.22};
+   T absd, eps[7], expmd, exppd;
    if CONSTEXPR (sizeof(T) == sizeof(float)) {
-      absd = fabsf(d), eps = epsfl[M];
+      absd = fabsf(d);
+      for (int i = 0; i < 7; ++i)
+         eps[i] = epsfl[i];
       expmd = expf(-d), exppd = expf(+d);
    } else {
-      absd = fabs(d), eps = epsd[M];
+      absd = fabs(d);
+      for (int i = 0; i < 7; ++i)
+         eps[i] = epsd[i];
       expmd = exp(-d), exppd = exp(+d);
    }
 
@@ -206,7 +201,7 @@ inline void fsinhcImpl(T d, T& restrict f1d, T& restrict f2d, T& restrict f3d, T
    T d3, d5, d7, d9, d11, d13;
    if CONSTEXPR (N >= 1) {
       d2 = d * d;
-      if (absd > eps) {
+      if (absd > eps[0]) {
          f1d = fsinhcAnalyt1(d, expmd, exppd);
       } else {
          f1d = fsinhcSeries<1>(d2);
@@ -214,7 +209,7 @@ inline void fsinhcImpl(T d, T& restrict f1d, T& restrict f2d, T& restrict f3d, T
    }
    if CONSTEXPR (N >= 2) {
       d3 = d * d2;
-      if (absd > eps) {
+      if (absd > eps[1]) {
          f2d = fsinhcAnalyt2(d, d3, expmd, exppd);
       } else {
          f2d = fsinhcSeries<2>(d2);
@@ -222,7 +217,7 @@ inline void fsinhcImpl(T d, T& restrict f1d, T& restrict f2d, T& restrict f3d, T
    }
    if CONSTEXPR (N >= 3) {
       d5 = d2 * d3;
-      if (absd > eps) {
+      if (absd > eps[2]) {
          f3d = fsinhcAnalyt3(d, d5, expmd, exppd);
       } else {
          f3d = fsinhcSeries<3>(d2);
@@ -231,7 +226,7 @@ inline void fsinhcImpl(T d, T& restrict f1d, T& restrict f2d, T& restrict f3d, T
    if CONSTEXPR (N >= 4) {
       d4 = d2 * d2;
       d7 = d3 * d4;
-      if (absd > eps) {
+      if (absd > eps[3]) {
          f4d = fsinhcAnalyt4(d, d7, expmd, exppd);
       } else {
          f4d = fsinhcSeries<4>(d2);
@@ -239,7 +234,7 @@ inline void fsinhcImpl(T d, T& restrict f1d, T& restrict f2d, T& restrict f3d, T
    }
    if CONSTEXPR (N >= 5) {
       d9 = d3 * d3 * d3;
-      if (absd > eps) {
+      if (absd > eps[4]) {
          f5d = fsinhcAnalyt5(d, d9, expmd, exppd);
       } else {
          f5d = fsinhcSeries<5>(d2);
@@ -247,7 +242,7 @@ inline void fsinhcImpl(T d, T& restrict f1d, T& restrict f2d, T& restrict f3d, T
    }
    if CONSTEXPR (N >= 6) {
       d11 = d3 * d4 * d4;
-      if (absd > eps) {
+      if (absd > eps[5]) {
          f6d = fsinhcAnalyt6(d, d11, expmd, exppd);
       } else {
          f6d = fsinhcSeries<6>(d2);
@@ -255,7 +250,7 @@ inline void fsinhcImpl(T d, T& restrict f1d, T& restrict f2d, T& restrict f3d, T
    }
    if CONSTEXPR (N >= 7) {
       d13 = d3 * d3 * d3 * d4;
-      if (absd > eps) {
+      if (absd > eps[6]) {
          f7d = fsinhcAnalyt7(d, d13, expmd, exppd);
       } else {
          f7d = fsinhcSeries<7>(d2);

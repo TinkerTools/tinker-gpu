@@ -72,13 +72,18 @@ static void getDeviceAttribute(DeviceAttribute& a, int device = 0)
    a.cc_major = prop.major;
    a.cc_minor = prop.minor;
    a.cc = a.cc_major * 10 + a.cc_minor;
-   a.single_double_ratio = prop.singleToDoublePrecisionPerfRatio;
+   // CUDA 13 removed these fields from cudaDeviceProp; the attributes remain
+   check_rt(cudaDeviceGetAttribute(&a.single_double_ratio,
+      cudaDevAttrSingleToDoublePrecisionPerfRatio, device));
+   int computeMode;
+   check_rt(cudaDeviceGetAttribute(&computeMode, cudaDevAttrComputeMode, device));
+   check_rt(cudaDeviceGetAttribute(&a.clock_rate_kHz, cudaDevAttrClockRate, device));
 
-   if (prop.computeMode == cudaComputeModeExclusive)
+   if (computeMode == cudaComputeModeExclusive)
       a.compute_mode_string = "exclusive thread";
-   else if (prop.computeMode == cudaComputeModeProhibited)
+   else if (computeMode == cudaComputeModeProhibited)
       a.compute_mode_string = "prohibited";
-   else if (prop.computeMode == cudaComputeModeExclusiveProcess)
+   else if (computeMode == cudaComputeModeExclusiveProcess)
       a.compute_mode_string = "exclusive process";
    else
       a.compute_mode_string = "default";
@@ -146,8 +151,6 @@ static void getDeviceAttribute(DeviceAttribute& a, int device = 0)
       a.cores_per_multiprocessor = 192;
    else
       found_cc = false;
-
-   a.clock_rate_kHz = prop.clockRate;
 
    check_rt(cudaDeviceReset());
 
@@ -272,9 +275,9 @@ void gpuData(RcOp op)
       // else if (cuda_device_flags == 0)
 
       cuda_device_flags = cudaDeviceMapHost;
-#if 1
+#if 0
       cuda_device_flags |= cudaDeviceScheduleBlockingSync;
-#elif 0
+#elif 1
       // Using this flag may reduce the latency for the cudaStreamSynchronize() calls.
       cuda_device_flags |= cudaDeviceScheduleSpin;
 #endif

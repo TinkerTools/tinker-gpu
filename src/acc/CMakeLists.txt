@@ -19,12 +19,12 @@ elseif (GPU_LANG STREQUAL "OPENACC")
       -acc verystrict
       -Minfo=accel
    )
-   ## Debug add flag: -ta=tesla:lineinfo,cc60,cc70
-   ## Release add flag: -ta=tesla:fastmath,cc60,cc70
+   ## Debug add flag: -gpu=lineinfo,cc60,cc70
+   ## Release add flag: -gpu=fastmath,cc60,cc70
    target_compile_options (tinker9_acc PUBLIC
-      "$<$<CONFIG:DEBUG>:-ta=tesla:lineinfo${__T9_ACC_CCLST4}>"
-      "$<$<CONFIG:RELWITHDEBINFO>:-ta=tesla:lineinfo,fastmath${__T9_ACC_CCLST4}>"
-      "$<$<CONFIG:RELEASE>:-ta=tesla:fastmath${__T9_ACC_CCLST4}>"
-      "$<$<CONFIG:MINSIZEREL>:-ta=tesla:fastmath${__T9_ACC_CCLST4}>"
+      "$<$<CONFIG:DEBUG>:${__T9_ACC_TARGET}lineinfo${__T9_ACC_CCLST4}>"
+      "$<$<CONFIG:RELWITHDEBINFO>:${__T9_ACC_TARGET}lineinfo,fastmath${__T9_ACC_CCLST4}>"
+      "$<$<CONFIG:RELEASE>:${__T9_ACC_TARGET}fastmath${__T9_ACC_CCLST4}>"
+      "$<$<CONFIG:MINSIZEREL>:${__T9_ACC_TARGET}fastmath${__T9_ACC_CCLST4}>"
    )
 endif ()

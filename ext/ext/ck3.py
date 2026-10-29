@@ -311,6 +311,8 @@ class Variable:
         self.type = vs[1]
         self.name = vs[2]
         self.readfrom, self.addto, self.onlyif = None, None, None
+        self.scale, self.dlsink = None, None
+        self.ifset = None
         for i in range(3, len(vs)):
             s2 = vs[i]
             if s2.startswith('from:'):
@@ -322,6 +324,15 @@ class Variable:
             elif s2.startswith('onlyif:'):
                 s3 = s2.replace('onlyif:', '')
                 self.onlyif = s3
+            elif s2.startswith('ifset:'):
+                # runtime guard: read 0 when this pointer is null
+                self.ifset = s2.replace('ifset:', '')
+            elif s2.startswith('scale:'):
+                self.scale = s2.replace('scale:', '')
+            elif s2.startswith('dlsink:'):
+                self.dlsink = s2.replace('dlsink:', '').split(',')
+                if len(self.dlsink) != 3:
+                    raise ValueError('dlsink: needs destination,scale,gate')
 
     @staticmethod
     def _get_src(src, index) -> str:
@@ -331,55 +342,66 @@ class Variable:
         else:
             return '{}[{}]'.format(src, index)
 
+    def _load(self) -> str:
+        rhs = self._get_src(self.readfrom, self.iork)
+        if self.ifset is not None:
+            rhs = '({} ? {} : 0)'.format(self.ifset, rhs)
+        return rhs
+
     def zero(self) -> str:
         v1 = ''
         if self.location == 'shared':
             v1 = '{}[threadIdx.x] = 0;'.format(self.name)
         else:
             v1 = '{} = 0;'.format(self.name)
-        if self.onlyif is not None:
-            v1 = 'if CONSTEXPR ({}) {}'.format(self.onlyif, v1)
         return v1
+
+    def _add_to(self, dst, scale) -> str:
+        suffix = '[threadIdx.x]' if self.location == 'shared' else ''
+        value = '{}{}'.format(self.name, suffix)
+        if scale is not None:
+            value = '{} * {}'.format(scale, value)
+        if ',' not in dst:
+            return 'atomic_add({}, {}, {});'.format(value, dst, self.iork)
+        vs = dst.split(',')
+        return 'atomic_add({}, &{}[{}][{}]);'.format(value, vs[0], self.iork, vs[1])
 
     def save(self) -> str:
-        dst = self.addto
-        v1, suffix = '', ''
-        if self.location == 'shared':
-            suffix = '[threadIdx.x]'
-        if ',' not in dst:
-            v1 = 'atomic_add({}{}, {}, {});'.format(self.name, suffix, dst, self.iork)
-        else:
-            vs = dst.split(',')
-            v1 = 'atomic_add({}{}, &{}[{}][{}]);'.format(self.name, suffix, vs[0], self.iork, vs[1])
-        if self.onlyif is not None:
-            v1 = 'if CONSTEXPR ({}) {}'.format(self.onlyif, v1)
+        v1 = self._add_to(self.addto, self.scale)
+        if self.dlsink is not None:
+            dst, scale, gate = self.dlsink
+            v1 = v1 + 'if CONSTEXPR ({}) {}'.format(gate, self._add_to(dst, scale))
         return v1
 
+    def save_count(self) -> int:
+        # the dlsink adds a second statement
+        return 1 if self.dlsink is None else 2
+
     def init_exclude(self) -> str:
-        rhs = self._get_src(self.readfrom, self.iork)
+        rhs = self._load()
         if self.location == 'shared':
             if self.iork == 'i':
-                return '{}[klane] = {};'.format(self.name, rhs)
+                return ('{}[klane] = {};'.format(self.name, rhs))
             elif self.iork == 'k':
-                return '{}[threadIdx.x] = {};'.format(self.name, rhs)
+                return ('{}[threadIdx.x] = {};'.format(self.name, rhs))
         else:
-            return '{} = {};'.format(self.name, rhs)
+            return ('{} = {};'.format(self.name, rhs))
 
     def init_block(self) -> str:
         if self.readfrom in ['x', 'y', 'z']:
             if self.location == 'shared':
-                return '{}[threadIdx.x] = sorted[atom{}].{};'.format(self.name, self.iork, self.readfrom)
+                return ('{}[threadIdx.x] = sorted[atom{}].{};'.format(self.name, self.iork, self.readfrom))
             else:
-                return '{} = sorted[atom{}].{};'.format(self.name, self.iork, self.readfrom)
+                return ('{} = sorted[atom{}].{};'.format(self.name, self.iork, self.readfrom))
         else:
             if self.location == 'shared':
-                return '{}[threadIdx.x] = {};'.format(self.name, self._get_src(self.readfrom, self.iork))
+                return ('{}[threadIdx.x] = {};'.format(self.name, self._load()))
             else:
-                return '{} = {};'.format(self.name, self._get_src(self.readfrom, self.iork))
+                return ('{} = {};'.format(self.name, self._load()))
 
     def shuffle(self) -> str:
         if self.location == 'register':
-            return '{0:} = __shfl_sync(ALL_LANES, {0:}, ilane + 1);'.format(self.name)
+            return ('{0:} = __shfl_sync(ALL_LANES, {0:}, ilane + 1);'.format(self.name))
         else:
             raise ValueError('Cannot shuffle variables in the shared memory.')
 
@@ -432,52 +454,51 @@ class VariableDefinitions:
         s = s.replace(',;', ';')
         return s
 
-    def zero(self) -> str:
-        s = ''
-        for t in self.shared.keys():
-            for v in self.shared[t]:
-                s = s + v.zero()
+    def _all(self, shared=True):
+        vs = []
+        if shared:
+            for t in self.shared.keys():
+                vs = vs + self.shared[t]
         for t in self.register.keys():
-            for v in self.register[t]:
-                s = s + v.zero()
+            vs = vs + self.register[t]
+        return vs
+
+    @staticmethod
+    def _gated(items) -> str:
+        # items are (onlyif, statements, count). onlyif: elides the load and the
+        # shuffle along with zero and save; consecutive statements under the same
+        # condition share one block.
+        s = ''
+        i = 0
+        while i < len(items):
+            cond = items[i][0]
+            body, count = '', 0
+            while i < len(items) and items[i][0] == cond:
+                body = body + items[i][1]
+                count = count + items[i][2]
+                i = i + 1
+            if cond is None:
+                s = s + body
+            elif count > 1:
+                s = s + 'if CONSTEXPR ({}) {{{}}}'.format(cond, body)
+            else:
+                s = s + 'if CONSTEXPR ({}) {}'.format(cond, body)
         return s
+
+    def zero(self) -> str:
+        return self._gated([(v.onlyif, v.zero(), 1) for v in self._all()])
 
     def save(self) -> str:
-        s = ''
-        for t in self.shared.keys():
-            for v in self.shared[t]:
-                s = s + v.save()
-        for t in self.register.keys():
-            for v in self.register[t]:
-                s = s + v.save()
-        return s
+        return self._gated([(v.onlyif, v.save(), v.save_count()) for v in self._all()])
 
     def init_exclude(self) -> str:
-        s = ''
-        for t in self.shared.keys():
-            for v in self.shared[t]:
-                s = s + v.init_exclude()
-        for t in self.register.keys():
-            for v in self.register[t]:
-                s = s + v.init_exclude()
-        return s
+        return self._gated([(v.onlyif, v.init_exclude(), 1) for v in self._all()])
 
     def init_block(self) -> str:
-        s = ''
-        for t in self.shared.keys():
-            for v in self.shared[t]:
-                s = s + v.init_block()
-        for t in self.register.keys():
-            for v in self.register[t]:
-                s = s + v.init_block()
-        return s
+        return self._gated([(v.onlyif, v.init_block(), 1) for v in self._all()])
 
     def shuffle(self) -> str:
-        s = ''
-        for t in self.register.keys():
-            for v in self.register[t]:
-                s = s + v.shuffle()
-        return s
+        return self._gated([(v.onlyif, v.shuffle(), 1) for v in self._all(shared=False)])
 
     def ikreplace(self, code:str) -> str:
         for t in self.shared.keys():
@@ -641,7 +662,11 @@ class KernelWriter:
             if len(kfrcs.shared.keys()):
                 raise ValueError('F_FORCE cannot be put on shared memory.')
             k1, v1 = 'DECLARE_PARAMS_I_AND_K', ivars.declare() + kvars.declare()
+            ifdl = VariableDefinitions('i', config['I_FORCE_DLMDA']) if 'I_FORCE_DLMDA' in keys else None
+            kfdl = VariableDefinitions('k', config['K_FORCE_DLMDA']) if 'K_FORCE_DLMDA' in keys else None
             k2, v2 = 'DECLARE_FORCE_I_AND_K', ifrcs.declare() + kfrcs.declare()
+            if ifdl is not None:
+                v2 = v2 + ifdl.declare() + kfdl.declare()
             d[k1], d[k2] = v1, v2
 
             # i and k in exclude block
@@ -684,6 +709,17 @@ class KernelWriter:
             v2 = 'using ebuf_prec = EnergyBufferTraits::type;\n'
             v2 = v2 + '%s if CONSTEXPR (do_e) {%s}' % (decl, zero)
             v3 = 'if CONSTEXPR (do_e) {%s}' % total
+            for kdl, gate in [('ENERGY_DLMDA1', 'do_dl1'), ('ENERGY_DLMDA2', 'do_dl2')]:
+                if kdl not in keys:
+                    continue
+                decl, zero, total = '', '', ''
+                for t in config[kdl]:
+                    v1 = v1 + ', EnergyBuffer restrict {}'.format(t)
+                    decl = decl + 'ebuf_prec {}tl;'.format(t)
+                    zero = zero + '{}tl = 0;'.format(t)
+                    total = total + 'atomic_add({}tl, {}, ithread);'.format(t, t)
+                v2 = v2 + '%s if CONSTEXPR (do_e) {%s}' % (decl, zero)
+                v3 = v3 + 'if CONSTEXPR (%s) {%s}' % (gate, total)
         d[k1], d[k2], d[k3] = v1, v2, v3
 
         # virial
@@ -708,6 +744,22 @@ class KernelWriter:
             v2 = 'using vbuf_prec = VirialBufferTraits::type;\n'
             v2 = v2 + '%s if CONSTEXPR (do_v) {%s}' % (decl, zero)
             v3 = 'if CONSTEXPR (do_v) {%s}' % total
+            if 'VIRIAL_DLMDA' in keys:
+                decl, zero, total = '', '', ''
+                for t in config['VIRIAL_DLMDA']:
+                    v1 = v1 + ', VirialBuffer restrict {}'.format(t)
+                    decl = decl + 'vbuf_prec {}tlxx'.format(t)
+                    zero = zero + '{}tlxx = 0;'.format(t)
+                    total = total + 'atomic_add({}tlxx'.format(t)
+                    for sufx in ['yx', 'zx', 'yy', 'zy', 'zz']:
+                        decl = decl + ', {}tl{}'.format(t, sufx)
+                        zero = zero + '{}tl{} = 0;'.format(t, sufx)
+                        total = total + ', {}tl{}'.format(t, sufx)
+                    decl = decl + ';'
+                    zero = zero + '\n'
+                    total = total + ', {}, ithread);'.format(t)
+                v2 = v2 + '%s if CONSTEXPR (do_v) {%s}' % (decl, zero)
+                v3 = v3 + 'if CONSTEXPR (do_vdl) {%s}' % total
         d[k1], d[k2], d[k3] = v1, v2, v3
 
         if use_ikvars:
@@ -724,6 +776,9 @@ class KernelWriter:
                 vcfg = config[kcfg]
                 for t in vcfg:
                     v = v + ', grad_prec* restrict {}'.format(t)
+                if 'GRADIENT_DLMDA' in keys:
+                    for t in config['GRADIENT_DLMDA']:
+                        v = v + ', grad_prec* restrict {}'.format(t)
             k1, v1 = 'KERNEL_ZERO_LOCAL_FORCE', ifrcs.zero() + kfrcs.zero()
             k2, v2 = 'KERNEL_SAVE_LOCAL_FORCE', ifrcs.save() + kfrcs.save()
             k3, v3 = 'KERNEL_SHUFFLE_LOCAL_FORCE_I', ifrcs.shuffle()
@@ -733,8 +788,13 @@ class KernelWriter:
                 if 'constexpr bool do_g =' in vcfg:
                     v1 = 'if CONSTEXPR (do_g) {%s}' % v1
                     v2 = 'if CONSTEXPR (do_g) {%s}' % v2
+                    if ifdl is not None:
+                        v1 = v1 + 'if CONSTEXPR (do_gdl) {%s}' % (ifdl.zero() + kfdl.zero())
+                        v2 = v2 + 'if CONSTEXPR (do_gdl) {%s}' % (ifdl.save() + kfdl.save())
                 if v3 != '':
                     v3 = 'if CONSTEXPR (do_g) {%s}' % v3
+                    if ifdl is not None:
+                        v3 = v3 + 'if CONSTEXPR (do_gdl) {%s}' % ifdl.shuffle()
             d[k], d[k1], d[k2], d[k3] = v, v1, v2, v3
 
             # klane -- True only if ivar uses shared memory
@@ -791,6 +851,9 @@ class KernelWriter:
             v1 = kvars.ikreplace(v1)
             v1 = ifrcs.ikreplace(v1)
             v1 = kfrcs.ikreplace(v1)
+            if ifdl is not None:
+                v1 = ifdl.ikreplace(v1)
+                v1 = kfdl.ikreplace(v1)
             v2 = v1  # in case no scaled pairwise interaction is given
         kcfg = self.yk_scaled_pairwise
         if kcfg in keys:
@@ -799,6 +862,9 @@ class KernelWriter:
             v2 = kvars.ikreplace(v2)
             v2 = ifrcs.ikreplace(v2)
             v2 = kfrcs.ikreplace(v2)
+            if ifdl is not None:
+                v2 = ifdl.ikreplace(v2)
+                v2 = kfdl.ikreplace(v2)
         d[k1], d[k2] = v1, v2
 
         # single loop

@@ -32,8 +32,8 @@ TEST_CASE("External-Fields-MPole-Analyze", "[ff][extfield]")
    auto ref_g = r.getGradient();
 
    rc_flag = calc::xyz | calc::mass | calc::energy | calc::grad | calc::virial | calc::analyz;
-   testBeginWithArgs(argc, argv);
-   initialize();
+   TestSession session(argc, argv);
+   session.init();
 
    energy(calc::v0);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -62,8 +62,7 @@ TEST_CASE("External-Fields-MPole-Analyze", "[ff][extfield]")
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("External-Fields-Polarize-Analyze", "[ff][extfield]")
@@ -86,8 +85,8 @@ TEST_CASE("External-Fields-Polarize-Analyze", "[ff][extfield]")
    auto ref_g = r.getGradient();
 
    rc_flag = calc::xyz | calc::mass | calc::energy | calc::grad | calc::virial | calc::analyz;
-   testBeginWithArgs(argc, argv);
-   initialize();
+   TestSession session(argc, argv);
+   session.init();
 
    energy(calc::v0);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -116,8 +115,7 @@ TEST_CASE("External-Fields-Polarize-Analyze", "[ff][extfield]")
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("External-Fields-MPolar-Analyze", "[ff][extfield]")
@@ -139,8 +137,8 @@ TEST_CASE("External-Fields-MPolar-Analyze", "[ff][extfield]")
    auto ref_g = r.getGradient();
 
    rc_flag = calc::xyz | calc::mass | calc::energy | calc::grad | calc::virial | calc::analyz;
-   testBeginWithArgs(argc, argv);
-   initialize();
+   TestSession session(argc, argv);
+   session.init();
 
    energy(calc::v0);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -168,8 +166,7 @@ TEST_CASE("External-Fields-MPolar-Analyze", "[ff][extfield]")
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("External-Fields-VdwPchg-Analyze", "[ff][extfield]")
@@ -191,8 +188,8 @@ TEST_CASE("External-Fields-VdwPchg-Analyze", "[ff][extfield]")
    auto ref_g = r.getGradient();
 
    rc_flag = calc::xyz | calc::mass | calc::energy | calc::grad | calc::virial | calc::analyz;
-   testBeginWithArgs(argc, argv);
-   initialize();
+   TestSession session(argc, argv);
+   session.init();
 
    energy(calc::v0);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -220,8 +217,7 @@ TEST_CASE("External-Fields-VdwPchg-Analyze", "[ff][extfield]")
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("External-Fields-MPole", "[ff][extfield]")
@@ -243,8 +239,8 @@ TEST_CASE("External-Fields-MPole", "[ff][extfield]")
    auto ref_g = r.getGradient();
 
    rc_flag = calc::xyz | calc::mass | calc::energy | calc::grad | calc::virial;
-   testBeginWithArgs(argc, argv);
-   initialize();
+   TestSession session(argc, argv);
+   session.init();
 
    energy(calc::v0);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -269,8 +265,7 @@ TEST_CASE("External-Fields-MPole", "[ff][extfield]")
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("External-Fields-Polarize", "[ff][extfield]")
@@ -292,8 +287,8 @@ TEST_CASE("External-Fields-Polarize", "[ff][extfield]")
    auto ref_g = r.getGradient();
 
    rc_flag = calc::xyz | calc::mass | calc::energy | calc::grad | calc::virial;
-   testBeginWithArgs(argc, argv);
-   initialize();
+   TestSession session(argc, argv);
+   session.init();
 
    energy(calc::v0);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -318,8 +313,7 @@ TEST_CASE("External-Fields-Polarize", "[ff][extfield]")
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("External-Fields-MPolar", "[ff][extfield]")
@@ -341,8 +335,8 @@ TEST_CASE("External-Fields-MPolar", "[ff][extfield]")
    auto ref_g = r.getGradient();
 
    rc_flag = calc::xyz | calc::mass | calc::energy | calc::grad | calc::virial;
-   testBeginWithArgs(argc, argv);
-   initialize();
+   TestSession session(argc, argv);
+   session.init();
 
    energy(calc::v0);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -367,8 +361,7 @@ TEST_CASE("External-Fields-MPolar", "[ff][extfield]")
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("External-Fields-VdwPchg", "[ff][extfield]")
@@ -390,8 +383,8 @@ TEST_CASE("External-Fields-VdwPchg", "[ff][extfield]")
    auto ref_g = r.getGradient();
 
    rc_flag = calc::xyz | calc::mass | calc::energy | calc::grad | calc::virial;
-   testBeginWithArgs(argc, argv);
-   initialize();
+   TestSession session(argc, argv);
+   session.init();
 
    energy(calc::v0);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -416,8 +409,7 @@ TEST_CASE("External-Fields-VdwPchg", "[ff][extfield]")
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 static const std::string externalFieldFreq = "exfld-freq  20.5\n";
@@ -445,11 +437,11 @@ TEST_CASE("External-Fields-Dynamic-Freq", "[ff][extfield]")
 
    const char* argv[] = {"dummy", xn};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    testMdInit(0.0, 0.0);
 
    rc_flag = mask;
-   initialize();
+   session.init();
 
    // NVE: zero initial velocities
    const double dt_ps = 0.002;
@@ -491,6 +483,5 @@ TEST_CASE("External-Fields-Dynamic-Freq", "[ff][extfield]")
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_vir);
 
-   finish();
-   testEnd();
+   session.end();
 }

@@ -74,8 +74,12 @@ public:
    int* iak;       ///< Block numbers \c Bi. Every \c Bi is duplicated several times
                    ///< to match its padded neighbors in #lst.
                    ///< One \c Bi corresponds to #BLOCK neighbors.
-   int* iak_idmap; // index map for iak during sorting
-   int* lst_tmp;   // temporary lst array for sorting
+                   ///< When the list is pruned, #iak and #lst hold the neighbors within #prune_cut
+                   ///< of the current coordinates, sorted by \c Bi; otherwise they alias #iak_full and #lst_full.
+   int* iak_full;  ///< #iak of the list built with `cutoff+buffer`.
+   int* lst_full;  ///< #lst of the list built with `cutoff+buffer`.
+   int* iak_idmap; // index map for iak during sorting; null for a pruned list, which uses #iak
+   int* lst_tmp;   // temporary lst array for sorting; null for a pruned list, which uses #lst
 
    const real* x; ///< Reference of the coordinates.
    const real* y; ///< Reference of the coordinates.
@@ -87,10 +91,13 @@ public:
    real buffer; ///< Cutoff buffer distance.
    int fresh;   ///< Logical flag for a fresh neighbor list, meaning no changes
                 ///< in the coordinates after the list construction.
+   real prune_cut; ///< Distance #lst is pruned to; 0 if the list is not pruned.
+                   ///< Must not be less than the cutoff of any kernel reading this list.
 
-   int nakpl; ///< Length of #iakpl. Multiple
-   int niak;  ///< Length of iak, not greater than #LSTCAP*#nak.
-   int n;     ///< Number of atoms.
+   int nakpl;     ///< Length of #iakpl. Multiple
+   int niak;      ///< Length of iak, not greater than #LSTCAP*#nak.
+   int niak_full; ///< Length of #iak_full.
+   int n;         ///< Number of atoms.
 
    ~Spatial();
 
@@ -110,7 +117,8 @@ public:
                          int (*js3)[2],
                          int ns4,
                          int (*js4)[2],
-                         bool nblist4nn = false);
+                         bool nblist4nn = false,
+                         double prune = 0);
 
    static void dataInit(SpatialUnit);
 
@@ -118,6 +126,9 @@ public:
 
    template <class IMG>
    static void RunStep5(SpatialUnit u);
+
+   template <class IMG>
+   static void RunPrune1(SpatialUnit u, real prune2);
 
 private:
    int* iakpl_rev; ///< Reverse lookup array. Length #nakp. `iakpl_rev[iakpl[i]] = i`.
@@ -134,9 +145,15 @@ private:
    int cap_nakpl;  ///< Capacity of iakpl. Initial value (32+8*nak).
    int nstype;     ///< Number of #ScaleInfo objects in use.
 
+   unsigned* prune_keep; ///< Bits of the kept neighbors of every #lst_full entry. Length `LSTCAP*nak`.
+   int* prune_beg;       ///< First #iak_full entry of every block. Length `nak+1`.
+   int* prune_ntile;     ///< Kept neighbors of every block, then the entries they take, then the offsets
+                         ///< of these entries in #iak. Length `nak+1`.
+
    friend void nblistRefresh();
    friend void spatialUpdate(SpatialUnit);
    friend void spatialDataInit_cu(SpatialUnit);
+   friend void spatialPrune_cu(SpatialUnit);
 };
 
 //====================================================================//

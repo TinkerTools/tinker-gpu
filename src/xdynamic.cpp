@@ -1,4 +1,8 @@
 #include "ff/atom.h"
+#include "ff/efep.h"
+#include "ff/watermc.h"
+#include "ff/ethrmint.h"
+#include "ff/eabf.h"
 #include "md/misc.h"
 #include "tool/argkey.h"
 #include "tool/iofortstr.h"
@@ -6,6 +10,7 @@
 #include "tool/ioread.h"
 #include <tinker/detail/bath.hh>
 #include <tinker/detail/bound.hh>
+#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/inform.hh>
 #include <tinker/detail/mdstuf.hh>
 #include <tinker/routines.h>
@@ -13,6 +18,7 @@
 #include "tinker9.h"
 
 #include <chrono>
+#include <algorithm>
 #include <cmath>
 
 namespace tinker {
@@ -79,7 +85,7 @@ void xDynamic(int, char**)
       "\n"
       " Enter Time between Saves in Picoseconds [0.1] :  ",
       0.1, [](double i) { return i <= 0; });
-   inform::iwrite = std::round(dtsave / dt);
+   inform::iwrite = std::max(1, (int)std::round(dtsave / dt));
 
    // get choice of statistical ensemble for periodic system
 
@@ -158,6 +164,11 @@ void xDynamic(int, char**)
       }
    }
 
+   // Monte Carlo lambda moves and water hops are accepted at a set temperature
+
+   lmdaMonteCheck();
+   waterMcCheck();
+
    // perform the setup functions needed to run dynamics
 
    inform::gpucard = 1;
@@ -172,9 +183,31 @@ void xDynamic(int, char**)
    rc_flag = flags;
    initialize();
 
+   // open the file holding the adaptive bias history
+   if (dlmda::use_ostdyn)
+      tinker_f_initostfile();
+   if (dlmda::use_metadyn)
+      tinker_f_initmetafile();
+   if (dlmda::use_abfdyn) {
+      tinker_f_initabffile();
+      abfFromFortran();
+   }
+
+   // lay out the thermodynamic integration lambda windows
+   if (use_ti)
+      init_tidyn(nstep);
+
+   // lay out the free energy perturbation lambda windows
+   if (use_fep)
+      init_fepdyn(nstep);
+
    auto t_start = std::chrono::steady_clock::now();
    mdPropagate(nstep, dt);
    auto t_end = std::chrono::steady_clock::now();
+
+   // save lambda dynamics information
+   mdsaveLmdaFinal(nstep);
+   waterMcFinal();
 
    auto d_us = std::chrono::duration_cast<std::chrono::microseconds>(t_end - t_start).count();
    double us1 = (dt * 1000.) * nstep * 86400;

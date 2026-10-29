@@ -1,18 +1,25 @@
-// ck.py Version 3.0.2
+// ck.py Version 3.1.0
 template <class Ver>
 __global__
-void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer restrict ev, VirialBuffer restrict vev,
-   grad_prec* restrict gx, grad_prec* restrict gy, grad_prec* restrict gz, real cut, real off,
-   const unsigned* restrict info, int nexclude, const int (*restrict exclude)[2], const real* restrict exclude_scale,
-   const real* restrict x, const real* restrict y, const real* restrict z, const Spatial::SortedAtom* restrict sorted,
-   int nakpl, const int* restrict iakpl, int niak, const int* restrict iak, const int* restrict lst, int njvdw,
-   real vlam, Vdw vcouple, const real* restrict radmin, const real* restrict epsilon, const int* restrict jvdw,
-   const int* restrict mut)
+void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer restrict ev,
+   EnergyBuffer restrict devdl, EnergyBuffer restrict d2evdl2, VirialBuffer restrict vev,
+   VirialBuffer restrict devvirdl, grad_prec* restrict gx, grad_prec* restrict gy, grad_prec* restrict gz,
+   grad_prec* restrict gxred_dlmda, grad_prec* restrict gyred_dlmda, grad_prec* restrict gzred_dlmda, real cut,
+   real off, const unsigned* restrict info, int nexclude, const int (*restrict exclude)[2],
+   const real* restrict exclude_scale, const real* restrict x, const real* restrict y, const real* restrict z,
+   const Spatial::SortedAtom* restrict sorted, int nakpl, const int* restrict iakpl, int niak, const int* restrict iak,
+   const int* restrict lst, int njvdw, Vdw vcouple, const real* restrict radmin, const real* restrict epsilon,
+   const int* restrict exclude14, const real* restrict radmin4, const real* restrict epsilon4, const int* restrict jvdw,
+   const int* restrict mutg, SoftCoreLmda lp1, SoftCoreLmda lp2)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;
    constexpr bool do_g = Ver::g;
    constexpr bool do_v = Ver::v;
+   constexpr bool do_dl1 = Ver::e_dlmda1;
+   constexpr bool do_dl2 = Ver::e_dlmda2;
+   constexpr bool do_gdl = Ver::g_dlmda;
+   constexpr bool do_vdl = Ver::v_dlmda;
    const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
    const int iwarp = ithread / WARP_SIZE;
    const int nwarp = blockDim.x * gridDim.x / WARP_SIZE;
@@ -27,6 +34,14 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
    if CONSTEXPR (do_e) {
       evtl = 0;
    }
+   ebuf_prec devdltl;
+   if CONSTEXPR (do_e) {
+      devdltl = 0;
+   }
+   ebuf_prec d2evdl2tl;
+   if CONSTEXPR (do_e) {
+      d2evdl2tl = 0;
+   }
    using vbuf_prec = VirialBufferTraits::type;
    vbuf_prec vevtlxx, vevtlyx, vevtlzx, vevtlyy, vevtlzy, vevtlzz;
    if CONSTEXPR (do_v) {
@@ -37,12 +52,23 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
       vevtlzy = 0;
       vevtlzz = 0;
    }
+   vbuf_prec devvirdltlxx, devvirdltlyx, devvirdltlzx, devvirdltlyy, devvirdltlzy, devvirdltlzz;
+   if CONSTEXPR (do_v) {
+      devvirdltlxx = 0;
+      devvirdltlyx = 0;
+      devvirdltlzx = 0;
+      devvirdltlyy = 0;
+      devvirdltlzy = 0;
+      devvirdltlzz = 0;
+   }
    real xi, yi, zi;
-   int ijvdw, imut;
+   int ijvdw, imutg;
    real xk, yk, zk;
-   int kjvdw, kmut;
+   int kjvdw, kmutg;
    real fix, fiy, fiz;
    real fkx, fky, fkz;
+   real dfix, dfiy, dfiz;
+   real dfkx, dfky, dfkz;
 
    //* /
    for (int ii = ithread; ii < nexclude; ii += blockDim.x * gridDim.x) {
@@ -54,6 +80,14 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
          fky = 0;
          fkz = 0;
       }
+      if CONSTEXPR (do_gdl) {
+         dfix = 0;
+         dfiy = 0;
+         dfiz = 0;
+         dfkx = 0;
+         dfky = 0;
+         dfkz = 0;
+      }
 
       int i = exclude[ii][0];
       int k = exclude[ii][1];
@@ -63,32 +97,45 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
       yi = y[i];
       zi = z[i];
       ijvdw = jvdw[i];
-      imut = mut[i];
+      imutg = mutg[i];
       xk = x[k];
       yk = y[k];
       zk = z[k];
       kjvdw = jvdw[k];
-      kmut = mut[k];
+      kmutg = mutg[k];
 
       constexpr bool incl = true;
       real xr = xi - xk;
       real yr = yi - yk;
       real zr = zi - zk;
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off * off and incl) {
+      // The two ligands of a relative free energy calculation never interact.
+      int ig = max(imutg, kmutg);
+      bool cross = (imutg * kmutg == 2);
+      if (r2 <= off * off and incl and not cross) {
          real r = REAL_SQRT(r2);
-         real rv = radmin[ijvdw * njvdw + kjvdw];
-         real eps = epsilon[ijvdw * njvdw + kjvdw];
-         real vlambda = 1;
-         if (vcouple == Vdw::DECOUPLE) {
-            vlambda = (imut == kmut ? 1 : vlam);
-         } else if (vcouple == Vdw::ANNIHILATE) {
-            vlambda = (imut || kmut ? vlam : 1);
-         }
+         // A 1-4 pair takes the vdw14 radius and well depth, when there are any.
+         bool v14 = exclude14 and exclude14[ii];
+         real rv = (v14 ? radmin4 : radmin)[ijvdw * njvdw + kjvdw];
+         real eps = (v14 ? epsilon4 : epsilon)[ijvdw * njvdw + kjvdw];
+         // Ligand 2 couples as the complement of vlambda. Pairs of the two ligands
+         // were skipped above, so this is also the pair that carries dE/dL.
+         bool mutik = (vcouple == Vdw::DECOUPLE and imutg != kmutg) or (vcouple == Vdw::ANNIHILATE and ig);
+         SoftCoreLmda lp = {1, 0, 0, 0, 0, 0, 0};
+         if (mutik)
+            lp = (ig == 2 ? lp2 : lp1);
          real e, de;
-         pair_hal_v2<do_g, 0>(r, scalea, rv, eps, cut, off, vlambda, GHAL, DHAL, SCEXP, SCALPHA, e, de);
+         PairHalLambda dl = {0, 0, 0};
+         pair_hal<do_g, 0, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, scalea, rv, eps, cut, off, lp, GHAL, DHAL, e, de, &dl,
+            mutik);
          if CONSTEXPR (do_e) {
             evtl += floatTo<ebuf_prec>(e);
+            if (mutik) {
+               if CONSTEXPR (do_dl1)
+                  devdltl += floatTo<ebuf_prec>(dl.dedl);
+               if CONSTEXPR (do_dl2)
+                  d2evdl2tl += floatTo<ebuf_prec>(dl.d2edl2);
+            }
             if CONSTEXPR (do_a) {
                if (scalea != 0 and e != 0)
                   nevtl += 1;
@@ -96,7 +143,9 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
          }
          if CONSTEXPR (do_g) {
             real dedx, dedy, dedz;
-            de = de * REAL_RECIP(r);
+            // Two sites at the same point have no direction to push along.
+            real rinv = (r == 0 ? 0 : REAL_RECIP(r));
+            de = de * rinv;
             dedx = de * xr;
             dedy = de * yr;
             dedz = de * zr;
@@ -106,6 +155,28 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
             fkx -= dedx;
             fky -= dedy;
             fkz -= dedz;
+            if (mutik) {
+               real dlde = dl.dlde * rinv;
+               real dldedx = dlde * xr;
+               real dldedy = dlde * yr;
+               real dldedz = dlde * zr;
+               if CONSTEXPR (do_gdl) {
+                  dfix += dldedx;
+                  dfiy += dldedy;
+                  dfiz += dldedz;
+                  dfkx -= dldedx;
+                  dfky -= dldedy;
+                  dfkz -= dldedz;
+               }
+               if CONSTEXPR (do_vdl) {
+                  devvirdltlxx += floatTo<vbuf_prec>(xr * dldedx);
+                  devvirdltlyx += floatTo<vbuf_prec>(yr * dldedx);
+                  devvirdltlzx += floatTo<vbuf_prec>(zr * dldedx);
+                  devvirdltlyy += floatTo<vbuf_prec>(yr * dldedy);
+                  devvirdltlzy += floatTo<vbuf_prec>(zr * dldedy);
+                  devvirdltlzz += floatTo<vbuf_prec>(zr * dldedz);
+               }
+            }
             if CONSTEXPR (do_v) {
                vevtlxx += floatTo<vbuf_prec>(xr * dedx);
                vevtlyx += floatTo<vbuf_prec>(yr * dedx);
@@ -125,6 +196,14 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
          atomic_add(fky, gy, k);
          atomic_add(fkz, gz, k);
       }
+      if CONSTEXPR (do_gdl) {
+         atomic_add(dfix, gxred_dlmda, i);
+         atomic_add(dfiy, gyred_dlmda, i);
+         atomic_add(dfiz, gzred_dlmda, i);
+         atomic_add(dfkx, gxred_dlmda, k);
+         atomic_add(dfky, gyred_dlmda, k);
+         atomic_add(dfkz, gzred_dlmda, k);
+      }
    }
    // */
 
@@ -136,6 +215,14 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
          fkx = 0;
          fky = 0;
          fkz = 0;
+      }
+      if CONSTEXPR (do_gdl) {
+         dfix = 0;
+         dfiy = 0;
+         dfiz = 0;
+         dfkx = 0;
+         dfky = 0;
+         dfkz = 0;
       }
 
       int tri, tx, ty;
@@ -152,12 +239,12 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
       ijvdw = jvdw[i];
-      imut = mut[i];
+      imutg = mutg[i];
       xk = sorted[atomk].x;
       yk = sorted[atomk].y;
       zk = sorted[atomk].z;
       kjvdw = jvdw[k];
-      kmut = mut[k];
+      kmutg = mutg[k];
 
       unsigned int info0 = info[iw * WARP_SIZE + ilane];
       for (int j = 0; j < WARP_SIZE; ++j) {
@@ -169,20 +256,31 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
          real yr = yi - yk;
          real zr = zi - zk;
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // The two ligands of a relative free energy calculation never interact.
+         int ig = max(imutg, kmutg);
+         bool cross = (imutg * kmutg == 2);
+         if (r2 <= off * off and incl and not cross) {
             real r = REAL_SQRT(r2);
             real rv = radmin[ijvdw * njvdw + kjvdw];
             real eps = epsilon[ijvdw * njvdw + kjvdw];
-            real vlambda = 1;
-            if (vcouple == Vdw::DECOUPLE) {
-               vlambda = (imut == kmut ? 1 : vlam);
-            } else if (vcouple == Vdw::ANNIHILATE) {
-               vlambda = (imut || kmut ? vlam : 1);
-            }
+            // Ligand 2 couples as the complement of vlambda. Pairs of the two ligands
+            // were skipped above, so this is also the pair that carries dE/dL.
+            bool mutik = (vcouple == Vdw::DECOUPLE and imutg != kmutg) or (vcouple == Vdw::ANNIHILATE and ig);
+            SoftCoreLmda lp = {1, 0, 0, 0, 0, 0, 0};
+            if (mutik)
+               lp = (ig == 2 ? lp2 : lp1);
             real e, de;
-            pair_hal_v2<do_g, 1>(r, 1, rv, eps, cut, off, vlambda, GHAL, DHAL, SCEXP, SCALPHA, e, de);
+            PairHalLambda dl = {0, 0, 0};
+            pair_hal<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, lp, GHAL, DHAL, e, de, &dl,
+               mutik);
             if CONSTEXPR (do_e) {
                evtl += floatTo<ebuf_prec>(e);
+               if (mutik) {
+                  if CONSTEXPR (do_dl1)
+                     devdltl += floatTo<ebuf_prec>(dl.dedl);
+                  if CONSTEXPR (do_dl2)
+                     d2evdl2tl += floatTo<ebuf_prec>(dl.d2edl2);
+               }
                if CONSTEXPR (do_a) {
                   if (e != 0)
                      nevtl += 1;
@@ -190,7 +288,9 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
             }
             if CONSTEXPR (do_g) {
                real dedx, dedy, dedz;
-               de = de * REAL_RECIP(r);
+               // Two sites at the same point have no direction to push along.
+               real rinv = (r == 0 ? 0 : REAL_RECIP(r));
+               de = de * rinv;
                dedx = de * xr;
                dedy = de * yr;
                dedz = de * zr;
@@ -200,6 +300,28 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
                fkx -= dedx;
                fky -= dedy;
                fkz -= dedz;
+               if (mutik) {
+                  real dlde = dl.dlde * rinv;
+                  real dldedx = dlde * xr;
+                  real dldedy = dlde * yr;
+                  real dldedz = dlde * zr;
+                  if CONSTEXPR (do_gdl) {
+                     dfix += dldedx;
+                     dfiy += dldedy;
+                     dfiz += dldedz;
+                     dfkx -= dldedx;
+                     dfky -= dldedy;
+                     dfkz -= dldedz;
+                  }
+                  if CONSTEXPR (do_vdl) {
+                     devvirdltlxx += floatTo<vbuf_prec>(xr * dldedx);
+                     devvirdltlyx += floatTo<vbuf_prec>(yr * dldedx);
+                     devvirdltlzx += floatTo<vbuf_prec>(zr * dldedx);
+                     devvirdltlyy += floatTo<vbuf_prec>(yr * dldedy);
+                     devvirdltlzy += floatTo<vbuf_prec>(zr * dldedy);
+                     devvirdltlzz += floatTo<vbuf_prec>(zr * dldedz);
+                  }
+               }
                if CONSTEXPR (do_v) {
                   vevtlxx += floatTo<vbuf_prec>(xr * dedx);
                   vevtlyx += floatTo<vbuf_prec>(yr * dedx);
@@ -216,11 +338,16 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
          yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
          zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
          ijvdw = __shfl_sync(ALL_LANES, ijvdw, ilane + 1);
-         imut = __shfl_sync(ALL_LANES, imut, ilane + 1);
+         imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
          if CONSTEXPR (do_g) {
             fix = __shfl_sync(ALL_LANES, fix, ilane + 1);
             fiy = __shfl_sync(ALL_LANES, fiy, ilane + 1);
             fiz = __shfl_sync(ALL_LANES, fiz, ilane + 1);
+         }
+         if CONSTEXPR (do_gdl) {
+            dfix = __shfl_sync(ALL_LANES, dfix, ilane + 1);
+            dfiy = __shfl_sync(ALL_LANES, dfiy, ilane + 1);
+            dfiz = __shfl_sync(ALL_LANES, dfiz, ilane + 1);
          }
       }
 
@@ -231,6 +358,14 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
          atomic_add(fkx, gx, k);
          atomic_add(fky, gy, k);
          atomic_add(fkz, gz, k);
+      }
+      if CONSTEXPR (do_gdl) {
+         atomic_add(dfix, gxred_dlmda, i);
+         atomic_add(dfiy, gyred_dlmda, i);
+         atomic_add(dfiz, gzred_dlmda, i);
+         atomic_add(dfkx, gxred_dlmda, k);
+         atomic_add(dfky, gyred_dlmda, k);
+         atomic_add(dfkz, gzred_dlmda, k);
       }
    }
 
@@ -243,6 +378,14 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
          fky = 0;
          fkz = 0;
       }
+      if CONSTEXPR (do_gdl) {
+         dfix = 0;
+         dfiy = 0;
+         dfiz = 0;
+         dfkx = 0;
+         dfky = 0;
+         dfkz = 0;
+      }
 
       int ty = iak[iw];
       int atomi = ty * WARP_SIZE + ilane;
@@ -253,12 +396,12 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
       ijvdw = jvdw[i];
-      imut = mut[i];
+      imutg = mutg[i];
       xk = sorted[atomk].x;
       yk = sorted[atomk].y;
       zk = sorted[atomk].z;
       kjvdw = jvdw[k];
-      kmut = mut[k];
+      kmutg = mutg[k];
 
       for (int j = 0; j < WARP_SIZE; ++j) {
          bool incl = atomk > 0;
@@ -266,20 +409,31 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
          real yr = yi - yk;
          real zr = zi - zk;
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
+         // The two ligands of a relative free energy calculation never interact.
+         int ig = max(imutg, kmutg);
+         bool cross = (imutg * kmutg == 2);
+         if (r2 <= off * off and incl and not cross) {
             real r = REAL_SQRT(r2);
             real rv = radmin[ijvdw * njvdw + kjvdw];
             real eps = epsilon[ijvdw * njvdw + kjvdw];
-            real vlambda = 1;
-            if (vcouple == Vdw::DECOUPLE) {
-               vlambda = (imut == kmut ? 1 : vlam);
-            } else if (vcouple == Vdw::ANNIHILATE) {
-               vlambda = (imut || kmut ? vlam : 1);
-            }
+            // Ligand 2 couples as the complement of vlambda. Pairs of the two ligands
+            // were skipped above, so this is also the pair that carries dE/dL.
+            bool mutik = (vcouple == Vdw::DECOUPLE and imutg != kmutg) or (vcouple == Vdw::ANNIHILATE and ig);
+            SoftCoreLmda lp = {1, 0, 0, 0, 0, 0, 0};
+            if (mutik)
+               lp = (ig == 2 ? lp2 : lp1);
             real e, de;
-            pair_hal_v2<do_g, 1>(r, 1, rv, eps, cut, off, vlambda, GHAL, DHAL, SCEXP, SCALPHA, e, de);
+            PairHalLambda dl = {0, 0, 0};
+            pair_hal<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, lp, GHAL, DHAL, e, de, &dl,
+               mutik);
             if CONSTEXPR (do_e) {
                evtl += floatTo<ebuf_prec>(e);
+               if (mutik) {
+                  if CONSTEXPR (do_dl1)
+                     devdltl += floatTo<ebuf_prec>(dl.dedl);
+                  if CONSTEXPR (do_dl2)
+                     d2evdl2tl += floatTo<ebuf_prec>(dl.d2edl2);
+               }
                if CONSTEXPR (do_a) {
                   if (e != 0)
                      nevtl += 1;
@@ -287,7 +441,9 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
             }
             if CONSTEXPR (do_g) {
                real dedx, dedy, dedz;
-               de = de * REAL_RECIP(r);
+               // Two sites at the same point have no direction to push along.
+               real rinv = (r == 0 ? 0 : REAL_RECIP(r));
+               de = de * rinv;
                dedx = de * xr;
                dedy = de * yr;
                dedz = de * zr;
@@ -297,6 +453,28 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
                fkx -= dedx;
                fky -= dedy;
                fkz -= dedz;
+               if (mutik) {
+                  real dlde = dl.dlde * rinv;
+                  real dldedx = dlde * xr;
+                  real dldedy = dlde * yr;
+                  real dldedz = dlde * zr;
+                  if CONSTEXPR (do_gdl) {
+                     dfix += dldedx;
+                     dfiy += dldedy;
+                     dfiz += dldedz;
+                     dfkx -= dldedx;
+                     dfky -= dldedy;
+                     dfkz -= dldedz;
+                  }
+                  if CONSTEXPR (do_vdl) {
+                     devvirdltlxx += floatTo<vbuf_prec>(xr * dldedx);
+                     devvirdltlyx += floatTo<vbuf_prec>(yr * dldedx);
+                     devvirdltlzx += floatTo<vbuf_prec>(zr * dldedx);
+                     devvirdltlyy += floatTo<vbuf_prec>(yr * dldedy);
+                     devvirdltlzy += floatTo<vbuf_prec>(zr * dldedy);
+                     devvirdltlzz += floatTo<vbuf_prec>(zr * dldedz);
+                  }
+               }
                if CONSTEXPR (do_v) {
                   vevtlxx += floatTo<vbuf_prec>(xr * dedx);
                   vevtlyx += floatTo<vbuf_prec>(yr * dedx);
@@ -312,11 +490,16 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
          yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
          zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
          ijvdw = __shfl_sync(ALL_LANES, ijvdw, ilane + 1);
-         imut = __shfl_sync(ALL_LANES, imut, ilane + 1);
+         imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
          if CONSTEXPR (do_g) {
             fix = __shfl_sync(ALL_LANES, fix, ilane + 1);
             fiy = __shfl_sync(ALL_LANES, fiy, ilane + 1);
             fiz = __shfl_sync(ALL_LANES, fiz, ilane + 1);
+         }
+         if CONSTEXPR (do_gdl) {
+            dfix = __shfl_sync(ALL_LANES, dfix, ilane + 1);
+            dfiy = __shfl_sync(ALL_LANES, dfiy, ilane + 1);
+            dfiz = __shfl_sync(ALL_LANES, dfiz, ilane + 1);
          }
       }
 
@@ -328,6 +511,14 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
          atomic_add(fky, gy, k);
          atomic_add(fkz, gz, k);
       }
+      if CONSTEXPR (do_gdl) {
+         atomic_add(dfix, gxred_dlmda, i);
+         atomic_add(dfiy, gyred_dlmda, i);
+         atomic_add(dfiz, gzred_dlmda, i);
+         atomic_add(dfkx, gxred_dlmda, k);
+         atomic_add(dfky, gyred_dlmda, k);
+         atomic_add(dfkz, gzred_dlmda, k);
+      }
    }
 
    if CONSTEXPR (do_a) {
@@ -336,7 +527,16 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
    if CONSTEXPR (do_e) {
       atomic_add(evtl, ev, ithread);
    }
+   if CONSTEXPR (do_dl1) {
+      atomic_add(devdltl, devdl, ithread);
+   }
+   if CONSTEXPR (do_dl2) {
+      atomic_add(d2evdl2tl, d2evdl2, ithread);
+   }
    if CONSTEXPR (do_v) {
       atomic_add(vevtlxx, vevtlyx, vevtlzx, vevtlyy, vevtlzy, vevtlzz, vev, ithread);
+   }
+   if CONSTEXPR (do_vdl) {
+      atomic_add(devvirdltlxx, devvirdltlyx, devvirdltlzx, devvirdltlyy, devvirdltlzy, devvirdltlzz, devvirdl, ithread);
    }
 }

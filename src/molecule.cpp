@@ -2,6 +2,7 @@
 #include "ff/atom.h"
 #include "ff/molecule.h"
 #include "tool/darray.h"
+#include "tool/error.h"
 #include <tinker/detail/couple.hh>
 #include <tinker/detail/group.hh>
 #include <tinker/detail/molcul.hh>
@@ -80,8 +81,28 @@ void moleculeData(RcOp op)
    }
 }
 
+// Whether any pair of atom groups interacts with a weight other than one
+// (group.f), which no tinker9 kernel applies. An empty group has weight zero
+// (cluster.f) but no atoms to weight.
+static bool groupsWeighted()
+{
+   if (not group::use_group)
+      return false;
+   auto empty = [](int i) { return group::igrp[2 * i + 1] < group::igrp[2 * i]; };
+   for (int i = 0; i <= group::ngrp; ++i)
+      for (int j = 0; j <= group::ngrp; ++j)
+         if (not empty(i) and not empty(j) and group::wgrp[j + i * (1 + sizes::maxgrp)] != 1)
+            return true;
+   return false;
+}
+
 void groupData(RcOp op)
 {
+   // Refuse before anything of the potential is set up; groups without weights
+   // (neural network, group restraints) still run.
+   if ((op & RcOp::ALLOC) and groupsWeighted())
+      TINKER_THROW("Atom group weights (GROUP-SELECT, GROUP-INTER, GROUP-INTRA) are not supported.");
+
    if (op & RcOp::DEALLOC) {
       auto& st = grp;
       darray::deallocate(st.kgrp, st.grplist, st.igrp, st.grpmass, st.wgrp);

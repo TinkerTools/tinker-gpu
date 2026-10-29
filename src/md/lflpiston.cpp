@@ -1,4 +1,5 @@
 #include "md/lflpiston.h"
+#include "ff/dlmda.h"
 #include "ff/energy.h"
 #include "math/random.h"
 #include "md/misc.h"
@@ -267,7 +268,7 @@ void lf_lpiston_npt(int istep, time_prec dt_ps)
    bool save = 0 == (istep % inform::iwrite);
    double eksum_new = 0.0;
 
-   if (!save)
+   if (!save and !use_dlmda)
       vers1 &= ~calc::energy;
    time_prec t2 = 0.5 * dt_ps;
    T_prec temp;

@@ -1,6 +1,8 @@
+#include "ff/dlmda.h"
 #include "ff/echarge.h"
 #include "ff/energy.h"
 #include "ff/image.h"
+#include "ff/modamoeba.h"
 #include "ff/pme.h"
 #include "ff/spatial.h"
 #include "ff/switch.h"
@@ -220,36 +222,39 @@ void echargeEwaldFphiSelf_cu(int vers)
       echargeFphiSelf_cu<calc::V6>();
 }
 
+template <class Ver>
 __global__
 static void exfieldCharge_cu1(CountBuffer restrict nec, EnergyBuffer restrict ec, VirialBuffer restrict vir_ec,
-   grad_prec* restrict decx, grad_prec* restrict decy, grad_prec* restrict decz, int vers, int n, real f, real ef1,
+   grad_prec* restrict decx, grad_prec* restrict decy, grad_prec* restrict decz, int n, real f, real ef1,
    real ef2, real ef3, const real* restrict pchg, const real* restrict x, const real* restrict y,
    const real* restrict z)
 {
-   bool do_e = vers & calc::energy;
-   bool do_a = vers & calc::analyz;
-   bool do_g = vers & calc::grad;
-   bool do_v = vers & calc::virial;
+   constexpr bool do_e = Ver::e;
+   constexpr bool do_a = Ver::a;
+   constexpr bool do_g = Ver::g;
+   constexpr bool do_v = Ver::v;
 
    int ithread = ITHREAD;
    for (int ii = ithread; ii < n; ii += STRIDE) {
       real xi = x[ii], yi = y[ii], zi = z[ii], ci = pchg[ii];
 
-      if (do_e) {
+      if CONSTEXPR (do_e) {
          real phi = xi * ef1 + yi * ef2 + zi * ef3; // negative potential
          real e = -f * ci * phi;
          atomic_add(e, ec, ithread);
-         if (do_a)
-            atomic_add(1, nec, ithread);
+         if CONSTEXPR (do_a) {
+            if (e != 0)
+               atomic_add(1, nec, ithread);
+         }
       }
-      if (do_g) {
+      if CONSTEXPR (do_g) {
          real frx = -f * ef1 * ci;
          real fry = -f * ef2 * ci;
          real frz = -f * ef3 * ci;
          atomic_add(frx, decx, ii);
          atomic_add(fry, decy, ii);
          atomic_add(frz, decz, ii);
-         if (do_v) {
+         if CONSTEXPR (do_v) {
             real vxx = xi * frx;
             real vyy = yi * fry;
             real vzz = zi * frz;
@@ -262,10 +267,124 @@ static void exfieldCharge_cu1(CountBuffer restrict nec, EnergyBuffer restrict ec
    }
 }
 
-void exfieldCharge_cu(int vers)
+template <class Ver>
+static void exfieldCharge_cu2()
 {
    real f = electric / dielec;
    real ef1 = extfld::texfld[0], ef2 = extfld::texfld[1], ef3 = extfld::texfld[2];
-   launch_k1s(g::s0, n, exfieldCharge_cu1, nec, ec, vir_ec, decx, decy, decz, vers, n, f, ef1, ef2, ef3, pchg, x, y, z);
+   launch_k1s(g::s0, n, exfieldCharge_cu1<Ver>, nec, ec, vir_ec, decx, decy, decz, n, f, ef1, ef2, ef3, pchg, x, y,
+      z);
+}
+
+void exfieldCharge_cu(int vers)
+{
+   if (vers == calc::v0)
+      exfieldCharge_cu2<calc::V0>();
+   else if (vers == calc::v1)
+      exfieldCharge_cu2<calc::V1>();
+   else if (vers == calc::v3)
+      exfieldCharge_cu2<calc::V3>();
+   else if (vers == calc::v4)
+      exfieldCharge_cu2<calc::V4>();
+   else if (vers == calc::v5)
+      exfieldCharge_cu2<calc::V5>();
+   else if (vers == calc::v6)
+      exfieldCharge_cu2<calc::V6>();
+}
+
+// One thread adds the Ewald uniform background charge correction, already
+// evaluated on the host, into the first slot of the term's buffers.
+__global__
+static void ewaldBackgroundAdd_cu1(CountBuffer restrict nc, EnergyBuffer restrict eb, EnergyBuffer restrict dl1b,
+   EnergyBuffer restrict dl2b, VirialBuffer restrict vb, VirialBuffer restrict dvb, int count, real e, real dl1,
+   real dl2)
+{
+   if (nc)
+      atomic_add(count, nc, 0);
+   if (eb)
+      atomic_add(e, eb, 0);
+   if (dl1b)
+      atomic_add(dl1, dl1b, 0);
+   if (dl2b)
+      atomic_add(dl2, dl2b, 0);
+   if (vb)
+      atomic_add(-e, (real)0, (real)0, -e, (real)0, -e, vb, 0);
+   if (dvb)
+      atomic_add(-dl1, (real)0, (real)0, -dl1, (real)0, -dl1, dvb, 0);
+}
+
+void ewaldBackgroundAdd_cu(CountBuffer nc, EnergyBuffer eb, EnergyBuffer dl1b, EnergyBuffer dl2b, VirialBuffer vb,
+   VirialBuffer dvb, int count, real e, real dl1, real dl2)
+{
+   ewaldBackgroundAdd_cu1<<<1, 1, 0, g::s0>>>(nc, eb, dl1b, dl2b, vb, dvb, count, e, dl1, dl2);
+}
+
+// The net charge of the cell from the monopoles, and with lambda groups its
+// lambda derivative, summed in fixed point so that the sum keeps its order.
+__global__
+static void ewaldNetCharge_cu1(int n, fixed* restrict qnet, const real (*restrict rpole)[MPL_TOTAL],
+   const int* restrict grp, GrpScale esc)
+{
+   real q = 0, dq = 0;
+   for (int i = ITHREAD; i < n; i += STRIDE) {
+      real c = rpole[i][MPL_PME_0];
+      if (grp) {
+         q += esc.s[grp[i]] * c;
+         dq += esc.ds[grp[i]] * c;
+      } else {
+         q += c;
+      }
+   }
+   atomic_add(q, qnet, 0);
+   if (grp)
+      atomic_add(dq, qnet, 1);
+}
+
+// The background correction of a net charge that charge flux moves with the
+// geometry, as ewaldBackgroundAdd adds it, and the flux potential of every
+// atom, dE/dQ = 2 fterm Q, with 2 fterm dQ/dl for the lambda derivative of
+// the multipoles (empole1.f, empole4.f).
+__global__
+static void ewaldBackgroundFlux_cu1(int n, const fixed* restrict qnet, real fterm, real deldl, real d2eldl2,
+   CountBuffer restrict nc, EnergyBuffer restrict eb, EnergyBuffer restrict dl1b, EnergyBuffer restrict dl2b,
+   VirialBuffer restrict vb, VirialBuffer restrict dvb, real* restrict pot, real* restrict dlpot)
+{
+   const real q = fixedTo<real>(qnet[0]);
+   const real dq = fixedTo<real>(qnet[1]);
+   if (ITHREAD == 0) {
+      const bool charged = REAL_ABS(q) > (real)1.0e-10;
+      const real e = fterm * q * q;
+      const real dl1 = 2 * fterm * q * dq * deldl;
+      const real dl2 = 2 * fterm * (dq * dq * deldl * deldl + q * dq * d2eldl2);
+      if (nc and charged)
+         atomic_add(1, nc, 0);
+      if (eb)
+         atomic_add(e, eb, 0);
+      if (dl1b)
+         atomic_add(dl1, dl1b, 0);
+      if (dl2b)
+         atomic_add(dl2, dl2b, 0);
+      if (vb)
+         atomic_add(-e, (real)0, (real)0, -e, (real)0, -e, vb, 0);
+      if (dvb)
+         atomic_add(-dl1, (real)0, (real)0, -dl1, (real)0, -dl1, dvb, 0);
+   }
+   const real c = 2 * fterm * q, dlc = 2 * fterm * dq;
+   for (int i = ITHREAD; i < n; i += STRIDE) {
+      if (pot)
+         pot[i] += c;
+      if (dlpot)
+         dlpot[i] += dlc;
+   }
+}
+
+void ewaldBackgroundFlux_cu(fixed* qnet, const int* grp, GrpScale esc, real fterm, real deldl, real d2eldl2,
+   CountBuffer nc, EnergyBuffer eb, EnergyBuffer dl1b, EnergyBuffer dl2b, VirialBuffer vb, VirialBuffer dvb,
+   real* pot, real* dlpot)
+{
+   darray::zero(g::q0, 2, qnet);
+   launch_k1b(g::s0, n, ewaldNetCharge_cu1, n, qnet, rpole, grp, esc);
+   launch_k1b(g::s0, n, ewaldBackgroundFlux_cu1, n, qnet, fterm, deldl, d2eldl2, nc, eb, dl1b, dl2b, vb, dvb,
+      pot, dlpot);
 }
 }

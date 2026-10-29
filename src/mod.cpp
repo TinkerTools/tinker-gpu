@@ -2,6 +2,7 @@
 
 #include "ff/atom.h"
 #include "ff/box.h"
+#include "ff/dlmda.h"
 #include "ff/echarge.h"
 #include "ff/echglj.h"
 #include "ff/elec.h"
@@ -15,12 +16,14 @@
 #include "ff/modhippo.h"
 #include "ff/molecule.h"
 #include "ff/nblist.h"
+#include "ff/ost.h"
 #include "ff/pme.h"
 #include "ff/spatial.h"
+#include "ff/efep.h"
+#include "ff/ethrmint.h"
 
 #include "md/lflpiston.h"
 #include "md/misc.h"
-#include "md/osrw.h"
 #include "md/pq.h"
 #include "md/rattle.h"
 

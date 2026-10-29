@@ -1,4 +1,5 @@
 #pragma once
+#include "ff/hippo/erepel.h"
 #include "math/realn.h"
 #include "math/switch.h"
 #include "seq/damp_hippo.h"
@@ -26,12 +27,16 @@ inline void zero(PairRepelGrad& pgrad)
    pgrad.ttqk[2] = 0;
 }
 
+/// A mutated pair (\c mutik) takes the soft core scaling of \c rs (erepel1.f).
+/// \c DO_DL1, \c DO_DL2 and \c DO_GDL also give its main lambda derivatives of
+/// the energy, \c dle and \c dle2, and of the force and torques, \c dlgrad.
 #pragma acc routine seq
-template <bool do_g, int SOFTCORE>
+template <bool do_g, bool DO_DL1, bool DO_DL2, bool DO_GDL>
 SEQ_CUDA
 void pair_repel(real r2,
                 real rscale,
-                real vlambda,
+                bool mutik,
+                const SoftCoreLmda& rs,
                 real cut,
                 real off,
                 real xr,
@@ -64,8 +69,19 @@ void pair_repel(real r2,
                 real qkyz,
                 real qkzz,
                 real& restrict e,
-                PairRepelGrad& restrict pgrad)
+                PairRepelGrad& restrict pgrad,
+                real& restrict dle,
+                real& restrict dle2,
+                PairRepelGrad& restrict dlgrad)
 {
+   static_assert(DO_DL1 or not(DO_DL2 or DO_GDL), "");
+   if CONSTEXPR (DO_DL1)
+      dle = 0;
+   if CONSTEXPR (DO_DL2)
+      dle2 = 0;
+   if CONSTEXPR (DO_GDL)
+      zero(dlgrad);
+
    real cut2 = cut * cut;
    real r = REAL_SQRT(r2);
    real rInv = REAL_RECIP(r);
@@ -125,14 +141,29 @@ void pair_repel(real r2,
 
    e = sizik * eterm * rInv;
 
-   // energy via soft core lambda scaling
-   real termsc, soft;
-   if CONSTEXPR (SOFTCORE) {
-      real vlambda3 = vlambda * vlambda * vlambda;
-      real vlambda4 = vlambda3 * vlambda;
-      real vlambda5 = vlambda4 * vlambda;
-      termsc = vlambda3 - vlambda4 + r2;
-      soft = vlambda5 * r / REAL_SQRT(termsc);
+   // energy via soft core lambda scaling of a mutated pair, along with the
+   // lambda derivatives of the scaling (erepsc.f:erepsc4); the scaling is
+   // p0 g(s) with g = r/sqrt(s + r^2) for the shift s
+   real e0 = e;
+   real soft = 1, dsoft = 0, dsdl = 0, d2sdl2 = 0, d2sdldr = 0;
+   if (mutik) {
+      real q = REAL_RSQRT(rs.sc + r2);
+      real q2 = q * q;
+      real q3 = q2 * q;
+      soft = rs.p0 * r * q;
+      dsoft = rs.p0 * rs.sc * q3;
+      // g, dg/ds and d2g/ds2 are r q, -r q^3/2 and 3 r q^5/4
+      if CONSTEXPR (DO_DL1 or DO_DL2 or DO_GDL)
+         dsdl = r * q * (rs.a1 - 0.5f * rs.b1 * q2);
+      if CONSTEXPR (DO_DL2)
+         d2sdl2 = r * q * (rs.a2 - 0.5f * rs.b2 * q2 + 0.75f * rs.c2 * q2 * q2);
+      // dg/dr and d2g/dsdr are s q^3 and q^3 (1 - 3 s q^2/2)
+      if CONSTEXPR (DO_GDL)
+         d2sdldr = q3 * (rs.a1 * rs.sc + rs.b1 * (1 - 1.5f * rs.sc * q2));
+      if CONSTEXPR (DO_DL1)
+         dle = dsdl * e0;
+      if CONSTEXPR (DO_DL2)
+         dle2 = d2sdl2 * e0;
       e *= soft;
    }
    // gradient
@@ -236,9 +267,23 @@ void pair_repel(real r2,
       pgrad.ttqk[1] += sizik * rr1 * trq0.y;
       pgrad.ttqk[2] += sizik * rr1 * trq0.z;
 
-      // force via soft core lambda scaling
-      if CONSTEXPR (SOFTCORE) {
-         real dsoft = e * soft * (rr2 - 1 / termsc);
+      // force via soft core lambda scaling, with its lambda derivative from
+      // the unscaled pair terms
+      if (mutik) {
+         if CONSTEXPR (DO_GDL) {
+            real dldsoft = d2sdldr * rr1 * e0;
+            dlgrad.frcx = pgrad.frcx * dsdl - dldsoft * xr;
+            dlgrad.frcy = pgrad.frcy * dsdl - dldsoft * yr;
+            dlgrad.frcz = pgrad.frcz * dsdl - dldsoft * zr;
+            dlgrad.ttqi[0] = pgrad.ttqi[0] * dsdl;
+            dlgrad.ttqi[1] = pgrad.ttqi[1] * dsdl;
+            dlgrad.ttqi[2] = pgrad.ttqi[2] * dsdl;
+            dlgrad.ttqk[0] = pgrad.ttqk[0] * dsdl;
+            dlgrad.ttqk[1] = pgrad.ttqk[1] * dsdl;
+            dlgrad.ttqk[2] = pgrad.ttqk[2] * dsdl;
+         }
+
+         dsoft *= rr1 * e0;
          pgrad.frcx = pgrad.frcx * soft - dsoft * xr;
          pgrad.frcy = pgrad.frcy * soft - dsoft * yr;
          pgrad.frcz = pgrad.frcz * soft - dsoft * zr;
@@ -255,6 +300,23 @@ void pair_repel(real r2,
    if (r2 > cut2) {
       real taper, dtaper;
       switchTaper5<do_g>(r, cut, off, taper, dtaper);
+      if CONSTEXPR (DO_GDL) {
+         real dldtaper = dtaper * dle * rr1;
+         dlgrad.frcx = dlgrad.frcx * taper - dldtaper * xr;
+         dlgrad.frcy = dlgrad.frcy * taper - dldtaper * yr;
+         dlgrad.frcz = dlgrad.frcz * taper - dldtaper * zr;
+
+         dlgrad.ttqi[0] *= taper;
+         dlgrad.ttqi[1] *= taper;
+         dlgrad.ttqi[2] *= taper;
+         dlgrad.ttqk[0] *= taper;
+         dlgrad.ttqk[1] *= taper;
+         dlgrad.ttqk[2] *= taper;
+      }
+      if CONSTEXPR (DO_DL2)
+         dle2 *= taper;
+      if CONSTEXPR (DO_DL1)
+         dle *= taper;
       if CONSTEXPR (do_g) {
          dtaper *= e * rr1;
          pgrad.frcx = pgrad.frcx * taper - dtaper * xr;
@@ -270,5 +332,54 @@ void pair_repel(real r2,
       }
       e *= taper;
    }
+}
+
+/// The plain pair, without lambda derivatives.
+#pragma acc routine seq
+template <bool do_g>
+SEQ_CUDA
+void pair_repel(real r2,
+                real rscale,
+                bool mutik,
+                const SoftCoreLmda& rs,
+                real cut,
+                real off,
+                real xr,
+                real yr,
+                real zr,
+                real sizi,
+                real dmpi,
+                real vali,
+                real ci,
+                real dix,
+                real diy,
+                real diz,
+                real qixx,
+                real qixy,
+                real qixz,
+                real qiyy,
+                real qiyz,
+                real qizz,
+                real sizk,
+                real dmpk,
+                real valk,
+                real ck,
+                real dkx,
+                real dky,
+                real dkz,
+                real qkxx,
+                real qkxy,
+                real qkxz,
+                real qkyy,
+                real qkyz,
+                real qkzz,
+                real& restrict e,
+                PairRepelGrad& restrict pgrad)
+{
+   real dle, dle2;
+   PairRepelGrad dlgrad;
+   pair_repel<do_g, false, false, false>(r2, rscale, mutik, rs, cut, off, xr, yr, zr, sizi, dmpi, vali, ci, dix, diy,
+      diz, qixx, qixy, qixz, qiyy, qiyz, qizz, sizk, dmpk, valk, ck, dkx, dky, dkz, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz,
+      e, pgrad, dle, dle2, dlgrad);
 }
 }

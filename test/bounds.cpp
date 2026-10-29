@@ -33,9 +33,9 @@ TEST_CASE("Bounds", "[ff][box]")
 
    const char* argv[] = {"dummy", xn};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    rc_flag = calc::xyz | calc::mass;
-   initialize();
+   session.init();
 
    FstrView fsw = files::filename;
    std::string fname = fsw.trim();
@@ -60,6 +60,5 @@ TEST_CASE("Bounds", "[ff][box]")
    COMPARE_REALS(yans[1], yref[1], eps);
    COMPARE_REALS(zans[1], zref[1], eps);
 
-   finish();
-   testEnd();
+   session.end();
 }

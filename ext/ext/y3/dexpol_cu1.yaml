@@ -4,13 +4,21 @@ TEMPLATE_PARAMS: template<class Ver>
 CONSTEXPR_FLAGS: |
   constexpr bool do_g = Ver::g;
   constexpr bool do_v = Ver::v;
+  constexpr bool do_gdl = Ver::g_dlmda;
+  constexpr bool do_vdl = Ver::v_dlmda;
 
 VIRIAL:
   - vep
+VIRIAL_DLMDA:
+  - dvep
 GRADIENT:
   - gx
   - gy
   - gz
+GRADIENT_DLMDA:
+  - dgx
+  - dgy
+  - dgz
 
 CUT_DISTANCE: cut
 OFF_DISTANCE: 'off'
@@ -23,6 +31,7 @@ EXTRA_PARAMS: |
   , const real* restrict kpep, const real* restrict prepep
   , const real* restrict dmppep, const int* restrict lpep
   , ExpolScr scrtyp, real f
+  , real wa, real wb
 # IMPLICIT_PARAMS:
 
 I_VARIABLES:
@@ -50,13 +59,13 @@ K_VARIABLES:
   - register int  eplk    from:lpep
   - register real polk    from:polarity
 I_FORCE:
-  - register real frcxi addto:gx
-  - register real frcyi addto:gy
-  - register real frczi addto:gz
+  - register real frcxi addto:gx scale:wa dlsink:dgx,wb,do_gdl
+  - register real frcyi addto:gy scale:wa dlsink:dgy,wb,do_gdl
+  - register real frczi addto:gz scale:wa dlsink:dgz,wb,do_gdl
 K_FORCE:
-  - register real frcxk addto:gx
-  - register real frcyk addto:gy
-  - register real frczk addto:gz
+  - register real frcxk addto:gx scale:wa dlsink:dgx,wb,do_gdl
+  - register real frcyk addto:gy scale:wa dlsink:dgy,wb,do_gdl
+  - register real frczk addto:gz scale:wa dlsink:dgz,wb,do_gdl
 
 FULL_PAIRWISE_INTERACTION: |
   real xr = @xk@ - @xi@;
@@ -65,9 +74,11 @@ FULL_PAIRWISE_INTERACTION: |
   real r2 = image2(xr, yr, zr);
   if ((@eplk@ or @epli@) and r2 <= off * off and incl) {
     real r = REAL_SQRT(r2);
+    real ski = (@poli@ != 0 ? @springi@ / @poli@ : 0);
+    real skk = (@polk@ != 0 ? @springk@ / @polk@ : 0);
     real frc[3];
     pair_dexpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, @uix@, @uiy@, @uiz@, @ukx@, @uky@, @ukz@,
-               @springi@/@poli@, @sizi@, @alphai@, @springk@/@polk@, @sizk@, @alphak@, f, frc);
+               ski, @sizi@, @alphai@, skk, @sizk@, @alphak@, f, frc);
     @frcxi@ += frc[0];
     @frcyi@ += frc[1];
     @frczi@ += frc[2];
@@ -82,11 +93,19 @@ FULL_PAIRWISE_INTERACTION: |
       real vyy = -yr * frc[1];
       real vyz = -0.5f * (zr * frc[1] + yr * frc[2]);
       real vzz = -zr * frc[2];
-      veptlxx += floatTo<vbuf_prec>(vxx);
-      veptlyx += floatTo<vbuf_prec>(vxy);
-      veptlzx += floatTo<vbuf_prec>(vxz);
-      veptlyy += floatTo<vbuf_prec>(vyy);
-      veptlzy += floatTo<vbuf_prec>(vyz);
-      veptlzz += floatTo<vbuf_prec>(vzz);
+      veptlxx += floatTo<vbuf_prec>(wa * vxx);
+      veptlyx += floatTo<vbuf_prec>(wa * vxy);
+      veptlzx += floatTo<vbuf_prec>(wa * vxz);
+      veptlyy += floatTo<vbuf_prec>(wa * vyy);
+      veptlzy += floatTo<vbuf_prec>(wa * vyz);
+      veptlzz += floatTo<vbuf_prec>(wa * vzz);
+      if CONSTEXPR (do_vdl) {
+        dveptlxx += floatTo<vbuf_prec>(wb * vxx);
+        dveptlyx += floatTo<vbuf_prec>(wb * vxy);
+        dveptlzx += floatTo<vbuf_prec>(wb * vxz);
+        dveptlyy += floatTo<vbuf_prec>(wb * vyy);
+        dveptlzy += floatTo<vbuf_prec>(wb * vyz);
+        dveptlzz += floatTo<vbuf_prec>(wb * vzz);
+      }
     }
   }

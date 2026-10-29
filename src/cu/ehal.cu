@@ -1,3 +1,4 @@
+#include "ff/dlmda.h"
 #include "ff/evdw.h"
 #include "ff/image.h"
 #include "ff/spatial.h"
@@ -7,6 +8,7 @@
 #include "seq/launch.h"
 #include "seq/pair_hal.h"
 #include "seq/triangle.h"
+#include <cmath>
 
 namespace tinker {
 __global__
@@ -60,7 +62,8 @@ void ehalResolveGradient_cu1(int n, const int* restrict ired, const real* restri
    }
 }
 
-void ehalResolveGradient_cu()
+void ehalResolveGradient_cu(const grad_prec* gxred, const grad_prec* gyred, const grad_prec* gzred, grad_prec* devx,
+   grad_prec* devy, grad_prec* devz)
 {
    launch_k1s(g::s0, n, ehalResolveGradient_cu1, //
       n, ired, kred, gxred, gyred, gzred, devx, devy, devz);
@@ -72,7 +75,7 @@ void ehalResolveGradient_cu()
  *    - Different vcouple methods.
  *    - PBC type in image().
  *    - Random access to the "i" parameters and gradients.
- *    - (If not hard-coded) ghal, dhal, scexp, scalpha.
+ *    - (If not hard-coded) ghal, dhal, scexp.
  */
 
 /**
@@ -97,13 +100,9 @@ namespace tinker {
 #if 1
 #define GHAL    (real)0.12
 #define DHAL    (real)0.07
-#define SCEXP   5
-#define SCALPHA (real)0.7
 #elif 0
 #define GHAL    ghal
 #define DHAL    dhal
-#define SCEXP   scexp
-#define SCALPHA scalpha
 #endif
 #include "ehal_cu1.cc"
 
@@ -111,25 +110,42 @@ template <class Ver>
 static void ehal_cu3()
 {
    constexpr bool do_g = Ver::g;
+   constexpr bool do_gdl = Ver::g_dlmda;
+   constexpr bool dodl = Ver::value & calc::dlmda;
 
    const auto& st = *vspatial_v2_unit;
    const real cut = switchCut(Switch::VDW);
    const real off = switchOff(Switch::VDW);
 
-   if CONSTEXPR (do_g)
+   // A relative calculation labels atoms by ligand group; ligand 2 couples as
+   // the complement of vlambda.
+   const int* grp = emGroup();
+   // The soft core terms, taken here once instead of per pair.
+   const auto lp1 = softCoreLmda(vlam, scexp, scalphav, scexpm, scexpp, dvldlmda, d2vldlmda2, dodl);
+   const auto lp2 = softCoreLmda(1 - vlam, scexp, scalphav, scexpm, scexpp, -dvldlmda, -d2vldlmda2, dodl);
+
+   if CONSTEXPR (do_g) {
       darray::zero(g::q0, n, gxred, gyred, gzred);
+      if CONSTEXPR (do_gdl)
+         darray::zero(g::q0, n, gxred_dlmda, gyred_dlmda, gzred_dlmda);
+   }
 
    int ngrid = gpuGridSize(BLOCK_DIM);
    auto ker1 = ehal_cu1<Ver>;
-   ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, vir_ev, gxred, gyred, gzred, cut, off,
-      st.si1.bit0, nvexclude, vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak,
-      st.iak, st.lst, njvdw, vlam, vcouple, radmin, epsilon, jvdw, mut);
+   ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, devdl_buf, d2evdl2_buf, vir_ev,
+      dvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0, nvexclude_scaled,
+      vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, njvdw,
+      vcouple, radmin, epsilon, vexclude14, radmin4, epsilon4, jvdw, grp, lp1, lp2);
 
    if CONSTEXPR (do_g) {
-      ehalResolveGradient();
+      ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);
+      if CONSTEXPR (do_gdl)
+         ehalResolveGradient(gxred_dlmda, gyred_dlmda, gzred_dlmda, dfdlx, dfdly, dfdlz);
    }
 }
 
+// One kernel takes both the plain versions and the lambda derivative ones, so a
+// run whose van der Waals map is flat takes the plain path (ehal1.f).
 void ehal_cu(int vers)
 {
    if (vers == calc::v0)
@@ -144,5 +160,13 @@ void ehal_cu(int vers)
       ehal_cu3<calc::V5>();
    else if (vers == calc::v6)
       ehal_cu3<calc::V6>();
+   else if (vers == calc::v7)
+      ehal_cu3<calc::V7>();
+   else if (vers == calc::v8)
+      ehal_cu3<calc::V8>();
+   else if (vers == calc::v9)
+      ehal_cu3<calc::V9>();
+   else if (vers == calc::v10)
+      ehal_cu3<calc::V10>();
 }
 }

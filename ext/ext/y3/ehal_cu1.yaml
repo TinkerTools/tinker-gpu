@@ -6,17 +6,31 @@ CONSTEXPR_FLAGS: |
   constexpr bool do_a = Ver::a;
   constexpr bool do_g = Ver::g;
   constexpr bool do_v = Ver::v;
+  constexpr bool do_dl1 = Ver::e_dlmda1;
+  constexpr bool do_dl2 = Ver::e_dlmda2;
+  constexpr bool do_gdl = Ver::g_dlmda;
+  constexpr bool do_vdl = Ver::v_dlmda;
 
 COUNT:
   - nev
 ENERGY:
   - ev
+ENERGY_DLMDA1:
+  - devdl
+ENERGY_DLMDA2:
+  - d2evdl2
 VIRIAL:
   - vev
+VIRIAL_DLMDA:
+  - devvirdl
 GRADIENT:
   - gx
   - gy
   - gz
+GRADIENT_DLMDA:
+  - gxred_dlmda
+  - gyred_dlmda
+  - gzred_dlmda
 
 CUT_DISTANCE: cut
 OFF_DISTANCE: 'off'
@@ -25,9 +39,11 @@ EXCLUDE_INFO: info
 SCALE_1X_TYPE: real_const_array
 
 EXTRA_PARAMS: |
-  , int njvdw, real vlam, Vdw vcouple
+  , int njvdw, Vdw vcouple
   , const real* restrict radmin, const real* restrict epsilon
-  , const int* restrict jvdw, const int* restrict mut
+  , const int* restrict exclude14, const real* restrict radmin4, const real* restrict epsilon4
+  , const int* restrict jvdw, const int* restrict mutg
+  , SoftCoreLmda lp1, SoftCoreLmda lp2
 # IMPLICIT_PARAMS:
 
 I_VARIABLES:
@@ -35,13 +51,13 @@ I_VARIABLES:
   - register real yi   from:y
   - register real zi   from:z
   - register int ijvdw from:jvdw
-  - register int imut  from:mut
+  - register int imutg from:mutg
 K_VARIABLES:
   - register real xk   from:x
   - register real yk   from:y
   - register real zk   from:z
   - register int kjvdw from:jvdw
-  - register int kmut  from:mut
+  - register int kmutg from:mutg
 I_FORCE:
   - register real fix addto:gx
   - register real fiy addto:gy
@@ -50,27 +66,48 @@ K_FORCE:
   - register real fkx addto:gx
   - register real fky addto:gy
   - register real fkz addto:gz
+I_FORCE_DLMDA:
+  - register real dfix addto:gxred_dlmda
+  - register real dfiy addto:gyred_dlmda
+  - register real dfiz addto:gzred_dlmda
+K_FORCE_DLMDA:
+  - register real dfkx addto:gxred_dlmda
+  - register real dfky addto:gyred_dlmda
+  - register real dfkz addto:gzred_dlmda
 
 SCALED_PAIRWISE_INTERACTION: |
   real xr = @xi@ - @xk@;
   real yr = @yi@ - @yk@;
   real zr = @zi@ - @zk@;
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  // The two ligands of a relative free energy calculation never interact.
+  int ig = max(@imutg@, @kmutg@);
+  bool cross = (@imutg@ * @kmutg@ == 2);
+  if (r2 <= off * off and incl and not cross) {
     real r = REAL_SQRT(r2);
-    real rv = radmin[@ijvdw@ * njvdw + @kjvdw@];
-    real eps = epsilon[@ijvdw@ * njvdw + @kjvdw@];
-    real vlambda = 1;
-    if (vcouple == Vdw::DECOUPLE) {
-      vlambda = (@imut@ == @kmut@ ? 1 : vlam);
-    } else if (vcouple == Vdw::ANNIHILATE) {
-      vlambda = (@imut@ || @kmut@ ? vlam : 1);
-    }
+    // A 1-4 pair takes the vdw14 radius and well depth, when there are any.
+    bool v14 = exclude14 and exclude14[ii];
+    real rv = (v14 ? radmin4 : radmin)[@ijvdw@ * njvdw + @kjvdw@];
+    real eps = (v14 ? epsilon4 : epsilon)[@ijvdw@ * njvdw + @kjvdw@];
+    // Ligand 2 couples as the complement of vlambda. Pairs of the two ligands
+    // were skipped above, so this is also the pair that carries dE/dL.
+    bool mutik = (vcouple == Vdw::DECOUPLE and @imutg@ != @kmutg@)
+      or (vcouple == Vdw::ANNIHILATE and ig);
+    SoftCoreLmda lp = {1, 0, 0, 0, 0, 0, 0};
+    if (mutik)
+      lp = (ig == 2 ? lp2 : lp1);
     real e, de;
-    pair_hal_v2<do_g, 0>(r, scalea, rv, eps, cut, off, vlambda,
-      GHAL, DHAL, SCEXP, SCALPHA, e, de);
+    PairHalLambda dl = {0, 0, 0};
+    pair_hal<do_g, 0, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, scalea, rv, eps, cut, off, lp,
+      GHAL, DHAL, e, de, &dl, mutik);
     if CONSTEXPR (do_e) {
       evtl += floatTo<ebuf_prec>(e);
+      if (mutik) {
+        if CONSTEXPR (do_dl1)
+          devdltl += floatTo<ebuf_prec>(dl.dedl);
+        if CONSTEXPR (do_dl2)
+          d2evdl2tl += floatTo<ebuf_prec>(dl.d2edl2);
+      }
       if CONSTEXPR (do_a) {
         if (scalea != 0 and e != 0)
           nevtl += 1;
@@ -78,7 +115,9 @@ SCALED_PAIRWISE_INTERACTION: |
     }
     if CONSTEXPR (do_g) {
       real dedx, dedy, dedz;
-      de = de * REAL_RECIP(r);
+      // Two sites at the same point have no direction to push along.
+      real rinv = (r == 0 ? 0 : REAL_RECIP(r));
+      de = de * rinv;
       dedx = de * xr;
       dedy = de * yr;
       dedz = de * zr;
@@ -88,6 +127,28 @@ SCALED_PAIRWISE_INTERACTION: |
       @fkx@ -= dedx;
       @fky@ -= dedy;
       @fkz@ -= dedz;
+      if (mutik) {
+        real dlde = dl.dlde * rinv;
+        real dldedx = dlde * xr;
+        real dldedy = dlde * yr;
+        real dldedz = dlde * zr;
+        if CONSTEXPR (do_gdl) {
+          @dfix@ += dldedx;
+          @dfiy@ += dldedy;
+          @dfiz@ += dldedz;
+          @dfkx@ -= dldedx;
+          @dfky@ -= dldedy;
+          @dfkz@ -= dldedz;
+        }
+        if CONSTEXPR (do_vdl) {
+          devvirdltlxx += floatTo<vbuf_prec>(xr * dldedx);
+          devvirdltlyx += floatTo<vbuf_prec>(yr * dldedx);
+          devvirdltlzx += floatTo<vbuf_prec>(zr * dldedx);
+          devvirdltlyy += floatTo<vbuf_prec>(yr * dldedy);
+          devvirdltlzy += floatTo<vbuf_prec>(zr * dldedy);
+          devvirdltlzz += floatTo<vbuf_prec>(zr * dldedz);
+        }
+      }
       if CONSTEXPR (do_v) {
         vevtlxx += floatTo<vbuf_prec>(xr * dedx);
         vevtlyx += floatTo<vbuf_prec>(yr * dedx);
@@ -103,21 +164,32 @@ FULL_PAIRWISE_INTERACTION: |
   real yr = @yi@ - @yk@;
   real zr = @zi@ - @zk@;
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  // The two ligands of a relative free energy calculation never interact.
+  int ig = max(@imutg@, @kmutg@);
+  bool cross = (@imutg@ * @kmutg@ == 2);
+  if (r2 <= off * off and incl and not cross) {
     real r = REAL_SQRT(r2);
     real rv = radmin[@ijvdw@ * njvdw + @kjvdw@];
     real eps = epsilon[@ijvdw@ * njvdw + @kjvdw@];
-    real vlambda = 1;
-    if (vcouple == Vdw::DECOUPLE) {
-      vlambda = (@imut@ == @kmut@ ? 1 : vlam);
-    } else if (vcouple == Vdw::ANNIHILATE) {
-      vlambda = (@imut@ || @kmut@ ? vlam : 1);
-    }
+    // Ligand 2 couples as the complement of vlambda. Pairs of the two ligands
+    // were skipped above, so this is also the pair that carries dE/dL.
+    bool mutik = (vcouple == Vdw::DECOUPLE and @imutg@ != @kmutg@)
+      or (vcouple == Vdw::ANNIHILATE and ig);
+    SoftCoreLmda lp = {1, 0, 0, 0, 0, 0, 0};
+    if (mutik)
+      lp = (ig == 2 ? lp2 : lp1);
     real e, de;
-    pair_hal_v2<do_g, 1>(r, 1, rv, eps, cut, off, vlambda,
-      GHAL, DHAL, SCEXP, SCALPHA, e, de);
+    PairHalLambda dl = {0, 0, 0};
+    pair_hal<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, lp,
+      GHAL, DHAL, e, de, &dl, mutik);
     if CONSTEXPR (do_e) {
       evtl += floatTo<ebuf_prec>(e);
+      if (mutik) {
+        if CONSTEXPR (do_dl1)
+          devdltl += floatTo<ebuf_prec>(dl.dedl);
+        if CONSTEXPR (do_dl2)
+          d2evdl2tl += floatTo<ebuf_prec>(dl.d2edl2);
+      }
       if CONSTEXPR (do_a) {
         if (e != 0)
           nevtl += 1;
@@ -125,7 +197,9 @@ FULL_PAIRWISE_INTERACTION: |
     }
     if CONSTEXPR (do_g) {
       real dedx, dedy, dedz;
-      de = de * REAL_RECIP(r);
+      // Two sites at the same point have no direction to push along.
+      real rinv = (r == 0 ? 0 : REAL_RECIP(r));
+      de = de * rinv;
       dedx = de * xr;
       dedy = de * yr;
       dedz = de * zr;
@@ -135,6 +209,28 @@ FULL_PAIRWISE_INTERACTION: |
       @fkx@ -= dedx;
       @fky@ -= dedy;
       @fkz@ -= dedz;
+      if (mutik) {
+        real dlde = dl.dlde * rinv;
+        real dldedx = dlde * xr;
+        real dldedy = dlde * yr;
+        real dldedz = dlde * zr;
+        if CONSTEXPR (do_gdl) {
+          @dfix@ += dldedx;
+          @dfiy@ += dldedy;
+          @dfiz@ += dldedz;
+          @dfkx@ -= dldedx;
+          @dfky@ -= dldedy;
+          @dfkz@ -= dldedz;
+        }
+        if CONSTEXPR (do_vdl) {
+          devvirdltlxx += floatTo<vbuf_prec>(xr * dldedx);
+          devvirdltlyx += floatTo<vbuf_prec>(yr * dldedx);
+          devvirdltlzx += floatTo<vbuf_prec>(zr * dldedx);
+          devvirdltlyy += floatTo<vbuf_prec>(yr * dldedy);
+          devvirdltlzy += floatTo<vbuf_prec>(zr * dldedy);
+          devvirdltlzz += floatTo<vbuf_prec>(zr * dldedz);
+        }
+      }
       if CONSTEXPR (do_v) {
         vevtlxx += floatTo<vbuf_prec>(xr * dedx);
         vevtlyx += floatTo<vbuf_prec>(yr * dedx);

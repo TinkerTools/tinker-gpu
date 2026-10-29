@@ -12,6 +12,7 @@
 #include "ff/spatial.h"
 #include "ff/switch.h"
 #include "nn/nn.h"
+#include "tool/argkey.h"
 #include "tool/externfunc.h"
 #include "tool/thrustcache.h"
 #include <tinker/detail/bound.hh>
@@ -19,6 +20,7 @@
 #include <tinker/detail/mplpot.hh>
 #include <tinker/detail/neigh.hh>
 #include <tinker/detail/polpot.hh>
+#include <algorithm>
 
 namespace tinker {
 NBList::~NBList()
@@ -285,8 +287,9 @@ static void nblistAlloc(Nbl version, NBListUnit& nblu, int maxn, real cutoff, re
 }
 
 // RcOp::ALLOC
+// prune: distance the list is pruned to on every update, 0 to keep the buffered list.
 static void spatialAlloc( //
-   SpatialUnit& unt, int n, real cut, real buf, const real* x, const real* y, const real* z,
+   SpatialUnit& unt, int n, real cut, real buf, real prune, const real* x, const real* y, const real* z,
    int nstype,                           //
    int ns1 = 0, int (*js1)[2] = nullptr, //
    int ns2 = 0, int (*js2)[2] = nullptr, //
@@ -296,9 +299,17 @@ static void spatialAlloc( //
 {
 #if TINKER_CUDART
    Spatial::dataAlloc(unt, n, cut, buf, x, y, z, nstype, //
-      ns1, js1, ns2, js2, ns3, js3, ns4, js4, nblist4nn);
+      ns1, js1, ns2, js2, ns3, js3, ns4, js4, nblist4nn, prune);
    alloc_thrust_cache = true;
 #endif
+}
+
+// LIST-PRUNE [ON / OFF]: the lists are pruned unless the keyword says OFF, NONE, NO or FALSE.
+static bool listPrune()
+{
+   std::string v;
+   getKV("LIST-PRUNE", v, "ON");
+   return not(v == "OFF" or v == "NONE" or v == "NO" or v == "FALSE");
 }
 
 // RcOp::INIT
@@ -348,11 +359,18 @@ void nblistData(RcOp op)
    Nbl u = Nbl::UNDEFINED;
    double cut = 0;
    double buf = 0;
+   // Distance each list is pruned to on every update; it must cover the cutoff of every kernel reading the list.
+   // Only the multipole and preconditioner lists are pruned: the polarization solver reads them many times per
+   // step. The vdw list gains less than its pruning costs (water70: -91 us ehal, +83 us pruning, -0.3% overall),
+   // and so do the charge and dispersion lists, also read once per step.
+   const bool use_prune = listPrune();
+   double prune = 0;
 
    // vlist
    u = vlistVersion();
    cut = switchOff(Switch::VDW);
    buf = neigh::lbuffer;
+   prune = 0;
    if (u & (Nbl::DOUBLE_LOOP | Nbl::VERLET)) {
       auto& unt = vlist_unit;
       if (op & RcOp::ALLOC) {
@@ -366,7 +384,7 @@ void nblistData(RcOp op)
    if (u & Nbl::SPATIAL) {
       auto& un2 = vspatial_v2_unit;
       if (op & RcOp::ALLOC) {
-         spatialAlloc(un2, n, cut, buf, xred, yred, zred, 1, nvexclude, vexclude);
+         spatialAlloc(un2, n, cut, buf, prune, xred, yred, zred, 1, nvexclude, vexclude);
       }
       if (op & RcOp::INIT) {
          ehalReduceXyz();
@@ -386,6 +404,7 @@ void nblistData(RcOp op)
          cut = std::max(cut, vdw_cut);
    }
    buf = neigh::lbuffer;
+   prune = 0;
    if (u & (Nbl::DOUBLE_LOOP | Nbl::VERLET)) {
       auto& unt = clist_unit;
       if (op & RcOp::ALLOC) {
@@ -398,7 +417,7 @@ void nblistData(RcOp op)
    if (u & Nbl::SPATIAL) {
       auto& un2 = cspatial_v2_unit;
       if (op & RcOp::ALLOC) {
-         spatialAlloc(un2, n, cut, buf, x, y, z, 3, //
+         spatialAlloc(un2, n, cut, buf, prune, x, y, z, 3, //
             ncexclude, cexclude, nvexclude, vexclude, ncvexclude, cvexclude);
       }
       if (op & RcOp::INIT) {
@@ -410,6 +429,8 @@ void nblistData(RcOp op)
    u = mlistVersion();
    cut = useEwald() ? switchOff(Switch::EWALD) : switchOff(Switch::MPOLE);
    buf = neigh::lbuffer;
+   // The list also serves repulsion, exchange polarization and charge transfer.
+   prune = use_prune ? std::max({cut, (double)switchOff(Switch::REPULS), (double)switchOff(Switch::CHGTRN)}) : 0;
    if (u & (Nbl::DOUBLE_LOOP | Nbl::VERLET)) {
       auto& unt = mlist_unit;
       if (op & RcOp::ALLOC) {
@@ -423,12 +444,12 @@ void nblistData(RcOp op)
       auto& un2 = mspatial_v2_unit;
       if (op & RcOp::ALLOC) {
          if (mplpot::use_chgpen and not polpot::use_tholed) { // HIPPO
-            spatialAlloc(un2, n, cut, buf, x, y, z, 2, nmdwexclude, mdwexclude, nrepexclude, repexclude);
+            spatialAlloc(un2, n, cut, buf, prune, x, y, z, 2, nmdwexclude, mdwexclude, nrepexclude, repexclude);
          } else if (mplpot::use_chgpen and polpot::use_tholed) { // AMOEBA Plus
-            spatialAlloc(un2, n, cut, buf, x, y, z, 3, nmdwexclude, mdwexclude, nmdpuexclude, mdpuexclude, nuexclude,
+            spatialAlloc(un2, n, cut, buf, prune, x, y, z, 3, nmdwexclude, mdwexclude, nmdpuexclude, mdpuexclude, nuexclude,
                uexclude);
          } else { // AMOEBA
-            spatialAlloc(un2, n, cut, buf, x, y, z, 4, nmdpuexclude, mdpuexclude, nmexclude, mexclude, ndpexclude,
+            spatialAlloc(un2, n, cut, buf, prune, x, y, z, 4, nmdpuexclude, mdpuexclude, nmexclude, mexclude, ndpexclude,
                dpexclude, nuexclude, uexclude);
          }
       }
@@ -441,6 +462,8 @@ void nblistData(RcOp op)
    u = ulistVersion();
    cut = switchOff(Switch::USOLVE);
    buf = neigh::pbuffer;
+   // The preconditioners take the pairs within `cut`, which the buffer guarantees are in the list.
+   prune = use_prune ? cut : 0;
    if (u & (Nbl::DOUBLE_LOOP | Nbl::VERLET)) {
       auto& unt = ulist_unit;
       if (op & RcOp::ALLOC) {
@@ -455,9 +478,9 @@ void nblistData(RcOp op)
       auto& un2 = uspatial_v2_unit;
       if (op & RcOp::ALLOC) {
          if (mplpot::use_chgpen and not polpot::use_tholed) { // HIPPO
-            spatialAlloc(un2, n, cut, buf, x, y, z, 1, nwexclude, wexclude);
+            spatialAlloc(un2, n, cut, buf, prune, x, y, z, 1, nwexclude, wexclude);
          } else { // AMOEBA and AMOEBA Plus
-            spatialAlloc(un2, n, cut, buf, x, y, z, 1, nuexclude, uexclude);
+            spatialAlloc(un2, n, cut, buf, prune, x, y, z, 1, nuexclude, uexclude);
          }
       }
       if (op & RcOp::INIT) {
@@ -469,6 +492,7 @@ void nblistData(RcOp op)
    u = dsplistVersion();
    cut = useDEwald() ? switchOff(Switch::DEWALD) : switchOff(Switch::DISP);
    buf = neigh::lbuffer;
+   prune = 0;
    if (u & (Nbl::DOUBLE_LOOP | Nbl::VERLET)) {
       auto& unt = dsplist_unit;
       if (op & RcOp::ALLOC) {
@@ -481,7 +505,7 @@ void nblistData(RcOp op)
    if (u & Nbl::SPATIAL) {
       auto& un2 = dspspatial_v2_unit;
       if (op & RcOp::ALLOC) {
-         spatialAlloc(un2, n, cut, buf, x, y, z, 1, ndspexclude, dspexclude);
+         spatialAlloc(un2, n, cut, buf, prune, x, y, z, 1, ndspexclude, dspexclude);
       }
       if (op & RcOp::INIT) {
          spatialBuild(un2);
@@ -492,10 +516,11 @@ void nblistData(RcOp op)
    u = nnlistVersion();
    cut = switchOff(Switch::NN);
    buf = neigh::lbuffer;
+   prune = 0;
    if (u & Nbl::SPATIAL) {
       auto& un2 = nnspatial_v2_unit;
       if (op & RcOp::ALLOC) {
-         spatialAlloc(un2, n, cut, buf, x, y, z, 0, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, true);
+         spatialAlloc(un2, n, cut, buf, prune, x, y, z, 0, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, true);
       }
       if (op & RcOp::INIT) {
          spatialBuild(un2);

@@ -401,8 +401,10 @@ enum class IntegratorEnum
    LEAPFROGLP,
    LP2022,
    NHC1996,
-   NHC2006, // J. Phys. A, 39 5629 (2006),
-            // https://doi.org/10.1088/0305-4470/39/19/S18
+   NHC2006,    // J. Phys. A, 39 5629 (2006),
+               // https://doi.org/10.1088/0305-4470/39/19/S18
+   STOCHASTIC, // Verlet-based stochastic dynamics; Mol. Phys. 40, 1073 (1980)
+               // and J. Comput. Chem. 15, 1302 (1994)
 };
 
 /// \ingroup mdintg
@@ -426,6 +428,9 @@ public:
    BasicIntegrator();
    virtual ~BasicIntegrator();
    virtual void dynamic(int istep, time_prec dt);
+   /// Finds again the forces the next step starts from, for coordinates that
+   /// were changed between steps.
+   void refreshForces();
 };
 
 /// \ingroup mdintg
@@ -483,6 +488,19 @@ protected:
 
 public:
    LP22Integrator(int nrspa);
+};
+
+/// \ingroup mdintg
+class StochasticIntegrator : public BasicIntegrator
+{
+protected:
+   const char* name() const override;
+   void kickoff() override;
+
+public:
+   StochasticIntegrator();
+   ~StochasticIntegrator();
+   void dynamic(int, time_prec) override;
 };
 
 /// \ingroup mdintg

@@ -3,9 +3,9 @@
 #include "ff/image.h"
 #include "ff/nblist.h"
 #include "ff/switch.h"
-#include "math/switch.h"
 #include "seq/add.h"
 #include "seq/pair_hal.h"
+#include "seq/pair_vlambda.h"
 #include "tool/gpucard.h"
 
 namespace tinker {
@@ -22,7 +22,8 @@ void ehalReduceXyz_acc()
    }
 }
 
-void ehalResolveGradient_acc()
+void ehalResolveGradient_acc(const grad_prec* gxred, const grad_prec* gyred, const grad_prec* gzred, grad_prec* devx,
+   grad_prec* devy, grad_prec* devz)
 {
    #pragma acc parallel loop independent async\
                deviceptr(ired,kred,gxred,gyred,gzred,devx,devy,devz)
@@ -59,10 +60,14 @@ static void ehal_acc1()
 
    const real cut = switchCut(Switch::VDW);
    const real off = switchOff(Switch::VDW);
-   const real cut2 = cut * cut;
    const real off2 = off * off;
    const int maxnlst = vlist_unit->maxnlst;
    const auto* vlst = vlist_unit.deviceptr();
+   // The soft core power and softening of vlam, taken once here instead of per
+   // pair. Without lambda derivatives pair_hal_v2 reads only p0 and sc.
+   const SoftCoreLmda lpm = softCoreLmda(vlam, scexp, scalphav, scexpm, scexpp, 0, 0, false);
+   const real vlamexp = lpm.p0;
+   const real vlamsc = lpm.sc;
 
    auto bufsize = bufferSize();
 
@@ -93,13 +98,10 @@ static void ehal_acc1()
          real zr = zi - zred[k];
          int mut2 = mut[k];
 
-         real vlambda = 1;
-         if (vcouple == Vdw::DECOUPLE) {
-            vlambda = (mut1 == mut2 ? 1 : vlam);
-         }
-         if (vcouple == Vdw::ANNIHILATE) {
-            vlambda = (mut1 || mut2 ? vlam : 1);
-         }
+         bool mutik = pair_mutik(vcouple, mut1, mut2);
+         SoftCoreLmda lp = {1, 0, 0, 0, 0, 0, 0};
+         if (mutik)
+            lp = {vlamexp, vlamsc, 0, 0, 0, 0, 0};
 
          real rik2 = image2(xr, yr, zr);
          if (rik2 <= off2) {
@@ -108,27 +110,19 @@ static void ehal_acc1()
             real eps = epsilon[it * njvdw + kt];
 
             MAYBE_UNUSED real e, de;
-            pair_hal<do_g>(rik, rv, eps, 1, vlambda, //
-               ghal, dhal, scexp, scalpha,           //
-               e, de);
+            pair_hal_v2<do_g, 1>(rik, 1, rv, eps, cut, off, lp, ghal, dhal, e, de);
 
-            if (rik2 > cut2) {
-               real taper, dtaper;
-               switchTaper5<do_g>(rik, cut, off, taper, dtaper);
-               if CONSTEXPR (do_g)
-                  de = e * dtaper + de * taper;
-               if CONSTEXPR (do_e)
-                  e = e * taper;
-            }
-
-            // Increment the energy, gradient, and virial.
+            // Increment the energy, gradient, and virial. Only a pair with a
+            // nonzero energy counts as an interaction, as in ehal3.f.
 
             if CONSTEXPR (do_a)
-               atomic_add(1, nev, offset);
+               if (e != 0)
+                  atomic_add(1, nev, offset);
             if CONSTEXPR (do_e)
                atomic_add(e, ev, offset);
             if CONSTEXPR (do_g) {
-               de *= REAL_RECIP(rik);
+               // Two sites at the same point have no direction to push along.
+               de *= (rik == 0 ? 0 : REAL_RECIP(rik));
                real dedx = de * xr;
                real dedy = de * yr;
                real dedz = de * zr;
@@ -162,7 +156,7 @@ static void ehal_acc1()
    } // end for (int i)
 
    #pragma acc parallel async present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(DEVICE_PTRS,vexclude,vexclude_scale)
+               deviceptr(DEVICE_PTRS,vexclude,vexclude_scale,vexclude14,radmin4,epsilon4)
    #pragma acc loop independent
    for (int ii = 0; ii < nvexclude; ++ii) {
       int offset = ii & (bufsize - 1);
@@ -183,13 +177,10 @@ static void ehal_acc1()
       real zr = zi - zred[k];
       int mut2 = mut[k];
 
-      real vlambda = 1;
-      if (vcouple == Vdw::DECOUPLE) {
-         vlambda = (mut1 == mut2 ? 1 : vlam);
-      }
-      if (vcouple == Vdw::ANNIHILATE) {
-         vlambda = (mut1 || mut2 ? vlam : 1);
-      }
+      bool mutik = pair_mutik(vcouple, mut1, mut2);
+      SoftCoreLmda lp = {1, 0, 0, 0, 0, 0, 0};
+      if (mutik)
+         lp = {vlamexp, vlamsc, 0, 0, 0, 0, 0};
 
       real rik2 = image2(xr, yr, zr);
       if (rik2 <= off2) {
@@ -198,26 +189,30 @@ static void ehal_acc1()
          real eps = epsilon[it * njvdw + kt];
 
          MAYBE_UNUSED real e, de;
-         pair_hal<do_g>(rik, rv, eps, vscale, vlambda, //
-            ghal, dhal, scexp, scalpha,                //
-            e, de);
-
-         if (rik2 > cut2) {
-            real taper, dtaper;
-            switchTaper5<do_g>(rik, cut, off, taper, dtaper);
+         // A 1-4 pair with vdw14 values takes them instead: remove the whole
+         // pair the neighbor loop added, and add it back scaled with them.
+         bool v14 = vexclude14 and vexclude14[ii];
+         pair_hal_v2<do_g, 0>(rik, (v14 ? -1 : vscale), rv, eps, cut, off, lp, ghal, dhal, e, de);
+         // The neighbor loop counted this pair only if its energy was nonzero.
+         MAYBE_UNUSED bool counted = (e != 0);
+         if (v14) {
+            MAYBE_UNUSED real e4, de4;
+            real rv4 = radmin4[it * njvdw + kt];
+            real eps4 = epsilon4[it * njvdw + kt];
+            pair_hal_v2<do_g, 0>(rik, vscale + 1, rv4, eps4, cut, off, lp, ghal, dhal, e4, de4);
+            e += e4;
             if CONSTEXPR (do_g)
-               de = e * dtaper + de * taper;
-            if CONSTEXPR (do_e)
-               e = e * taper;
+               de += de4;
          }
 
          if CONSTEXPR (do_a)
-            if (vscale == -1)
+            if (vscale == -1 and counted)
                atomic_add(-1, nev, offset);
          if CONSTEXPR (do_e)
             atomic_add(e, ev, offset);
          if CONSTEXPR (do_g) {
-            de *= REAL_RECIP(rik);
+            // Two sites at the same point have no direction to push along.
+            de *= (rik == 0 ? 0 : REAL_RECIP(rik));
             real dedx = de * xr;
             real dedy = de * yr;
             real dedz = de * zr;
@@ -244,7 +239,7 @@ static void ehal_acc1()
    } // end for (int ii)
 
    if CONSTEXPR (do_g)
-      ehalResolveGradient();
+      ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);
 }
 
 void ehal_acc(int vers)

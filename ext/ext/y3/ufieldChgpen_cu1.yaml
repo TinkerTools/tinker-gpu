@@ -21,6 +21,7 @@ EXTRA_PARAMS: |
   , const real *restrict pval
   , const real* restrict palpha
   , real aewald
+  , const int* restrict grp, RdtMask live
 # IMPLICIT_PARAM:
 
 I_VARIABLES:
@@ -33,6 +34,7 @@ I_VARIABLES:
   - shared   real corei  from:pcore
   - shared   real alphai from:palpha
   - shared   real vali   from:pval
+  - shared   int  gi     from:grp ifset:grp
 K_VARIABLES:
   - register real xk     from:x
   - register real yk     from:y
@@ -43,6 +45,7 @@ K_VARIABLES:
   - register real corek  from:pcore
   - register real alphak from:palpha
   - register real valk   from:pval
+  - register int  gk     from:grp ifset:grp
 I_FORCE:
   - register real fidx addto:field,0
   - register real fidy addto:field,1
@@ -58,7 +61,9 @@ FULL_PAIRWISE_INTERACTION: |
   real yr = @yk@ - @yi@;
   real zr = @zk@ - @zi@;
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  // a pair with a dead group has no multipole or induced dipole;
+  // grp is null when every group is live
+  if (r2 <= off * off and incl and (not grp or grpPairLive(live, @gi@, @gk@))) {
     pair_ufield_chgpen<ETYP>(
       r2, xr, yr, zr, scalec,
       @uidx@, @uidy@, @uidz@, @corei@, @vali@, @alphai@,

@@ -1,13 +1,15 @@
 #include "ff/atom.h"
+#include "ff/dlmda.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/nblist.h"
+#include "ff/switch.h"
 #include "seq/add.h"
 #include "seq/damp.h"
 #include "tool/gpucard.h"
 
 namespace tinker {
-#define APPLY_DPTRS rsd, zrsd, x, y, z, polarity, pdamp, thole
+#define APPLY_DPTRS rsd, zrsd, x, y, z, polarity, pdamp, jpolar, thlval
 void sparsePrecondApply3_acc(const real (*rsd)[3], real (*zrsd)[3])
 {
    #pragma acc parallel loop independent async\
@@ -21,18 +23,25 @@ void sparsePrecondApply3_acc(const real (*rsd)[3], real (*zrsd)[3])
 
    const int maxnlst = ulist_unit->maxnlst;
    const auto* ulst = ulist_unit.deviceptr();
+   // a pair with a dead group has no induced dipole;
+   // grp is null when every group is live
+   const int* grp = elecDeadGroups();
+   const RdtMask live = elecLiveMask();
+   // The preconditioner takes the pairs within the cutoff; the list adds the buffer.
+   const real off = switchOff(Switch::USOLVE);
+   const real off2 = off * off;
 
    MAYBE_UNUSED int GRID_DIM = gpuGridSize(BLOCK_DIM);
    #pragma acc parallel async num_gangs(GRID_DIM) vector_length(BLOCK_DIM)\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(APPLY_DPTRS,ulst)
+               deviceptr(APPLY_DPTRS,grp,ulst)
    #pragma acc loop gang independent
    for (int i = 0; i < n; ++i) {
       real xi = x[i];
       real yi = y[i];
       real zi = z[i];
       real pdi = pdamp[i];
-      real pti = thole[i];
+      int jpi = jpolar[i];
       real poli = polarity[i];
 
       int nulsti = ulst->nlst[i];
@@ -42,18 +51,22 @@ void sparsePrecondApply3_acc(const real (*rsd)[3], real (*zrsd)[3])
       #pragma acc loop vector independent reduction(+:gxi,gyi,gzi)
       for (int kk = 0; kk < nulsti; ++kk) {
          int k = ulst->lst[base + kk];
+         if (grp and not grpPairLive(live, grp[i], grp[k]))
+            continue;
 
          real pdk = pdamp[k];
-         real ptk = thole[k];
+         real pga = thlval[njpolar * jpi + jpolar[k]];
          real xr = x[k] - xi;
          real yr = y[k] - yi;
          real zr = z[k] - zi;
 
          real r2 = image2(xr, yr, zr);
+         if (r2 > off2)
+            continue;
          real r = REAL_SQRT(r2);
 
          real scale3, scale5;
-         damp_thole2(r, pdi, pti, pdk, ptk, scale3, scale5);
+         dmpthole2_a(r, pga, pdi, pdk, scale3, scale5);
 
          real polik = poli * polarity[k];
          real rr3 = scale3 * polik * REAL_RECIP(r * r2);
@@ -82,17 +95,19 @@ void sparsePrecondApply3_acc(const real (*rsd)[3], real (*zrsd)[3])
 
    #pragma acc parallel loop async\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(APPLY_DPTRS,uexclude,uexclude_scale)
+               deviceptr(APPLY_DPTRS,grp,uexclude,uexclude_scale)
    for (int ii = 0; ii < nuexclude; ++ii) {
       int i = uexclude[ii][0];
       int k = uexclude[ii][1];
+      if (grp and not grpPairLive(live, grp[i], grp[k]))
+         continue;
       real uscale = uexclude_scale[ii] - 1;
 
       real xi = x[i];
       real yi = y[i];
       real zi = z[i];
       real pdi = pdamp[i];
-      real pti = thole[i];
+      real pga = thlval[njpolar * jpolar[i] + jpolar[k]];
       real poli = polarity[i];
 
       real xr = x[k] - xi;
@@ -103,7 +118,7 @@ void sparsePrecondApply3_acc(const real (*rsd)[3], real (*zrsd)[3])
       real r = REAL_SQRT(r2);
 
       real scale3, scale5;
-      damp_thole2(r, pdi, pti, pdamp[k], thole[k], scale3, scale5);
+      dmpthole2_a(r, pga, pdi, pdamp[k], scale3, scale5);
       scale3 *= uscale;
       scale5 *= uscale;
 

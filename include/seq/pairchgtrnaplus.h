@@ -21,7 +21,7 @@ void pair_chgtrn_aplus(real r,
                        e_prec& restrict de)
 {
    f *= mscale;
-   real alphaik = 0.5 * (alphai + alphak);
+   real alphaik = (real)0.5 * (alphai + alphak);
    real chgik = REAL_SQRT(chgi * chgk);
    e = -chgik * REAL_EXP(-alphaik * r);
    e *= f * elambda;

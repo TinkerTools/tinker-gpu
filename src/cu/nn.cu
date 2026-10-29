@@ -213,20 +213,20 @@ void aev_cu1(AEV_PARAMS)
       real rj = REAL_SQRT(rj2);
       real inv_rj = REAL_RECIP(rj);
       real inv_Rmc = REAL_RECIP(R_m_c);
-      real fcj = 0.5 * REAL_COS(pi * rj * inv_Rmc) + 0.5;
+      real fcj = (real)0.5 * REAL_COS(pi * rj * inv_Rmc) + (real)0.5;
       if (R_m_c >= R_q_c) { // if so, calulate radial terms here as well
          int loc0 = ct * laev + atomic2species[aj] * R_m_d;
          for (int m = 0; m < R_m_d; m++) {
             real expterm = REAL_EXP(-eta_m * (rj - R_m[m]) * (rj - R_m[m]));
-            real GR_ijm = 0.25 * expterm * fcj;
+            real GR_ijm = (real)0.25 * expterm * fcj;
             int loc = loc0 + m;
 
             if (do_e) {
                atomic_add(GR_ijm, iaev, loc);
             }
             if (do_g) {
-               real dGR_ijm = 0.5 * expterm
-                  * (eta_m * (R_m[m] - rj) * fcj - 0.25 * pi * inv_Rmc * REAL_SIN(pi * rj * inv_Rmc)) * inv_rj;
+               real dGR_ijm = (real)0.5 * expterm
+                  * (eta_m * (R_m[m] - rj) * fcj - (real)0.25 * pi * inv_Rmc * REAL_SIN(pi * rj * inv_Rmc)) * inv_rj;
                real dx = dGR_ijm * xrj;
                real dy = dGR_ijm * yrj;
                real dz = dGR_ijm * zrj;
@@ -269,14 +269,14 @@ void aev_cu1(AEV_PARAMS)
          real dot = xrj * xrk + yrj * yrk + zrj * zrk;
          real cosine = dot * REAL_RSQRT(rj2 * rk2);
          // cosine = REAL_MIN((real)1, REAL_MAX((real)-1, cosine));
-         real angle = REAL_ACOS(0.95 * cosine);
+         real angle = REAL_ACOS((real)0.95 * cosine);
 
          real rk = REAL_SQRT(rk2);
          real inv_rk = REAL_RECIP(rk);
-         real ravg = 0.5 * (rj + rk);
+         real ravg = (real)0.5 * (rj + rk);
          real pi_inv_Rqc = pi * REAL_RECIP(R_q_c);
-         fcj = 0.5 * REAL_COS(rj * pi_inv_Rqc) + 0.5;
-         real fck = 0.5 * REAL_COS(rk * pi_inv_Rqc) + 0.5;
+         fcj = (real)0.5 * REAL_COS(rj * pi_inv_Rqc) + (real)0.5;
+         real fck = (real)0.5 * REAL_COS(rk * pi_inv_Rqc) + (real)0.5;
          real fcj_fck = fcj * fck;
          int spj = atomic2species[aj], spk = atomic2species[ak];
          if (spj > spk) {
@@ -288,7 +288,7 @@ void aev_cu1(AEV_PARAMS)
             + (spj * (2 * natomic_covered - spj - 1) / 2 + spk) * R_q_d * theta_p_d;
          for (int q = 0; q < R_q_d; q++) {
             for (int p = 0; p < theta_p_d; p++) {
-               real costerm = 2.0 * REAL_POW((1.0 + REAL_COS(angle - theta_p[p])) / 2.0, zeta_p);
+               real costerm = 2 * REAL_POW((1 + REAL_COS(angle - theta_p[p])) / 2, zeta_p);
                real expterm = REAL_EXP(-eta_q * (ravg - R_q[q]) * (ravg - R_q[q]));
                real expterm_fcj_fck = expterm * fcj_fck;
                real GA_ijkpq = costerm * expterm_fcj_fck;
@@ -298,10 +298,10 @@ void aev_cu1(AEV_PARAMS)
                   atomic_add(GA_ijkpq, iaev, loc);
                }
                if (do_g) {
-                  real dcosterm = -zeta_p * REAL_POW((1.0 + REAL_COS(angle - theta_p[p])) / 2.0, zeta_p - 1.0)
+                  real dcosterm = -zeta_p * REAL_POW((1 + REAL_COS(angle - theta_p[p])) / 2, zeta_p - 1)
                      * REAL_SIN(angle - theta_p[p]);
-                  dcosterm *= 0.95
-                     * REAL_RECIP(REAL_SQRT(0.0975 * rj2 * rk2 + 0.9025 * rp2)); // 0.9025 = 0.95^2, 0.0975 = 1 - 0.9025
+                  dcosterm *= (real)0.95
+                     * REAL_RECIP(REAL_SQRT((real)0.0975 * rj2 * rk2 + (real)0.9025 * rp2)); // 0.9025 = 0.95^2, 0.0975 = 1 - 0.9025
                   real dcosterm_j = -dcosterm * REAL_RECIP(rj2);
                   real dcosterm_k = dcosterm * REAL_RECIP(rk2);
                   real dcosterm_dxj = dcosterm_j * (yrj * zp - zrj * yp);
@@ -321,11 +321,11 @@ void aev_cu1(AEV_PARAMS)
                   real dexpterm_dyk = dexpterm_inv_rk * yrk;
                   real dexpterm_dzk = dexpterm_inv_rk * zrk;
 
-                  real dfcj = -0.5 * pi_inv_Rqc * REAL_SIN(rj * pi_inv_Rqc) * inv_rj;
+                  real dfcj = -(real)0.5 * pi_inv_Rqc * REAL_SIN(rj * pi_inv_Rqc) * inv_rj;
                   real dfcj_dxj = dfcj * xrj;
                   real dfcj_dyj = dfcj * yrj;
                   real dfcj_dzj = dfcj * zrj;
-                  real dfck = -0.5 * pi_inv_Rqc * REAL_SIN(rk * pi_inv_Rqc) * inv_rk;
+                  real dfck = -(real)0.5 * pi_inv_Rqc * REAL_SIN(rk * pi_inv_Rqc) * inv_rk;
                   real dfck_dxk = dfck * xrk;
                   real dfck_dyk = dfck * yrk;
                   real dfck_dzk = dfck * zrk;
@@ -441,19 +441,19 @@ void aev_cu1(AEV_PARAMS)
       real rj = REAL_SQRT(rj2);
       real inv_rj = REAL_RECIP(rj);
       real inv_Rmc = REAL_RECIP(R_m_c);
-      real fcj = 0.5 * REAL_COS(pi * rj * inv_Rmc) + 0.5;
+      real fcj = (real)0.5 * REAL_COS(pi * rj * inv_Rmc) + (real)0.5;
       int loc0 = ct * laev + atomic2species[aj] * R_m_d;
       for (int m = 0; m < R_m_d; m++) {
          real expterm = REAL_EXP(-eta_m * (rj - R_m[m]) * (rj - R_m[m]));
-         real GR_ijm = 0.25 * expterm * fcj;
+         real GR_ijm = (real)0.25 * expterm * fcj;
          int loc = loc0 + m;
 
          if (do_e) {
             atomic_add(GR_ijm, iaev, loc);
          }
          if (do_g) {
-            real dGR_ijm = 0.5 * expterm
-               * (eta_m * (R_m[m] - rj) * fcj - 0.25 * pi * inv_Rmc * REAL_SIN(pi * rj * inv_Rmc)) * inv_rj;
+            real dGR_ijm = (real)0.5 * expterm
+               * (eta_m * (R_m[m] - rj) * fcj - (real)0.25 * pi * inv_Rmc * REAL_SIN(pi * rj * inv_Rmc)) * inv_rj;
             real dx = dGR_ijm * xrj;
             real dy = dGR_ijm * yrj;
             real dz = dGR_ijm * zrj;

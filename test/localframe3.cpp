@@ -34,9 +34,9 @@ TEST_CASE("Local-Frame3-1", "[ff][empole][epolar][emplar][nonewald][local-frame3
    TestFile fke("", kname, key);
    TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
 
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    rc_flag = usage;
-   initialize();
+   session.init();
 
    SECTION("  - emplar -- non-ewald pbc")
    {
@@ -92,8 +92,7 @@ TEST_CASE("Local-Frame3-1", "[ff][empole][epolar][emplar][nonewald][local-frame3
             COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
    }
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("Local-Frame3-2", "[ff][empole][epolar][emplar][ewald][local-frame3]")
@@ -105,9 +104,9 @@ TEST_CASE("Local-Frame3-2", "[ff][empole][epolar][emplar][ewald][local-frame3]")
    TestFile fke("", kname, key);
    TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
 
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    rc_flag = usage;
-   initialize();
+   session.init();
 
    SECTION("  - emplar -- ewald pbc")
    {
@@ -155,8 +154,7 @@ TEST_CASE("Local-Frame3-2", "[ff][empole][epolar][emplar][ewald][local-frame3]")
             COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
    }
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("Local-Frame3-3", "[ff][empole][epolar][emplar][ewald][local-frame3]")
@@ -168,9 +166,9 @@ TEST_CASE("Local-Frame3-3", "[ff][empole][epolar][emplar][ewald][local-frame3]")
    TestFile fke("", kname, key);
    TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
 
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    rc_flag = usage & ~calc::analyz;
-   initialize();
+   session.init();
 
    SECTION("  - emplar -- ewald pbc")
    {
@@ -212,6 +210,5 @@ TEST_CASE("Local-Frame3-3", "[ff][empole][epolar][emplar][ewald][local-frame3]")
             COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
    }
 
-   finish();
-   testEnd();
+   session.end();
 }

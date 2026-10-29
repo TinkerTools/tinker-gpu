@@ -101,6 +101,16 @@ extern "C"
 #define REAL_LOG                 logf
 #endif
 
+// Under fast math nvcc may compile 1/sqrt(x) as rsqrt in one instantiation of
+// a kernel and as rcp(sqrt) in another, so the energy-only and gradient
+// versions disagree. On the device this names the rsqrt instruction; without
+// fast math 1/sqrt(x) is correctly rounded in every version and is kept.
+#if defined(__CUDA_ARCH__) && defined(TINKER_CUDA_FAST_MATH)
+#define REAL_RSQRT_V2(x) rsqrt(x)
+#else
+#define REAL_RSQRT_V2(x) REAL_RSQRT(x)
+#endif
+
 #ifdef _OPENACC
 #include <accelmath.h>
 

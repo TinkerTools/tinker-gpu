@@ -34,6 +34,7 @@ EXTRA_PARAMS: |
   , real *restrict pval
   , const real* restrict palpha
   , real aewald, real f
+  , const int* restrict grp, RdtMask live
 # IMPLICIT_PARAMS:
 
 I_VARIABLES:
@@ -53,6 +54,7 @@ I_VARIABLES:
   - shared real corei  from:pcore
   - shared real alphai from:palpha
   - shared real vali   from:pval
+  - shared int  gi     from:grp ifset:grp
 K_VARIABLES:
   - shared   real xk     from:x
   - shared   real yk     from:y
@@ -70,6 +72,7 @@ K_VARIABLES:
   - register real corek  from:pcore
   - register real alphak from:palpha
   - register real valk   from:pval
+  - register int  gk     from:grp ifset:grp
 I_FORCE:
   - register real gxi  addto:gx
   - register real gyi  addto:gy
@@ -98,7 +101,9 @@ SCALED_PAIRWISE_INTERACTION: |
   zero(pgrad);
 
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  // a pair with a dead group has no multipole or induced dipole;
+  // grp is null when every group is live
+  if (r2 <= off * off and incl and (not grp or grpPairLive(live, @gi@, @gk@))) {
     if CONSTEXPR (CP == Chgpen::GORDON1) {
     pair_mpole_chgpen<do_e, do_g, ETYP, CFLX>(
       r2, xr, yr, zr, scalea,                  //
@@ -161,7 +166,9 @@ FULL_PAIRWISE_INTERACTION: |
   zero(pgrad);
 
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  // a pair with a dead group has no multipole or induced dipole;
+  // grp is null when every group is live
+  if (r2 <= off * off and incl and (not grp or grpPairLive(live, @gi@, @gk@))) {
     if CONSTEXPR (CP == Chgpen::GORDON1) {
     pair_mpole_chgpen<do_e, do_g, ETYP, CFLX>(
       r2, xr, yr, zr, 1,                  //

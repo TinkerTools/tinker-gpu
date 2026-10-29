@@ -1,3 +1,4 @@
+#include "ff/dlmda.h"
 #include "ff/energy.h"
 #include "ff/modhippo.h"
 #include "ff/potent.h"
@@ -91,10 +92,14 @@ void echgtrn(int vers)
          darray::zero(g::q0, n, dectx, decty, dectz);
    }
 
+   polarLmdaZero(vers);
+
+   // Charge transfer follows the polarization lambda (echgtrn1.f).
+   const int dlvers = lmdaDerivVers(vers, pdlmdaActive());
    if (ctrntyp == Chgtrn::SEPARATE) {
-      TINKER_FCALL2(acc1, cu1, echgtrn, vers);
+      TINKER_FCALL2(acc1, cu1, echgtrn, dlvers);
    } else if (ctrntyp == Chgtrn::COMBINED) {
-      TINKER_FCALL2(acc1, cu1, echgtrnAplus, vers);
+      TINKER_FCALL2(acc1, cu1, echgtrnAplus, dlvers);
    }
 
    if (rc_a) {
@@ -116,5 +121,6 @@ void echgtrn(int vers)
       if (do_g)
          sumGradient(gx_elec, gy_elec, gz_elec, dectx, decty, dectz);
    }
+   polarLmdaFlush(vers);
 }
 }

@@ -23,9 +23,9 @@ TEST_CASE("Urey-Ten-Water", "[ff][eurey][h2o10]")
 
    const char* argv[] = {"dummy", x1};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    rc_flag = calc::xyz | calc::vmask;
-   initialize();
+   session.init();
 
    const double eps_e = 0.0001;
    const double eps_g = 0.0001;
@@ -55,6 +55,5 @@ TEST_CASE("Urey-Ten-Water", "[ff][eurey][h2o10]")
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }

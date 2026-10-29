@@ -1,4 +1,5 @@
 #include "ff/amoeba/empole.h"
+#include "ff/dlmda.h"
 #include "ff/elec.h"
 #include "ff/energy.h"
 #include "ff/hippo/cflux.h"
@@ -11,6 +12,8 @@
 #include <tinker/detail/mplpot.hh>
 
 namespace tinker {
+static LmdaBuffer em_dl;
+
 void empoleChgpenData(RcOp op)
 {
    if (not use(Potent::MPOLE) and not use(Potent::CHGTRN))
@@ -31,6 +34,7 @@ void empoleChgpenData(RcOp op)
       demx = nullptr;
       demy = nullptr;
       demz = nullptr;
+      em_dl.manage(op, rc_flag, use_edlmda, edlmdaActive, &demdl_buf, &d2emdl2_buf, &demdl, &d2emdl2);
    }
 
    if (op & RcOp::ALLOC) {
@@ -45,6 +49,8 @@ void empoleChgpenData(RcOp op)
          bufferAllocate(rc_flag, &nem);
          bufferAllocate(rc_flag, &em, &vir_em, &demx, &demy, &demz);
       }
+
+      em_dl.manage(op, rc_flag, use_edlmda, edlmdaActive, &demdl_buf, &d2emdl2_buf, &demdl, &d2emdl2);
    }
 
    if (op & RcOp::INIT) {}
@@ -80,6 +86,23 @@ static void empoleChgpenEwald(int vers, int use_cf)
 }
 
 namespace tinker {
+TINKER_FVOID2(acc0, cu1, empoleChgpenDlmdaNonEwald, int, int);
+TINKER_FVOID2(acc0, cu1, empoleChgpenDlmdaEwaldRealSelf, int, int);
+TINKER_FVOID2(acc0, cu1, empoleChgpenEwaldRecipDlmda, int, int);
+
+// The multipoles scaled on the fly from their unscaled values, with their
+// lambda derivatives (empole4.f).
+static void empoleChgpenDlmda(int vers, int dlvers, int use_cf, int use_cfgrad)
+{
+   if (useEwald()) {
+      TINKER_FCALL2(acc0, cu1, empoleChgpenDlmdaEwaldRealSelf, dlvers, use_cfgrad);
+      TINKER_FCALL2(acc0, cu1, empoleChgpenEwaldRecipDlmda, dlvers, use_cfgrad);
+      empoleEwaldBackground(vers, dlvers, use_cf);
+   } else {
+      TINKER_FCALL2(acc0, cu1, empoleChgpenDlmdaNonEwald, dlvers, use_cfgrad);
+   }
+}
+
 void empoleChgpen(int vers)
 {
    auto rc_a = rc_flag & calc::analyz;
@@ -102,18 +125,27 @@ void empoleChgpen(int vers)
       if (do_g)
          darray::zero(g::q0, n, demx, demy, demz);
    }
+   em_dl.zero(vers);
+   const int dlvers = use_emast ? lmdaDerivVers(vers, edlmdaActive()) : vers;
 
+   // The polarization state at plam and free energy perturbation both move
+   // the multipoles off the electrostatic lambda between energy calls.
+   if (not use_emast)
+      mpoleEnsureElec(use_cf);
    if (use_cf)
       alterchg();
-   mpoleInit(vers);
+   mpoleInit(vers, use_emast);
    if (use_cfgrad) {
       cfluxZeroPot();
    }
-   if (useEwald()) {
+   if (use_emast) {
+      empoleChgpenDlmda(vers, dlvers, use_cf, use_cfgrad);
+   } else if (useEwald()) {
       if (pentyp == Chgpen::GORDON1)
          empoleChgpenEwald(vers, use_cfgrad);
       else if (pentyp == Chgpen::GORDON2)
          empoleAplusEwald(vers, use_cfgrad);
+      empoleEwaldBackground(vers, 0, use_cf);
    } else {
       if (pentyp == Chgpen::GORDON1)
          empoleChgpenNonEwald(vers, use_cfgrad);
@@ -122,8 +154,14 @@ void empoleChgpen(int vers)
    }
    exfield(vers, 1);
    torque(vers, demx, demy, demz);
-   if (use_cfgrad)
-      dcflux(vers, demx, demy, demz, vir_em);
+   if (dlvers & (calc::grad_dlmda | calc::virial_dlmda))
+      torque(vers, dfdlx, dfdly, dfdlz, dltrqx, dltrqy, dltrqz, dvirdl_buf);
+   if (use_cfgrad) {
+      if (use_emast)
+         dcfluxDlmda(vers, dlvers);
+      else
+         dcflux(vers, demx, demy, demz, vir_em);
+   }
    if (do_v) {
       VirialBuffer u2 = vir_trq;
       virial_prec v2[9];
@@ -153,6 +191,7 @@ void empoleChgpen(int vers)
       if (do_g)
          sumGradient(gx_elec, gy_elec, gz_elec, demx, demy, demz);
    }
+   em_dl.flush(vers);
 }
 }
 

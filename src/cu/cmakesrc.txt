@@ -1,8 +1,11 @@
 set (__T9_CU_SRC
 amoeba/binding.cu
 amoeba/emplar.cu
+amoeba/emplarast.cu
 amoeba/empole.cu
+amoeba/empoledlmda.cu
 amoeba/epolar.cu
+amoeba/epolardt.cu
 amoeba/field.cu
 amoeba/pcg.cu
 amoeba/precond.cu
@@ -24,7 +27,9 @@ hippo/cflux.cu
 hippo/echgtrn.cu
 hippo/edisp.cu
 hippo/empole.cu
+hippo/empoledlmda.cu
 hippo/epolar.cu
+hippo/epolardt.cu
 hippo/erepel.cu
 hippo/expol.cu
 hippo/field.cu
@@ -42,5 +47,6 @@ nn.cu
 pme.cu
 rattle.cu
 spatial.cu
+stochastic.cu
 upredict.cu
 )

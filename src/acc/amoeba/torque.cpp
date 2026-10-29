@@ -17,7 +17,8 @@ namespace tinker {
 // at the end of the routine. When I have rewritten the torque kernel to force
 // everything in the "local memory", the segfault would disappear.
 template <bool DO_V>
-static void torque_acc1(VirialBuffer gpu_vir, grad_prec* gx, grad_prec* gy, grad_prec* gz)
+static void torque_acc1(VirialBuffer gpu_vir, grad_prec* gx, grad_prec* gy, grad_prec* gz,
+   const real* tqx, const real* tqy, const real* tqz)
 {
    auto bufsize = bufferSize();
 
@@ -37,7 +38,7 @@ static void torque_acc1(VirialBuffer gpu_vir, grad_prec* gx, grad_prec* gy, grad
                u[3],v[3],w[3],uv[3],uw[3],vw[3],\
                r[3],s[3],ur[3],us[3],vs[3],ws[3],t1[3],t2[3],\
                p[3],del[3],eps[3])\
-               deviceptr(x,y,z,gx,gy,gz,zaxis,trqx,trqy,trqz,gpu_vir)
+               deviceptr(x,y,z,gx,gy,gz,zaxis,tqx,tqy,tqz,gpu_vir)
    for (int i = 0; i < n; ++i) {
       auto axetyp = zaxis[i].polaxe;
       if (axetyp == LFRM_NONE)
@@ -88,9 +89,9 @@ static void torque_acc1(VirialBuffer gpu_vir, grad_prec* gx, grad_prec* gy, grad
 
       // negative of dot product of torque with unit vectors gives result of
       // infinitesimal rotation along these vectors
-      trq[0] = trqx[i];
-      trq[1] = trqy[i];
-      trq[2] = trqz[i];
+      trq[0] = tqx[i];
+      trq[1] = tqy[i];
+      trq[2] = tqz[i];
       real dphidu = -torqueDot(trq, u);
       real dphidv = -torqueDot(trq, v);
       real dphidw = -torqueDot(trq, w);
@@ -390,8 +391,17 @@ static void torque_acc1(VirialBuffer gpu_vir, grad_prec* gx, grad_prec* gy, grad
 void torque_acc(int vers, grad_prec* gx, grad_prec* gy, grad_prec* gz)
 {
    if (vers & calc::virial)
-      torque_acc1<true>(vir_trq, gx, gy, gz);
+      torque_acc1<true>(vir_trq, gx, gy, gz, trqx, trqy, trqz);
    else if (vers & calc::grad)
-      torque_acc1<false>(nullptr, gx, gy, gz);
+      torque_acc1<false>(nullptr, gx, gy, gz, trqx, trqy, trqz);
+}
+
+void torque_acc(int vers, grad_prec* gx, grad_prec* gy, grad_prec* gz, const real* tqx, const real* tqy,
+   const real* tqz, VirialBuffer vbuf)
+{
+   if (vers & calc::virial)
+      torque_acc1<true>(vbuf, gx, gy, gz, tqx, tqy, tqz);
+   else if (vers & calc::grad)
+      torque_acc1<false>(nullptr, gx, gy, gz, tqx, tqy, tqz);
 }
 }

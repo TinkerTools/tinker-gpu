@@ -6,17 +6,32 @@ CONSTEXPR_FLAGS: |
   constexpr bool do_e = Ver::e;
   constexpr bool do_v = Ver::v;
   constexpr bool do_g = Ver::g;
+  constexpr bool do_dl1 = Ver::e_dlmda1;
+  constexpr bool do_dl2 = Ver::e_dlmda2;
+  constexpr bool do_gdl = Ver::g_dlmda;
+  constexpr bool do_tdl = Ver::g_dlmda or Ver::v_dlmda;
+  constexpr bool do_vdl = Ver::v_dlmda;
 
 COUNT:
   - nr
 ENERGY:
   - er
+ENERGY_DLMDA1:
+  - dvdl
+ENERGY_DLMDA2:
+  - d2vdl2
 VIRIAL:
   - vr
+VIRIAL_DLMDA:
+  - dvvirdl
 GRADIENT:
   - gx
   - gy
   - gz
+GRADIENT_DLMDA:
+  - dfvdlx
+  - dfvdly
+  - dfvdlz
 
 CUT_DISTANCE: cut
 OFF_DISTANCE: 'off'
@@ -28,13 +43,16 @@ EXTRA_PARAMS: |
   , real *restrict trqx
   , real *restrict trqy
   , real *restrict trqz
+  , real *restrict dltrqx
+  , real *restrict dltrqy
+  , real *restrict dltrqz
   , const real(*restrict rpole)[10]
   , const real* restrict sizpr
   , const real* restrict elepr
   , const real* restrict dmppr
   , const int*  restrict mut
-  , real vlam
   , Vdw vcouple
+  , SoftCoreLmda rs
 # IMPLICIT_PARAMS:
 
 I_VARIABLES:
@@ -80,6 +98,9 @@ I_FORCE:
   - register real txi addto:trqx
   - register real tyi addto:trqy
   - register real tzi addto:trqz
+  - register real dltxi addto:dltrqx onlyif:do_tdl
+  - register real dltyi addto:dltrqy onlyif:do_tdl
+  - register real dltzi addto:dltrqz onlyif:do_tdl
 K_FORCE:
   - register real gxk addto:gx
   - register real gyk addto:gy
@@ -87,6 +108,17 @@ K_FORCE:
   - register real txk addto:trqx
   - register real tyk addto:trqy
   - register real tzk addto:trqz
+  - register real dltxk addto:dltrqx onlyif:do_tdl
+  - register real dltyk addto:dltrqy onlyif:do_tdl
+  - register real dltzk addto:dltrqz onlyif:do_tdl
+I_FORCE_DLMDA:
+  - register real dgxi addto:dfvdlx
+  - register real dgyi addto:dfvdly
+  - register real dgzi addto:dfvdlz
+K_FORCE_DLMDA:
+  - register real dgxk addto:dfvdlx
+  - register real dgyk addto:dfvdly
+  - register real dgzk addto:dfvdlz
 
 #SCALED_PAIRWISE_INTERACTION: |
 FULL_PAIRWISE_INTERACTION: |
@@ -94,20 +126,20 @@ FULL_PAIRWISE_INTERACTION: |
   real yr = @yk@ - @yi@;
   real zr = @zk@ - @zi@;
 
-  real e;
-  PairRepelGrad pgrad;
+  real e, dle, dle2;
+  PairRepelGrad pgrad, dlgrad;
   zero(pgrad);
 
   real r2 = image2(xr, yr, zr);
   if (r2 <= off * off and incl) {
-    real vlambda = pair_vlambda(vlam, vcouple, @imut@, @kmut@);
-    pair_repel<do_g, 1>( //
-      r2, scalea, vlambda, cut, off, xr, yr, zr,
+    bool mutik = pair_mutik(vcouple, @imut@, @kmut@);
+    pair_repel<do_g, do_dl1, do_dl2, do_tdl>( //
+      r2, scalea, mutik, rs, cut, off, xr, yr, zr,
       @sizi@, @dmpi@, @vali@, @ci@, @dix@, @diy@, @diz@, @qixx@, @qixy@,
       @qixz@, @qiyy@, @qiyz@, @qizz@,
       @sizk@, @dmpk@, @valk@, @ck@, @dkx@, @dky@, @dkz@, @qkxx@, @qkxy@,
       @qkxz@, @qkyy@, @qkyz@, @qkzz@,
-      e, pgrad);
+      e, pgrad, dle, dle2, dlgrad);
 
     if CONSTEXPR (do_a)
       if (e != 0)
@@ -137,5 +169,34 @@ FULL_PAIRWISE_INTERACTION: |
         vrtlyy += floatTo<vbuf_prec>(-yr * pgrad.frcy);
         vrtlzy += floatTo<vbuf_prec>(-0.5f * (zr * pgrad.frcy + yr * pgrad.frcz));
         vrtlzz += floatTo<vbuf_prec>(-zr * pgrad.frcz);
+    }
+    // lambda derivatives of a mutated pair (erepel1.f)
+    if CONSTEXPR (do_dl1)
+        dvdltl += floatTo<ebuf_prec>(dle);
+    if CONSTEXPR (do_dl2)
+        d2vdl2tl += floatTo<ebuf_prec>(dle2);
+    if CONSTEXPR (do_gdl) {
+      @dgxi@ += dlgrad.frcx;
+      @dgyi@ += dlgrad.frcy;
+      @dgzi@ += dlgrad.frcz;
+      @dgxk@ -= dlgrad.frcx;
+      @dgyk@ -= dlgrad.frcy;
+      @dgzk@ -= dlgrad.frcz;
+    }
+    if CONSTEXPR (do_tdl) {
+      @dltxi@ += dlgrad.ttqi[0];
+      @dltyi@ += dlgrad.ttqi[1];
+      @dltzi@ += dlgrad.ttqi[2];
+      @dltxk@ += dlgrad.ttqk[0];
+      @dltyk@ += dlgrad.ttqk[1];
+      @dltzk@ += dlgrad.ttqk[2];
+    }
+    if CONSTEXPR (do_vdl) {
+        dvvirdltlxx += floatTo<vbuf_prec>(-xr * dlgrad.frcx);
+        dvvirdltlyx += floatTo<vbuf_prec>(-0.5f * (yr * dlgrad.frcx + xr * dlgrad.frcy));
+        dvvirdltlzx += floatTo<vbuf_prec>(-0.5f * (zr * dlgrad.frcx + xr * dlgrad.frcz));
+        dvvirdltlyy += floatTo<vbuf_prec>(-yr * dlgrad.frcy);
+        dvvirdltlzy += floatTo<vbuf_prec>(-0.5f * (zr * dlgrad.frcy + yr * dlgrad.frcz));
+        dvvirdltlzz += floatTo<vbuf_prec>(-zr * dlgrad.frcz);
     }
   } // end if (include)

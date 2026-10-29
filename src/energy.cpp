@@ -1,4 +1,9 @@
 #include "ff/energy.h"
+#include "ff/atom.h"
+#include "ff/eabf.h"
+#include "ff/efep.h"
+#include "ff/ethrmint.h"
+#include "ff/ost.h"
 #include "tool/error.h"
 
 namespace tinker {
@@ -39,6 +44,9 @@ const TimeScaleConfig& defaultTSConfig()
       {"edisp", 0},
       {"erepel", 0},
       {"ehippo", 0},
+
+      {"eost", 0},
+      {"eabf", 0},
    };
    return tsconfig;
 }
@@ -60,6 +68,7 @@ static bool fts(std::string eng, bool& use_flag, unsigned tsflag, const TimeScal
 #include "ff/amoeba/emplar.h"
 #include "ff/amoeba/empole.h"
 #include "ff/amoeba/epolar.h"
+#include "ff/dlmda.h"
 #include "ff/echarge.h"
 #include "ff/echglj.h"
 #include "ff/ennintermol.h"
@@ -69,6 +78,7 @@ static bool fts(std::string eng, bool& use_flag, unsigned tsflag, const TimeScal
 #include "ff/hippo/edisp.h"
 #include "ff/hippo/empole.h"
 #include "ff/hippo/epolar.h"
+#include "ff/ost.h"
 #include "ff/hippo/erepel.h"
 #include "ff/molecule.h"
 #include "ff/nblist.h"
@@ -86,13 +96,9 @@ static bool ecore_nnintermol;
 
 static bool amoeba_emplar(int vers)
 {
-   if (mplpot::use_chgpen)
-      return false;
-   if (rc_flag & calc::analyz)
-      return false;
    if (vers & calc::analyz)
       return false;
-   return use(Potent::MPOLE) and use(Potent::POLAR) and (mlistVersion() & Nbl::SPATIAL);
+   return useEmplar();
 }
 
 static bool amoeba_empole(int vers)
@@ -173,7 +179,9 @@ static bool ennintermol(int vers)
    return false;
 }
 
-void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
+// Evaluates the energy terms selected by tsflag and tsconfig, without zeroing or
+// reducing the buffers.
+static void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
 {
 #define tscfg(x, f) fts(x, f, tsflag, tsconfig)
 
@@ -263,11 +271,19 @@ void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
       if (tscfg("empole", ecore_ele))
          empole(vers);
    if (amoeba_epolar(vers))
-      if (tscfg("epolar", ecore_ele))
-         epolar(vers);
+      if (tscfg("epolar", ecore_ele)) {
+         if (use_epdt)
+            epolar_dt(vers);
+         else
+            epolar(vers);
+      }
    if (amoeba_emplar(vers))
-      if (tscfg("emplar", ecore_ele))
-         emplar(vers);
+      if (tscfg("emplar", ecore_ele)) {
+         if (use_emast)
+            emplarAst(vers);
+         else
+            emplar(vers);
+      }
 
    if (hippo_empole(vers))
       if (tscfg("empoleChgpen", ecore_ele))
@@ -291,6 +307,7 @@ void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
 }
 }
 
+#include "ff/amoeba/induce.h"
 #include "ff/elec.h"
 #include "ff/hippo/cflux.h"
 #include "ff/hippo/expol.h"
@@ -306,10 +323,13 @@ struct DHRc
    EnergyBufferTraits::type e_vdw;
    EnergyBufferTraits::type e_ele;
    EnergyBufferTraits::type e_nnintermol;
+   EnergyBufferTraits::type dedl;
+   EnergyBufferTraits::type d2edl2;
    VirialBufferTraits::type v_val[VirialBufferTraits::N];
    VirialBufferTraits::type v_vdw[VirialBufferTraits::N];
    VirialBufferTraits::type v_ele[VirialBufferTraits::N];
    VirialBufferTraits::type v_nnintermol[VirialBufferTraits::N];
+   VirialBufferTraits::type dvirdl[VirialBufferTraits::N];
 };
 
 static DHRc ev_hobj;
@@ -318,19 +338,35 @@ static DHRc* ev_dptr;
 
 void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
 {
+   // Nothing derived from the coordinates carries over from an earlier call.
+   ++xyz_epoch;
+
+   // Whichever method owns the main lambda drives the sub-lambda maps.
+   if (use_mainlmda)
+      mapSubLambda();
+
    zeroEGV(vers);
    energy_core(vers, tsflag, tsconfig);
+   // If the induced dipoles failed to converge, the atoms have been wiggled;
+   // recompute every term at the new positions.
+   while (induceWiggleRetry()) {
+      zeroEGV(vers);
+      energy_core(vers, tsflag, tsconfig);
+   }
 
    auto rc_a = rc_flag & calc::analyz;
    auto do_e = vers & calc::energy;
    auto do_v = vers & calc::virial;
    auto do_g = vers & calc::grad;
+   const int dvers = lmdaDerivVers(vers, use_dlmda);
 
    bool must_wait = false;
    ev_hobj.e_val = 0;
    ev_hobj.e_vdw = 0;
    ev_hobj.e_ele = 0;
    ev_hobj.e_nnintermol = 0;
+   ev_hobj.dedl = 0;
+   ev_hobj.d2edl2 = 0;
    if (do_e) {
       if (!rc_a) {
          size_t bufsize = bufferSize();
@@ -351,12 +387,21 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             reduceSumOnDevice(&ev_dptr->e_nnintermol, eng_buf_nnintermol, bufsize, g::q0);
          }
       }
+      if ((dvers & calc::energy_dlmda1) and dedl_buf) {
+         must_wait = true;
+         reduceSumOnDevice(&ev_dptr->dedl, dedl_buf, bufferSize(), g::q0);
+      }
+      if ((dvers & calc::energy_dlmda2) and d2edl2_buf) {
+         must_wait = true;
+         reduceSumOnDevice(&ev_dptr->d2edl2, d2edl2_buf, bufferSize(), g::q0);
+      }
    }
 
    zeroOnHost(ev_hobj.v_val);
    zeroOnHost(ev_hobj.v_vdw);
    zeroOnHost(ev_hobj.v_ele);
    zeroOnHost(ev_hobj.v_nnintermol);
+   zeroOnHost(ev_hobj.dvirdl);
    if (do_v) {
       if (!rc_a) {
          size_t bufsize = bufferSize();
@@ -376,6 +421,10 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             must_wait = true;
             reduceSum2OnDevice(ev_dptr->v_nnintermol, vir_buf_nnintermol, bufsize, g::q0);
          }
+      }
+      if ((dvers & calc::virial_dlmda) and dvirdl_buf) {
+         must_wait = true;
+         reduceSum2OnDevice(ev_dptr->dvirdl, dvirdl_buf, bufferSize(), g::q0);
       }
    }
    if (must_wait) {
@@ -397,7 +446,14 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
             energy_nnintermol += toFloatingPoint<energy_prec>(ev_hobj.e_nnintermol);
          }
       }
+      if ((dvers & calc::energy_dlmda1) and dedl_buf) {
+         dedl += toFloatingPoint<energy_prec>(ev_hobj.dedl);
+      }
+      if ((dvers & calc::energy_dlmda2) and d2edl2_buf) {
+         d2edl2 += toFloatingPoint<energy_prec>(ev_hobj.d2edl2);
+      }
       esum = energy_valence + energy_vdw + energy_elec + energy_nnintermol;
+      esum_epoch = xyz_epoch;
    }
    if (do_v) {
       if (!rc_a) {
@@ -434,6 +490,14 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
                virial_nnintermol[iv] += v2nn[iv];
          }
       }
+      if ((dvers & calc::virial_dlmda) and dvirdl_buf) {
+         virial_prec vdl[VirialBufferTraits::N], v2dl[9];
+         for (int iv = 0; iv < (int)VirialBufferTraits::N; ++iv)
+            vdl[iv] = toFloatingPoint<virial_prec>(ev_hobj.dvirdl[iv]);
+         virialReshape(v2dl, vdl);
+         for (int iv = 0; iv < 9; ++iv)
+            dvirdl[iv] += v2dl[iv];
+      }
       for (int iv = 0; iv < 9; ++iv)
          vir[iv] = virial_valence[iv] + virial_vdw[iv] + virial_elec[iv] + virial_nnintermol[iv];
    }
@@ -444,6 +508,16 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
          sumGradient(gx, gy, gz, gx_elec, gy_elec, gz_elec);
       if (ecore_nnintermol and gx_nnintermol)
          sumGradient(gx, gy, gz, gx_nnintermol, gy_nnintermol, gz_nnintermol);
+   }
+
+   if (use_ost or use_meta) {
+      bool ecore_ost = false;
+      if (fts("eost", ecore_ost, tsflag, tsconfig))
+         eostBias(vers);
+   } else if (use_abf) {
+      bool ecore_abf = false;
+      if (fts("eabf", ecore_abf, tsflag, tsconfig))
+         eabfBias(vers);
    }
 }
 
@@ -485,7 +559,15 @@ void energyData(RcOp op)
 
    RcMan ennmetal42{ennmetalData, op};
 
+   RcMan dlmda42{dlmdaData, op};
+   RcMan eost42{eostData, op};
+   RcMan eabf42{eabfData, op};
+   RcMan lmdawin42{lmdaWinData, op};
+   RcMan ti42{thermintData, op};
+   RcMan fep42{efepData, op};
    RcMan vdwsSoftcore42{vdwSoftcoreData, op};
+   // Shared by van der Waals and Pauli repulsion.
+   RcMan vdwLmda42{vdwLmdaData, op};
    RcMan evdw42{evdwData, op};
 
    // Must call elecData() before any electrostatics routine.
@@ -497,7 +579,12 @@ void energyData(RcOp op)
    // Must follow evdw_data() and echarge_data().
    RcMan echglj42{echgljData, op};
 
-   // empoleData() must be in front of epolarData().
+   // Shared by polarization and charge transfer.
+   RcMan polarLmda42{polarLmdaData, op};
+
+   // Must precede empoleData() and epolarData(), which decide whether their
+   // terms run at all from useEmplar().
+   RcMan emplar42{emplarData, op};
    RcMan empole42{empoleData, op};
    RcMan epolar42{epolarData, op};
 
@@ -557,6 +644,7 @@ namespace tinker {
 void egvData(RcOp op)
 {
    auto rc_a = rc_flag & calc::analyz;
+   const int dlmask = lmdaDerivMask(rc_flag, use_dlmda);
 
    if (op & RcOp::DEALLOC) {
       deviceMemoryDeallocate(ev_dptr);
@@ -565,6 +653,10 @@ void egvData(RcOp op)
 
    if (op & RcOp::ALLOC) {
       deviceMemoryAllocateBytes((void**)(&ev_dptr), sizeof(DHRc));
+      // energy() copies the whole struct back but reads only the fields it
+      // reduced; zeroed, the rest is defined for memory checkers too
+      deviceMemoryZeroBytesAsync(ev_dptr, sizeof(DHRc), g::q0);
+      waitFor(g::q0);
    }
 
    if (rc_flag & calc::energy) {
@@ -577,11 +669,15 @@ void egvData(RcOp op)
                darray::deallocate(eng_buf_elec);
             if (useEnergyINN())
                darray::deallocate(eng_buf_nnintermol);
+            if (dlmask & calc::energy_dlmda1)
+               darray::deallocate(dedl_buf);
+            if (dlmask & calc::energy_dlmda2)
+               darray::deallocate(d2edl2_buf);
          }
       }
 
       if (op & RcOp::ALLOC) {
-         zeroOnHost(eng_buf, eng_buf_vdw, eng_buf_elec, eng_buf_nnintermol);
+         zeroOnHost(eng_buf, eng_buf_vdw, eng_buf_elec, eng_buf_nnintermol, dedl_buf, d2edl2_buf);
          if (!rc_a) {
             auto sz = bufferSize();
             darray::allocate(sz, &eng_buf);
@@ -591,6 +687,10 @@ void egvData(RcOp op)
                darray::allocate(sz, &eng_buf_elec);
             if (useEnergyINN())
                darray::allocate(sz, &eng_buf_nnintermol);
+            if (dlmask & calc::energy_dlmda1)
+               darray::allocate(sz, &dedl_buf);
+            if (dlmask & calc::energy_dlmda2)
+               darray::allocate(sz, &d2edl2_buf);
          }
       }
    }
@@ -606,10 +706,12 @@ void egvData(RcOp op)
             if (useEnergyINN())
                darray::deallocate(vir_buf_nnintermol);
          }
+         if (dlmask & calc::virial_dlmda)
+            darray::deallocate(dvirdl_buf);
       }
 
       if (op & RcOp::ALLOC) {
-         zeroOnHost(vir_buf, vir_buf_vdw, vir_buf_elec, vir_buf_nnintermol);
+         zeroOnHost(vir_buf, vir_buf_vdw, vir_buf_elec, vir_buf_nnintermol, dvirdl_buf);
          if (!rc_a) {
             auto sz = bufferSize();
             darray::allocate(sz, &vir_buf);
@@ -620,6 +722,8 @@ void egvData(RcOp op)
             if (useEnergyINN())
                darray::allocate(sz, &vir_buf_nnintermol);
          }
+         if (dlmask & calc::virial_dlmda)
+            darray::allocate(bufferSize(), &dvirdl_buf);
       }
    }
 
@@ -632,11 +736,13 @@ void egvData(RcOp op)
             darray::deallocate(gx_elec, gy_elec, gz_elec);
          if (useEnergyINN())
             darray::deallocate(gx_nnintermol, gy_nnintermol, gz_nnintermol);
+         if (dlmask & (calc::grad_dlmda | calc::virial_dlmda))
+            darray::deallocate(dfdlx, dfdly, dfdlz);
       }
 
       if (op & RcOp::ALLOC) {
          zeroOnHost(gx, gy, gz, gx_vdw, gy_vdw, gz_vdw, gx_elec, gy_elec, gz_elec, gx_nnintermol, gy_nnintermol,
-            gz_nnintermol);
+            gz_nnintermol, dfdlx, dfdly, dfdlz);
          darray::allocate(n, &gx, &gy, &gz);
          if (useEnergyVdw())
             darray::allocate(n, &gx_vdw, &gy_vdw, &gz_vdw);
@@ -644,6 +750,8 @@ void egvData(RcOp op)
             darray::allocate(n, &gx_elec, &gy_elec, &gz_elec);
          if (useEnergyINN())
             darray::allocate(n, &gx_nnintermol, &gy_nnintermol, &gz_nnintermol);
+         if (dlmask & (calc::grad_dlmda | calc::virial_dlmda))
+            darray::allocate(n, &dfdlx, &dfdly, &dfdlz);
       }
    }
 }

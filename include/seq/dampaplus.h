@@ -108,12 +108,14 @@ inline void damp_gordon2(real* restrict dmpik, real* restrict dmpi, real* restri
 
 // dfield aplus
 SEQ_ROUTINE
-inline void damp_aplus3(real r, real pdi, real ddi, real pdk, real ddk, real& restrict scale3, real& restrict scale5, real& restrict scale7)
+inline void dmpaplus3_a(real r, real pgamma, real pdi, real pdk, real& restrict scale3, real& restrict scale5, real& restrict scale7)
 {
-   real pgamma = REAL_MIN(ddi, ddk);
    real damp = pdi * pdk;
    real ratio = r * REAL_RECIP(damp);
-   damp = (damp == 0 ? 0 : pgamma * REAL_SQRT(ratio * ratio * ratio));
+   // A pair with no damping width or no direct damping pair value (thdval) is
+   // undamped, as in damptholed (damping.f); a zero damp would instead switch
+   // its direct field off.
+   damp = (damp == 0 or pgamma == 0 ? ((real)1.0e16) : pgamma * REAL_SQRT(ratio * ratio * ratio));
    real damp2 = damp * damp;
    real expdamp = REAL_EXP(-damp);
    scale3 = 1 - expdamp;
@@ -122,15 +124,14 @@ inline void damp_aplus3(real r, real pdi, real ddi, real pdk, real ddk, real& re
 }
 
 SEQ_ROUTINE
-inline void damp_aplus3g(real r,
+inline void dmpaplus3g_a(real r,
                          real rr2,
                          real xr,
                          real yr,
                          real zr,
+                         real pgamma,
                          real pdi,
-                         real ddi,
                          real pdk,
-                         real ddk,
                          real& restrict scale31,
                          real& restrict scale51,
                          real& restrict scale71,
@@ -144,10 +145,12 @@ inline void damp_aplus3g(real r,
                          real& restrict rc72,
                          real& restrict rc73)
 {
-   real pgamma = REAL_MIN(ddi, ddk);
    real damp = pdi * pdk;
    real ratio = r * REAL_RECIP(damp);
-   damp = (damp == 0 ? 0 : pgamma * REAL_SQRT(ratio * ratio * ratio));
+   // A pair with no damping width or no direct damping pair value (thdval) is
+   // undamped, as in damptholed (damping.f); a zero damp would instead switch
+   // its direct field off.
+   damp = (damp == 0 or pgamma == 0 ? ((real)1.0e16) : pgamma * REAL_SQRT(ratio * ratio * ratio));
    real damp2 = damp * damp;
    scale31 = REAL_EXP(-damp);
    scale51 = scale31 * (1 + (real)0.5 * damp);

@@ -1,4 +1,5 @@
 #include "ff/energy.h"
+#include "ff/dlmda.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/nblist.h"
@@ -21,6 +22,10 @@ void empoleNonEwald_acc1()
 
    const real off = switchOff(Switch::MPOLE);
    const real off2 = off * off;
+   // a pair with a dead group has no multipole or induced dipole;
+   // grp is null when every group is live
+   const int* grp = elecDeadGroups();
+   const RdtMask live = elecLiveMask();
    const int maxnlst = mlist_unit->maxnlst;
    const auto* mlst = mlist_unit.deviceptr();
 
@@ -30,7 +35,7 @@ void empoleNonEwald_acc1()
    MAYBE_UNUSED int GRID_DIM = gpuGridSize(BLOCK_DIM);
    #pragma acc parallel async num_gangs(GRID_DIM) vector_length(BLOCK_DIM)\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(DEVICE_PTRS,mlst)
+               deviceptr(DEVICE_PTRS,grp,mlst)
    #pragma acc loop gang independent
    for (int i = 0; i < n; ++i) {
       real xi = x[i];
@@ -61,7 +66,7 @@ void empoleNonEwald_acc1()
          real zr = z[k] - zi;
 
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off2) {
+         if (r2 <= off2 and (not grp or grpPairLive(live, grp[i], grp[k]))) {
             MAYBE_UNUSED real e;
             pair_mpole<do_e, do_g, NON_EWALD>(                        //
                r2, xr, yr, zr, 1,                                     //
@@ -72,7 +77,8 @@ void empoleNonEwald_acc1()
                f, 0, e, pgrad);
 
             if CONSTEXPR (do_a)
-               atomic_add(1, nem, offset);
+               if (e != 0)
+                  atomic_add(1, nem, offset);
             if CONSTEXPR (do_e)
                atomic_add(e, em, offset);
             if CONSTEXPR (do_g) {
@@ -118,7 +124,7 @@ void empoleNonEwald_acc1()
 
    #pragma acc parallel async\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(DEVICE_PTRS,mexclude,mexclude_scale)
+               deviceptr(DEVICE_PTRS,grp,mexclude,mexclude_scale)
    #pragma acc loop independent private(pgrad)
    for (int ii = 0; ii < nmexclude; ++ii) {
       int offset = ii & (bufsize - 1);
@@ -146,7 +152,7 @@ void empoleNonEwald_acc1()
       real zr = z[k] - zi;
 
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off2) {
+      if (r2 <= off2 and (not grp or grpPairLive(live, grp[i], grp[k]))) {
          MAYBE_UNUSED real e;
          pair_mpole<do_e, do_g, NON_EWALD>(                        //
             r2, xr, yr, zr, mscale,                                //
@@ -157,7 +163,7 @@ void empoleNonEwald_acc1()
             f, 0, e, pgrad);
 
          if CONSTEXPR (do_a)
-            if (mscale == -1)
+            if (mscale == -1 and e != 0)
                atomic_add(-1, nem, offset);
          if CONSTEXPR (do_e)
             atomic_add(e, em, offset);
@@ -209,12 +215,13 @@ void empoleNonEwald_acc(int vers)
       empoleNonEwald_acc1<calc::V6>();
 }
 
-void exfieldDipole_acc(int vers)
+template <class Ver>
+static void exfieldDipole_acc1()
 {
-   bool do_e = vers & calc::energy;
-   bool do_a = vers & calc::analyz;
-   bool do_g = vers & calc::grad;
-   bool do_v = vers & calc::virial;
+   constexpr bool do_e = Ver::e;
+   constexpr bool do_a = Ver::a;
+   constexpr bool do_g = Ver::g;
+   constexpr bool do_v = Ver::v;
 
    auto bufsize = bufferSize();
    real f = electric / dielec;
@@ -227,14 +234,16 @@ void exfieldDipole_acc(int vers)
       real xi = x[ii], yi = y[ii], zi = z[ii];
       real ci = rpole[ii][0], dix = rpole[ii][1], diy = rpole[ii][2], diz = rpole[ii][3];
 
-      if (do_e) {
+      if CONSTEXPR (do_e) {
          real phi = xi * ef1 + yi * ef2 + zi * ef3; // negative potential
          real e = -f * (ci * phi + dix * ef1 + diy * ef2 + diz * ef3);
          atomic_add(e, em, offset);
-         if (do_a)
-            atomic_add(1, nem, offset);
+         if CONSTEXPR (do_a) {
+            if (e != 0)
+               atomic_add(1, nem, offset);
+         }
       }
-      if (do_g) {
+      if CONSTEXPR (do_g) {
          // torque due to the dipole
          real tx = f * (diy * ef3 - diz * ef2);
          real ty = f * (diz * ef1 - dix * ef3);
@@ -249,7 +258,7 @@ void exfieldDipole_acc(int vers)
          atomic_add(frx, demx, ii);
          atomic_add(fry, demy, ii);
          atomic_add(frz, demz, ii);
-         if (do_v) {
+         if CONSTEXPR (do_v) {
             real vxx = xi * frx;
             real vyy = yi * fry;
             real vzz = zi * frz;
@@ -260,6 +269,22 @@ void exfieldDipole_acc(int vers)
          }
       }
    }
+}
+
+void exfieldDipole_acc(int vers)
+{
+   if (vers == calc::v0)
+      exfieldDipole_acc1<calc::V0>();
+   else if (vers == calc::v1)
+      exfieldDipole_acc1<calc::V1>();
+   else if (vers == calc::v3)
+      exfieldDipole_acc1<calc::V3>();
+   else if (vers == calc::v4)
+      exfieldDipole_acc1<calc::V4>();
+   else if (vers == calc::v5)
+      exfieldDipole_acc1<calc::V5>();
+   else if (vers == calc::v6)
+      exfieldDipole_acc1<calc::V6>();
 }
 
 void extfieldModifyDField_acc(real (*field)[3], real (*fieldp)[3])

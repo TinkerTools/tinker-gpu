@@ -34,12 +34,14 @@ void finish()
 #include "tool/gpucard.h"
 #include "tool/platform.h"
 
+#include "ff/amoeba/induce.h"
 #include "ff/box.h"
+#include "ff/dlmda.h"
 #include "ff/energy.h"
 #include "ff/molecule.h"
 #include "ff/nblist.h"
+#include "ff/watermc.h"
 #include "md/misc.h"
-#include "md/osrw.h"
 #include "md/pq.h"
 #include "md/rattle.h"
 #include "nn/nn.h"
@@ -67,12 +69,14 @@ void deviceData(RcOp op)
    RcMan group42{groupData, op};
 
    RcMan energy42{energyData, op};
-   RcMan osrw42{osrwData, op};
+   RcMan wiggle42{induceWiggleData, op};
 
    // Neighbor lists must be initialized after potential initialization.
    // xred, yred, and zred need to be initialized in vdw (Halgren 14-7)
    // and will be used in nblist setups.
    RcMan nbl42{nblistData, op};
+   RcMan dlmda42{dlmdaData2, op};
+   RcMan wmc42{waterMcData, op};
 
    RcMan rattle42{rattleData, op};
    RcMan vel42{mdVelData, op};

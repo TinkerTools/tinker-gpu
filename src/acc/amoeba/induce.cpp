@@ -1,5 +1,6 @@
 #include "ff/amoeba/induce.h"
 #include "ff/atom.h"
+#include "ff/dlmda.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/nblist.h"
@@ -14,8 +15,6 @@
 #include <tinker/detail/polpcg.hh>
 #include <tinker/detail/polpot.hh>
 #include <tinker/detail/units.hh>
-
-#define TINKER9_POLPAIR 2
 
 namespace tinker {
 // PCG
@@ -54,12 +53,9 @@ void induceMutualPcg1_acc(real (*uind)[3], real (*uinp)[3])
    // use sparse matrix preconditioner
    // or just use diagonal matrix preconditioner
    const bool sparse_prec = polpcg::pcgprec and (switchOff(Switch::USOLVE) > 0);
-   bool dirguess = polpcg::pcgguess;
-   bool predict = polpred != UPred::NONE;
-   if (predict and nualt < maxualt) {
-      predict = false;
-      dirguess = true;
-   }
+   const UGuess guess = induceGuess();
+   const bool predict = guess == UGuess::PREDICT;
+   const bool dirguess = guess == UGuess::DIRECT;
 
    // get the electrostatic field due to permanent multipoles
    dfield(field, fieldp);
@@ -285,10 +281,8 @@ void induceMutualPcg1_acc(real (*uind)[3], real (*uinp)[3])
 
    // terminate the calculation if dipoles failed to converge
 
-   if (iter >= maxiter) {
-      printError();
-      TINKER_THROW("INDUCE  --  Warning, Induced Dipoles are not Converged");
-   }
+   if (iter >= maxiter)
+      induceNotConverged(rsd, rsdp);
 }
 }
 
@@ -307,7 +301,7 @@ void diagPrecond_acc(const real (*rsd)[3], const real (*rsdp)[3], real (*zrsd)[3
    }
 }
 
-#define APPLY_DPTRS rsd, rsdp, zrsd, zrsdp, x, y, z, polarity, pdamp, thole, jpolar, thlval
+#define APPLY_DPTRS rsd, rsdp, zrsd, zrsdp, x, y, z, polarity, pdamp, jpolar, thlval
 void sparsePrecondApply_acc(const real (*rsd)[3], const real (*rsdp)[3], real (*zrsd)[3], real (*zrsdp)[3])
 {
    #pragma acc parallel loop independent async\
@@ -323,22 +317,25 @@ void sparsePrecondApply_acc(const real (*rsd)[3], const real (*rsdp)[3], real (*
 
    const int maxnlst = ulist_unit->maxnlst;
    const auto* ulst = ulist_unit.deviceptr();
+   // a pair with a dead group has no induced dipole;
+   // grp is null when every group is live
+   const int* grp = elecDeadGroups();
+   const RdtMask live = elecLiveMask();
+   // The preconditioner takes the pairs within the cutoff; the list adds the buffer.
+   const real off = switchOff(Switch::USOLVE);
+   const real off2 = off * off;
 
    MAYBE_UNUSED int GRID_DIM = gpuGridSize(BLOCK_DIM);
    #pragma acc parallel async num_gangs(GRID_DIM) vector_length(BLOCK_DIM)\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(APPLY_DPTRS,ulst)
+               deviceptr(APPLY_DPTRS,grp,ulst)
    #pragma acc loop gang independent
    for (int i = 0; i < n; ++i) {
       real xi = x[i];
       real yi = y[i];
       real zi = z[i];
       real pdi = pdamp[i];
-#if TINKER9_POLPAIR == 2
       int jpi = jpolar[i];
-#else
-      real pti = thole[i];
-#endif
       real poli = polarity[i];
 
       int nulsti = ulst->nlst[i];
@@ -349,21 +346,21 @@ void sparsePrecondApply_acc(const real (*rsd)[3], const real (*rsdp)[3], real (*
       #pragma acc loop vector independent reduction(+:gxi,gyi,gzi,txi,tyi,tzi)
       for (int kk = 0; kk < nulsti; ++kk) {
          int k = ulst->lst[base + kk];
+         if (grp and not grpPairLive(live, grp[i], grp[k]))
+            continue;
          real xr = x[k] - xi;
          real yr = y[k] - yi;
          real zr = z[k] - zi;
 
          real r2 = image2(xr, yr, zr);
+         if (r2 > off2)
+            continue;
          real r = REAL_SQRT(r2);
 
          real scale3, scale5;
-#if TINKER9_POLPAIR == 2
          int jpk = jpolar[k];
          real pga = thlval[njpolar * jpi + jpk];
-         damp_thole2(r, pdi, pga, pdamp[k], pga, scale3, scale5);
-#else
-         damp_thole2(r, pdi, pti, pdamp[k], thole[k], scale3, scale5);
-#endif
+         dmpthole2_a(r, pga, pdi, pdamp[k], scale3, scale5);
 
          real polik = poli * polarity[k];
          real rr3 = scale3 * polik * REAL_RECIP(r * r2);
@@ -404,21 +401,19 @@ void sparsePrecondApply_acc(const real (*rsd)[3], const real (*rsdp)[3], real (*
 
    #pragma acc parallel loop async\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(APPLY_DPTRS,uexclude,uexclude_scale)
+               deviceptr(APPLY_DPTRS,grp,uexclude,uexclude_scale)
    for (int ii = 0; ii < nuexclude; ++ii) {
       int i = uexclude[ii][0];
       int k = uexclude[ii][1];
       real uscale = uexclude_scale[ii] - 1;
+      if (grp and not grpPairLive(live, grp[i], grp[k]))
+         continue;
 
       real xi = x[i];
       real yi = y[i];
       real zi = z[i];
       real pdi = pdamp[i];
-#if TINKER9_POLPAIR == 2
       int jpi = jpolar[i];
-#else
-      real pti = thole[i];
-#endif
       real poli = polarity[i];
 
       real xr = x[k] - xi;
@@ -429,13 +424,9 @@ void sparsePrecondApply_acc(const real (*rsd)[3], const real (*rsdp)[3], real (*
       real r = REAL_SQRT(r2);
 
       real scale3, scale5;
-#if TINKER9_POLPAIR == 2
       int jpk = jpolar[k];
       real pga = thlval[njpolar * jpi + jpk];
-      damp_thole2(r, pdi, pga, pdamp[k], pga, scale3, scale5);
-#else
-      damp_thole2(r, pdi, pti, pdamp[k], thole[k], scale3, scale5);
-#endif
+      dmpthole2_a(r, pga, pdi, pdamp[k], scale3, scale5);
       scale3 *= uscale;
       scale5 *= uscale;
 
@@ -470,14 +461,24 @@ void sparsePrecondApply_acc(const real (*rsd)[3], const real (*rsdp)[3], real (*
 
 void ulspredSaveP1_acc(real (*ud)[3], real (*up)[3], const real (*uind)[3], const real (*uinp)[3])
 {
-   #pragma acc parallel loop independent async deviceptr(uind,uinp,ud,up)
-   for (int i = 0; i < n; ++i) {
-      ud[i][0] = uind[i][0];
-      ud[i][1] = uind[i][1];
-      ud[i][2] = uind[i][2];
-      up[i][0] = uinp[i][0];
-      up[i][1] = uinp[i][1];
-      up[i][2] = uinp[i][2];
+   if (uinp) {
+      #pragma acc parallel loop independent async deviceptr(uind,uinp,ud,up)
+      for (int i = 0; i < n; ++i) {
+         ud[i][0] = uind[i][0];
+         ud[i][1] = uind[i][1];
+         ud[i][2] = uind[i][2];
+         up[i][0] = uinp[i][0];
+         up[i][1] = uinp[i][1];
+         up[i][2] = uinp[i][2];
+      }
+   } else {
+      // HIPPO and AMOEBA+ keep the one set of induced dipoles
+      #pragma acc parallel loop independent async deviceptr(uind,ud)
+      for (int i = 0; i < n; ++i) {
+         ud[i][0] = uind[i][0];
+         ud[i][1] = uind[i][1];
+         ud[i][2] = uind[i][2];
+      }
    }
 }
 
@@ -486,7 +487,7 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
    if (nualt < maxualt)
       return;
 
-   constexpr double aspc[16] = {62. / 17., //
+   constexpr real aspc[16] = {62. / 17., //
       -310. / 51.,                         //
       2170. / 323.,                        //
       -2329. / 400.,                       //
@@ -502,7 +503,7 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
       -3. / 67015.,                        //
       2. / 646323.,                        //
       -1. / 9694845.};
-   constexpr double gear[6] = {6., //
+   constexpr real gear[6] = {6., //
       -15.,                        //
       20.,                         //
       -15.,                        //
@@ -511,8 +512,8 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
 
    using real3_ptr = real(*)[3];
    if (polpred == UPred::ASPC and uinp) {
-      double c00, c01, c02, c03, c04, c05, c06, c07;
-      double c08, c09, c10, c11, c12, c13, c14, c15;
+      real c00, c01, c02, c03, c04, c05, c06, c07;
+      real c08, c09, c10, c11, c12, c13, c14, c15;
       c00 = aspc[(nualt - 1 + 16) % 16];
       c01 = aspc[(nualt - 2 + 16) % 16];
       c02 = aspc[(nualt - 3 + 16) % 16];
@@ -530,7 +531,7 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
       c14 = aspc[(nualt - 15 + 16) % 16];
       c15 = aspc[(nualt - 16 + 16) % 16];
       #pragma acc parallel loop independent async\
-              deviceptr(uind,uinp,\
+              deviceptr(polarity,uind,uinp,\
               udalt_00,udalt_01,udalt_02,udalt_03,udalt_04,udalt_05,udalt_06,\
               udalt_07,udalt_08,udalt_09,udalt_10,udalt_11,udalt_12,udalt_13,\
               udalt_14,udalt_15,upalt_00,upalt_01,upalt_02,upalt_03,upalt_04,\
@@ -561,9 +562,17 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
             + c04 * upalt_04[i][2] + c05 * upalt_05[i][2] + c06 * upalt_06[i][2] + c07 * upalt_07[i][2]
             + c08 * upalt_08[i][2] + c09 * upalt_09[i][2] + c10 * upalt_10[i][2] + c11 * upalt_11[i][2]
             + c12 * upalt_12[i][2] + c13 * upalt_13[i][2] + c14 * upalt_14[i][2] + c15 * upalt_15[i][2];
+         if (polarity[i] == 0) {
+            uind[i][0] = 0;
+            uind[i][1] = 0;
+            uind[i][2] = 0;
+            uinp[i][0] = 0;
+            uinp[i][1] = 0;
+            uinp[i][2] = 0;
+         }
       }
    } else if (polpred == UPred::GEAR and uinp) {
-      double c00, c01, c02, c03, c04, c05;
+      real c00, c01, c02, c03, c04, c05;
       c00 = gear[(nualt - 1 + 6) % 6];
       c01 = gear[(nualt - 2 + 6) % 6];
       c02 = gear[(nualt - 3 + 6) % 6];
@@ -571,7 +580,7 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
       c04 = gear[(nualt - 5 + 6) % 6];
       c05 = gear[(nualt - 6 + 6) % 6];
       #pragma acc parallel loop independent async\
-              deviceptr(uind,uinp,\
+              deviceptr(polarity,uind,uinp,\
               udalt_00,udalt_01,udalt_02,udalt_03,udalt_04,udalt_05,\
               upalt_00,upalt_01,upalt_02,upalt_03,upalt_04,upalt_05)
       for (int i = 0; i < n; ++i) {
@@ -587,6 +596,14 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
             + c04 * upalt_04[i][1] + c05 * upalt_05[i][1];
          uinp[i][2] = c00 * upalt_00[i][2] + c01 * upalt_01[i][2] + c02 * upalt_02[i][2] + c03 * upalt_03[i][2]
             + c04 * upalt_04[i][2] + c05 * upalt_05[i][2];
+         if (polarity[i] == 0) {
+            uind[i][0] = 0;
+            uind[i][1] = 0;
+            uind[i][2] = 0;
+            uinp[i][0] = 0;
+            uinp[i][1] = 0;
+            uinp[i][2] = 0;
+         }
       }
    } else if (polpred == UPred::LSQR and uinp) {
       real3_ptr ppd[7] = {udalt_00, udalt_01, udalt_02, udalt_03, udalt_04, udalt_05, udalt_06};
@@ -638,7 +655,7 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
       real* bd = udalt_lsqr_b;
       real* bp = upalt_lsqr_b;
       #pragma acc parallel loop independent async\
-                  deviceptr(uind,uinp,bd,bp,\
+                  deviceptr(polarity,uind,uinp,bd,bp,\
                   pd0,pd1,pd2,pd3,pd4,pd5,\
                   pp0,pp1,pp2,pp3,pp4,pp5)
       for (int i = 0; i < n; ++i) {
@@ -654,10 +671,18 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
             + bp[5] * pp5[i][1];
          uinp[i][2] = bp[0] * pp0[i][2] + bp[1] * pp1[i][2] + bp[2] * pp2[i][2] + bp[3] * pp3[i][2] + bp[4] * pp4[i][2]
             + bp[5] * pp5[i][2];
+         if (polarity[i] == 0) {
+            uind[i][0] = 0;
+            uind[i][1] = 0;
+            uind[i][2] = 0;
+            uinp[i][0] = 0;
+            uinp[i][1] = 0;
+            uinp[i][2] = 0;
+         }
       }
    } else if (polpred == UPred::ASPC) {
-      double c00, c01, c02, c03, c04, c05, c06, c07;
-      double c08, c09, c10, c11, c12, c13, c14, c15;
+      real c00, c01, c02, c03, c04, c05, c06, c07;
+      real c08, c09, c10, c11, c12, c13, c14, c15;
       c00 = aspc[(nualt - 1 + 16) % 16];
       c01 = aspc[(nualt - 2 + 16) % 16];
       c02 = aspc[(nualt - 3 + 16) % 16];
@@ -675,7 +700,7 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
       c14 = aspc[(nualt - 15 + 16) % 16];
       c15 = aspc[(nualt - 16 + 16) % 16];
       #pragma acc parallel loop independent async\
-              deviceptr(uind,\
+              deviceptr(polarity,uind,\
               udalt_00,udalt_01,udalt_02,udalt_03,udalt_04,udalt_05,udalt_06,\
               udalt_07,udalt_08,udalt_09,udalt_10,udalt_11,udalt_12,udalt_13,\
               udalt_14,udalt_15)
@@ -692,9 +717,14 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
             + c04 * udalt_04[i][2] + c05 * udalt_05[i][2] + c06 * udalt_06[i][2] + c07 * udalt_07[i][2]
             + c08 * udalt_08[i][2] + c09 * udalt_09[i][2] + c10 * udalt_10[i][2] + c11 * udalt_11[i][2]
             + c12 * udalt_12[i][2] + c13 * udalt_13[i][2] + c14 * udalt_14[i][2] + c15 * udalt_15[i][2];
+         if (polarity[i] == 0) {
+            uind[i][0] = 0;
+            uind[i][1] = 0;
+            uind[i][2] = 0;
+         }
       }
    } else if (polpred == UPred::GEAR) {
-      double c00, c01, c02, c03, c04, c05;
+      real c00, c01, c02, c03, c04, c05;
       c00 = gear[(nualt - 1 + 6) % 6];
       c01 = gear[(nualt - 2 + 6) % 6];
       c02 = gear[(nualt - 3 + 6) % 6];
@@ -702,7 +732,7 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
       c04 = gear[(nualt - 5 + 6) % 6];
       c05 = gear[(nualt - 6 + 6) % 6];
       #pragma acc parallel loop independent async\
-              deviceptr(uind,\
+              deviceptr(polarity,uind,\
               udalt_00,udalt_01,udalt_02,udalt_03,udalt_04,udalt_05)
       for (int i = 0; i < n; ++i) {
          uind[i][0] = c00 * udalt_00[i][0] + c01 * udalt_01[i][0] + c02 * udalt_02[i][0] + c03 * udalt_03[i][0]
@@ -711,6 +741,11 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
             + c04 * udalt_04[i][1] + c05 * udalt_05[i][1];
          uind[i][2] = c00 * udalt_00[i][2] + c01 * udalt_01[i][2] + c02 * udalt_02[i][2] + c03 * udalt_03[i][2]
             + c04 * udalt_04[i][2] + c05 * udalt_05[i][2];
+         if (polarity[i] == 0) {
+            uind[i][0] = 0;
+            uind[i][1] = 0;
+            uind[i][2] = 0;
+         }
       }
    } else if (polpred == UPred::LSQR) {
       real3_ptr ppd[7] = {udalt_00, udalt_01, udalt_02, udalt_03, udalt_04, udalt_05, udalt_06};
@@ -749,7 +784,7 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
       real3_ptr pd5 = pd[5];
       real* bd = udalt_lsqr_b;
       #pragma acc parallel loop independent async\
-                  deviceptr(uind,bd,\
+                  deviceptr(polarity,uind,bd,\
                   pd0,pd1,pd2,pd3,pd4,pd5)
       for (int i = 0; i < n; ++i) {
          uind[i][0] = bd[0] * pd0[i][0] + bd[1] * pd1[i][0] + bd[2] * pd2[i][0] + bd[3] * pd3[i][0] + bd[4] * pd4[i][0]
@@ -758,6 +793,11 @@ void ulspredSum_acc(real (*restrict uind)[3], real (*restrict uinp)[3])
             + bd[5] * pd5[i][1];
          uind[i][2] = bd[0] * pd0[i][2] + bd[1] * pd1[i][2] + bd[2] * pd2[i][2] + bd[3] * pd3[i][2] + bd[4] * pd4[i][2]
             + bd[5] * pd5[i][2];
+         if (polarity[i] == 0) {
+            uind[i][0] = 0;
+            uind[i][1] = 0;
+            uind[i][2] = 0;
+         }
       }
    }
 }

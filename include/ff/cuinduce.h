@@ -52,6 +52,16 @@ void pcgUdirV2(int n,                  ///< Number of atoms.
                const real (*fieldp)[3] ///< External p-field.
 );
 
+/// \brief Calculates the initial induced dipoles of the direct guess under exchange polarization,
+/// the polarizability times the inverse of \f$ I+kS^2 \f$ times the field.
+__global__
+void pcgUdirGuessV3(int n,                     ///< Number of atoms.
+                    const real* polarity,      ///< Polarizabilities.
+                    real (*uind)[3],           ///< [out] Initial induced dipoles.
+                    const real (*field)[3],    ///< External field.
+                    const real (*polinv)[3][3] ///< The inverse \f$ I+kS^2 \f$ matrices for every atom.
+);
+
 /// \brief Calculates the initial residuals for the predictor \c 3a.
 __global__
 void pcgRsd0V1(int n,                    ///< Number of atoms.
@@ -155,6 +165,16 @@ void pcgP4(int n,                    ///< Number of atoms.
            const real (*field)[3]    ///< \c ufield(p).
 );
 
+/// \brief Calculates the vector Ap -- step \c 5a -- under exchange polarization.
+__global__
+void pcgP4V3(int n,                       ///< Number of atoms.
+             const real* polarity_inv,    ///< Multiplicative inverse of polarizabilities.
+             real (*vec)[3],              ///< [out] Vector Ap.
+             const real (*conj)[3],       ///< Vector p.
+             const real (*field)[3],      ///< \c ufield(p).
+             const real (*polscale)[3][3] ///< The \f$ I+kS^2 \f$ matrices for every atom.
+);
+
 /// \brief Updates the induced dipoles and residuals -- step \c 5bc.
 __global__
 void pcgP5(int n,                 ///< Number of atoms.
@@ -178,7 +198,7 @@ void pcgP6(int n,                ///< Number of atoms.
 /// \brief Applies the peek step.
 __global__
 void pcgPeek(int n,                ///< Number of atoms.
-             float pcgpeek,        ///< The "peek" parameter.
+             real pcgpeek,         ///< The "peek" parameter.
              const real* polarity, ///< Polarizabilities.
              real (*uind)[3],      ///< [in,out] d-dipoles.
              real (*uinp)[3],      ///< [in,out] p-dipoles.
@@ -189,7 +209,7 @@ void pcgPeek(int n,                ///< Number of atoms.
 /// \brief Applies the peek step.
 __global__
 void pcgPeek1(int n,                ///< Number of atoms.
-              float pcgpeek,        ///< The "peek" parameter.
+              real pcgpeek,         ///< The "peek" parameter.
               const real* polarity, ///< Polarizabilities.
               real (*uind)[3],      ///< [in,out] Dipoles.
               const real (*rsd)[3]  ///< Final residual.

@@ -7,7 +7,9 @@
 #include "seq/bsplgen.h"
 
 namespace tinker {
-template <class T>
+// ONE_SET: UIND spreads fuind alone, into qgrid as the real input of an
+// in-place real-to-complex FFT (fftfrontOneSet)
+template <class T, bool ONE_SET = false>
 static void gridPut_acc(PMEUnit pme_u, real* ptr1, real* ptr2)
 {
    auto& st = *pme_u;
@@ -17,6 +19,7 @@ static void gridPut_acc(PMEUnit pme_u, real* ptr1, real* ptr2)
    MAYBE_UNUSED const real(*fmp)[10] = (real(*)[10])ptr1;
    MAYBE_UNUSED const real(*fuind)[3] = (real(*)[3])ptr1;
    MAYBE_UNUSED const real(*fuinp)[3] = (real(*)[3])ptr2;
+   MAYBE_UNUSED const int* dpart = (const int*)ptr2;
 
    const int nfft1 = st.nfft1;
    const int nfft2 = st.nfft2;
@@ -24,11 +27,12 @@ static void gridPut_acc(PMEUnit pme_u, real* ptr1, real* ptr2)
    const int bsorder = st.bsorder;
    assert(bsorder <= 5);
 
-   darray::zero(g::q0, 2 * nfft1 * nfft2 * nfft3, st.qgrid);
+   // ONE_SET: the real grid of the in-place R2C FFT, with its padded rows
+   darray::zero(g::q0, (ONE_SET ? 2 * (nfft1 / 2 + 1) : 2 * nfft1) * nfft2 * nfft3, st.qgrid);
 
    #pragma acc parallel loop independent async\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(pchg,fmp,fuind,fuinp,x,y,z,qgrid)
+               deviceptr(pchg,fmp,fuind,fuinp,dpart,x,y,z,qgrid)
    for (int i = 0; i < n; ++i) {
       real thetai1[4 * 5];
       real thetai2[4 * 5];
@@ -71,6 +75,8 @@ static void gridPut_acc(PMEUnit pme_u, real* ptr1, real* ptr2)
          real pchgi = pchg[i];
          if (pchgi == 0)
             continue;
+         // the mutated ligand of Ewald dispersion fills the imaginary part
+         int ip = (eq<T, DISP>() and dpart and dpart[i]) ? 1 : 0;
 
          bsplgen<1>(w1, thetai1, bsorder);
          bsplgen<1>(w2, thetai2, bsorder);
@@ -94,7 +100,7 @@ static void gridPut_acc(PMEUnit pme_u, real* ptr1, real* ptr2)
                   xbase -= (xbase >= nfft1 ? nfft1 : 0);
                   int index = xbase + ybase + zbase;
                   real term = thetai1[4 * ix] * u0;
-                  atomic_add(term, qgrid, 2 * index);
+                  atomic_add(term, qgrid, 2 * index + ip);
                }
             } // end for (int iy)
          }
@@ -152,6 +158,8 @@ static void gridPut_acc(PMEUnit pme_u, real* ptr1, real* ptr2)
       } // end if (MPOLE)
 
       if CONSTEXPR (eq<T, UIND>()) {
+         // ONE_SET: the padded rows of an in-place real FFT
+         const int ldx = 2 * (nfft1 / 2 + 1);
          bsplgen<2>(w1, thetai1, bsorder);
          bsplgen<2>(w2, thetai2, bsorder);
          bsplgen<2>(w3, thetai3, bsorder);
@@ -159,21 +167,24 @@ static void gridPut_acc(PMEUnit pme_u, real* ptr1, real* ptr2)
          real fuindi0 = fuind[i][0];
          real fuindi1 = fuind[i][1];
          real fuindi2 = fuind[i][2];
-         real fuinpi0 = fuinp[i][0];
-         real fuinpi1 = fuinp[i][1];
-         real fuinpi2 = fuinp[i][2];
+         real fuinpi0 = 0, fuinpi1 = 0, fuinpi2 = 0;
+         if CONSTEXPR (not ONE_SET) {
+            fuinpi0 = fuinp[i][0];
+            fuinpi1 = fuinp[i][1];
+            fuinpi2 = fuinp[i][2];
+         }
          #pragma acc loop seq
          for (int iz = 0; iz < bsorder; ++iz) {
             int zbase = igrid3 + iz;
             zbase -= (zbase >= nfft3 ? nfft3 : 0);
-            zbase *= (nfft1 * nfft2);
+            zbase *= (ONE_SET ? ldx * nfft2 : nfft1 * nfft2);
             real v0 = thetai3[4 * iz];
             real v1 = thetai3[4 * iz + 1];
             #pragma acc loop seq
             for (int iy = 0; iy < bsorder; ++iy) {
                int ybase = igrid2 + iy;
                ybase -= (ybase >= nfft2 ? nfft2 : 0);
-               ybase *= nfft1;
+               ybase *= (ONE_SET ? ldx : nfft1);
                real u0 = thetai2[4 * iy];
                real u1 = thetai2[4 * iy + 1];
                real term01 = fuindi1 * u1 * v0 + fuindi2 * u0 * v1;
@@ -187,8 +198,9 @@ static void gridPut_acc(PMEUnit pme_u, real* ptr1, real* ptr2)
                   int index = xbase + ybase + zbase;
                   real t0 = thetai1[4 * ix];
                   real t1 = thetai1[4 * ix + 1];
-                  atomic_add(term01 * t0 + term11 * t1, qgrid, 2 * index);
-                  atomic_add(term02 * t0 + term12 * t1, qgrid, 2 * index + 1);
+                  atomic_add(term01 * t0 + term11 * t1, qgrid, ONE_SET ? index : 2 * index);
+                  if CONSTEXPR (not ONE_SET)
+                     atomic_add(term02 * t0 + term12 * t1, qgrid, 2 * index + 1);
                }
             } // end for (int iy)
          }
@@ -201,9 +213,9 @@ void gridPchg_acc(PMEUnit pme_u, real* pchg)
    gridPut_acc<PCHG>(pme_u, pchg, nullptr);
 }
 
-void gridDisp_acc(PMEUnit pme_u, real* csix)
+void gridDisp_acc(PMEUnit pme_u, real* csix, const int* part)
 {
-   gridPut_acc<DISP>(pme_u, csix, nullptr);
+   gridPut_acc<DISP>(pme_u, csix, (real*)part);
 }
 
 void gridMpole_acc(PMEUnit pme_u, real (*fmp)[10])
@@ -216,7 +228,19 @@ void gridUind_acc(PMEUnit pme_u, real (*fuind)[3], real (*fuinp)[3])
    gridPut_acc<UIND>(pme_u, (real*)fuind, (real*)fuinp);
 }
 
-template <bool DO_E, bool DO_V>
+void gridUindOneSet_acc(PMEUnit pme_u, real (*fuind)[3])
+{
+   gridPut_acc<UIND, true>(pme_u, (real*)fuind, nullptr);
+}
+
+void gridCuindOneSet_acc(PMEUnit pme_u, const real (*cind)[3])
+{
+   cuindToFuind(pme_u, cind, nullptr, fuind, nullptr);
+   gridPut_acc<UIND, true>(pme_u, (real*)fuind, nullptr);
+}
+
+// ONE_SET: the half spectrum, k1 <= nfft1/2, of a real grid, fftfrontOneSet
+template <bool DO_E, bool DO_V, bool ONE_SET = false>
 static void pmeConv_acc1(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
 {
    auto& st = *pme_u;
@@ -228,8 +252,9 @@ static void pmeConv_acc1(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir
    const int nfft1 = st.nfft1;
    const int nfft2 = st.nfft2;
    const int nfft3 = st.nfft3;
-   const int nff = nfft1 * nfft2;
-   const int ntot = nfft1 * nfft2 * nfft3;
+   const int nx = ONE_SET ? nfft1 / 2 + 1 : nfft1;
+   const int nff = nx * nfft2;
+   const int ntot = nff * nfft3;
 
    const real f = electric / dielec;
    real aewald = st.aewald;
@@ -251,8 +276,8 @@ static void pmeConv_acc1(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir
 
       int k3 = i / nff;
       int j = i - k3 * nff;
-      int k2 = j / nfft1;
-      int k1 = j - k2 * nfft1;
+      int k2 = j / nx;
+      int k1 = j - k2 * nx;
 
       int r1 = (k1 < (nfft1 + 1) / 2) ? k1 : (k1 - nfft1);
       int r2 = (k2 < (nfft2 + 1) / 2) ? k2 : (k2 - nfft2);
@@ -319,7 +344,14 @@ void pmeConv_acc(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
    }
 }
 
-template <class T>
+void pmeConvOneSet_acc(PMEUnit pme_u)
+{
+   pmeConv_acc1<false, false, true>(pme_u, nullptr, nullptr);
+}
+
+// ONE_SET: UIND/UIND2 read fuind's potential from qgrid as the real output of
+// fftbackOneSet and skip fdip_phi2; fdip_sum_phi is the d+p sum with p = d
+template <class T, bool ONE_SET = false>
 static void fphiGet_acc(PMEUnit pme_u, real* opt1, real* opt2, real* opt3)
 {
    auto& st = *pme_u;
@@ -501,6 +533,8 @@ static void fphiGet_acc(PMEUnit pme_u, real* opt1, real* opt2, real* opt3)
       } // end if (fphi_mpole)
 
       if CONSTEXPR (eq<T, UIND>() || eq<T, UIND2>()) {
+         // ONE_SET: the padded rows of an in-place real FFT
+         const int ldx = 2 * (nfft1 / 2 + 1);
          real tuv100_1 = 0;
          real tuv010_1 = 0;
          real tuv001_1 = 0;
@@ -543,7 +577,7 @@ static void fphiGet_acc(PMEUnit pme_u, real* opt1, real* opt2, real* opt3)
          for (int iz = 0; iz < bsorder; ++iz) {
             int zbase = igrid3 + iz;
             zbase -= (zbase >= nfft3 ? nfft3 : 0);
-            zbase *= (nfft1 * nfft2);
+            zbase *= (ONE_SET ? ldx * nfft2 : nfft1 * nfft2);
             real v0 = thetai3[4 * iz];
             real v1 = thetai3[4 * iz + 1];
             real v2 = thetai3[4 * iz + 2];
@@ -574,7 +608,7 @@ static void fphiGet_acc(PMEUnit pme_u, real* opt1, real* opt2, real* opt3)
             for (int iy = 0; iy < bsorder; ++iy) {
                int ybase = igrid2 + iy;
                ybase -= (ybase >= nfft2 ? nfft2 : 0);
-               ybase *= nfft1;
+               ybase *= (ONE_SET ? ldx : nfft1);
                real u0 = thetai2[4 * iy];
                real u1 = thetai2[4 * iy + 1];
                real u2 = thetai2[4 * iy + 2];
@@ -590,8 +624,8 @@ static void fphiGet_acc(PMEUnit pme_u, real* opt1, real* opt2, real* opt3)
                for (int ix = 0; ix < bsorder; ++ix) {
                   int xbase = igrid1 + ix;
                   xbase -= (xbase >= nfft1 ? nfft1 : 0);
-                  real tq_1 = qgrid[2 * (xbase + ybase + zbase)];
-                  real tq_2 = qgrid[2 * (xbase + ybase + zbase) + 1];
+                  real tq_1 = ONE_SET ? qgrid[xbase + ybase + zbase] : qgrid[2 * (xbase + ybase + zbase)];
+                  real tq_2 = ONE_SET ? tq_1 : qgrid[2 * (xbase + ybase + zbase) + 1];
                   t0_1 += tq_1 * thetai1[4 * ix];
                   t1_1 += tq_1 * thetai1[4 * ix + 1];
                   t2_1 += tq_1 * thetai1[4 * ix + 2];
@@ -676,16 +710,18 @@ static void fphiGet_acc(PMEUnit pme_u, real* opt1, real* opt2, real* opt3)
          fdip_phi1[i][8] = tuv101_1;
          fdip_phi1[i][9] = tuv011_1;
 
-         fdip_phi2[i][0] = 0;
-         fdip_phi2[i][1] = tuv100_2;
-         fdip_phi2[i][2] = tuv010_2;
-         fdip_phi2[i][3] = tuv001_2;
-         fdip_phi2[i][4] = tuv200_2;
-         fdip_phi2[i][5] = tuv020_2;
-         fdip_phi2[i][6] = tuv002_2;
-         fdip_phi2[i][7] = tuv110_2;
-         fdip_phi2[i][8] = tuv101_2;
-         fdip_phi2[i][9] = tuv011_2;
+         if CONSTEXPR (not ONE_SET) {
+            fdip_phi2[i][0] = 0;
+            fdip_phi2[i][1] = tuv100_2;
+            fdip_phi2[i][2] = tuv010_2;
+            fdip_phi2[i][3] = tuv001_2;
+            fdip_phi2[i][4] = tuv200_2;
+            fdip_phi2[i][5] = tuv020_2;
+            fdip_phi2[i][6] = tuv002_2;
+            fdip_phi2[i][7] = tuv110_2;
+            fdip_phi2[i][8] = tuv101_2;
+            fdip_phi2[i][9] = tuv011_2;
+         }
 
          if CONSTEXPR (eq<T, UIND>()) {
             fdip_sum_phi[i][0] = tuv000;
@@ -726,6 +762,14 @@ void fphiUind_acc(PMEUnit pme_u, real (*gpu_fdip_phi1)[10], real (*gpu_fdip_phi2
 void fphiUind2_acc(PMEUnit pme_u, real (*gpu_fdip_phi1)[10], real (*gpu_fdip_phi2)[10])
 {
    fphiGet_acc<UIND2>(pme_u, (real*)gpu_fdip_phi1, (real*)gpu_fdip_phi2, nullptr);
+}
+
+void fphiUindOneSet_acc(PMEUnit pme_u, real (*gpu_fdip_phi1)[10], real (*gpu_fdip_sum_phi)[20])
+{
+   if (gpu_fdip_sum_phi)
+      fphiGet_acc<UIND, true>(pme_u, (real*)gpu_fdip_phi1, nullptr, (real*)gpu_fdip_sum_phi);
+   else
+      fphiGet_acc<UIND2, true>(pme_u, (real*)gpu_fdip_phi1, nullptr, nullptr);
 }
 
 void rpoleToCmp_acc()
@@ -865,7 +909,8 @@ void cuindToFuind_acc(PMEUnit pme_u, const real (*cind)[3], const real (*cinp)[3
       #pragma acc loop seq
       for (int j = 0; j < 3; ++j) {
          fuind[i][j] = a[0][j] * cind[i][0] + a[1][j] * cind[i][1] + a[2][j] * cind[i][2];
-         fuinp[i][j] = a[0][j] * cinp[i][0] + a[1][j] * cinp[i][1] + a[2][j] * cinp[i][2];
+         if (cinp)
+            fuinp[i][j] = a[0][j] * cinp[i][0] + a[1][j] * cinp[i][1] + a[2][j] * cinp[i][2];
       }
    }
 }

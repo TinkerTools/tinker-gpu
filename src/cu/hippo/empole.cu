@@ -1,9 +1,13 @@
+#include "ff/amoeba/mpolestate.h"
+#include "ff/dlmda.h"
+#include "ff/egvop.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/modhippo.h"
 #include "ff/pme.h"
 #include "ff/spatial.h"
 #include "ff/switch.h"
+#include "seq/emrecip.h"
 #include "seq/emselfhippo.h"
 #include "seq/launch.h"
 #include "seq/pair_mpole_chgpen.h"
@@ -39,7 +43,8 @@ static void empoleChgpen_cu()
    int ngrid = gpuGridSize(BLOCK_DIM);
    empoleChgpen_cu1<Ver, ETYP, CP, CFLX><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, vir_em, demx,
       demy, demz, off, st.si1.bit0, nmdwexclude, mdwexclude, mdwexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl,
-      st.iakpl, st.niak, st.iak, st.lst, trqx, trqy, trqz, pot, rpole, pcore, pval, palpha, aewald, f);
+      st.iakpl, st.niak, st.iak, st.lst, trqx, trqy, trqz, pot, rpole, pcore, pval, palpha, aewald, f, elecDeadGroups(),
+      elecLiveMask());
 }
 
 void empoleChgpenNonEwald_cu(int vers, int use_cf)
@@ -192,12 +197,6 @@ void empoleAplusEwaldRealSelf_cu(int vers, int use_cf)
 }
 
 namespace tinker {
-__global__
-void empoleEwaldRecipGenericAddVirM_cu(size_t size, VirialBuffer restrict vir_em, const VirialBuffer restrict vir_m)
-{
-   for (size_t i = ITHREAD; i < size; i += STRIDE)
-      vir_em[0][i] += vir_m[0][i];
-}
 
 template <bool do_e, bool do_g, bool do_v, int CFLX>
 __global__
@@ -212,24 +211,8 @@ void empoleEwaldRecipGeneric_cu1(int n, real f,                                 
 {
    int ithread = ITHREAD;
    for (int i = ithread; i < n; i += STRIDE) {
-      constexpr int deriv1[] = {2, 5, 8, 9, 11, 16, 18, 14, 15, 20};
-      constexpr int deriv2[] = {3, 8, 6, 10, 14, 12, 19, 16, 20, 17};
-      constexpr int deriv3[] = {4, 9, 10, 7, 15, 17, 13, 20, 18, 19};
-
-      real e = 0;
-      real f1 = 0;
-      real f2 = 0;
-      real f3 = 0;
-
-      for (int k = 0; k < 10; ++k) {
-         if CONSTEXPR (do_e)
-            e += fmp[i][k] * fphi[i][k];
-         if CONSTEXPR (do_g) {
-            f1 += fmp[i][k] * fphi[i][deriv1[k] - 1];
-            f2 += fmp[i][k] * fphi[i][deriv2[k] - 1];
-            f3 += fmp[i][k] * fphi[i][deriv3[k] - 1];
-         }
-      } // end for (int k)
+      real e, f1, f2, f3;
+      emrecipEnergyForceAtomI<do_e, do_g>(i, fmp, fphi, e, f1, f2, f3);
 
       // increment the permanent multipole energy and gradient
 
@@ -251,44 +234,16 @@ void empoleEwaldRecipGeneric_cu1(int n, real f,                                 
 
          // resolve site torques then increment forces and virial
 
-         real tem1 = cmp[i][3] * cphi[i][2] - cmp[i][2] * cphi[i][3] + 2 * (cmp[i][6] - cmp[i][5]) * cphi[i][9]
-            + cmp[i][8] * cphi[i][7] + cmp[i][9] * cphi[i][5] - cmp[i][7] * cphi[i][8] - cmp[i][9] * cphi[i][6];
-         real tem2 = cmp[i][1] * cphi[i][3] - cmp[i][3] * cphi[i][1] + 2 * (cmp[i][4] - cmp[i][6]) * cphi[i][8]
-            + cmp[i][7] * cphi[i][9] + cmp[i][8] * cphi[i][6] - cmp[i][8] * cphi[i][4] - cmp[i][9] * cphi[i][7];
-         real tem3 = cmp[i][2] * cphi[i][1] - cmp[i][1] * cphi[i][2] + 2 * (cmp[i][5] - cmp[i][4]) * cphi[i][7]
-            + cmp[i][7] * cphi[i][4] + cmp[i][9] * cphi[i][8] - cmp[i][7] * cphi[i][5] - cmp[i][8] * cphi[i][9];
-         tem1 *= f;
-         tem2 *= f;
-         tem3 *= f;
-
-         atomic_add(tem1, trqx, i);
-         atomic_add(tem2, trqy, i);
-         atomic_add(tem3, trqz, i);
+         real tem[3];
+         emrecipTorqueAtomI(i, cmp, cphi, tem);
+         atomic_add(tem[0] * f, trqx, i);
+         atomic_add(tem[1] * f, trqy, i);
+         atomic_add(tem[2] * f, trqz, i);
 
          if CONSTEXPR (do_v) {
-            real vxx = -cmp[i][1] * cphi[i][1] - 2 * cmp[i][4] * cphi[i][4] - cmp[i][7] * cphi[i][7]
-               - cmp[i][8] * cphi[i][8];
-            real vxy = -0.5f * (cmp[i][2] * cphi[i][1] + cmp[i][1] * cphi[i][2]) - (cmp[i][4] + cmp[i][5]) * cphi[i][7]
-               - 0.5f * cmp[i][7] * (cphi[i][4] + cphi[i][5])
-               - 0.5f * (cmp[i][8] * cphi[i][9] + cmp[i][9] * cphi[i][8]);
-            real vxz = -0.5f * (cmp[i][3] * cphi[i][1] + cmp[i][1] * cphi[i][3]) - (cmp[i][4] + cmp[i][6]) * cphi[i][8]
-               - 0.5f * cmp[i][8] * (cphi[i][4] + cphi[i][6])
-               - 0.5f * (cmp[i][7] * cphi[i][9] + cmp[i][9] * cphi[i][7]);
-            real vyy = -cmp[i][2] * cphi[i][2] - 2 * cmp[i][5] * cphi[i][5] - cmp[i][7] * cphi[i][7]
-               - cmp[i][9] * cphi[i][9];
-            real vyz = -0.5f * (cmp[i][3] * cphi[i][2] + cmp[i][2] * cphi[i][3]) - (cmp[i][5] + cmp[i][6]) * cphi[i][9]
-               - 0.5f * cmp[i][9] * (cphi[i][5] + cphi[i][6])
-               - 0.5f * (cmp[i][7] * cphi[i][8] + cmp[i][8] * cphi[i][7]);
-            real vzz = -cmp[i][3] * cphi[i][3] - 2 * cmp[i][6] * cphi[i][6] - cmp[i][8] * cphi[i][8]
-               - cmp[i][9] * cphi[i][9];
-            vxx *= f;
-            vxy *= f;
-            vxz *= f;
-            vyy *= f;
-            vyz *= f;
-            vzz *= f;
-
-            atomic_add(vxx, vxy, vxz, vyy, vyz, vzz, vir_em, ithread);
+            real v[6];
+            emrecipVirialAtomI(i, cmp, cphi, v);
+            atomic_add(v[0] * f, v[1] * f, v[2] * f, v[3] * f, v[4] * f, v[5] * f, vir_em, ithread);
          } // end if (do_v)
          if CONSTEXPR (CFLX) {
             atomic_add(f * cphi[i][0], pot, i);
@@ -297,7 +252,10 @@ void empoleEwaldRecipGeneric_cu1(int n, real f,                                 
    }
 }
 
-template <class Ver, int CFLX>
+// With REUSE, fmp, fphi and cphi are the ones induce() just built for the
+// direct field from this same cmp, and the convolution virial is already in
+// vir_m, so only the per-atom work is left.
+template <class Ver, int CFLX, bool REUSE = false>
 static void empoleEwaldRecipGeneric_cu()
 {
    constexpr bool do_e = Ver::e;
@@ -305,23 +263,36 @@ static void empoleEwaldRecipGeneric_cu()
    constexpr bool do_v = Ver::v;
 
    const PMEUnit pu = epme_unit;
-   cmpToFmp(pu, cmp, fmp);
-   gridMpole(pu, fmp);
-   fftfront(pu);
-   if CONSTEXPR (do_v) {
-      if (vir_m) {
-         pmeConv(pu, vir_m);
-         auto size = bufferSize() * VirialBufferTraits::value;
-         launch_k1s(g::s0, size, empoleEwaldRecipGenericAddVirM_cu, size, vir_em, vir_m);
-      } else {
-         pmeConv(pu, vir_em);
+   if CONSTEXPR (REUSE) {
+      if CONSTEXPR (do_v) {
+         if (vir_m) {
+            auto size = bufferSize() * VirialBufferTraits::value;
+            sumVirialBuffer(size, vir_em, vir_m);
+         }
       }
    } else {
-      pmeConv(pu);
+      cmpToFmp(pu, cmp, fmp);
+      gridMpole(pu, fmp);
+      fftfront(pu);
+      bool conv_vir_m = false;
+      if CONSTEXPR (do_v) {
+         if (vir_m) {
+            darray::zero(g::q0, bufferSize(), vir_m);
+            pmeConv(pu, vir_m);
+            auto size = bufferSize() * VirialBufferTraits::value;
+            sumVirialBuffer(size, vir_em, vir_m);
+            conv_vir_m = true;
+         } else {
+            pmeConv(pu, vir_em);
+         }
+      } else {
+         pmeConv(pu);
+      }
+      fftback(pu);
+      fphiMpole(pu, fphi);
+      fphiToCphi(pu, fphi, cphi);
+      mpoleFphiProduced(pu, conv_vir_m);
    }
-   fftback(pu);
-   fphiMpole(pu);
-   fphiToCphi(pu, fphi, cphi);
 
    auto& st = *pu;
    const int nfft1 = st.nfft1;
@@ -333,6 +304,22 @@ static void empoleEwaldRecipGeneric_cu()
       n, f, em, vir_em, demx, demy, demz, trqx, trqy, trqz, pot,             //
       cmp, fmp, cphi, fphi,                                                  //
       nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS);
+}
+
+// Multipole reciprocal energy and forces from the potential induce() left in
+// fphi and cphi; the caller guarantees cmp and the coordinates are unchanged.
+void empoleEwaldRecipReuse_cu(int vers)
+{
+   if (vers == calc::v0)
+      empoleEwaldRecipGeneric_cu<calc::V0, 0, true>();
+   else if (vers == calc::v1)
+      empoleEwaldRecipGeneric_cu<calc::V1, 0, true>();
+   else if (vers == calc::v4)
+      empoleEwaldRecipGeneric_cu<calc::V4, 0, true>();
+   else if (vers == calc::v5)
+      empoleEwaldRecipGeneric_cu<calc::V5, 0, true>();
+   else if (vers == calc::v6)
+      empoleEwaldRecipGeneric_cu<calc::V6, 0, true>();
 }
 
 void empoleChgpenEwaldRecip_cu(int vers, int use_cf)

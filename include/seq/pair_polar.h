@@ -36,7 +36,7 @@ inline void zero(PairPolarGrad& pgrad)
 }
 
 #pragma acc routine seq
-template <bool do_e, bool do_g, class ETYP>
+template <bool do_e, bool do_a, bool do_g, class ETYP>
 SEQ_CUDA
 void pair_polar( //
    real r2,
@@ -63,7 +63,7 @@ void pair_polar( //
    real uiyp,
    real uizp,
    real pdi,
-   real pti, //
+   real pga, //
    real ck,
    real dkx,
    real dky,
@@ -80,11 +80,11 @@ void pair_polar( //
    real ukxp,
    real ukyp,
    real ukzp,
-   real pdk,
-   real ptk, //
+   real pdk, //
    real f,
    real aewald,
    real& restrict e,
+   real& restrict edamp,
    PairPolarGrad& restrict pgrad)
 {
    if CONSTEXPR (eq<ETYP, EWALD>()) {
@@ -135,15 +135,15 @@ void pair_polar( //
    real ex3, ex5, ex7;
    MAYBE_UNUSED real rc31, rc32, rc33, rc51, rc52, rc53, rc71, rc72, rc73;
    if CONSTEXPR (!do_g) {
-      damp_thole3(r, pdi, pti, pdk, ptk, //
+      dmpthole3_a(r, pga, pdi, pdk, //
                   ex3, ex5, ex7);
       ex3 = 1 - ex3;
       ex5 = 1 - ex5;
       ex7 = 1 - ex7;
    } else {
-      damp_thole3g(          //
+      dmpthole3g_a(          //
          r, rr2, xr, yr, zr, //
-         pdi, pti, pdk, ptk, //
+         pga, pdi, pdk,      //
          ex3, ex5, ex7,      //
          rc31, rc32, rc33,   //
          rc51, rc52, rc53,   //
@@ -173,6 +173,11 @@ void pair_polar( //
       real term2 = 2 * (qiu - qku) - uir * dkr - dir * ukr;
       real term3 = uir * qkr - ukr * qir;
       e = pscale * f * (term1 * sr3 + term2 * sr5 + term3 * sr7);
+      // The damped pair energy without Ewald screening or scaling. Tinker counts
+      // the pair as an interaction when this and its scale are nonzero (epolar3.f).
+      // Only counting reads it, so it is left unset unless do_a.
+      if CONSTEXPR (do_a)
+         edamp = f * (term1 * (rr3 - ex3 * rr3) + term2 * (rr5 - ex5 * rr5) + term3 * (rr7 - ex7 * rr7));
    }
 
    if CONSTEXPR (do_g) {
@@ -391,7 +396,7 @@ void pair_polar_v2( //
    real uiyp,
    real uizp,
    real pdi,
-   real pti, //
+   real pga, //
    real ck,
    real dkx,
    real dky,
@@ -408,8 +413,7 @@ void pair_polar_v2( //
    real ukxp,
    real ukyp,
    real ukzp,
-   real pdk,
-   real ptk, //
+   real pdk, //
    real f,
    real aewald, //
    real& restrict frcxi,
@@ -437,6 +441,7 @@ void pair_polar_v2( //
    real& restrict duf4k,
    real& restrict duf5k,
    real& restrict e,
+   real& restrict edamp,
    real& restrict vxx,
    real& restrict vxy,
    real& restrict vxz,
@@ -445,6 +450,7 @@ void pair_polar_v2( //
    real& restrict vzz)
 {
    constexpr bool do_e = Ver::e;
+   constexpr bool do_a = Ver::a;
    constexpr bool do_g = Ver::g;
    constexpr bool do_v = Ver::v;
 
@@ -496,15 +502,15 @@ void pair_polar_v2( //
    real ex3, ex5, ex7;
    MAYBE_UNUSED real rc31, rc32, rc33, rc51, rc52, rc53, rc71, rc72, rc73;
    if CONSTEXPR (!do_g) {
-      damp_thole3(r, pdi, pti, pdk, ptk, //
+      dmpthole3_a(r, pga, pdi, pdk, //
                   ex3, ex5, ex7);
       ex3 = 1 - ex3;
       ex5 = 1 - ex5;
       ex7 = 1 - ex7;
    } else {
-      damp_thole3g(          //
+      dmpthole3g_a(          //
          r, rr2, xr, yr, zr, //
-         pdi, pti, pdk, ptk, //
+         pga, pdi, pdk,      //
          ex3, ex5, ex7,      //
          rc31, rc32, rc33,   //
          rc51, rc52, rc53,   //
@@ -534,6 +540,11 @@ void pair_polar_v2( //
       real term2 = 2 * (qiu - qku) - uir * dkr - dir * ukr;
       real term3 = uir * qkr - ukr * qir;
       e = pscale * f * (term1 * sr3 + term2 * sr5 + term3 * sr7);
+      // The damped pair energy without Ewald screening or scaling. Tinker counts
+      // the pair as an interaction when this and its scale are nonzero (epolar3.f).
+      // Only counting reads it, so it is left unset unless do_a.
+      if CONSTEXPR (do_a)
+         edamp = f * (term1 * (rr3 - ex3 * rr3) + term2 * (rr5 - ex5 * rr5) + term3 * (rr7 - ex7 * rr7));
    }
 
    if CONSTEXPR (do_g) {

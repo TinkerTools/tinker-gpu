@@ -49,14 +49,14 @@ void dk_geom_group(real& restrict e,
    // image() calls are necessary here because atoms in the same group
    // do not necessarily belong to the same molecule
 
-   real weigha = REAL_MAX((real)1, grpmass[ia]);
+   real weigha = REAL_MAX((real)1, (real)grpmass[ia]);
    int ka1 = kgrp[ja1];
    real xa1 = x[ka1], ya1 = y[ka1], za1 = z[ka1];
    real xacm = xa1 * weigha, yacm = ya1 * weigha, zacm = za1 * weigha;
    #pragma acc loop seq
    for (int j = ja1 + 1; j < ja2; ++j) {
       int k = kgrp[j];
-      real weigh = mass[k];
+      real weigh = (real)mass[k];
       real xr = x[k] - xa1;
       real yr = y[k] - ya1;
       real zr = z[k] - za1;
@@ -68,14 +68,14 @@ void dk_geom_group(real& restrict e,
    }
    weigha = REAL_RECIP(weigha);
 
-   real weighb = REAL_MAX((real)1, grpmass[ib]);
+   real weighb = REAL_MAX((real)1, (real)grpmass[ib]);
    int kb1 = kgrp[jb1];
    real xb1 = x[kb1], yb1 = y[kb1], zb1 = z[kb1];
    real xbcm = xb1 * weighb, ybcm = yb1 * weighb, zbcm = zb1 * weighb;
    #pragma acc loop seq
    for (int j = jb1 + 1; j < jb2; ++j) {
       int k = kgrp[j];
-      real weigh = mass[k];
+      real weigh = (real)mass[k];
       real xr = x[k] - xb1;
       real yr = y[k] - yb1;
       real zr = z[k] - zb1;
@@ -116,7 +116,7 @@ void dk_geom_group(real& restrict e,
       #pragma acc loop seq
       for (int j = ja1; j < ja2; ++j) {
          int k = kgrp[j];
-         real ratio = mass[k] * weigha;
+         real ratio = (real)mass[k] * weigha;
          atomic_add(dedx * ratio, degx, k);
          atomic_add(dedy * ratio, degy, k);
          atomic_add(dedz * ratio, degz, k);
@@ -124,7 +124,7 @@ void dk_geom_group(real& restrict e,
       #pragma acc loop seq
       for (int j = jb1; j < jb2; ++j) {
          int k = kgrp[j];
-         real ratio = mass[k] * weighb;
+         real ratio = (real)mass[k] * weighb;
          atomic_add(-dedx * ratio, degx, k);
          atomic_add(-dedy * ratio, degy, k);
          atomic_add(-dedz * ratio, degz, k);

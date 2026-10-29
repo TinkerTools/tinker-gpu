@@ -5,7 +5,7 @@
 
 namespace tinker {
 #pragma acc routine seq
-template <bool do_e, bool do_g, class ETYP, int CFLX>
+template <bool do_e, bool do_a, bool do_g, class ETYP, int CFLX>
 SEQ_CUDA
 void pair_polar_aplus(real r2,
                       real xr,
@@ -18,8 +18,8 @@ void pair_polar_aplus(real r2,
                       real diy,
                       real diz,
                       real pdi,
-                      real pti,
-                      real ddi,
+                      real pga,
+                      real pgd,
                       real qixx,
                       real qixy,
                       real qixz,
@@ -34,8 +34,6 @@ void pair_polar_aplus(real r2,
                       real dky,
                       real dkz,
                       real pdk,
-                      real ptk,
-                      real ddk,
                       real qkxx,
                       real qkxy,
                       real qkxz,
@@ -48,6 +46,7 @@ void pair_polar_aplus(real r2,
                       real f,
                       real aewald,
                       real& restrict e,
+                      real& restrict edamp,
                       real& restrict poti,
                       real& restrict potk,
                       PairPolarGrad& restrict pgrad)
@@ -94,15 +93,15 @@ void pair_polar_aplus(real r2,
    real ex3, ex5, ex7;
    MAYBE_UNUSED real rc31, rc32, rc33, rc51, rc52, rc53, rc71, rc72, rc73;
    if CONSTEXPR (!do_g) {
-      damp_aplus3(r, pdi, ddi, pdk, ddk, //
+      dmpaplus3_a(r, pgd, pdi, pdk, //
                   ex3, ex5, ex7);
       ex3 = 1 - ex3;
       ex5 = 1 - ex5;
       ex7 = 1 - ex7;
    } else {
-      damp_aplus3g(          //
+      dmpaplus3g_a(          //
          r, rr2, xr, yr, zr, //
-         pdi, ddi, pdk, ddk, //
+         pgd, pdi, pdk,      //
          ex3, ex5, ex7,      //
          rc31, rc32, rc33,   //
          rc51, rc52, rc53,   //
@@ -132,28 +131,33 @@ void pair_polar_aplus(real r2,
       real term2 = 2 * (qiu - qku) - uir * dkr - dir * ukr;
       real term3 = uir * qkr - ukr * qir;
       e = dscale * f * (term1 * sr3 + term2 * sr5 + term3 * sr7);
+      // The damped pair energy without Ewald screening or scaling. Tinker counts
+      // the pair as an interaction when this and its scale are nonzero (epolar3.f).
+      // Only counting reads it, so it is left unset unless do_a.
+      if CONSTEXPR (do_a)
+         edamp = f * (term1 * (rr3 - ex3 * rr3) + term2 * (rr5 - ex5 * rr5) + term3 * (rr7 - ex7 * rr7));
    }
 
    if CONSTEXPR (do_g) {
       real uir = uix * xr + uiy * yr + uiz * zr;
       real ukr = ukx * xr + uky * yr + ukz * zr;
       if CONSTEXPR (CFLX) {
-         poti = -2.0 * ukr * f * dscale * sr3;
-         potk = 2.0 * uir * f * dscale * sr3;
+         poti = -2 * ukr * f * dscale * sr3;
+         potk = 2 * uir * f * dscale * sr3;
       }
 
       // get the induced dipole field used for dipole torques
 
       real tuir, tukr;
 
-      real tix3 = 2.0 * dscale * sr3 * ukx;
-      real tiy3 = 2.0 * dscale * sr3 * uky;
-      real tiz3 = 2.0 * dscale * sr3 * ukz;
-      real tkx3 = 2.0 * dscale * sr3 * uix;
-      real tky3 = 2.0 * dscale * sr3 * uiy;
-      real tkz3 = 2.0 * dscale * sr3 * uiz;
-      tuir = -2.0 * dscale * sr5 * ukr;
-      tukr = -2.0 * dscale * sr5 * uir;
+      real tix3 = 2 * dscale * sr3 * ukx;
+      real tiy3 = 2 * dscale * sr3 * uky;
+      real tiz3 = 2 * dscale * sr3 * ukz;
+      real tkx3 = 2 * dscale * sr3 * uix;
+      real tky3 = 2 * dscale * sr3 * uiy;
+      real tkz3 = 2 * dscale * sr3 * uiz;
+      tuir = -2 * dscale * sr5 * ukr;
+      tukr = -2 * dscale * sr5 * uir;
 
       pgrad.ufldi[0] = f * (tix3 + xr * tuir);
       pgrad.ufldi[1] = f * (tiy3 + yr * tuir);
@@ -170,8 +174,8 @@ void pair_polar_aplus(real r2,
       real tkx5 = 4 * (dscale * sr5 * uix);
       real tky5 = 4 * (dscale * sr5 * uiy);
       real tkz5 = 4 * (dscale * sr5 * uiz);
-      tuir = -2.0 * dscale * sr7 * ukr;
-      tukr = -2.0 * dscale * sr7 * uir;
+      tuir = -2 * dscale * sr7 * ukr;
+      tukr = -2 * dscale * sr7 * uir;
 
       pgrad.dufldi[0] = f * (xr * tix5 + xr * xr * tuir);
       pgrad.dufldi[1] = f * (xr * tiy5 + yr * tix5 + 2 * xr * yr * tuir);
@@ -256,9 +260,9 @@ void pair_polar_aplus(real r2,
       }
 
       // get the dtau/dr terms used for mutual polarization force
-      damp_thole3g(          //
+      dmpthole3g_a(          //
          r, rr2, xr, yr, zr, //
-         pdi, pti, pdk, ptk, //
+         pga, pdi, pdk,      //
          ex3, ex5, ex7,      //
          rc31, rc32, rc33,   //
          rc51, rc52, rc53,   //
@@ -349,8 +353,8 @@ void pair_polar_aplus_v2(real r2,
                          real uiy,
                          real uiz,
                          real pdi,
-                         real pti,
-                         real ddi,
+                         real pga,
+                         real pgd,
                          real ck,
                          real dkx,
                          real dky,
@@ -365,8 +369,6 @@ void pair_polar_aplus_v2(real r2,
                          real uky,
                          real ukz,
                          real pdk,
-                         real ptk,
-                         real ddk,
                          real f,
                          real aewald,
                          real& restrict frcxi,
@@ -394,6 +396,7 @@ void pair_polar_aplus_v2(real r2,
                          real& restrict duf4k,
                          real& restrict duf5k,
                          real& restrict e,
+                         real& restrict edamp,
                          real& restrict vxx,
                          real& restrict vxy,
                          real& restrict vxz,
@@ -404,6 +407,7 @@ void pair_polar_aplus_v2(real r2,
                          real& restrict potk)
 {
    constexpr bool do_e = Ver::e;
+   constexpr bool do_a = Ver::a;
    constexpr bool do_g = Ver::g;
    constexpr bool do_v = Ver::v;
 
@@ -455,15 +459,15 @@ void pair_polar_aplus_v2(real r2,
    real ex3, ex5, ex7;
    MAYBE_UNUSED real rc31, rc32, rc33, rc51, rc52, rc53, rc71, rc72, rc73;
    if CONSTEXPR (!do_g) {
-      damp_aplus3(r, pdi, ddi, pdk, ddk, //
+      dmpaplus3_a(r, pgd, pdi, pdk, //
                   ex3, ex5, ex7);
       ex3 = 1 - ex3;
       ex5 = 1 - ex5;
       ex7 = 1 - ex7;
    } else {
-      damp_aplus3g(          //
+      dmpaplus3g_a(          //
          r, rr2, xr, yr, zr, //
-         pdi, ddi, pdk, ddk, //
+         pgd, pdi, pdk,      //
          ex3, ex5, ex7,      //
          rc31, rc32, rc33,   //
          rc51, rc52, rc53,   //
@@ -493,11 +497,16 @@ void pair_polar_aplus_v2(real r2,
       real term2 = 2 * (qiu - qku) - uir * dkr - dir * ukr;
       real term3 = uir * qkr - ukr * qir;
       e = dscale * f * (term1 * sr3 + term2 * sr5 + term3 * sr7);
+      // The damped pair energy without Ewald screening or scaling. Tinker counts
+      // the pair as an interaction when this and its scale are nonzero (epolar3.f).
+      // Only counting reads it, so it is left unset unless do_a.
+      if CONSTEXPR (do_a)
+         edamp = f * (term1 * (rr3 - ex3 * rr3) + term2 * (rr5 - ex5 * rr5) + term3 * (rr7 - ex7 * rr7));
    }
 
    if CONSTEXPR (CFLX) {
-      poti = -2.0 * ukr * f * dscale * sr3;
-      potk = 2.0 * uir * f * dscale * sr3;
+      poti = -2 * ukr * f * dscale * sr3;
+      potk = 2 * uir * f * dscale * sr3;
    }
 
    if CONSTEXPR (do_g) {
@@ -508,14 +517,14 @@ void pair_polar_aplus_v2(real r2,
 
       real tuir, tukr;
 
-      real tix3 = 2.0 * dscale * sr3 * ukx;
-      real tiy3 = 2.0 * dscale * sr3 * uky;
-      real tiz3 = 2.0 * dscale * sr3 * ukz;
-      real tkx3 = 2.0 * dscale * sr3 * uix;
-      real tky3 = 2.0 * dscale * sr3 * uiy;
-      real tkz3 = 2.0 * dscale * sr3 * uiz;
-      tuir = -2.0 * dscale * sr5 * ukr;
-      tukr = -2.0 * dscale * sr5 * uir;
+      real tix3 = 2 * dscale * sr3 * ukx;
+      real tiy3 = 2 * dscale * sr3 * uky;
+      real tiz3 = 2 * dscale * sr3 * ukz;
+      real tkx3 = 2 * dscale * sr3 * uix;
+      real tky3 = 2 * dscale * sr3 * uiy;
+      real tkz3 = 2 * dscale * sr3 * uiz;
+      tuir = -2 * dscale * sr5 * ukr;
+      tukr = -2 * dscale * sr5 * uir;
 
       uf0i += f * (tix3 + xr * tuir);
       uf1i += f * (tiy3 + yr * tuir);
@@ -532,8 +541,8 @@ void pair_polar_aplus_v2(real r2,
       real tkx5 = 4 * (dscale * sr5 * uix);
       real tky5 = 4 * (dscale * sr5 * uiy);
       real tkz5 = 4 * (dscale * sr5 * uiz);
-      tuir = -2.0 * dscale * sr7 * ukr;
-      tukr = -2.0 * dscale * sr7 * uir;
+      tuir = -2 * dscale * sr7 * ukr;
+      tukr = -2 * dscale * sr7 * uir;
 
       duf0i += f * (xr * tix5 + xr * xr * tuir);
       duf1i += f * (xr * tiy5 + yr * tix5 + 2 * xr * yr * tuir);
@@ -619,9 +628,9 @@ void pair_polar_aplus_v2(real r2,
       }
 
       // get the dtau/dr terms used for mutual polarization force
-      damp_thole3g(          //
+      dmpthole3g_a(          //
          r, rr2, xr, yr, zr, //
-         pdi, pti, pdk, ptk, //
+         pga, pdi, pdk,      //
          ex3, ex5, ex7,      //
          rc31, rc32, rc33,   //
          rc51, rc52, rc53,   //

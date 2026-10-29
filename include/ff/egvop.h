@@ -1,4 +1,5 @@
 #pragma once
+#include "ff/energybuffer.h"
 #include "ff/precision.h"
 #include "tool/rcman.h"
 
@@ -9,8 +10,11 @@ namespace tinker {
 /// Zero out all of the counts, energies, gradients, and virials on device.
 void zeroEGV(int vers = rc_flag);
 
-/// `g0 *= scale`.
-void scaleGradient(double scale, grad_prec* g0x, grad_prec* g0y, grad_prec* g0z);
+/// `dst += src` for an energy buffer.
+void sumEnergyBuffer(size_t size, EnergyBuffer dst, const EnergyBufferTraits::type* src);
+
+/// `dst += src` for `size` flattened virial-buffer elements.
+void sumVirialBuffer(size_t size, VirialBuffer dst, const VirialBuffer src);
 
 /// `g0 += g1`.
 void sumGradient(grad_prec* g0x,
@@ -28,6 +32,14 @@ void sumGradient(double scale,
                  const grad_prec* g1x,
                  const grad_prec* g1y,
                  const grad_prec* g1z);
+
+/// `g0 = g1` on device.
+void copyGradient(grad_prec* g0x,
+                  grad_prec* g0y,
+                  grad_prec* g0z, //
+                  const grad_prec* g1x,
+                  const grad_prec* g1y,
+                  const grad_prec* g1z);
 
 /// Copies the energy gradients from device to host.
 void copyGradientSync(int vers,

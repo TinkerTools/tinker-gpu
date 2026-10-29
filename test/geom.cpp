@@ -39,9 +39,9 @@ restrainterm        only
    const double eps_g = 0.0001;
    const double eps_v = 0.001;
 
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    rc_flag = usage;
-   initialize();
+   session.init();
 
    energy(calc::v3);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -67,8 +67,7 @@ restrainterm        only
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("Geom-Distance-Local-Frame2", "[ff][egeom][local-frame2]")
@@ -99,9 +98,9 @@ restrainterm        only
    const double eps_g = 0.0001;
    const double eps_v = 0.001;
 
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    rc_flag = usage;
-   initialize();
+   session.init();
 
    energy(calc::v3);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -127,8 +126,7 @@ restrainterm        only
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("Geom-Angle-Local-Frame2", "[ff][egeom][local-frame2]")
@@ -159,9 +157,9 @@ restrainterm        only
    const double eps_g = 0.0001;
    const double eps_v = 0.001;
 
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    rc_flag = usage;
-   initialize();
+   session.init();
 
    energy(calc::v3);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -187,8 +185,7 @@ restrainterm        only
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("Geom-Torsion-Local-Frame2", "[ff][egeom][local-frame2]")
@@ -219,9 +216,9 @@ restrainterm        only
    const double eps_g = 0.1000;
    const double eps_v = 0.0015;
 
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    rc_flag = usage;
-   initialize();
+   session.init();
 
    energy(calc::v3);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -247,8 +244,7 @@ restrainterm        only
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("Geom-Position-Local-Frame2", "[ff][egeom][local-frame2]")
@@ -279,9 +275,9 @@ restrainterm        only
    const double eps_g = 0.1000;
    const double eps_v = 0.0015;
 
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    rc_flag = usage;
-   initialize();
+   session.init();
 
    energy(calc::v3);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -307,6 +303,5 @@ restrainterm        only
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }

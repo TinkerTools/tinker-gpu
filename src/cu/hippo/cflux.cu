@@ -1,3 +1,5 @@
+#include "ff/dlmda.h"
+#include "ff/elec.h"
 #include "ff/evalence.h"
 #include "ff/modamoeba.h"
 #include "ff/modhippo.h"
@@ -80,11 +82,13 @@ static void bndangChg_cu1(real* restrict pdelta,                                
 
 __global__
 static void bndangChg_cu2(int n, real* restrict pval, real (*restrict pole)[MPL_TOTAL], //
-   const real* restrict pval0, const real* restrict mono0, const real* restrict pdelta)
+   const real* restrict pval0, const real* restrict mono0, const real* restrict pdelta,
+   const real* restrict fluxsc)
 {
    for (int i = ITHREAD; i < n; i += STRIDE) {
-      pval[i] = pval0[i] + pdelta[i];
-      pole[i][0] = mono0[i] + pdelta[i];
+      real dq = fluxsc[i] * pdelta[i];
+      pval[i] = pval0[i] + dq;
+      pole[i][0] = mono0[i] + dq;
    }
 }
 
@@ -101,16 +105,43 @@ void alterchg_cu()
    }
 
    launch_k1s(g::s0, n, bndangChg_cu2, //
-      n, pval, pole, pval0, mono0, pdelta);
+      n, pval, pole, pval0, mono0, pdelta, fluxsc);
 }
 }
 
 namespace tinker {
+// Where the energy derivative with respect to each unscaled flux change comes
+// from: the potential of the scaled multipoles at each atom times its flux
+// scale; or, with the multipoles scaled on the fly, times the scale of its
+// lambda group; or, with dlpot, the lambda derivative of that product with the
+// chain rule to the main lambda (empole4.f:emflux4).
+struct CfluxPot
+{
+   const real* pot;
+   const real* fluxsc;
+   const real* dlpot;
+   const int* grp;
+   GrpScale esc;
+   real deldl;
+};
+
+__device__
+inline real cfluxPotAt(const CfluxPot& p, int i)
+{
+   if (p.grp) {
+      int g = p.grp[i];
+      if (p.dlpot)
+         return p.deldl * (p.esc.ds[g] * p.pot[i] + p.esc.s[g] * p.dlpot[i]);
+      return p.esc.s[g] * p.pot[i];
+   }
+   return p.fluxsc[i] * p.pot[i];
+}
+
 template <int DO_V>
 __global__
 static void dcfluxBndAng_cu1(VirialBuffer restrict vir, grad_prec* restrict gx, grad_prec* restrict gy,
    grad_prec* restrict gz, const real* restrict x, const real* restrict y, const real* restrict z,
-   const real* restrict pot,                                            //
+   CfluxPot p,                                                          //
    int nbond, const int (*restrict ibnd)[2], const real* restrict bflx, //
    int nangle, const int (*restrict iang)[4], const real (*restrict aflx)[2], const real (*restrict abflx)[2])
 {
@@ -125,7 +156,7 @@ static void dcfluxBndAng_cu1(VirialBuffer restrict vir, grad_prec* restrict gx, 
       real yab = y[ia] - y[ib];
       real zab = z[ia] - z[ib];
       real rab = REAL_SQRT(xab * xab + yab * yab + zab * zab);
-      real dpot = pot[ia] - pot[ib];
+      real dpot = cfluxPotAt(p, ia) - cfluxPotAt(p, ib);
       real pb = bflx[i] / rab;
 
       real fx = dpot * pb * xab;
@@ -172,8 +203,9 @@ static void dcfluxBndAng_cu1(VirialBuffer restrict vir, grad_prec* restrict gx, 
       real rbc = REAL_SQRT(rbc2);
       real rbc3 = rbc2 * rbc;
 
-      real dpota = pot[ia] - pot[ib];
-      real dpotc = pot[ic] - pot[ib];
+      real pib = cfluxPotAt(p, ib);
+      real dpota = cfluxPotAt(p, ia) - pib;
+      real dpotc = cfluxPotAt(p, ic) - pib;
       pb1 *= dpota;
       pb2 *= dpotc;
 
@@ -229,24 +261,42 @@ static void dcfluxBndAng_cu1(VirialBuffer restrict vir, grad_prec* restrict gx, 
    }
 }
 
-template <int DO_V>
-static void dcflux_cu1(grad_prec* restrict gx, grad_prec* restrict gy, grad_prec* restrict gz,
+static void dcflux_cu1(const CfluxPot& p, grad_prec* restrict gx, grad_prec* restrict gy, grad_prec* restrict gz,
    VirialBuffer restrict vir)
 {
    auto nparall = std::max(nbond, nangle);
-   if (nparall > 0) {
-      launch_k1b(g::s0, nparall, dcfluxBndAng_cu1<DO_V>, //
-         vir, gx, gy, gz, x, y, z, pot,                  //
-         nbond, ibnd, bflx,                              //
-         nangle, iang, aflx, abflx);
-   }
+   if (nparall <= 0)
+      return;
+   if (vir)
+      launch_k1b(g::s0, nparall, dcfluxBndAng_cu1<1>, vir, gx, gy, gz, x, y, z, p, //
+         nbond, ibnd, bflx, nangle, iang, aflx, abflx);
+   else
+      launch_k1b(g::s0, nparall, dcfluxBndAng_cu1<0>, vir, gx, gy, gz, x, y, z, p, //
+         nbond, ibnd, bflx, nangle, iang, aflx, abflx);
 }
 
 void dcflux_cu(int vers, grad_prec* gx, grad_prec* gy, grad_prec* gz, VirialBuffer vir)
 {
-   if (vers & calc::virial)
-      dcflux_cu1<1>(gx, gy, gz, vir);
-   else
-      dcflux_cu1<0>(gx, gy, gz, nullptr);
+   CfluxPot p{pot, fluxsc, nullptr, nullptr, GrpScale{}, 0};
+   dcflux_cu1(p, gx, gy, gz, (vers & calc::virial) ? vir : nullptr);
+}
+
+void dcfluxGroup_cu(const int* grp, GrpScale w, grad_prec* gx, grad_prec* gy, grad_prec* gz, VirialBuffer vir)
+{
+   CfluxPot p{pot, nullptr, nullptr, grp, w, 0};
+   dcflux_cu1(p, gx, gy, gz, vir);
+}
+
+void dcfluxDlmda_cu(int vers, int dlvers)
+{
+   CfluxPot p{pot, nullptr, nullptr, emGroup(), grpScale(elam), 0};
+   dcflux_cu1(p, demx, demy, demz, (vers & calc::virial) ? vir_em : nullptr);
+
+   // the force lambda derivative, and with it the virial's
+   if (dlvers & calc::grad_dlmda) {
+      p.dlpot = dlpot;
+      p.deldl = deldlmda;
+      dcflux_cu1(p, dfdlx, dfdly, dfdlz, (dlvers & calc::virial_dlmda) ? dvirdl_buf : nullptr);
+   }
 }
 }

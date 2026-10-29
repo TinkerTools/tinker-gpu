@@ -27,9 +27,9 @@ TEST_CASE("Torsion-Trpcage", "[ff][etors][trpcage]")
 
    const char* argv[] = {"dummy", x1};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    rc_flag = calc::xyz | calc::vmask;
-   initialize();
+   session.init();
 
    energy(calc::v3);
    COMPARE_REALS(esum, ref_e, eps_e);
@@ -55,6 +55,5 @@ TEST_CASE("Torsion-Trpcage", "[ff][etors][trpcage]")
       for (int j = 0; j < 3; ++j)
          COMPARE_REALS(vir[i * 3 + j], ref_v[i][j], eps_v);
 
-   finish();
-   testEnd();
+   session.end();
 }

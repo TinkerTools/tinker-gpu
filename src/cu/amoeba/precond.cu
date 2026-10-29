@@ -1,4 +1,5 @@
 #include "ff/cumodamoeba.h"
+#include "ff/dlmda.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
 #include "ff/spatial.h"
@@ -28,8 +29,7 @@ void sparsePrecond_cu0(const real (*restrict rsd)[3], const real (*restrict rsdp
 void sparsePrecondApply_cu(const real (*rsd)[3], const real (*rsdp)[3], real (*zrsd)[3], real (*zrsdp)[3])
 {
    const auto& st = *uspatial_v2_unit;
-   real off = switchOff(Switch::USOLVE);
-   off = off + st.buffer;
+   const real off = switchOff(Switch::USOLVE);
 
    launch_k1s(g::s0, n, sparsePrecond_cu0, //
       rsd, rsdp, zrsd, zrsdp, polarity, n, udiag);
@@ -39,6 +39,6 @@ void sparsePrecondApply_cu(const real (*rsd)[3], const real (*rsdp)[3], real (*z
    nparallel = std::max(nparallel, ngrid);
    launch_k1s(g::s0, nparallel, sparsePrecond_cu1, //
       st.n, TINKER_IMAGE_ARGS, off, st.si1.bit0, nuexclude, uexclude, uexclude_scale, st.x, st.y, st.z, st.sorted,
-      st.nakpl, st.iakpl, st.niak, st.iak, st.lst, rsd, rsdp, zrsd, zrsdp, polarity);
+      st.nakpl, st.iakpl, st.niak, st.iak, st.lst, rsd, rsdp, zrsd, zrsdp, polarity, elecDeadGroups(), elecLiveMask());
 }
 }

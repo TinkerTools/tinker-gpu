@@ -50,9 +50,9 @@ TEST_CASE("Local-Frame2-1", "[ff][triclinic][evdw][hal][local-frame2]")
    TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
    TestFile fx1(TINKER9_DIRSTR "/test/file/local_frame/local_frame2.xyz", x1);
 
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    rc_flag = usage;
-   initialize();
+   session.init();
 
    SECTION("ehal -- pbc, cutoff")
    {
@@ -66,8 +66,7 @@ TEST_CASE("Local-Frame2-1", "[ff][triclinic][evdw][hal][local-frame2]")
       COMPARE_COUNT(nev, ref_count);
    }
 
-   finish();
-   testEnd();
+   session.end();
 }
 
 TEST_CASE("Local-Frame2-2", "[ff][monoclinic][evdw][hal][local-frame2]")
@@ -79,9 +78,9 @@ TEST_CASE("Local-Frame2-2", "[ff][monoclinic][evdw][hal][local-frame2]")
    TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
    TestFile fx1(TINKER9_DIRSTR "/test/file/local_frame/local_frame2.xyz", x1);
 
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
    rc_flag = usage;
-   initialize();
+   session.init();
 
    SECTION("ehal -- pbc, cutoff")
    {
@@ -95,6 +94,5 @@ TEST_CASE("Local-Frame2-2", "[ff][monoclinic][evdw][hal][local-frame2]")
       COMPARE_COUNT(nev, ref_count);
    }
 
-   finish();
-   testEnd();
+   session.end();
 }

@@ -1,5 +1,6 @@
 #include "ff/amoeba/induce.h"
 #include "ff/cuinduce.h"
+#include "ff/dlmda.h"
 #include "ff/modamoeba.h"
 #include "ff/switch.h"
 #include "seq/launch.h"
@@ -9,6 +10,7 @@
 #include <tinker/detail/polpcg.hh>
 #include <tinker/detail/polpot.hh>
 #include <tinker/detail/units.hh>
+#include <utility>
 
 namespace tinker {
 void induceMutualPcg1_cu(real (*uind)[3], real (*uinp)[3])
@@ -25,12 +27,9 @@ void induceMutualPcg1_cu(real (*uind)[3], real (*uinp)[3])
    auto* vecp = work10_;
 
    const bool sparse_prec = polpcg::pcgprec and (switchOff(Switch::USOLVE) > 0);
-   bool dirguess = polpcg::pcgguess;
-   bool predict = polpred != UPred::NONE;
-   if (predict and nualt < maxualt) {
-      predict = false;
-      dirguess = true;
-   }
+   const UGuess guess = induceGuess();
+   const bool predict = guess == UGuess::PREDICT;
+   const bool dirguess = guess == UGuess::DIRECT;
 
    // get the electrostatic field due to permanent multipoles
    dfield(field, fieldp);
@@ -82,6 +81,8 @@ void induceMutualPcg1_cu(real (*uind)[3], real (*uinp)[3])
    // initial r(0) M r(0)
    real* sum = &((real*)dptr_buf)[0];
    real* sump = &((real*)dptr_buf)[1];
+   real* sum1 = &((real*)dptr_buf)[4];
+   real* sump1 = &((real*)dptr_buf)[5];
    darray::dot(g::q0, n, sum, rsd, zrsd);
    darray::dot(g::q0, n, sump, rsdp, zrsdp);
 
@@ -126,16 +127,15 @@ void induceMutualPcg1_cu(real (*uind)[3], real (*uinp)[3])
          diagPrecond(rsd, rsdp, zrsd, zrsdp);
 
       // b = sum1 / sum; bp = sump1 / sump
-      real* sum1 = &((real*)dptr_buf)[4];
-      real* sump1 = &((real*)dptr_buf)[5];
       darray::dot(g::q0, n, sum1, rsd, zrsd);
       darray::dot(g::q0, n, sump1, rsdp, zrsdp);
 
       // calculate/update p
       launch_k1s(g::s0, n, pcgP3, n, sum, sump, sum1, sump1, conj, conjp, zrsd, zrsdp);
 
-      // copy sum1/p to sum/p
-      darray::copy(g::q0, 2, sum, sum1);
+      // sum1/p become sum/p; the old slots take the next sum1/p
+      std::swap(sum, sum1);
+      std::swap(sump, sump1);
 
       real* epsd = &((real*)dptr_buf)[6];
       real* epsp = &((real*)dptr_buf)[7];
@@ -178,9 +178,7 @@ void induceMutualPcg1_cu(real (*uind)[3], real (*uinp)[3])
    }
 
    // terminate the calculation if dipoles failed to converge
-   if (iter >= maxiter) {
-      printError();
-      TINKER_THROW("INDUCE  --  Warning, Induced Dipoles are not Converged");
-   }
+   if (iter >= maxiter)
+      induceNotConverged(rsd, rsdp);
 }
 }

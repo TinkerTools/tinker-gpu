@@ -10,14 +10,6 @@ namespace tinker {
 /// \addtogroup egv
 /// \{
 
-/// Evaluates potential energy.
-/// \param vers      Flag to select the version of energy routines.
-/// \param tsflag    Time scale flag, a 32-bit encrypted integer.
-/// \param tsconfig  Constant reference to a TimeScaleConfig object.
-///
-/// \see TimeScaleConfig
-void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig);
-
 /// First, energy buffers, virial buffers, gradient arrays, and count buffers are set to 0.
 /// Then, evaluate energies, gradients, virials, and count interactions.
 /// Last, update the global energy and virial tensor variables.
@@ -38,6 +30,9 @@ bool useEnergyVdw();
 
 /// Logical flag for use of electrostatic terms.
 bool useEnergyElec();
+
+/// Logical flag for use of intermolecular neural network terms.
+bool useEnergyINN();
 
 /// Sets up data on device.
 void egvData(RcOp);
@@ -110,6 +105,10 @@ TINKER_EXTERN VirialBuffer vir_buf_elec;       ///< Virial buffer for the electr
 TINKER_EXTERN VirialBuffer vir_buf_nnintermol; ///< Virial buffer for the Intermolecular NN terms.
 
 TINKER_EXTERN energy_prec esum;              ///< Total potential energy.
+/// \ref xyz_epoch as the energy call that found \ref esum left it. While the two
+/// are equal neither the coordinates nor the box have been set since, and esum
+/// is still the energy of the system.
+TINKER_EXTERN unsigned long long esum_epoch;
 TINKER_EXTERN energy_prec energy_valence;    ///< Total valence energy.
 TINKER_EXTERN energy_prec energy_vdw;        ///< Total vdw energy.
 TINKER_EXTERN energy_prec energy_elec;       ///< Total electrostatic energy.

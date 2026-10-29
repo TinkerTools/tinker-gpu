@@ -1,15 +1,72 @@
 #pragma once
+#include "ff/dlmda.h"
+#include "ff/energybuffer.h"
 #include "ff/precision.h"
 #include "tool/rcman.h"
 
 namespace tinker {
 /// \ingroup polar
 /// \{
+
+/// Whether the induced dipole dot product supplies the polarization energy for
+/// this version. It does whenever an energy is wanted without an analysis
+/// breakdown (epolar0e in epolar.f), and then the pairwise and reciprocal
+/// kernels must leave every energy channel alone or the two would be summed.
+///
+/// Under dual topology this also settles the lambda derivative of the energy:
+/// the only version that takes its energy pairwise is calc::v3, which
+/// lmdaDerivVers() leaves alone, so it carries no derivative channels. The dot
+/// product therefore owns dE/dL and d2E/dL2 as well, and the kernels below need
+/// no energy derivative sinks.
+inline constexpr bool epolarEnergyFromDotProd(int vers)
+{
+   return (vers & calc::energy) and not(vers & calc::analyz);
+}
+
+/// Where one dual topology pass sends its reciprocal-space and self
+/// contributions, and with what weight. Polarization masks rpole and polarity
+/// before each pass, so a whole pass shares one set of weights and the kernels
+/// need no per-atom group lookup.
+///
+///     E, virial, gradient, torque  <- wa times the pass result
+///     their lambda derivatives     <- wb times the same, into the dl sinks
+///
+/// The default is the ordinary single-topology path: unit weight and no sinks.
+/// A null sink means that channel was not requested, so the kernels gate on the
+/// pointer rather than on a separate flag.
+struct RecipDt
+{
+   VirialBuffer vdl = nullptr;
+   grad_prec* dgx = nullptr;
+   grad_prec* dgy = nullptr;
+   grad_prec* dgz = nullptr;
+   real* dltrqx = nullptr;
+   real* dltrqy = nullptr;
+   real* dltrqz = nullptr;
+   real wa = 1;
+   real wb = 0;
+};
+
 void epolarData(RcOp);
 void epolar(int vers);
-void epolarEwaldRecipSelf(int vers);
-// see also subroutine epolar0e in epolar.f
-void epolar0DotProd(const real (*uind)[3], const real (*udirp)[3]);
+void epolar_dt(int vers);
+void epolarDtPasses(int vers);
+/// Single topology polarization at the polarization lambda (epolar4.f:
+/// epolar4s): the parameters scaled to it, charge flux, the solve and pair
+/// terms of \c kernel, the external field, torque, the flux and exchange
+/// polarization gradients, the torque virial, and the explicit lambda
+/// derivative. The caller zeroes and flushes the term's buffers.
+void epolarSingleTopology(int vers, void (*kernel)(int vers, bool use_cfgrad));
+void epolarSetActiveMask();
+void epolarAstDeriv();
+void polarState(RdtMask mask, const int* group, real factor = 1);
+void epolarPhysicalInduced();
+RecipDt dtRecipSinks(int vers, real wa, real wb);
+void epolarEwaldRecipSelf(int vers, EnergyBuffer out_e, VirialBuffer out_v,
+   grad_prec* out_gx, grad_prec* out_gy, grad_prec* out_gz);
+void epolarEwaldRecipSelfDt(int vers, EnergyBuffer out_e, VirialBuffer out_v, grad_prec* out_gx,
+   grad_prec* out_gy, grad_prec* out_gz, const RecipDt& dt);
+void epolar0DotProd(const real (*uind)[3], const real (*udirp)[3], EnergyBuffer eout);
 void epolarPairwiseExtfield(int vers, const real (*uind)[3]);
 /// \}
 }

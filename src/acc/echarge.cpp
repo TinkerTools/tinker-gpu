@@ -1,12 +1,16 @@
 #include "ff/atom.h"
+#include "ff/dlmda.h"
 #include "ff/echarge.h"
 #include "ff/image.h"
+#include "ff/modamoeba.h"
 #include "ff/nblist.h"
 #include "ff/pme.h"
 #include "ff/switch.h"
+#include "math/libfunc.h"
 #include "math/switch.h"
 #include "seq/bsplgen.h"
 #include "seq/pair_charge.h"
+#include "tool/darray.h"
 #include "tool/gpucard.h"
 #include <tinker/detail/extfld.hh>
 
@@ -369,12 +373,13 @@ void echargeEwaldFphiSelf_acc(int vers)
       echarge_acc3<calc::V6, 5>();
 }
 
-void exfieldCharge_acc(int vers)
+template <class Ver>
+static void exfieldCharge_acc1()
 {
-   bool do_e = vers & calc::energy;
-   bool do_a = vers & calc::analyz;
-   bool do_g = vers & calc::grad;
-   bool do_v = vers & calc::virial;
+   constexpr bool do_e = Ver::e;
+   constexpr bool do_a = Ver::a;
+   constexpr bool do_g = Ver::g;
+   constexpr bool do_v = Ver::v;
 
    auto bufsize = bufferSize();
    real f = electric / dielec;
@@ -386,21 +391,23 @@ void exfieldCharge_acc(int vers)
       int offset = ii & (bufsize - 1);
       real xi = x[ii], yi = y[ii], zi = z[ii], ci = pchg[ii];
 
-      if (do_e) {
+      if CONSTEXPR (do_e) {
          real phi = xi * ef1 + yi * ef2 + zi * ef3; // negative potential
          real e = -f * ci * phi;
          atomic_add(e, ec, offset);
-         if (do_a)
-            atomic_add(1, nec, offset);
+         if CONSTEXPR (do_a) {
+            if (e != 0)
+               atomic_add(1, nec, offset);
+         }
       }
-      if (do_g) {
+      if CONSTEXPR (do_g) {
          real frx = -f * ef1 * ci;
          real fry = -f * ef2 * ci;
          real frz = -f * ef3 * ci;
          atomic_add(frx, decx, ii);
          atomic_add(fry, decy, ii);
          atomic_add(frz, decz, ii);
-         if (do_v) {
+         if CONSTEXPR (do_v) {
             real vxx = xi * frx;
             real vyy = yi * fry;
             real vzz = zi * frz;
@@ -410,6 +417,74 @@ void exfieldCharge_acc(int vers)
             atomic_add(vxx, vxy, vxz, vyy, vyz, vzz, vir_ec, offset);
          }
       }
+   }
+}
+
+void exfieldCharge_acc(int vers)
+{
+   if (vers == calc::v0)
+      exfieldCharge_acc1<calc::V0>();
+   else if (vers == calc::v1)
+      exfieldCharge_acc1<calc::V1>();
+   else if (vers == calc::v3)
+      exfieldCharge_acc1<calc::V3>();
+   else if (vers == calc::v4)
+      exfieldCharge_acc1<calc::V4>();
+   else if (vers == calc::v5)
+      exfieldCharge_acc1<calc::V5>();
+   else if (vers == calc::v6)
+      exfieldCharge_acc1<calc::V6>();
+}
+
+// Adds the Ewald uniform background charge correction, already evaluated on
+// the host, into the first slot of the term's buffers.
+void ewaldBackgroundAdd_acc(CountBuffer nc, EnergyBuffer eb, EnergyBuffer dl1b, EnergyBuffer dl2b, VirialBuffer vb,
+   VirialBuffer dvb, int count, real e, real dl1, real dl2)
+{
+   #pragma acc serial async deviceptr(nc,eb,dl1b,dl2b,vb,dvb)
+   {
+      if (nc)
+         atomic_add(count, nc, 0);
+      if (eb)
+         atomic_add(e, eb, 0);
+      if (dl1b)
+         atomic_add(dl1, dl1b, 0);
+      if (dl2b)
+         atomic_add(dl2, dl2b, 0);
+      if (vb)
+         atomic_add(-e, (real)0, (real)0, -e, (real)0, -e, vb, 0);
+      if (dvb)
+         atomic_add(-dl1, (real)0, (real)0, -dl1, (real)0, -dl1, dvb, 0);
+   }
+}
+
+// The background correction of a net charge that charge flux moves with the
+// geometry, as ewaldBackgroundFlux_cu adds it; only the multipole lambda
+// derivative, which is CUDA only, passes lambda groups.
+void ewaldBackgroundFlux_acc(fixed* qnet, const int* grp, GrpScale esc, real fterm, real deldl, real d2eldl2,
+   CountBuffer nc, EnergyBuffer eb, EnergyBuffer dl1b, EnergyBuffer dl2b, VirialBuffer vb, VirialBuffer dvb,
+   real* pot, real* dlpot)
+{
+   darray::zero(g::q0, 2, qnet);
+   #pragma acc parallel loop independent async deviceptr(qnet,rpole)
+   for (int i = 0; i < n; ++i)
+      atomic_add(rpole[i][MPL_PME_0], qnet, 0);
+   #pragma acc serial async deviceptr(qnet,nc,eb,vb)
+   {
+      real q = fixedTo<real>(qnet[0]);
+      real e = fterm * q * q;
+      bool charged = REAL_ABS(q) > (real)1.0e-10;
+      if (nc and charged)
+         atomic_add(1, nc, 0);
+      if (eb)
+         atomic_add(e, eb, 0);
+      if (vb)
+         atomic_add(-e, (real)0, (real)0, -e, (real)0, -e, vb, 0);
+   }
+   if (pot) {
+      #pragma acc parallel loop independent async deviceptr(qnet,pot)
+      for (int i = 0; i < n; ++i)
+         pot[i] += 2 * fterm * fixedTo<real>(qnet[0]);
    }
 }
 }

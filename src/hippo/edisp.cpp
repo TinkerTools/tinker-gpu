@@ -1,16 +1,30 @@
 #include "ff/hippo/edisp.h"
+#include "ff/dlmda.h"
 #include "ff/energy.h"
+#include "ff/evdw.h"
 #include "ff/pme.h"
 #include "ff/potent.h"
 #include "math/zero.h"
 #include "tool/externfunc.h"
+#include <cassert>
 #include <tinker/detail/couple.hh>
 #include <tinker/detail/disp.hh>
 #include <tinker/detail/dsppot.hh>
 #include <tinker/detail/limits.hh>
+#include <tinker/detail/mutant.hh>
 #include <tinker/routines.h>
 
 namespace tinker {
+// The C6 sums of the environment and of the mutated ligand, the sum of the
+// squared C6 of the ligand for its self term, and the copy of the forward
+// transform that separates their two transforms (edisp1.f:edrecip1).
+static double dsp_sume, dsp_suml, dsp_sqll;
+static real* dsp_qfwd;
+// The lambda derivative of the potential, which gives the force one.
+static real* dsp_qdl;
+// The class sums of the long-range dispersion correction.
+static LrcSums dsp_lrc;
+
 bool useDEwald()
 {
    return use(Potent::DISP) and static_cast<bool>(limits::use_dewald);
@@ -26,6 +40,9 @@ void edispData(RcOp op)
    if (op & RcOp::DEALLOC) {
       darray::deallocate(csix, adisp);
       darray::deallocate(dspexclude, dspexclude_scale);
+      darray::deallocate(dsp_qfwd, dsp_qdl);
+      dsp_qfwd = nullptr;
+      dsp_qdl = nullptr;
 
       if (rc_a) {
          bufferDeallocate(rc_flag, ndisp);
@@ -38,12 +55,20 @@ void edispData(RcOp op)
       dedspy = nullptr;
       dedspz = nullptr;
 
-      elrc_vol_dsp = 0;
-      vlrc_vol_dsp = 0;
+      dsp_lrc = {};
    }
 
    if (op & RcOp::ALLOC) {
       darray::allocate(n, &csix, &adisp);
+      // a mutated ligand may be weighted apart from the environment (dispSplit)
+      dsp_qfwd = nullptr;
+      dsp_qdl = nullptr;
+      if (useDEwald() and mutant::nmut > 0) {
+         const auto& st = *dpme_unit;
+         darray::allocate(2 * st.nfft1 * st.nfft2 * st.nfft3, &dsp_qfwd);
+         if (use_vdlmda and use_d2lmda)
+            darray::allocate(2 * st.nfft1 * st.nfft2 * st.nfft3, &dsp_qdl);
+      }
 
       ndisp = nullptr;
       edsp = eng_buf_vdw;
@@ -56,15 +81,6 @@ void edispData(RcOp op)
          bufferAllocate(rc_flag, &edsp, &vir_edsp, &dedspx, &dedspy, &dedspz);
       }
 
-      if (dsppot::use_dcorr && not useDEwald()) {
-         double elrc = 0, vlrc = 0;
-         tinker_f_evcorr1({const_cast<char*>("DISP"), 4}, &elrc, &vlrc);
-         elrc_vol_dsp = elrc * boxVolume();
-         vlrc_vol_dsp = vlrc * boxVolume();
-      } else {
-         elrc_vol_dsp = 0;
-         vlrc_vol_dsp = 0;
-      }
       dsp2scale = dsppot::dsp2scale;
       dsp3scale = dsppot::dsp3scale;
       dsp4scale = dsppot::dsp4scale;
@@ -142,58 +158,204 @@ void edispData(RcOp op)
    }
 
    if (op & RcOp::INIT) {
+      scrdsp = mutant::scrdsp;
+      scexpd = mutant::scexpd;
+      scexpdq = mutant::scexpdq;
       csixpr = disp::csixpr;
       darray::copyin(g::q0, n, csix, disp::csix);
       darray::copyin(g::q0, n, adisp, disp::adisp);
       waitFor(g::q0);
+
+      dsp_sume = 0;
+      dsp_suml = 0;
+      dsp_sqll = 0;
+      if (mutant::nmut > 0) {
+         for (int i = 0; i < n; ++i) {
+            double c = disp::csix[i];
+            if (mutant::mutg[i] == 0) {
+               dsp_sume += c;
+            } else {
+               dsp_suml += c;
+               dsp_sqll += c * c;
+            }
+         }
+      }
+
+      dsp_lrc = {};
+      if (dsppot::use_dcorr && not useDEwald())
+         lrcSetup(dsp_lrc, true);
    }
 }
 }
 
 namespace tinker {
-TINKER_FVOID2(acc1, cu1, edispNonEwald, int);
-static void edispNonEwald(int vers)
+// A lambda power vlam^e of the soft core and its lambda derivatives
+// (edspsc.f:dspsc4). The soft core is linear in its two powers, so the van der
+// Waals lambda chain rule goes on the powers themselves.
+static LmdaFn dispPower(double e, bool dodl)
 {
-   TINKER_FCALL2(acc1, cu1, edispNonEwald, vers);
+   return lmdaPwrChain(vlam, e, dvldlmda, d2vldlmda2, dodl);
 }
 
-TINKER_FVOID2(acc1, cu1, edispEwaldReal, int);
-TINKER_FVOID2(acc1, cu1, edispEwaldRecipSelf, int);
-TINKER_FVOID2(acc1, cu1, pmeConvDisp, int);
-static void edispEwald(int vers)
+// The soft core of the real space pairs from its powers lambda^n and
+// lambda^(n+q) (edspsc.f:dspsc4).
+static DispSoft dispSoft(const LmdaFn& c, const LmdaFn& q)
 {
-   TINKER_FCALL2(acc1, cu1, edispEwaldReal, vers);
+   DispSoft ds;
+   ds.dlsc = c.f;
+   ds.dlsq = q.f;
+   ds.dlsc1 = c.d1;
+   ds.dlsq1 = q.d1;
+   ds.dlsc2 = c.d2;
+   ds.dlsq2 = q.d2;
+   ds.rs2 = scrdsp * scrdsp;
+   ds.rrs2 = (scrdsp > 0 ? 1 / (scrdsp * scrdsp) : 0);
+   return ds;
+}
 
-   // recip and self
+TINKER_FVOID2(acc1, cu1, edispNonEwald, int, DispSoft);
+static void edispNonEwald(int vers, const DispSoft& sc)
+{
+   TINKER_FCALL2(acc1, cu1, edispNonEwald, vers, sc);
+}
+
+// The terms of the reciprocal and self parts summed on the host: the weighted
+// C6 pair sum of the zero wavevector with its lambda derivatives, and the
+// lambda derivatives of the ligand-ligand weight, which scales the self term
+// of each ligand site.
+struct DispHost
+{
+   real cpr;
+   double dcpr, d2cpr;
+   double dwll, d2wll;
+};
+
+// The reciprocal and self terms weight the ligand by the lambda power v of the
+// soft core, which the real space pairs carry beyond its switch radius: v
+// between the ligand and the environment, and within the ligand v when it is
+// annihilated or 1 when it is decoupled. The weighted C6 sum product replaces
+// csixpr, and the split stays on at full coupling while the weights have
+// lambda derivatives (edisp.f:dspmutwt4).
+static DispSplit dispSplit(const LmdaFn& v, bool dodl, DispHost& h)
+{
+   DispSplit ds = {false, 1, 1, 0, 0, 0, 0, nullptr, nullptr, nullptr};
+   h = {csixpr, 0, 0, 0, 0};
+   if (mutant::nmut == 0)
+      return ds;
+   if (not dodl and v.f == 1)
+      return ds;
+
+   double wel = v.f, dwel = v.d1, d2wel = v.d2;
+   double wll = 1, dwll = 0, d2wll = 0;
+   if (vcouple == Vdw::ANNIHILATE) {
+      wll = v.f;
+      dwll = v.d1;
+      d2wll = v.d2;
+   }
+   assert(dsp_qfwd);
+   ds.split = true;
+   ds.wel = wel;
+   ds.wll = wll;
+   ds.dwel = dwel;
+   ds.dwll = dwll;
+   ds.d2wel = d2wel;
+   ds.d2wll = d2wll;
+   ds.part = mut;
+   ds.qfwd = reinterpret_cast<const real(*)[2]>(dsp_qfwd);
+   double se = dsp_sume, sl = dsp_suml;
+   h.cpr = se * se + 2 * wel * se * sl + wll * sl * sl;
+   h.dcpr = 2 * dwel * se * sl + dwll * sl * sl;
+   h.d2cpr = 2 * d2wel * se * sl + d2wll * sl * sl;
+   h.dwll = dwll;
+   h.d2wll = d2wll;
+   return ds;
+}
+
+TINKER_FVOID2(acc1, cu1, edispEwaldReal, int, DispSoft);
+TINKER_FVOID2(acc1, cu1, edispEwaldRecipSelf, int, DispSplit);
+TINKER_FVOID2(acc1, cu1, pmeConvDisp, int, DispSplit);
+TINKER_FVOID2(acc0, cu1, edispEwaldRecipDlmda, DispSplit);
+static void edispEwald(int vers, const DispSoft& sc, const LmdaFn& v)
+{
+   TINKER_FCALL2(acc1, cu1, edispEwaldReal, vers, sc);
+
+   // recip and self, whose lambda derivatives vanish without a mutated ligand
+   DispHost h;
+   DispSplit ds = dispSplit(v, vers & calc::energy_dlmda1, h);
+   if (not ds.split)
+      vers &= ~calc::dlmda;
    auto do_e = vers & calc::energy;
    auto do_v = vers & calc::virial;
    auto do_g = vers & calc::grad;
+   auto do_dl1 = vers & calc::energy_dlmda1;
+   auto do_dl2 = vers & calc::energy_dlmda2;
+   auto do_gdl = vers & calc::grad_dlmda;
+   auto do_vdl = vers & calc::virial_dlmda;
    PMEUnit u = dpme_unit;
+   const int ntot = u->nfft1 * u->nfft2 * u->nfft3;
 
-   gridDisp(u, csix);
+   if (do_gdl) {
+      assert(dsp_qdl);
+      ds.qdl = reinterpret_cast<real(*)[2]>(dsp_qdl);
+   }
+   gridDisp(u, csix, ds.part);
    fftfront(u);
-   TINKER_FCALL2(acc1, cu1, pmeConvDisp, vers);
+   // each point of the convolution reads the opposite wavevector as well
+   if (ds.split)
+      darray::copy(g::q0, 2 * ntot, dsp_qfwd, u->qgrid);
+   TINKER_FCALL2(acc1, cu1, pmeConvDisp, vers, ds);
    if (do_g) {
       fftback(u);
    }
-   TINKER_FCALL2(acc1, cu1, edispEwaldRecipSelf, vers);
+   // the lambda derivatives of the self term are added below
+   TINKER_FCALL2(acc1, cu1, edispEwaldRecipSelf, vers & ~calc::dlmda, ds);
+
+   // the lambda derivative of the potential goes through the same grid
+   if (do_gdl) {
+      darray::copy(g::q0, 2 * ntot, u->qgrid, dsp_qdl);
+      fftback(u);
+      TINKER_FCALL2(acc0, cu1, edispEwaldRecipDlmda, ds);
+   }
 
    // account for the total energy and virial correction term
-   if CONSTEXPR (do_e || do_v) {
+   if (do_e || do_v) {
       const real aewald = u->aewald;
       const real denom0 = 6 * boxVolume() / std::pow(M_PI, 1.5);
-      energy_prec term = csixpr * aewald * aewald * aewald / denom0;
-      if CONSTEXPR (do_e) {
+      energy_prec term = h.cpr * aewald * aewald * aewald / denom0;
+      if (do_e) {
          energy_edsp -= term;
          energy_vdw -= term;
       }
-      if CONSTEXPR (do_v) {
+      if (do_v) {
          virial_edsp[0] += term; // xx
          virial_edsp[4] += term; // yy
          virial_edsp[8] += term; // zz
          virial_vdw[0] += term;  // xx
          virial_vdw[4] += term;  // yy
          virial_vdw[8] += term;  // zz
+      }
+   }
+
+   // the lambda derivatives of the correction term and of the self term of
+   // the ligand sites (edisp.f:dspself)
+   if (do_dl1) {
+      const double aewald = u->aewald;
+      const double a3 = aewald * aewald * aewald;
+      const double fcpr = a3 * std::pow(M_PI, 1.5) / (6 * boxVolume());
+      const double fself = a3 * a3 / 12 * dsp_sqll;
+      energy_prec term = h.dcpr * fcpr;
+      energy_prec dl1 = h.dwll * fself - term;
+      devdl += dl1;
+      dedl += dl1;
+      if (do_dl2) {
+         energy_prec dl2 = h.d2wll * fself - h.d2cpr * fcpr;
+         d2evdl2 += dl2;
+         d2edl2 += dl2;
+      }
+      if (do_vdl) {
+         dvirdl[0] += term;
+         dvirdl[4] += term;
+         dvirdl[8] += term;
       }
    }
 }
@@ -219,29 +381,20 @@ void edisp(int vers)
          darray::zero(g::q0, n, dedspx, dedspy, dedspz);
    }
 
+   // The lambda derivatives follow vlambda and go to the van der Waals
+   // channels, while its map has slope or curvature (edisp1.f).
+   // The soft core powers are taken once for the real and reciprocal parts.
+   const int dlvers = lmdaDerivVers(vers, vdlmdaActive());
+   const bool dodl = dlvers & calc::energy_dlmda1;
+   const LmdaFn vn = dispPower(scexpd, dodl);
+   const DispSoft sc = dispSoft(vn, dispPower(scexpd + scexpdq, dodl));
+   vdwLmdaZero(vers);
    if (useDEwald())
-      edispEwald(vers);
+      edispEwald(dlvers, sc, vn);
    else
-      edispNonEwald(vers);
-
-   if (do_e) {
-      if (elrc_vol_dsp != 0) {
-         energy_prec corr = elrc_vol_dsp / boxVolume();
-         energy_edsp += corr;
-         energy_vdw += corr;
-      }
-   }
-   if (do_v) {
-      if (vlrc_vol_dsp != 0) {
-         virial_prec term = vlrc_vol_dsp / boxVolume();
-         virial_edsp[0] += term; // xx
-         virial_edsp[4] += term; // yy
-         virial_edsp[8] += term; // zz
-         virial_vdw[0] += term;
-         virial_vdw[4] += term;
-         virial_vdw[8] += term;
-      }
-   }
+      edispNonEwald(dlvers, sc);
+   vdwLmdaFlush(vers);
+   lrcApply(vers, dlvers, dsp_lrc, energy_edsp, virial_edsp);
    if (rc_a) {
       if (do_e) {
          EnergyBuffer u = edsp;

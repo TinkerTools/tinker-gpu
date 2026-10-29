@@ -10,10 +10,13 @@
 #include "seq/triangle.h"
 #include "tool/error.h"
 #include "tool/thrustcache.h"
-#include <numeric>
 // Eventually thrust will drop c++11 support.
 #define THRUST_IGNORE_DEPRECATED_CPP_DIALECT
+#include <thrust/binary_search.h>
 #include <thrust/gather.h>
+#include <thrust/iterator/counting_iterator.h>
+#include <thrust/scan.h>
+#include <thrust/sequence.h>
 #include <thrust/sort.h>
 
 // step 1 2
@@ -695,17 +698,18 @@ void spatialStep5(const int* restrict bnum, const int* restrict iakpl_rev, int n
 template <class IMG>
 void Spatial::RunStep5(SpatialUnit u)
 {
-   u->niak = 0;
+   u->niak_full = 0;
    int* dev_niak = &u->update[2];
    real cutbuf = u->cutoff + u->buffer;
    launch_k1s(g::s0, u->nakp, spatialStep5<IMG>, //
       u->bnum, u->iakpl_rev, u->nstype, u->si1, u->si2, u->si3,
-      u->si4,                                  //
-      dev_niak, u->iak, u->lst,                //
+      u->si4,                                   //
+      dev_niak, u->iak_full, u->lst_full,       //
       u->n, u->nak, cutbuf, TINKER_IMAGE_ARGS, //
       u->akpf, u->sorted, u->akc, u->half, u->nblist4nn, ngrps_nnvalence, grps_nnvalence, grp.grplist);
-   darray::copyout(g::q0, 1, &u->niak, dev_niak);
+   darray::copyout(g::q0, 1, &u->niak_full, dev_niak);
    waitFor(g::q0);
+   u->niak = u->niak_full;
    if (u->niak > u->nak * Spatial::LSTCAP) {
       int cap = Spatial::LSTCAP;
       printError();
@@ -725,6 +729,123 @@ struct alignas(128) intx32
    int a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24,
       a25, a26, a27, a28, a29, a30, a31, a32;
 };
+
+// Pruning keeps an #lst_full entry if its atom is within the pruning distance of any atom of
+// the block. Every entry is handled by one warp, since there are many more entries than blocks;
+// keep[] gets the bits of its kept lanes and nkept[] of its block counts them.
+template <class IMG>
+__global__
+void spatialPrune1(int n, int nfull, const int* restrict iak_full, const Spatial::SortedAtom* restrict sorted,
+   const int* restrict lst_full, real prune2, TINKER_IMAGE_PARAMS, unsigned* restrict keep, int* restrict nkept)
+{
+   const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
+   const int iwarp = ithread / WARP_SIZE;
+   const int nwarp = blockDim.x * gridDim.x / WARP_SIZE;
+   const int ilane = threadIdx.x & (WARP_SIZE - 1);
+
+   for (int it = iwarp; it < nfull; it += nwarp) {
+      int wy = iak_full[it];
+      int atomi = min(wy * WARP_SIZE + ilane, n - 1);
+      real xi = sorted[atomi].x;
+      real yi = sorted[atomi].y;
+      real zi = sorted[atomi].z;
+      // 0 pads the entries and is never a neighbor.
+      int k = lst_full[it * WARP_SIZE + ilane];
+      real xk = sorted[k].x;
+      real yk = sorted[k].y;
+      real zk = sorted[k].z;
+      bool kept = false;
+      for (int j = 0; j < WARP_SIZE; ++j) {
+         real xr = __shfl_sync(ALL_LANES, xi, j) - xk;
+         real yr = __shfl_sync(ALL_LANES, yi, j) - yk;
+         real zr = __shfl_sync(ALL_LANES, zi, j) - zk;
+         real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_LVEC_ARGS, TINKER_IMAGE_RECIP_ARGS);
+         kept = kept or r2 <= prune2;
+         if ((j & 7) == 7 and __all_sync(ALL_LANES, kept or k == 0))
+            break;
+      }
+      unsigned bits = __ballot_sync(ALL_LANES, kept and k != 0);
+      if (ilane == 0) {
+         keep[it] = bits;
+         atomicAdd(&nkept[wy], __popc(bits));
+      }
+   }
+}
+
+// Turns the kept neighbors of every block into the number of entries they take; the extra
+// element after the last block is 0, for the scan.
+__global__
+void spatialPruneTiles(int nak, int* restrict ntile)
+{
+   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i <= nak; i += blockDim.x * gridDim.x)
+      ntile[i] = i < nak ? (ntile[i] + WARP_SIZE - 1) / WARP_SIZE : 0;
+}
+
+// Writes the kept neighbors of every block, in their #lst_full order, from offset[] on.
+__global__
+void spatialPrune2(int nak, const int* restrict beg, const int* restrict lst_full, const unsigned* restrict keep,
+   const int* restrict offset, int* restrict iak, int* restrict lst)
+{
+   const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
+   const int iwarp = ithread / WARP_SIZE;
+   const int nwarp = blockDim.x * gridDim.x / WARP_SIZE;
+   const int ilane = threadIdx.x & (WARP_SIZE - 1);
+   const unsigned lanemask = (1u << ilane) - 1;
+
+   for (int wy = iwarp; wy < nak; wy += nwarp) {
+      int pos = offset[wy] * WARP_SIZE;
+      for (int it = beg[wy]; it < beg[wy + 1]; ++it) {
+         unsigned bits = keep[it];
+         if (bits & (1u << ilane))
+            lst[pos + __popc(bits & lanemask)] = lst_full[it * WARP_SIZE + ilane];
+         pos += __popc(bits);
+      }
+      int end = offset[wy + 1] * WARP_SIZE;
+      for (int i = pos + ilane; i < end; i += WARP_SIZE)
+         lst[i] = 0;
+      for (int i = offset[wy] + ilane; i < offset[wy + 1]; i += WARP_SIZE)
+         iak[i] = wy;
+   }
+}
+
+template <class IMG>
+void Spatial::RunPrune1(SpatialUnit u, real prune2)
+{
+   if (u->niak_full > 0)
+      launch_k1s(g::s0, u->niak_full * WARP_SIZE, spatialPrune1<IMG>, //
+         u->n, u->niak_full, u->iak_full, u->sorted, u->lst_full, prune2, TINKER_IMAGE_ARGS, u->prune_keep,
+         u->prune_ntile);
+}
+
+void spatialPrune_cu(SpatialUnit u)
+{
+   // A little slack keeps every pair a kernel can take, whatever the rounding of its distance.
+   real prune2 = u->prune_cut * (1 + (real)1e-4);
+   prune2 *= prune2;
+   darray::zero(g::q0, u->nak + 1, u->prune_ntile);
+   if (box_shape == BoxShape::ORTHO) {
+      Spatial::RunPrune1<PbcOrtho>(u, prune2);
+   } else if (box_shape == BoxShape::MONO) {
+      Spatial::RunPrune1<PbcMono>(u, prune2);
+   } else if (box_shape == BoxShape::TRI) {
+      Spatial::RunPrune1<PbcTri>(u, prune2);
+   } else if (box_shape == BoxShape::OCT) {
+      Spatial::RunPrune1<PbcOct>(u, prune2);
+   } else if (box_shape == BoxShape::UNBOUND) {
+      Spatial::RunPrune1<PbcUnbound>(u, prune2);
+   } else {
+      assert(false);
+   }
+   launch_k1s(g::s0, u->nak + 1, spatialPruneTiles, u->nak, u->prune_ntile);
+
+   // The entry counts become the offsets of the blocks; the last one is the length of iak.
+   auto policy = thrust::cuda::par(ThrustCache::instance()).on(g::s0);
+   thrust::exclusive_scan(policy, u->prune_ntile, u->prune_ntile + u->nak + 1, u->prune_ntile);
+   darray::copyout(g::q0, 1, &u->niak, &u->prune_ntile[u->nak]);
+   launch_k1s(g::s0, u->nak * WARP_SIZE, spatialPrune2, //
+      u->nak, u->prune_beg, u->lst_full, u->prune_keep, u->prune_ntile, u->iak, u->lst);
+   waitFor(g::q0);
+}
 
 void spatialDataInit_cu(SpatialUnit u)
 {
@@ -807,14 +928,22 @@ void spatialDataInit_cu(SpatialUnit u)
    }
 
    // TODO sort iak and lst
-   if (u->nblist4nn) {
-      std::vector<int> idmap_host(u->niak);
-      std::iota(idmap_host.begin(), idmap_host.end(), 0);
-      darray::copyin(g::q0, u->niak, u->iak_idmap, idmap_host.data());
-      waitFor(g::q0);
-      thrust::stable_sort_by_key(policy, u->iak, u->iak + u->niak, u->iak_idmap);
-      darray::copy(g::q0, u->niak * 32, u->lst_tmp, u->lst);
-      thrust::gather(policy, u->iak_idmap, u->iak_idmap + u->niak, (intx32*)u->lst_tmp, (intx32*)u->lst);
+   if (u->nblist4nn or u->prune_cut > 0) {
+      const int nfull = u->niak_full;
+      // A pruned list sorts in iak and lst, which spatialPrune_cu overwrites next.
+      int* idmap = u->prune_cut > 0 ? u->iak : u->iak_idmap;
+      int* tmp = u->prune_cut > 0 ? u->lst : u->lst_tmp;
+      thrust::sequence(policy, idmap, idmap + nfull);
+      thrust::stable_sort_by_key(policy, u->iak_full, u->iak_full + nfull, idmap);
+      darray::copy(g::q0, nfull * 32, tmp, u->lst_full);
+      thrust::gather(policy, idmap, idmap + nfull, (intx32*)tmp, (intx32*)u->lst_full);
+   }
+
+   if (u->prune_cut > 0) {
+      // The entries of every block are contiguous after the sort.
+      thrust::lower_bound(policy, u->iak_full, u->iak_full + u->niak_full, thrust::counting_iterator<int>(0),
+         thrust::counting_iterator<int>(u->nak + 1), u->prune_beg);
+      spatialPrune_cu(u);
    }
 }
 
@@ -912,6 +1041,8 @@ void spatialDataUpdateSorted_cu(SpatialUnit u)
    launch_k1s(g::s0, u->n, spatialUpdateSorted_cu1, //
       u->n, u->sorted, u->x, u->y, u->z,            //
       TINKER_IMAGE_ARGS, u->cutoff, u->akc, u->half);
+   if (u->prune_cut > 0)
+      spatialPrune_cu(u);
 }
 }
 

@@ -282,6 +282,7 @@ void echglj(int vers)
    assert(vdwtyp == Vdw::LJ);
    assert(radrule == Vdw::ARITHMETIC);
    assert(epsrule == Vdw::GEOMETRIC);
+   pchgEnsureElec();
    if (useEwald()) {
       echargeEwaldRecipSelf(vers);
       TINKER_FCALL2(acc0, cu1, echgljRadArithEpsGeomEwaldReal, vers);
@@ -290,16 +291,20 @@ void echglj(int vers)
    }
    exfield(vers, 0);
 
+   // at the current vdw lambda, which free energy perturbation moves
+   energy_prec elrc;
+   virial_prec vlrc;
+   evdwLrcVol(elrc, vlrc);
    if (do_e) {
-      if (elrc_vol != 0) {
-         energy_prec corr = elrc_vol / boxVolume();
+      if (elrc != 0) {
+         energy_prec corr = elrc / boxVolume();
          energy_ev += corr;
          energy_vdw += corr;
       }
    }
    if (do_v) {
-      if (vlrc_vol != 0) {
-         virial_prec term = vlrc_vol / boxVolume();
+      if (vlrc != 0) {
+         virial_prec term = vlrc / boxVolume();
          virial_ev[0] += term; // xx
          virial_ev[4] += term; // yy
          virial_ev[8] += term; // zz

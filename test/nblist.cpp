@@ -1,10 +1,14 @@
 #include "ff/nblist.h"
 #include "ff/atom.h"
+#include "ff/box.h"
+#include "ff/spatial.h"
 #include "tool/error.h"
 #include "tool/ioread.h"
 #include "tool/platform.h"
 #include "tool/rcman.h"
 #include <fstream>
+#include <limits>
+#include <random>
 #include <set>
 #include <sstream>
 
@@ -13,6 +17,7 @@
 
 using namespace tinker;
 
+#if TINKER_GPULANG_OPENACC
 // static const int ans[5][216][70];
 #include "nblist.hh"
 
@@ -142,7 +147,7 @@ static void copyin_arc_file(const std::string& arcfile, int first1, int last1, i
    }
 }
 
-TEST_CASE("NBList-ArBox", "[ff][nblist][arbox][mixcuda]")
+TEST_CASE("NBList-ArBox", "[ff][nblist][arbox]")
 {
    int usage_ = calc::xyz | calc::mass | calc::traj | calc::energy;
 
@@ -156,12 +161,12 @@ TEST_CASE("NBList-ArBox", "[ff][nblist][arbox][mixcuda]")
 
    const char* argv[] = {"dummy", x1};
    int argc = 2;
-   testBeginWithArgs(argc, argv);
+   TestSession session(argc, argv);
 
    rc_flag = usage_;
    pltfm_config = Platform::ACC; // to always use nblist
    trajn = 5;
-   initialize();
+   session.init();
 
    copyin_arc_file(x1, 1, 5, 1);
 
@@ -188,6 +193,164 @@ TEST_CASE("NBList-ArBox", "[ff][nblist][arbox][mixcuda]")
          break;
    }
 
-   finish();
-   testEnd();
+   session.end();
 }
+#endif
+
+#if TINKER_GPULANG_CUDA
+// The kernels reach a pair through a block pair of iakpl or as a neighbor of its lower block in lst. Every pair
+// within the pruning distance must stay reachable, and every neighbor left in the pruned lst must be within it.
+static void checkPrunedList(const Spatial& st)
+{
+   const int n = st.n;
+   const int nak = (n + Spatial::BLOCK - 1) / Spatial::BLOCK;
+   std::vector<Spatial::SortedAtom> s(n);
+   std::vector<int> iakpl(st.nakpl), iak(st.niak), lst(st.niak * Spatial::BLOCK);
+   darray::copyout(g::q0, n, s.data(), st.sorted);
+   darray::copyout(g::q0, st.nakpl, iakpl.data(), st.iakpl);
+   darray::copyout(g::q0, st.niak, iak.data(), st.iak);
+   darray::copyout(g::q0, st.niak * Spatial::BLOCK, lst.data(), st.lst);
+   waitFor(g::q0);
+
+   // Minimum image of any box: round the fractional coordinates, then search the 27 nearest images.
+   Box box;
+   boxGetCurrent(box);
+   const real3 rc[3] = {box.recipa, box.recipb, box.recipc};
+   const real3 lv[3] = {box.lvec1, box.lvec2, box.lvec3};
+   auto dist2 = [&](int i, int k) {
+      double d[3] = {s[i].x - s[k].x, s[i].y - s[k].y, s[i].z - s[k].z};
+      double f[3];
+      for (int m = 0; m < 3; ++m) {
+         f[m] = rc[m].x * d[0] + rc[m].y * d[1] + rc[m].z * d[2];
+         f[m] -= std::round(f[m]);
+      }
+      double r2 = std::numeric_limits<double>::max();
+      for (int n1 = -1; n1 <= 1; ++n1)
+         for (int n2 = -1; n2 <= 1; ++n2)
+            for (int n3 = -1; n3 <= 1; ++n3) {
+               double g[3] = {f[0] + n1, f[1] + n2, f[2] + n3}, c2 = 0;
+               for (int m = 0; m < 3; ++m) {
+                  double c = lv[m].x * g[0] + lv[m].y * g[1] + lv[m].z * g[2];
+                  c2 += c * c;
+               }
+               r2 = std::min(r2, c2);
+            }
+      return r2;
+   };
+
+   std::set<int> tiles(iakpl.begin(), iakpl.end());
+   std::vector<std::set<int>> nb(nak);
+   for (int t = 0; t < st.niak; ++t)
+      for (int j = 0; j < Spatial::BLOCK; ++j)
+         if (int k = lst[t * Spatial::BLOCK + j])
+            nb[iak[t]].insert(k);
+
+   const double c2 = st.prune_cut * st.prune_cut;
+   int nmissing = 0;
+   for (int i = 0; i < n; ++i) {
+      for (int k = i + 1; k < n; ++k) {
+         if (dist2(i, k) > c2)
+            continue;
+         int bi = i / Spatial::BLOCK, bk = k / Spatial::BLOCK;
+         bool reached = bi == bk or tiles.count(bk * (bk + 1) / 2 + bi) or nb[bi].count(k);
+         nmissing += reached ? 0 : 1;
+      }
+   }
+   int nfar = 0;
+   for (int b = 0; b < nak; ++b) {
+      for (int k : nb[b]) {
+         double r2 = c2 * 4;
+         for (int i = b * Spatial::BLOCK; i < std::min(n, (b + 1) * Spatial::BLOCK); ++i)
+            r2 = std::min(r2, dist2(i, k));
+         nfar += r2 > c2 * (1 + 1e-3) ? 1 : 0;
+      }
+   }
+   REQUIRE(nmissing == 0);
+   REQUIRE(nfar == 0);
+   REQUIRE(st.niak < st.niak_full);
+}
+
+TEST_CASE("NBList-Prune-Water30", "[ff][nblist][prune]")
+{
+   const char* k = "test_water30.key";
+   const char* x1 = "test_water30.xyz";
+   TestFile fke(TINKER9_DIRSTR "/test/file/water30/water30.key", k);
+   TestFile fx1(TINKER9_DIRSTR "/test/file/water30/water30_iso.xyz", x1);
+   TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/water03.prm");
+
+   const char* argv[] = {"dummy", x1};
+   int argc = 2;
+   TestSession session(argc, argv);
+   rc_flag = calc::xyz | calc::energy;
+   session.init();
+
+   REQUIRE(mspatial_v2_unit->prune_cut > 0);
+   REQUIRE(uspatial_v2_unit->prune_cut > 0);
+   checkPrunedList(*mspatial_v2_unit);
+   checkPrunedList(*uspatial_v2_unit);
+
+   // Moves within half of the buffer only update the sorted coordinates; a longer one rebuilds the list.
+   std::vector<pos_prec> xs(n), ys(n), zs(n);
+   std::mt19937 gen(2026);
+   std::uniform_real_distribution<double> nudge(-0.25, 0.25);
+   auto move = [&](double far) {
+      darray::copyout(g::q0, n, xs.data(), xpos);
+      darray::copyout(g::q0, n, ys.data(), ypos);
+      darray::copyout(g::q0, n, zs.data(), zpos);
+      waitFor(g::q0);
+      for (int i = 0; i < n; ++i) {
+         xs[i] += nudge(gen);
+         ys[i] += nudge(gen);
+         zs[i] += nudge(gen);
+      }
+      xs[0] += far;
+      darray::copyin(g::q0, n, xpos, xs.data());
+      darray::copyin(g::q0, n, ypos, ys.data());
+      darray::copyin(g::q0, n, zpos, zs.data());
+      waitFor(g::q0);
+      copyPosToXyz(true);
+      checkPrunedList(*mspatial_v2_unit);
+      checkPrunedList(*uspatial_v2_unit);
+   };
+   move(0.0);
+   move(3.0);
+
+   // Skewed boxes take their own image routines; the long move rebuilds the list in the new box.
+   for (auto sh : {BoxShape::MONO, BoxShape::TRI}) {
+      Box b;
+      if (sh == BoxShape::MONO)
+         boxLattice(b, sh, 30.0, 30.0, 30.0, 90.0, 100.0, 90.0);
+      else
+         boxLattice(b, sh, 30.0, 30.0, 30.0, 85.0, 95.0, 100.0);
+      boxSetCurrent(b);
+      move(3.0);
+      move(0.0);
+   }
+
+   session.end();
+}
+
+TEST_CASE("NBList-Prune-Keyword", "[ff][nblist][prune]")
+{
+   const char* x1 = "test_water30.xyz";
+   TestFile fx1(TINKER9_DIRSTR "/test/file/water30/water30_iso.xyz", x1);
+   TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/water03.prm");
+
+   for (std::string v : {"off", "none", "", "on"}) {
+      const char* k = "test_water30.key";
+      TestFile fke(TINKER9_DIRSTR "/test/file/water30/water30.key", k, "\nlist-prune " + v + "\n");
+      const char* argv[] = {"dummy", x1};
+      int argc = 2;
+      TestSession session(argc, argv);
+      rc_flag = calc::xyz | calc::energy;
+      session.init();
+
+      bool on = v == "" or v == "on";
+      for (auto* st : {&*mspatial_v2_unit, &*uspatial_v2_unit}) {
+         REQUIRE((st->prune_cut > 0) == on);
+         REQUIRE((st->niak < st->niak_full) == on);
+      }
+      session.end();
+   }
+}
+#endif

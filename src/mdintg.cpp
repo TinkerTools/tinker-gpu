@@ -1,3 +1,5 @@
+#include "ff/dlmda.h"
+#include "ff/watermc.h"
 #include "math/pow2.h"
 #include "md/integrator.h"
 #include "md/misc.h"
@@ -96,6 +98,10 @@ void mdIntegrateData(RcOp op)
          integrator = IntegratorEnum::NHC1996;
          thermostat = ThermostatEnum::m_NHC1996;
          barostat = BarostatEnum::m_NHC1996;
+      } else if (itg == "STOCHASTIC") {
+         integrator = IntegratorEnum::STOCHASTIC;
+         thermostat = ThermostatEnum::NONE;
+         barostat = BarostatEnum::NONE;
       }
 
       int nrspa = 1;
@@ -119,6 +125,12 @@ void mdIntegrateData(RcOp op)
          }
       }
 
+      // A water hop finds again the forces the next step starts from, which
+      // these integrators cannot do without resetting their own state.
+      if (waterMcOn() and (integrator == IntegratorEnum::NHC1996 or integrator == IntegratorEnum::LEAPFROGLP))
+         TINKER_THROW("DYNAMIC  --  Monte Carlo Water Moves Require the Verlet, RESPA, Stochastic, LP22 or "
+                      "NHC2006 Integrator");
+
       intg = nullptr;
       if (integrator == IntegratorEnum::RESPA)
          intg = new RespaIntegrator(thermostat, barostat);
@@ -132,10 +144,19 @@ void mdIntegrateData(RcOp op)
          intg = new Nhc96Integrator;
       else if (integrator == IntegratorEnum::NHC2006)
          intg = new Nhc06Integrator(nrspa);
+      else if (integrator == IntegratorEnum::STOCHASTIC)
+         intg = new StochasticIntegrator;
       else if (integrator == IntegratorEnum::BEEMAN)
-         TINKER_THROW("Beeman integrator is not available.");
+         TINKER_THROW(format("Integrator \"%s\" is not available.", itg.trim().c_str()));
       intg->printDetail(stdout);
    }
+}
+
+void mdRefreshForces()
+{
+   // nothing holds forces outside of dynamics
+   if (intg)
+      intg->refreshForces();
 }
 }
 
@@ -171,6 +192,11 @@ void mdPropagate(int nsteps, time_prec dt_ps)
       }
       intg->dynamic(istep, dt_ps);
 
+      // sample the lambda window of a sequential lambda method or try a Monte
+      // Carlo lambda move, once the step is complete and before the trajectory
+      // is saved
+      lmdaWinDyn(istep);
+
       // mdstat
       bool save = (istep % inform::iwrite == 0);
       if ((save || (istep % BOUNDS_EVERY_X_STEPS) == 0) and bound::use_wrap)
@@ -181,6 +207,10 @@ void mdPropagate(int nsteps, time_prec dt_ps)
          mdsaveAsync(istep, dt_ps);
       }
       mdrest(istep);
+
+      // move to the next lambda window at the end of the current one
+      if (use_ti or use_fep)
+         lmdaWinStep(istep);
    }
    mdsaveSynchronize();
    if (!output::dynsave)
@@ -226,6 +256,9 @@ const TimeScaleConfig& respaTSConfig()
       {"edisp", slow},
       {"erepel", slow},
       {"ehippo", slow},
+
+      {"eost", slow},
+      {"eabf", slow},
    };
    return tsconfig;
 }

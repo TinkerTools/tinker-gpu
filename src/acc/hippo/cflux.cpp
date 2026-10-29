@@ -90,10 +90,11 @@ void alterchg_acc()
 
    // alter monopoles and charge penetration
     #pragma acc parallel loop independent async\
-           deviceptr(pval,pval0,pdelta,pole,mono0)
+           deviceptr(pval,pval0,pdelta,fluxsc,pole,mono0)
    for (int i = 0; i < n; ++i) {
-      pval[i] = pval0[i] + pdelta[i];
-      pole[i][0] = mono0[i] + pdelta[i];
+      real dq = fluxsc[i] * pdelta[i];
+      pval[i] = pval0[i] + dq;
+      pole[i][0] = mono0[i] + dq;
    }
 }
 }
@@ -102,7 +103,7 @@ namespace tinker {
 static void dcfluxBnd_acc()
 {
    #pragma acc parallel loop independent async\
-               deviceptr(x,y,z,ibnd,bflx,pot,\
+               deviceptr(x,y,z,ibnd,bflx,pot,fluxsc,\
                decfx,decfy,decfz)
    for (int i = 0; i < nbond; ++i) {
       int ia = ibnd[i][0];
@@ -113,7 +114,7 @@ static void dcfluxBnd_acc()
       real yab = y[ia] - y[ib];
       real zab = z[ia] - z[ib];
       real rab = REAL_SQRT(xab * xab + yab * yab + zab * zab);
-      real dpot = pot[ia] - pot[ib];
+      real dpot = fluxsc[ia] * pot[ia] - fluxsc[ib] * pot[ib];
       pb = pb / rab;
 
       real fx = dpot * pb * xab;
@@ -131,7 +132,7 @@ static void dcfluxBnd_acc()
 static void dcfluxAng_acc()
 {
    #pragma acc parallel loop independent async\
-               deviceptr(x,y,z,iang,aflx,abflx,pot,decfx,decfy,decfz)
+               deviceptr(x,y,z,iang,aflx,abflx,pot,fluxsc,decfx,decfy,decfz)
    for (int i = 0; i < nangle; ++i) {
       int ia = iang[i][0];
       int ib = iang[i][1];
@@ -164,8 +165,8 @@ static void dcfluxAng_acc()
       dbc[1] = ycb;
       dbc[2] = zcb;
 
-      real dpota = pot[ia] - pot[ib];
-      real dpotc = pot[ic] - pot[ib];
+      real dpota = fluxsc[ia] * pot[ia] - fluxsc[ib] * pot[ib];
+      real dpotc = fluxsc[ic] * pot[ic] - fluxsc[ib] * pot[ib];
       pb1 *= dpota;
       pb2 *= dpotc;
 
