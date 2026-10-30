@@ -28,6 +28,23 @@ void rattle2(time_prec dt, bool do_v);
 
 void shake(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew, const pos_prec* xold, const pos_prec* yold, const pos_prec* zold);
 
+/// \brief Places the extra sites of rigid four-site waters on their O-H-H
+/// frames, and zeroes their velocities if \c do_v is true (watfour in settle.f).
+void rattleWater4Pos(pos_prec* xnew, pos_prec* ynew, pos_prec* znew, bool do_v);
+
+/// \brief Places the extra sites of rigid four-site waters on their O-H-H
+/// frames in \c atoms::x, \c y, and \c z, which the input coordinates only
+/// approximate; called wherever coordinates are read.
+void rattleWater4PosHost();
+
+/// \brief Zeroes the velocities of the extra sites of rigid four-site waters
+/// in the given arrays.
+void rattleWater4Vel(vel_prec* vxnew, vel_prec* vynew, vel_prec* vznew);
+
+/// \brief Moves the gradient on the extra sites of rigid four-site waters to
+/// their O-H-H atoms (watfour2 in settle.f).
+void rattleWater4Grad();
+
 void hcKinetic();
 
 void hcVirial();
@@ -67,6 +84,10 @@ TINKER_EXTERN pos_prec rateps;
 TINKER_EXTERN int nratwt;            // rattle water
 TINKER_EXTERN int (*iratwt)[3];      // atoms a b c
 TINKER_EXTERN pos_prec (*kratwt)[3]; // lengths ab ac bc
+
+TINKER_EXTERN int nratw4;            // rigid four-site water extra sites
+TINKER_EXTERN int (*iratw4)[4];      // atoms O H H M
+TINKER_EXTERN pos_prec (*kratw4)[2]; // weights of O and of each H on M
 
 TINKER_EXTERN int nratch;       // rattle methine group
 TINKER_EXTERN int (*iratch)[2]; // atoms a b (-C H)

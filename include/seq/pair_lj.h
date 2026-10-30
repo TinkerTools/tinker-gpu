@@ -78,7 +78,7 @@ void pair_lj_v2(real r,
          dev = 0;
       return;
    }
-   real rad = RADRULE::avg(radi, radk);
+   real rad = RADRULE::savg(radi, radk);
    real eps = EPSRULE::savg(epsi, epsk);
    if CONSTEXPR (SCALE != 1)
       eps *= vscale;

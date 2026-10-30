@@ -56,6 +56,9 @@ static void propagate_velocity_lp2(time_prec dt, vel_prec* vx_lp, vel_prec* vy_l
 {
    TINKER_FCALL2(acc1, cu0, propagate_velocity_lp2, dt, vx_lp, vy_lp, vz_lp, x_lp, y_lp, z_lp, xold_lp, yold_lp,
       zold_lp);
+   // shake moved the extra sites of four-site waters with their waters, but
+   // they carry no velocity, as in settle.f
+   rattleWater4Vel(vx_lp, vy_lp, vz_lp);
 }
 
 TINKER_FVOID2(acc1, cu0, propagate_velocity_lp3, vel_prec* vx_lp, vel_prec* vy_lp, vel_prec* vz_lp,

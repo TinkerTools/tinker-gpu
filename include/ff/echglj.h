@@ -5,6 +5,10 @@
 
 namespace tinker {
 /// \ingroup chglj
+/// \brief Whether the fused charge and Lennard-Jones kernel can replace
+/// echarge() and evdw(); the analysis versions never use it.
+bool echgljAvailable();
+/// \ingroup chglj
 void echgljData(RcOp);
 /// \ingroup chglj
 void echglj(int vers);

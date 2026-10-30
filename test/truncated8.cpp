@@ -62,3 +62,21 @@ TEST_CASE("Truncated-Octahedron", "[ff][pbc][arbox]")
 
    session.end();
 }
+
+// tinker9 has no rhombic dodecahedron box, so boxData() refuses DODECAHEDRON.
+TEST_CASE("Dodecahedron-Unsupported", "[ff][pbc]")
+{
+   rc_flag = calc::xyz | calc::vmask;
+
+   const std::string files = TINKER9_DIRSTR "/test/file/";
+   const char* xyzname = "ions.xyz";
+   const char* keyname = "dodecahedron.key";
+   TestFile fxyz(files + "testvir/" + xyzname, xyzname);
+   TestFile fkey(files + "testvir/01_charge_ewald.key", keyname, "dodecahedron\n");
+   TestFile fprm(files + "commit_350df099/amber99sb.prm");
+
+   const char* argv[] = {"dummy", xyzname, "-k", keyname};
+   int argc = 4;
+   TestSession session(argc, argv);
+   REQUIRE_THROWS(session.init());
+}

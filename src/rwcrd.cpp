@@ -2,6 +2,7 @@
 #include "ff/atom.h"
 #include "ff/box.h"
 #include "math/maxmin.h"
+#include "md/rattle.h"
 #include "tool/iofortstr.h"
 #include "tool/error.h"
 #include "tool/ioprint.h"
@@ -33,6 +34,7 @@ public:
    int readCurrent()
    {
       this->read();
+      rattleWater4PosHost();
       xyzData(RcOp::INIT);
       if (this->atEnd())
          return 1;

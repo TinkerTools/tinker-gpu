@@ -1,5 +1,6 @@
 #pragma once
 #include "ff/precision.h"
+#include "seq/add.h"
 #include "seq/seq.h"
 #include <tinker/detail/units.hh>
 
@@ -432,5 +433,84 @@ void dk_settle2(time_prec dt,
       vzy += zca * yterm;
       vzz += zca * zterm;
    }
+}
+/// \brief Places the extra site of rigid four-site water \c iw on its O-H-H
+/// frame (watfour in settle.f).
+#pragma acc routine seq
+template <bool DO_V>
+SEQ_CUDA
+void dk_water4Pos(int iw,
+                  pos_prec* restrict x,
+                  pos_prec* restrict y,
+                  pos_prec* restrict z,
+                  vel_prec* restrict vx,
+                  vel_prec* restrict vy,
+                  vel_prec* restrict vz,
+                  const int (*restrict iratw4)[4],
+                  const pos_prec (*restrict kratw4)[2])
+{
+   int ia = iratw4[iw][0];
+   int ib = iratw4[iw][1];
+   int ic = iratw4[iw][2];
+   int id = iratw4[iw][3];
+   pos_prec oterm = kratw4[iw][0];
+   pos_prec hterm = kratw4[iw][1];
+   x[id] = oterm * x[ia] + hterm * (x[ib] + x[ic]);
+   y[id] = oterm * y[ia] + hterm * (y[ib] + y[ic]);
+   z[id] = oterm * z[ia] + hterm * (z[ib] + z[ic]);
+   if CONSTEXPR (DO_V) {
+      vx[id] = 0;
+      vy[id] = 0;
+      vz[id] = 0;
+   }
+}
+
+/// \brief Zeroes the velocity of the extra site of rigid four-site water \c iw.
+#pragma acc routine seq
+SEQ_CUDA
+inline void dk_water4Vel(int iw,
+                         vel_prec* restrict vx,
+                         vel_prec* restrict vy,
+                         vel_prec* restrict vz,
+                         const int (*restrict iratw4)[4])
+{
+   int id = iratw4[iw][3];
+   vx[id] = 0;
+   vy[id] = 0;
+   vz[id] = 0;
+}
+
+/// \brief Moves the gradient on the extra site of rigid four-site water
+/// \c iw to its O-H-H atoms (watfour2 in settle.f).
+#pragma acc routine seq
+SEQ_CUDA
+inline void dk_water4Grad(int iw,
+                          grad_prec* restrict gx,
+                          grad_prec* restrict gy,
+                          grad_prec* restrict gz,
+                          const int (*restrict iratw4)[4],
+                          const pos_prec (*restrict kratw4)[2])
+{
+   int ia = iratw4[iw][0];
+   int ib = iratw4[iw][1];
+   int ic = iratw4[iw][2];
+   int id = iratw4[iw][3];
+   double oterm = kratw4[iw][0];
+   double hterm = kratw4[iw][1];
+   double gdx = toFloatGrad<double>(gx[id]);
+   double gdy = toFloatGrad<double>(gy[id]);
+   double gdz = toFloatGrad<double>(gz[id]);
+   gx[ia] += floatTo<grad_prec>(oterm * gdx);
+   gy[ia] += floatTo<grad_prec>(oterm * gdy);
+   gz[ia] += floatTo<grad_prec>(oterm * gdz);
+   gx[ib] += floatTo<grad_prec>(hterm * gdx);
+   gy[ib] += floatTo<grad_prec>(hterm * gdy);
+   gz[ib] += floatTo<grad_prec>(hterm * gdz);
+   gx[ic] += floatTo<grad_prec>(hterm * gdx);
+   gy[ic] += floatTo<grad_prec>(hterm * gdy);
+   gz[ic] += floatTo<grad_prec>(hterm * gdz);
+   gx[id] = 0;
+   gy[id] = 0;
+   gz[id] = 0;
 }
 }

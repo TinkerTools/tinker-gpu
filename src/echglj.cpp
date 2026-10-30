@@ -9,6 +9,7 @@
 #include "tool/externfunc.h"
 #include "tool/iofortstr.h"
 #include "tool/iotext.h"
+#include <cmath>
 #include <set>
 #include <tinker/detail/atomid.hh>
 #include <tinker/detail/atoms.hh>
@@ -20,6 +21,27 @@
 #include <tinker/detail/vdwpot.hh>
 
 namespace tinker {
+bool echgljAvailable()
+{
+   if (not(clistVersion() & Nbl::SPATIAL))
+      return false;
+   if (not use(Potent::CHARGE) or not use(Potent::VDW))
+      return false;
+   if (ebuffer != 0)
+      return false;
+   if (vdwtyp != Vdw::LJ)
+      return false;
+   // the fused kernel mixes arithmetic or geometric radii and geometric
+   // epsilons only
+   if (radrule != Vdw::ARITHMETIC and radrule != Vdw::GEOMETRIC)
+      return false;
+   if (epsrule != Vdw::GEOMETRIC)
+      return false;
+   if (vdwpr_in_use)
+      return false;
+   return true;
+}
+
 TINKER_FVOID2(acc0, cu1, echgljData, RcOp);
 void echgljData(RcOp op)
 {
@@ -33,8 +55,14 @@ void echgljData(RcOp op)
       ncvexclude = 0;
       vdwpr_in_use = false;
       darray::deallocate(cvexclude, cvexclude_scale);
+      // allocated only for the fused kernel, so a later session may skip them
       darray::deallocate(atom_rad, atom_eps);
       darray::deallocate(mut_coalesced, chg_coalesced, radeps_coalesced);
+      atom_rad = nullptr;
+      atom_eps = nullptr;
+      mut_coalesced = nullptr;
+      chg_coalesced = nullptr;
+      radeps_coalesced = nullptr;
    }
 
    if (op & RcOp::ALLOC) {
@@ -240,25 +268,31 @@ void echgljData(RcOp op)
       darray::copyin(g::q0, ncvexclude, cvexclude, ik_vec.data());
       darray::copyin(g::q0, ncvexclude, cvexclude_scale, scal_vec.data());
       waitFor(g::q0);
-      darray::allocate(n, &atom_rad, &atom_eps);
-      darray::allocate(n, &mut_coalesced);
-      darray::allocate(n, &chg_coalesced);
-      darray::allocate(2 * n, &radeps_coalesced);
+      if (echgljAvailable()) {
+         darray::allocate(n, &atom_rad, &atom_eps);
+         darray::allocate(n, &mut_coalesced);
+         darray::allocate(n, &chg_coalesced);
+         darray::allocate(2 * n, &radeps_coalesced);
+      }
    }
 
-   if (op & RcOp::INIT) {
+   if ((op & RcOp::INIT) and echgljAvailable()) {
+      // the geometric rules multiply square roots (srad and seps in kvdw.f),
+      // which are taken here in double precision
+      auto radval = [](int jj) { return radrule == Vdw::GEOMETRIC ? std::sqrt(kvdws::rad[jj]) : kvdws::rad[jj]; };
+      auto epsval = [](int jj) { return epsrule == Vdw::GEOMETRIC ? std::sqrt(kvdws::eps[jj]) : kvdws::eps[jj]; };
       std::vector<real> vrad(n), veps(n);
       if (vdwindex == Vdw::ATOM_TYPE) {
          for (int i = 0; i < n; ++i) {
             int jj = atoms::type[i] - 1;
-            vrad[i] = kvdws::rad[jj];
-            veps[i] = kvdws::eps[jj];
+            vrad[i] = radval(jj);
+            veps[i] = epsval(jj);
          }
       } else if (vdwindex == Vdw::ATOM_CLASS) {
          for (int i = 0; i < n; ++i) {
             int jj = atomid::class_[i] - 1;
-            vrad[i] = kvdws::rad[jj];
-            veps[i] = kvdws::eps[jj];
+            vrad[i] = radval(jj);
+            veps[i] = epsval(jj);
          }
       }
       darray::copyin(g::q0, n, atom_rad, vrad.data());
@@ -271,6 +305,8 @@ void echgljData(RcOp op)
 
 TINKER_FVOID2(acc0, cu1, echgljRadArithEpsGeomNonEwald, int);
 TINKER_FVOID2(acc0, cu1, echgljRadArithEpsGeomEwaldReal, int);
+TINKER_FVOID2(acc0, cu1, echgljRadGeomEpsGeomNonEwald, int);
+TINKER_FVOID2(acc0, cu1, echgljRadGeomEpsGeomEwaldReal, int);
 void echglj(int vers)
 {
    auto do_e = vers & calc::energy;
@@ -280,14 +316,20 @@ void echglj(int vers)
    zeroOnHost(energy_ev, virial_ev);
 
    assert(vdwtyp == Vdw::LJ);
-   assert(radrule == Vdw::ARITHMETIC);
+   assert(radrule == Vdw::ARITHMETIC or radrule == Vdw::GEOMETRIC);
    assert(epsrule == Vdw::GEOMETRIC);
    pchgEnsureElec();
    if (useEwald()) {
       echargeEwaldRecipSelf(vers);
-      TINKER_FCALL2(acc0, cu1, echgljRadArithEpsGeomEwaldReal, vers);
+      if (radrule == Vdw::GEOMETRIC)
+         TINKER_FCALL2(acc0, cu1, echgljRadGeomEpsGeomEwaldReal, vers);
+      else
+         TINKER_FCALL2(acc0, cu1, echgljRadArithEpsGeomEwaldReal, vers);
    } else {
-      TINKER_FCALL2(acc0, cu1, echgljRadArithEpsGeomNonEwald, vers);
+      if (radrule == Vdw::GEOMETRIC)
+         TINKER_FCALL2(acc0, cu1, echgljRadGeomEpsGeomNonEwald, vers);
+      else
+         TINKER_FCALL2(acc0, cu1, echgljRadArithEpsGeomNonEwald, vers);
    }
    exfield(vers, 0);
 

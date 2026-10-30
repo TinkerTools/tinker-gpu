@@ -69,5 +69,6 @@ urey.cpp
 vdw14.cpp
 verlet.cpp
 versionsuffix.cpp
+water4.cpp
 watermc.cpp
 )

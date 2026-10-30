@@ -75,8 +75,8 @@ static void hcPosVelAn_cu(int n, double3 s0, double3 s1, double3 s2, const int* 
    const vel_prec* restrict ratcom_vz)
 {
    vel_prec s00 = s0.x, s01 = s0.y, s02 = s0.z;
-   vel_prec s10 = s0.x, s11 = s1.y, s12 = s1.z;
-   vel_prec s20 = s0.x, s21 = s2.y, s22 = s2.z;
+   vel_prec s10 = s1.x, s11 = s1.y, s12 = s1.z;
+   vel_prec s20 = s2.x, s21 = s2.y, s22 = s2.z;
    for (int i = ITHREAD; i < n; i += STRIDE) {
       int im = molec[i];
       auto xm = ratcom_vx[im], ym = ratcom_vy[im], zm = ratcom_vz[im];

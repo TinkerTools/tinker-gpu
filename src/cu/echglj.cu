@@ -14,45 +14,31 @@ extern "C"
 {
    using real = tinker::real;
 
+   // the geometric rules take the square roots stored by echgljData()
    struct RAD_GEOM
    {
       __device__
-      static real avg(real ra, real rb)
+      static real savg(real a, real b)
       {
-         return 2 * REAL_SQRT(ra * rb);
+         return 2 * a * b;
       }
    };
 
    struct RAD_ARITH
    {
       __device__
-      static real avg(real ra, real rb)
+      static real savg(real a, real b)
       {
-         return (ra + rb);
+         return a + b;
       }
    };
 
    struct EPS_GEOM
    {
       __device__
-      static real avg(real a, real b)
-      {
-         return REAL_SQRT(a * b);
-      }
-
-      __device__
       static real savg(real a, real b)
       {
          return a * b;
-      }
-   };
-
-   struct EPS_ARITH
-   {
-      __device__
-      static real avg(real a, real b)
-      {
-         return 0.5f * (a + b);
       }
    };
 }
@@ -579,9 +565,8 @@ void echglj_cu5(EnergyBuffer restrict ebuf, VirialBuffer restrict vbuf, grad_pre
    }
 }
 
-template <class RADRULE, class EPSRULE>
 __global__
-void echgljCoalesce(int n, int use_mutate, int* restrict smut, real* restrict schg, real2* restrict svdw,
+static void echgljCoalesce(int n, int use_mutate, int* restrict smut, real* restrict schg, real2* restrict svdw,
    const Spatial::SortedAtom* restrict sorted, const int* restrict mut, const real* restrict chg,
    const real* restrict rad, const real* restrict eps)
 {
@@ -590,14 +575,8 @@ void echgljCoalesce(int n, int use_mutate, int* restrict smut, real* restrict sc
       if (use_mutate)
          smut[i] = mut[iold];
       schg[i] = chg[iold];
-      real radold = rad[iold];
-      real epsold = eps[iold];
-      if CONSTEXPR (eq<RADRULE, RAD_ARITH>()) {
-         svdw[i].x = radold;
-      }
-      if CONSTEXPR (eq<EPSRULE, EPS_GEOM>()) {
-         svdw[i].y = REAL_SQRT(epsold);
-      }
+      svdw[i].x = rad[iold];
+      svdw[i].y = eps[iold];
    }
 }
 
@@ -608,8 +587,7 @@ static void echglj_cu3()
 
    if (st.fresh & cspatial_fresh_mask_echglj) {
       int use_mutate = use(Potent::MUTATE) ? 1 : 0;
-      auto ker = echgljCoalesce<RADRULE, EPSRULE>;
-      launch_k1s(g::s0, st.n, ker, //
+      launch_k1s(g::s0, st.n, echgljCoalesce, //
          st.n, use_mutate, mut_coalesced, chg_coalesced,
          (real2*)radeps_coalesced, //
          st.sorted, mut, pchg, atom_rad, atom_eps);
@@ -661,73 +639,51 @@ static void echglj_cu3()
 #undef ECHGLJ_CU3_V2_ARGS
 }
 
-void echgljRadArithEpsGeomNonEwald_cu(int vers)
+template <class ETYP, class RADRULE, class EPSRULE, bool SOFTCORE>
+static void echglj_cu2(int vers)
 {
-   if (use(Potent::MUTATE)) {
-      constexpr bool SOFTCORE = true;
-      if (vers == calc::v0)
-         echglj_cu3<calc::V0, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-      else if (vers == calc::v1)
-         echglj_cu3<calc::V1, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-      else if (vers == calc::v3)
-         echglj_cu3<calc::V3, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-      else if (vers == calc::v4)
-         echglj_cu3<calc::V4, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-      else if (vers == calc::v5)
-         echglj_cu3<calc::V5, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-      else if (vers == calc::v6)
-         echglj_cu3<calc::V6, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-   } else {
-      constexpr bool SOFTCORE = false;
-      if (vers == calc::v0)
-         echglj_cu3<calc::V0, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-      else if (vers == calc::v1)
-         echglj_cu3<calc::V1, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-      else if (vers == calc::v3)
-         echglj_cu3<calc::V3, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-      else if (vers == calc::v4)
-         echglj_cu3<calc::V4, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-      else if (vers == calc::v5)
-         echglj_cu3<calc::V5, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-      else if (vers == calc::v6)
-         echglj_cu3<calc::V6, NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-   }
+   if (vers == calc::v0)
+      echglj_cu3<calc::V0, ETYP, RADRULE, EPSRULE, SOFTCORE>();
+   else if (vers == calc::v1)
+      echglj_cu3<calc::V1, ETYP, RADRULE, EPSRULE, SOFTCORE>();
+   else if (vers == calc::v3)
+      echglj_cu3<calc::V3, ETYP, RADRULE, EPSRULE, SOFTCORE>();
+   else if (vers == calc::v4)
+      echglj_cu3<calc::V4, ETYP, RADRULE, EPSRULE, SOFTCORE>();
+   else if (vers == calc::v5)
+      echglj_cu3<calc::V5, ETYP, RADRULE, EPSRULE, SOFTCORE>();
+   else if (vers == calc::v6)
+      echglj_cu3<calc::V6, ETYP, RADRULE, EPSRULE, SOFTCORE>();
+}
+
+template <class ETYP, class RADRULE, class EPSRULE>
+static void echglj_cu1(int vers)
+{
+   if (use(Potent::MUTATE))
+      echglj_cu2<ETYP, RADRULE, EPSRULE, true>(vers);
+   else
+      echglj_cu2<ETYP, RADRULE, EPSRULE, false>(vers);
 
    elj14(vers);
 }
 
+void echgljRadArithEpsGeomNonEwald_cu(int vers)
+{
+   echglj_cu1<NON_EWALD_TAPER, RAD_ARITH, EPS_GEOM>(vers);
+}
+
 void echgljRadArithEpsGeomEwaldReal_cu(int vers)
 {
-   if (use(Potent::MUTATE)) {
-      constexpr bool SOFTCORE = true;
-      if (vers == calc::v0)
-         echglj_cu3<calc::V0, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-      else if (vers == calc::v1)
-         echglj_cu3<calc::V1, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-      else if (vers == calc::v3)
-         echglj_cu3<calc::V3, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-      else if (vers == calc::v4)
-         echglj_cu3<calc::V4, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-      else if (vers == calc::v5)
-         echglj_cu3<calc::V5, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-      else if (vers == calc::v6)
-         echglj_cu3<calc::V6, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-   } else {
-      constexpr bool SOFTCORE = false;
-      if (vers == calc::v0)
-         echglj_cu3<calc::V0, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-      else if (vers == calc::v1)
-         echglj_cu3<calc::V1, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-      else if (vers == calc::v3)
-         echglj_cu3<calc::V3, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-      else if (vers == calc::v4)
-         echglj_cu3<calc::V4, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-      else if (vers == calc::v5)
-         echglj_cu3<calc::V5, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-      else if (vers == calc::v6)
-         echglj_cu3<calc::V6, EWALD, RAD_ARITH, EPS_GEOM, SOFTCORE>();
-   }
+   echglj_cu1<EWALD, RAD_ARITH, EPS_GEOM>(vers);
+}
 
-   elj14(vers);
+void echgljRadGeomEpsGeomNonEwald_cu(int vers)
+{
+   echglj_cu1<NON_EWALD_TAPER, RAD_GEOM, EPS_GEOM>(vers);
+}
+
+void echgljRadGeomEpsGeomEwaldReal_cu(int vers)
+{
+   echglj_cu1<EWALD, RAD_GEOM, EPS_GEOM>(vers);
 }
 }

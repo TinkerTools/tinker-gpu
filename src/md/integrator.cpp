@@ -71,6 +71,9 @@ void BasicIntegrator::printDetail(FILE* o)
 void BasicIntegrator::dynamic(int istep, time_prec dt)
 {
    time_prec dt2 = dt * 0.5;
+   // as vrespa in respa.f, constrain every inner step, which also keeps the
+   // extra sites of four-site waters on their frames for the fast forces
+   const bool rattleRespa = nrespa > 1 and useRattle();
 
    m_baro->control1(dt);
    m_thermo->control1(dt);
@@ -79,48 +82,15 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
       m_prop->vel1(dt2);
    else
       m_prop->velR1(dt2, nrespa);
-   m_prop->rattleSave();
+   if (not rattleRespa)
+      m_prop->rattleSave();
 
    m_baro->control3(dt);
 
    this->plan(istep);
-   if (nrespa == 1) {
-      m_prop->pos(dt);
-      m_prop->rattle(dt);
-      copyPosToXyz(true);
-      energy(vers1);
-      if (vers1 & calc::virial)
-         if (not atomic)
-            hcVirial();
-   } else {
-      virial_prec vir_fast[9] = {0};
-      energy_prec esum_f;
-      time_prec dta = dt / nrespa;
-
-      for (int ifast = 1; ifast < nrespa; ++ifast) {
-         m_prop->pos(dta);
-         copyPosToXyz(false);
-         energy(vers1, RESPA_FAST, respaTSConfig());
-         m_prop->velR0(dta);
-         if (vers1 & calc::virial) {
-            if (atomic) {
-               for (int iv = 0; iv < 9; ++iv)
-                  vir_fast[iv] += vir[iv];
-            } else {
-               hcVirial();
-               for (int iv = 0; iv < 9; ++iv)
-                  vir_fast[iv] += hc_vir[iv];
-            }
-         }
-      }
-      m_prop->pos(dta);
-      m_prop->rattle(dt);
-      copyPosToXyz(true);
-
-      // fast force
-      energy(vers1, RESPA_FAST, respaTSConfig());
-      copyGradient(gx1, gy1, gz1, gx, gy, gz);
-      copyEnergy(vers1, &esum_f);
+   virial_prec vir_fast[9] = {0};
+   energy_prec esum_f = 0;
+   auto addFastVirial = [&]() {
       if (vers1 & calc::virial) {
          if (atomic) {
             for (int iv = 0; iv < 9; ++iv)
@@ -131,8 +101,8 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
                vir_fast[iv] += hc_vir[iv];
          }
       }
-
-      // slow force
+   };
+   auto slowForce = [&]() {
       energy(vers1, RESPA_SLOW, respaTSConfig());
       copyGradient(gx2, gy2, gz2, gx, gy, gz);
       if (vers1 & calc::energy)
@@ -147,11 +117,69 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
                hc_vir[iv] += vir_fast[iv] / nrespa;
          }
       }
+   };
+   if (nrespa == 1) {
+      m_prop->pos(dt);
+      m_prop->rattle(dt);
+      copyPosToXyz(true);
+      energy(vers1);
+      if (vers1 & calc::virial)
+         if (not atomic)
+            hcVirial();
+   } else if (rattleRespa) {
+      time_prec dta = dt / nrespa;
+      time_prec dta2 = dta * 0.5;
+      // rattle2 does not change the molecular virial
+      const bool do_v = static_cast<bool>(vers1 & calc::virial) and atomic;
+
+      for (int ifast = 1; ifast <= nrespa; ++ifast) {
+         const bool last = ifast == nrespa;
+         if (ifast > 1)
+            m_prop->velR0(dta2);
+         m_prop->rattleSave();
+         m_prop->pos(dta);
+         m_prop->rattle(dta);
+         copyPosToXyz(last);
+
+         // fast force
+         energy(vers1, RESPA_FAST, respaTSConfig());
+         if (last) {
+            copyGradient(gx1, gy1, gz1, gx, gy, gz);
+            copyEnergy(vers1, &esum_f);
+         }
+         m_prop->velR0(dta2);
+         m_prop->rattle2(dta, do_v);
+         addFastVirial();
+      }
+
+      slowForce();
+   } else {
+      time_prec dta = dt / nrespa;
+
+      for (int ifast = 1; ifast < nrespa; ++ifast) {
+         m_prop->pos(dta);
+         copyPosToXyz(false);
+         energy(vers1, RESPA_FAST, respaTSConfig());
+         m_prop->velR0(dta);
+         addFastVirial();
+      }
+      m_prop->pos(dta);
+      m_prop->rattle(dt);
+      copyPosToXyz(true);
+
+      // fast force
+      energy(vers1, RESPA_FAST, respaTSConfig());
+      copyGradient(gx1, gy1, gz1, gx, gy, gz);
+      copyEnergy(vers1, &esum_f);
+      addFastVirial();
+
+      slowForce();
    }
 
    m_baro->control4(dt);
 
-   if (nrespa == 1)
+   // with rattleRespa only the slow half kick is left, and gx is the slow force
+   if (nrespa == 1 or rattleRespa)
       m_prop->vel2(dt2);
    else
       m_prop->velR2(dt2, nrespa);

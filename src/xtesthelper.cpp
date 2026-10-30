@@ -3,6 +3,7 @@
 #include "ff/atom.h"
 #include "ff/egvop.h"
 #include "ff/nblist.h"
+#include "md/rattle.h"
 #include "tool/darray.h"
 #include "tool/ioprint.h"
 #include <cmath>
@@ -58,6 +59,8 @@ void syncXyzFromHost()
    darray::copyin(g::q0, n, xpos, atoms::x);
    darray::copyin(g::q0, n, ypos, atoms::y);
    darray::copyin(g::q0, n, zpos, atoms::z);
+   // the extra sites of rigid four-site waters follow their O-H-H frames
+   rattleWater4Pos(xpos, ypos, zpos, false);
    copyPosToXyz();
    nblistRefresh();
 }

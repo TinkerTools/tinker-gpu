@@ -7,6 +7,7 @@
 #include <set>
 #include <tinker/detail/atomid.hh>
 #include <tinker/detail/freeze.hh>
+#include <tinker/routines.h>
 
 namespace tinker {
 inline namespace v1 {
@@ -201,6 +202,8 @@ void rattleData(RcOp op)
       rateps = 0;
       nratwt = 0;
       darray::deallocate(iratwt, kratwt);
+      nratw4 = 0;
+      darray::deallocate(iratw4, kratw4);
       nratch = 0;
       darray::deallocate(iratch, kratch);
       nratch2 = 0;
@@ -361,7 +364,8 @@ void rattleData(RcOp op)
             int im = hvec_molec[i];
             double imass = atomid::mass[i];
             double mmass = hvec_molmass[im];
-            hvec_massfrac[i] = imass / mmass;
+            // outside dynamics mdinit has not set zero masses to 1.0
+            hvec_massfrac[i] = mmass > 0 ? imass / mmass : 0;
          }
 
          // allocate
@@ -439,6 +443,19 @@ void rattleData(RcOp op)
       darray::allocate(nratwt, &iratwt, &kratwt);
       darray::copyin(g::q0, nratwt, iratwt, veciwater.data());
       darray::copyin(g::q0, nratwt, kratwt, veckwater.data());
+      waitFor(g::q0);
+
+      // extra sites of rigid four-site waters (kfreeze.f)
+      nratw4 = freeze::nwat4;
+      std::vector<int> veciw4(4 * nratw4);
+      std::vector<pos_prec> veckw4(2 * nratw4);
+      for (int i = 0; i < 4 * nratw4; ++i)
+         veciw4[i] = freeze::iwat4[i] - 1;
+      for (int i = 0; i < 2 * nratw4; ++i)
+         veckw4[i] = freeze::kwat4[i];
+      darray::allocate(nratw4, &iratw4, &kratw4);
+      darray::copyin(g::q0, nratw4, iratw4, veciw4.data());
+      darray::copyin(g::q0, nratw4, kratw4, veckw4.data());
       waitFor(g::q0);
       assert(vecich.size() % 2 == 0);
       nratch = vecich.size() / 2;
@@ -521,6 +538,7 @@ void rattle(time_prec dt, const pos_prec* xold, const pos_prec* yold, const pos_
       TINKER_FCALL1(acc1, cu0, rattleCH, dt, xold, yold, zold);
       TINKER_FCALL1(acc1, cu0, rattle, dt, xold, yold, zold);
    }
+   rattleWater4Pos(xpos, ypos, zpos, true);
 }
 }
 
@@ -571,6 +589,42 @@ void shake(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew, const p
       TINKER_FCALL1(acc1, cu0, shakeCH, dt, xnew, ynew, znew, xold, yold, zold);
       TINKER_FCALL1(acc1, cu0, shake, dt, xnew, ynew, znew, xold, yold, zold);
    }
+   // as in shake.f, which passes a zero time step to watfour
+   rattleWater4Pos(xnew, ynew, znew, false);
+}
+}
+
+namespace tinker {
+TINKER_FVOID2(acc1, cu1, rattleWater4Pos, pos_prec*, pos_prec*, pos_prec*, bool);
+void rattleWater4Pos(pos_prec* xnew, pos_prec* ynew, pos_prec* znew, bool do_v)
+{
+   if (nratw4 <= 0)
+      return;
+   TINKER_FCALL2(acc1, cu1, rattleWater4Pos, xnew, ynew, znew, do_v);
+}
+
+void rattleWater4PosHost()
+{
+   if (freeze::nwat4 <= 0)
+      return;
+   double dt = 0;
+   tinker_f_watfour(&dt);
+}
+
+TINKER_FVOID2(acc1, cu1, rattleWater4Vel, vel_prec*, vel_prec*, vel_prec*);
+void rattleWater4Vel(vel_prec* vxnew, vel_prec* vynew, vel_prec* vznew)
+{
+   if (nratw4 <= 0)
+      return;
+   TINKER_FCALL2(acc1, cu1, rattleWater4Vel, vxnew, vynew, vznew);
+}
+
+TINKER_FVOID2(acc1, cu1, rattleWater4Grad);
+void rattleWater4Grad()
+{
+   if (nratw4 <= 0)
+      return;
+   TINKER_FCALL2(acc1, cu1, rattleWater4Grad);
 }
 }
 

@@ -1,6 +1,7 @@
 #include "ff/box.h"
 #include "ff/atom.h"
 #include "tool/darray.h"
+#include "tool/error.h"
 #include "tool/externfunc.h"
 #include <tinker/detail/bound.hh>
 #include <tinker/detail/boxes.hh>
@@ -28,6 +29,11 @@ static void boxGetTinkerModule(Box& p)
       p.recipc = make_real3(0, 0, y);
       return;
    }
+
+   // No BoxShape for it; box_shape would be left unset and run as an
+   // orthogonal box, losing the half-cell images.
+   if (boxes::dodecadron)
+      TINKER_THROW("Rhombic dodecahedron periodic boundaries are not supported in Tinker9");
 
    if (boxes::orthogonal)
       p.box_shape = BoxShape::ORTHO;

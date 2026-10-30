@@ -1,3 +1,4 @@
+#include "ff/energy.h"
 #include "md/pq.h"
 #include "md/rattle.h"
 #include "seq/add.h"
@@ -77,6 +78,54 @@ void rattle2Settle_cu(time_prec dt, bool do_v)
       constrainSettle2_cu<true>(dt);
    else
       constrainSettle2_cu<false>(dt);
+}
+
+template <bool DO_V>
+__global__
+static void water4Pos_cu1(int nratw4, pos_prec* restrict xnew, pos_prec* restrict ynew, pos_prec* restrict znew,
+   vel_prec* restrict vx, vel_prec* restrict vy, vel_prec* restrict vz, const int (*restrict iratw4)[4],
+   const pos_prec (*restrict kratw4)[2])
+{
+   for (int iw = ITHREAD; iw < nratw4; iw += STRIDE) {
+      dk_water4Pos<DO_V>(iw, xnew, ynew, znew, vx, vy, vz, iratw4, kratw4);
+   }
+}
+
+void rattleWater4Pos_cu(pos_prec* xnew, pos_prec* ynew, pos_prec* znew, bool do_v)
+{
+   auto ker = do_v ? water4Pos_cu1<true> : water4Pos_cu1<false>;
+   launch_k1s(g::s0, nratw4, ker, //
+      nratw4, xnew, ynew, znew, vx, vy, vz, iratw4, kratw4);
+}
+
+__global__
+static void water4Vel_cu1(int nratw4, vel_prec* restrict vxnew, vel_prec* restrict vynew, vel_prec* restrict vznew,
+   const int (*restrict iratw4)[4])
+{
+   for (int iw = ITHREAD; iw < nratw4; iw += STRIDE) {
+      dk_water4Vel(iw, vxnew, vynew, vznew, iratw4);
+   }
+}
+
+void rattleWater4Vel_cu(vel_prec* vxnew, vel_prec* vynew, vel_prec* vznew)
+{
+   launch_k1s(g::s0, nratw4, water4Vel_cu1, //
+      nratw4, vxnew, vynew, vznew, iratw4);
+}
+
+__global__
+static void water4Grad_cu1(int nratw4, grad_prec* restrict gx, grad_prec* restrict gy, grad_prec* restrict gz,
+   const int (*restrict iratw4)[4], const pos_prec (*restrict kratw4)[2])
+{
+   for (int iw = ITHREAD; iw < nratw4; iw += STRIDE) {
+      dk_water4Grad(iw, gx, gy, gz, iratw4, kratw4);
+   }
+}
+
+void rattleWater4Grad_cu()
+{
+   launch_k1s(g::s0, nratw4, water4Grad_cu1, //
+      nratw4, gx, gy, gz, iratw4, kratw4);
 }
 }
 

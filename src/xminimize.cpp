@@ -1,10 +1,12 @@
 #include "ff/energy.h"
 #include "ff/nblist.h"
+#include "md/rattle.h"
 #include "tool/argkey.h"
 #include "tool/externfunc.h"
 #include "tool/iofortstr.h"
 #include "tool/ioprint.h"
 #include "tool/ioread.h"
+#include <tinker/detail/atoms.hh>
 #include <tinker/detail/files.hh>
 #include <tinker/detail/inform.hh>
 #include <tinker/detail/scales.hh>
@@ -31,9 +33,50 @@ static void xMinimizeSetXx(int n, double* xx, const double* scale)
 
 TINKER_FVOID2(acc1, cu1, xMinimizeEnd);
 
-static double minimiz1(double* xx, double* g)
+static void xMinimizeSetHostXyz(int n, const double* xx, const double* scale)
 {
-   // convert optimization parameters to atomic coordinates
+   for (int i = 0; i < n; ++i) {
+      int ii = 3 * i;
+      atoms::x[i] = xx[ii + 0] / scale[ii + 0];
+      atoms::y[i] = xx[ii + 1] / scale[ii + 1];
+      atoms::z[i] = xx[ii + 2] / scale[ii + 2];
+   }
+}
+
+// As in minimize.f, shake moves the atoms back onto the distance constraints,
+// rigid waters included, and places the extra sites of four-site waters.
+static void xMinimizeShake(int n, double* xx, const double* scale)
+{
+   xMinimizeSetHostXyz(n, xx, scale);
+   tinker_f_shake(atoms::x, atoms::y, atoms::z);
+   for (int i = 0; i < n; ++i) {
+      int ii = 3 * i;
+      xx[ii + 0] = atoms::x[i] * scale[ii + 0];
+      xx[ii + 1] = atoms::y[i] * scale[ii + 1];
+      xx[ii + 2] = atoms::z[i] * scale[ii + 2];
+   }
+}
+
+// Interleaves the gradient into g; as in minimize.f, shakeg then removes the
+// components along the distance constraints, at the coordinates in atoms::x.
+static void xMinimizeGradient(int n, double* g, bool userat)
+{
+   for (int i = 0; i < n; ++i) {
+      g[3 * i + 0] = grx[i];
+      g[3 * i + 1] = gry[i];
+      g[3 * i + 2] = grz[i];
+   }
+   if (userat)
+      tinker_f_shakeg(g);
+}
+
+double minimizeFunction(double* xx, double* g)
+{
+   // convert optimization parameters to atomic coordinates; xx keeps the
+   // coordinates as shake left them
+   const bool userat = useRattle();
+   if (userat)
+      xMinimizeShake(n, xx, scales::scale);
    xMinimizeSetXyz(n, xx, scales::scale);
 
    // compute and store the energy and gradient
@@ -42,19 +85,48 @@ static double minimiz1(double* xx, double* g)
    copyEnergy(calc::energy, &eout);
    copyGradient(calc::grad, grx.data(), gry.data(), grz.data());
 
-   // convert coordinates and gradient to optimization parameters
-
-   // Unnecessary if we don't use shake() algorithm that may change xyz.
-   xMinimizeSetXx(n, xx, scales::scale);
-
-   for (int i = 0; i < n; ++i) {
-      int ii = 3 * i;
-      g[ii + 0] = grx[i] / scales::scale[ii + 0];
-      g[ii + 1] = gry[i] / scales::scale[ii + 1];
-      g[ii + 2] = grz[i] / scales::scale[ii + 2];
-   }
+   // convert gradient to optimization parameters
+   xMinimizeGradient(n, g, userat);
+   for (int i = 0; i < 3 * n; ++i)
+      g[i] /= scales::scale[i];
 
    return eout;
+}
+
+std::vector<double> minimizeParams()
+{
+   // perform dynamic allocation of some global arrays
+   if (!tinker_f_allocated(scales::scale))
+      tinker_f_allocate_element(&scales::scale, 3 * n);
+
+   // set scaling parameter for function and derivative values;
+   // use square root of median eigenvalue of typical Hessian
+   scales::set_scale = 1;
+   int nvar = 0;
+   for (int i = 0; i < n; ++i) {
+      for (int j = 0; j < 3; ++j) {
+         scales::scale[nvar] = 12;
+         ++nvar;
+      }
+   }
+
+   // perform dynamic allocation of some local arrays
+   std::vector<double> xxvec(3 * n);
+   grx.resize(n);
+   gry.resize(n);
+   grz.resize(n);
+
+   // convert atomic coordinates to optimization parameters
+   xMinimizeSetXx(n, xxvec.data(), scales::scale);
+   return xxvec;
+}
+
+void minimizeEnd()
+{
+   grx.clear();
+   gry.clear();
+   grz.clear();
+   TINKER_FCALL2(acc1, cu1, xMinimizeEnd);
 }
 }
 
@@ -97,35 +169,13 @@ void xMinimize(int, char**)
    rc_flag = flags;
    initialize();
 
-   // perform dynamic allocation of some global arrays
-   if (!tinker_f_allocated(scales::scale))
-      tinker_f_allocate_element(&scales::scale, 3 * n);
-
-   // set scaling parameter for function and derivative values;
-   // use square root of median eigenvalue of typical Hessian
-   scales::set_scale = 1;
-   int nvar = 0;
-   for (int i = 0; i < n; ++i) {
-      for (int j = 0; j < 3; ++j) {
-         scales::scale[nvar] = 12;
-         ++nvar;
-      }
-   }
-
-   // perform dynamic allocation of some local arrays
-   std::vector<double> xxvec(3 * n);
+   std::vector<double> xxvec = minimizeParams();
    double* xx = xxvec.data();
-   grx.resize(n);
-   gry.resize(n);
-   grz.resize(n);
-
-   // convert atomic coordinates to optimization parameters
-   xMinimizeSetXx(n, xx, scales::scale);
 
    // make the call to the optimization routine
    int n3 = 3 * n;
    double mini;
-   tinker_f_lbfgs(&n3, xx, &mini, &grdmin, minimiz1, tinker_f_optsave);
+   tinker_f_lbfgs(&n3, xx, &mini, &grdmin, minimizeFunction, tinker_f_optsave);
 
    // convert optimization parameters to atomic coordinates
    xMinimizeSetXyz(n, xx, scales::scale);
@@ -135,19 +185,21 @@ void xMinimize(int, char**)
    energy(calc::energy + calc::grad);
    copyEnergy(calc::energy, &minimum);
    copyGradient(calc::grad, grx.data(), gry.data(), grz.data());
+   const bool userat = useRattle();
+   if (userat)
+      xMinimizeSetHostXyz(n, xx, scales::scale);
+   std::vector<double> gvec(n3);
+   xMinimizeGradient(n, gvec.data(), userat);
    double gnorm = 0;
-   for (int i = 0; i < n; ++i) {
-      gnorm += grx[i] * grx[i] + gry[i] * gry[i] + grz[i] * grz[i];
+   for (int i = 0; i < n3; ++i) {
+      gnorm += gvec[i] * gvec[i];
    }
    gnorm = std::sqrt(gnorm);
    double grms = gnorm / std::sqrt(n);
 
    // perform deallocation of some local arrays
    xxvec.clear();
-   grx.clear();
-   gry.clear();
-   grz.clear();
-   TINKER_FCALL2(acc1, cu1, xMinimizeEnd);
+   minimizeEnd();
 
    // write out the final function and gradient values
    auto o = stdout;

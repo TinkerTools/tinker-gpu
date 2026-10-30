@@ -1,6 +1,7 @@
 #pragma once
 #include "tool/macro.h"
 #include <string>
+#include <vector>
 
 /// \addtogroup general
 /// \{
@@ -60,5 +61,15 @@ void initial();    ///< Sets up original values for some variables and parameter
 void mechanic2();  ///< Sets up extra parameters and options in addition to the Fortran \c mechanic subroutine.
 void initialize(); ///< Sets up host and device environment.
 void finish();     ///< Cleans up host and device environment.
+
+/// Sets the scale factors of the \c minimize program and returns its optimization
+/// parameters (the coordinates times the scale factors) for the current coordinates.
+std::vector<double> minimizeParams();
+/// Evaluates the energy that the \c minimize program optimizes, and its gradient
+/// \c g by the optimization parameters \c xx. Distance constraints first move
+/// \c xx onto them and the gradient is projected off them, as in minimize.f.
+double minimizeFunction(double* xx, double* g);
+/// Frees what #minimizeParams and #minimizeFunction allocated.
+void minimizeEnd();
 /// \}
 }

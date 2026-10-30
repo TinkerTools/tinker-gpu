@@ -193,6 +193,42 @@ void shakeCH_acc(time_prec dt, pos_prec* xnew, pos_prec* ynew, pos_prec* znew, c
 }
 
 template <bool DO_V>
+static void water4Pos_acc1(pos_prec* xnew, pos_prec* ynew, pos_prec* znew)
+{
+   #pragma acc parallel loop independent async\
+           deviceptr(xnew,ynew,znew,vx,vy,vz,iratw4,kratw4)
+   for (int iw = 0; iw < nratw4; ++iw) {
+      dk_water4Pos<DO_V>(iw, xnew, ynew, znew, vx, vy, vz, iratw4, kratw4);
+   }
+}
+
+void rattleWater4Pos_acc(pos_prec* xnew, pos_prec* ynew, pos_prec* znew, bool do_v)
+{
+   if (do_v)
+      water4Pos_acc1<true>(xnew, ynew, znew);
+   else
+      water4Pos_acc1<false>(xnew, ynew, znew);
+}
+
+void rattleWater4Vel_acc(vel_prec* vxnew, vel_prec* vynew, vel_prec* vznew)
+{
+   #pragma acc parallel loop independent async\
+           deviceptr(vxnew,vynew,vznew,iratw4)
+   for (int iw = 0; iw < nratw4; ++iw) {
+      dk_water4Vel(iw, vxnew, vynew, vznew, iratw4);
+   }
+}
+
+void rattleWater4Grad_acc()
+{
+   #pragma acc parallel loop independent async\
+           deviceptr(gx,gy,gz,iratw4,kratw4)
+   for (int iw = 0; iw < nratw4; ++iw) {
+      dk_water4Grad(iw, gx, gy, gz, iratw4, kratw4);
+   }
+}
+
+template <bool DO_V>
 static void constrain2_acc(time_prec dt)
 {
    if (nratmol <= 0)

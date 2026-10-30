@@ -84,6 +84,7 @@ static bool fts(std::string eng, bool& use_flag, unsigned tsflag, const TimeScal
 #include "ff/nblist.h"
 #include "ff/pmestream.h"
 #include "ff/potent.h"
+#include "md/rattle.h"
 #include "nn/nn.h"
 #include <tinker/detail/mplpot.hh>
 #include <tinker/detail/polpot.hh>
@@ -125,17 +126,7 @@ static bool amoeba_echglj(int vers)
       return false;
    if (vers & calc::analyz)
       return false;
-   if (not use(Potent::CHARGE) or not use(Potent::VDW))
-      return false;
-   if (not(clistVersion() & Nbl::SPATIAL))
-      return false;
-   if (ebuffer != 0)
-      return false;
-   if (vdwtyp != Vdw::LJ)
-      return false;
-   if (vdwpr_in_use)
-      return false;
-   return true;
+   return echgljAvailable();
 }
 
 static bool amoeba_echarge(int vers)
@@ -519,6 +510,12 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
       if (fts("eabf", ecore_abf, tsflag, tsconfig))
          eabfBias(vers);
    }
+
+   // as gradient.f does after the bias, move the gradient on the extra sites
+   // of rigid four-site waters to their O-H-H atoms, since the extra sites
+   // are not degrees of freedom
+   if (do_g)
+      rattleWater4Grad();
 }
 
 void energy(int vers)
