@@ -247,3 +247,71 @@ TEST_CASE("Box-3", "[ff][box][triclinic]")
    tinker_f_final();
    tinkerFortranRuntimeEnd();
 }
+
+TEST_CASE("Box-4", "[ff][box][octahedron]")
+{
+   const char* argv[] = {"dummy"};
+   int argc = 1;
+   real xr, yr, zr;
+
+   tinkerFortranRuntimeBegin(argc, (char**)argv);
+   initial();
+   gpuData(RcOp::ALLOC | RcOp::INIT);
+   boxDataP1(RcOp::ALLOC);
+
+   double eps = 1.0e-6;
+   double p[] = {16, 16, 16, 90, 90, 90};
+   set_box(BoxShape::OCT, p);
+
+   SECTION("  - volume")
+   {
+      double vol = p[0] * p[1] * p[2] / 2;
+      REQUIRE(boxVolume() == Approx(vol).margin(eps));
+   }
+
+   // image and imagen
+   SECTION("  - inside")
+   {
+      xr = 1, yr = 2, zr = 3;
+      double xa = 1, ya = 2, za = 3;
+      compare_im();
+      compare_in();
+   }
+
+   SECTION("  - square face")
+   {
+      xr = 10, yr = 0, zr = 0;
+      double xa = -6, ya = 0, za = 0;
+      compare_im();
+      compare_in();
+   }
+
+   SECTION("  - hexagonal face")
+   {
+      xr = 5, yr = 5, zr = 5;
+      double xa = -3, ya = -3, za = -3;
+      compare_im();
+      compare_in();
+   }
+
+   SECTION("  - square then hexagonal face")
+   {
+      xr = 12, yr = 4, zr = -5;
+      double xa = 4, ya = -4, za = 3;
+      compare_im();
+      compare_in();
+   }
+
+   SECTION("  - far")
+   {
+      xr = 35, yr = -41, zr = 22;
+      double xa = -5, ya = -1, za = -2;
+      compare_im();
+      compare_in();
+   }
+
+   boxDataP1(RcOp::DEALLOC);
+   gpuData(RcOp::DEALLOC);
+   tinker_f_final();
+   tinkerFortranRuntimeEnd();
+}

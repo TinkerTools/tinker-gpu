@@ -101,6 +101,30 @@ inline void ixyzOctahedron(int& restrict ix, int& restrict iy, int& restrict iz,
    iz = iz1 + qz2;
 }
 
+// Fractional reach, along the axis of reciprocal vector r, of a box of half
+// sizes (hx,hy,hz) and a sphere of radius cut.
+__device__
+inline real spatialReach(real3 r, real hx, real hy, real hz, real cut)
+{
+   return REAL_ABS(r.x) * hx + REAL_ABS(r.y) * hy + REAL_ABS(r.z) * hz
+      + REAL_SQRT(r.x * r.x + r.y * r.y + r.z * r.z) * cut;
+}
+
+// A block is local if imaging its atoms, and the atoms within `cut` of them,
+// once around its center gives the image of every such pair. This holds if the
+// block and the cutoff reach less than half a cell along every fractional axis
+// and, in the octahedron, stay inside the hexagonal faces |x|+|y|+|z| = 3a/4.
+__device__
+inline bool spatialLocal(real hx, real hy, real hz, real cut, TINKER_IMAGE_PARAMS)
+{
+   bool local = spatialReach(recipa, hx, hy, hz, cut) < 0.5f //
+      and spatialReach(recipb, hx, hy, hz, cut) < 0.5f       //
+      and spatialReach(recipc, hx, hy, hz, cut) < 0.5f;
+   if (box_shape == BoxShape::OCT)
+      local = local and (hx + hy + hz) + 1.7320508f * cut < 0.75f * lvec1.x;
+   return local;
+}
+
 template <size_t n, class coord_t>
 __device__
 inline void AxesToTranspose(coord_t (&x)[n], int b)
@@ -197,38 +221,38 @@ void spatialStep2(int n, Spatial::SortedAtom* restrict sorted, int* restrict bnu
    real* restrict yold, real* restrict zold, //
    TINKER_IMAGE_PARAMS, real cutbuf, Spatial::Center* restrict akc, Spatial::Center* restrict half)
 {
-   real xbox, ybox, zbox;
-   xbox = lvec1.x * lvec1.x + lvec2.x * lvec2.x + lvec3.x * lvec3.x;
-   ybox = lvec1.y * lvec1.y + lvec2.y * lvec2.y + lvec3.y * lvec3.y;
-   zbox = lvec1.z * lvec1.z + lvec2.z * lvec2.z + lvec3.z * lvec3.z;
-   xbox = REAL_SQRT(xbox);
-   ybox = REAL_SQRT(ybox);
-   zbox = REAL_SQRT(zbox);
-
    real xr, yr, zr, r, r2;
 
    // b2num has been sorted by the box number
    // i: sorted index
    // b2num[i] = [box number][unsorted atom number]
-   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < n; i += blockDim.x * gridDim.x) {
+   // Every lane of the last, partial block takes part in the reductions over
+   // the block; the extra lanes repeat its last atom.
+   const int nfull = (n + WARP_SIZE - 1) / WARP_SIZE * WARP_SIZE;
+   for (int i0 = threadIdx.x + blockIdx.x * blockDim.x; i0 < nfull; i0 += blockDim.x * gridDim.x) {
+      const int i = min(i0, n - 1);
       int atomi = b2num[i].y;
       xr = x[atomi];
       yr = y[atomi];
       zr = z[atomi];
-      if (!ZERO_LBUF) {
-         xold[atomi] = xr;
-         yold[atomi] = yr;
-         zold[atomi] = zr;
+      // Every lane reads b2num before it is reset.
+      __syncwarp();
+      if (i0 < n) {
+         if (!ZERO_LBUF) {
+            xold[atomi] = xr;
+            yold[atomi] = yr;
+            zold[atomi] = zr;
+         }
+         sorted[i].x = xr;
+         sorted[i].y = yr;
+         sorted[i].z = zr;
+         sorted[i].unsorted = atomi;
+         bnum[atomi] = i;            // C.1
+         b2num[i] = make_int2(0, 0); // C.3
       }
-      sorted[i].x = xr;
-      sorted[i].y = yr;
-      sorted[i].z = zr;
-      sorted[i].unsorted = atomi;
-      bnum[atomi] = i;            // C.1
-      b2num[i] = make_int2(0, 0); // C.3
 
       // C.4 mid point
-      int tmask = __activemask();
+      const unsigned tmask = ALL_LANES;
       real x0 = __shfl_sync(tmask, xr, 0);
       real y0 = __shfl_sync(tmask, yr, 0);
       real z0 = __shfl_sync(tmask, zr, 0);
@@ -269,11 +293,7 @@ void spatialStep2(int n, Spatial::SortedAtom* restrict sorted, int* restrict bnu
       real yh = (ymax - ymin) / 2;
       real zh = (zmax - zmin) / 2;
       // C.4 local flag
-      // if i-block has a small distribution in space:
-      // xbox / 2 - xhalf > cutbuf ==> xbox > 2*(xhalf+cutbuf)
-      bool ilocal = xbox > 2 * (xh + cutbuf) //
-         and ybox > 2 * (yh + cutbuf)        //
-         and zbox > 2 * (zh + cutbuf);
+      bool ilocal = spatialLocal(xh, yh, zh, cutbuf, TINKER_IMAGE_ARGS);
 
       int iblock = i / WARP_SIZE;
       int ilane = threadIdx.x & (WARP_SIZE - 1);
@@ -425,6 +445,63 @@ void spatialStep5Bits(int x0, int y0, unsigned int* bit0, const int* iakpl_rev)
    }
 }
 
+// Rounding the fractional coordinates is not the minimum image of a skewed
+// cell, so the image of a pair can differ from that of the centers of its
+// blocks, and the tests of whole blocks look at more than one image.
+template <class IMG>
+__device__
+constexpr bool spatialSkewed()
+{
+   return std::is_same<IMG, PbcMono>::value or std::is_same<IMG, PbcTri>::value;
+}
+
+// Let (xr,yr,zr) be the rounded displacement of two centers, f its fractional
+// coordinates, and del the fractional reach of the boxes of half sizes
+// (hx,hy,hz) around them. For a pair of points, one in each box, the image of
+// the centers that goes with the rounded image of the pair is (xr,yr,zr)
+// shifted by n cells, where along every axis n is 0 or sign(f), and sign(f)
+// only if |f| + del reaches 1/2, as long as del is below 1/2. Gives the
+// smallest squared distance and squared gap of the boxes over these images, at
+// most 8, or 0 when the boxes are too large.
+__device__
+inline void spatialSkewedImages(real xr, real yr, real zr, real hx, real hy, real hz, TINKER_IMAGE_LVEC_PARAMS,
+   TINKER_IMAGE_RECIP_PARAMS, real& restrict r2min, real& restrict gap2min)
+{
+   const real lim = 0.49f; // 1/2 with a margin for rounding
+   real fa = recipa.x * xr + recipa.y * yr + recipa.z * zr;
+   real fb = recipb.x * xr + recipb.y * yr + recipb.z * zr;
+   real fc = recipc.x * xr + recipc.y * yr + recipc.z * zr;
+   real da = spatialReach(recipa, hx, hy, hz, 0);
+   real db = spatialReach(recipb, hx, hy, hz, 0);
+   real dc = spatialReach(recipc, hx, hy, hz, 0);
+   r2min = 0;
+   gap2min = 0;
+   if (da >= lim or db >= lim or dc >= lim)
+      return;
+
+   int na = REAL_ABS(fa) + da >= lim ? 1 : 0;
+   int nb = REAL_ABS(fb) + db >= lim ? 1 : 0;
+   int nc = REAL_ABS(fc) + dc >= lim ? 1 : 0;
+   real sa = fa > 0 ? 1 : -1;
+   real sb = fb > 0 ? 1 : -1;
+   real sc = fc > 0 ? 1 : -1;
+   r2min = (real)1e30;
+   gap2min = (real)1e30;
+   for (int ia = 0; ia <= na; ++ia)
+      for (int ib = 0; ib <= nb; ++ib)
+         for (int ic = 0; ic <= nc; ++ic) {
+            real ma = ia * sa, mb = ib * sb, mc = ic * sc;
+            real dx = xr - (ma * lvec1.x + mb * lvec1.y + mc * lvec1.z);
+            real dy = yr - (ma * lvec2.x + mb * lvec2.y + mc * lvec2.z);
+            real dz = zr - (ma * lvec3.x + mb * lvec3.y + mc * lvec3.z);
+            r2min = REAL_MIN(r2min, dx * dx + dy * dy + dz * dz);
+            dx = REAL_MAX((real)0, REAL_ABS(dx) - hx);
+            dy = REAL_MAX((real)0, REAL_ABS(dy) - hy);
+            dz = REAL_MAX((real)0, REAL_ABS(dz) - hz);
+            gap2min = REAL_MIN(gap2min, dx * dx + dy * dy + dz * dz);
+         }
+}
+
 template <class IMG>
 __global__
 void spatialStep5(const int* restrict bnum, const int* restrict iakpl_rev, int nstype, Spatial::ScaleInfo si1,
@@ -542,6 +619,7 @@ void spatialStep5(const int* restrict bnum, const int* restrict iakpl_rev, int n
          }
 
          // Check if two blocks are far apart.
+         real gap2 = 0;
          if (calcwx) {
             real cxk = akc[wx].x;
             real cyk = akc[wx].y;
@@ -553,6 +631,9 @@ void spatialStep5(const int* restrict bnum, const int* restrict iakpl_rev, int n
             yr = cyk - cyi;
             zr = czk - czi;
             r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_LVEC_ARGS, TINKER_IMAGE_RECIP_ARGS);
+            if CONSTEXPR (spatialSkewed<IMG>())
+               spatialSkewedImages(xr, yr, zr, half[wx].x + hxi, half[wx].y + hyi, half[wx].z + hzi,
+                  TINKER_IMAGE_LVEC_ARGS, TINKER_IMAGE_RECIP_ARGS, r2, gap2);
             if (r2 > rlimit2)
                calcwx = false;
          }
@@ -560,13 +641,26 @@ void spatialStep5(const int* restrict bnum, const int* restrict iakpl_rev, int n
          // Check if the bounding boxes of two blocks overlap.
          if (calcwx) {
             rlimit2 = cutbuf2;
-            xr = REAL_ABS(xr) - (half[wx].x + hxi);
-            yr = REAL_ABS(yr) - (half[wx].y + hyi);
-            zr = REAL_ABS(zr) - (half[wx].z + hzi);
-            xr = REAL_MAX((real)0, xr);
-            yr = REAL_MAX((real)0, yr);
-            zr = REAL_MAX((real)0, zr);
-            r2 = xr * xr + yr * yr + zr * zr;
+            if CONSTEXPR (spatialSkewed<IMG>()) {
+               r2 = gap2;
+            } else {
+               real ax = REAL_ABS(xr), ay = REAL_ABS(yr), az = REAL_ABS(zr);
+               real hx = half[wx].x + hxi, hy = half[wx].y + hyi, hz = half[wx].z + hzi;
+               xr = REAL_MAX((real)0, ax - hx);
+               yr = REAL_MAX((real)0, ay - hy);
+               zr = REAL_MAX((real)0, az - hz);
+               r2 = xr * xr + yr * yr + zr * zr;
+               // The minimum image of the centers is not the closest image on
+               // every axis for an octahedron: the images shifted by
+               // (a/2,a/2,a/2) are a/2-|d| away on each axis.
+               if CONSTEXPR (std::is_same<IMG, PbcOct>::value) {
+                  real a2 = lvec1.x / 2;
+                  xr = REAL_MAX((real)0, a2 - ax - hx);
+                  yr = REAL_MAX((real)0, a2 - ay - hy);
+                  zr = REAL_MAX((real)0, a2 - az - hz);
+                  r2 = REAL_MIN(r2, xr * xr + yr * yr + zr * zr);
+               }
+            }
             if (r2 > rlimit2)
                calcwx = false;
          }
@@ -604,6 +698,11 @@ void spatialStep5(const int* restrict bnum, const int* restrict iakpl_rev, int n
             yr = cyk - yi;
             zr = czk - zi;
             r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_LVEC_ARGS, TINKER_IMAGE_RECIP_ARGS);
+            if CONSTEXPR (spatialSkewed<IMG>()) {
+               real g2;
+               spatialSkewedImages(xr, yr, zr, half[wx].x, half[wx].y, half[wx].z, TINKER_IMAGE_LVEC_ARGS,
+                  TINKER_IMAGE_RECIP_ARGS, r2, g2);
+            }
             // Only consider those "i-atoms" that are close to k-center.
             int iflag = __ballot_sync(ALL_LANES, r2 <= rlimit2);
 
@@ -952,27 +1051,25 @@ void spatialUpdateSorted_cu1(int n, Spatial::SortedAtom* restrict sorted,  //
    const real* restrict x, const real* restrict y, const real* restrict z, //
    TINKER_IMAGE_PARAMS, real cut, Spatial::Center* restrict akc, Spatial::Center* restrict half)
 {
-   real xbox, ybox, zbox;
-   xbox = lvec1.x * lvec1.x + lvec2.x * lvec2.x + lvec3.x * lvec3.x;
-   ybox = lvec1.y * lvec1.y + lvec2.y * lvec2.y + lvec3.y * lvec3.y;
-   zbox = lvec1.z * lvec1.z + lvec2.z * lvec2.z + lvec3.z * lvec3.z;
-   xbox = REAL_SQRT(xbox);
-   ybox = REAL_SQRT(ybox);
-   zbox = REAL_SQRT(zbox);
-
    real xr, yr, zr, r, r2;
 
-   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < n; i += blockDim.x * gridDim.x) {
+   // Every lane of the last, partial block takes part in the reductions over
+   // the block; the extra lanes repeat its last atom.
+   const int nfull = (n + WARP_SIZE - 1) / WARP_SIZE * WARP_SIZE;
+   for (int i0 = threadIdx.x + blockIdx.x * blockDim.x; i0 < nfull; i0 += blockDim.x * gridDim.x) {
+      const int i = min(i0, n - 1);
       int atomi = sorted[i].unsorted;
       xr = x[atomi];
       yr = y[atomi];
       zr = z[atomi];
-      sorted[i].x = xr;
-      sorted[i].y = yr;
-      sorted[i].z = zr;
+      if (i0 < n) {
+         sorted[i].x = xr;
+         sorted[i].y = yr;
+         sorted[i].z = zr;
+      }
 
       // C.4 mid point
-      int tmask = __activemask();
+      const unsigned tmask = ALL_LANES;
       real x0 = __shfl_sync(tmask, xr, 0);
       real y0 = __shfl_sync(tmask, yr, 0);
       real z0 = __shfl_sync(tmask, zr, 0);
@@ -1015,11 +1112,7 @@ void spatialUpdateSorted_cu1(int n, Spatial::SortedAtom* restrict sorted,  //
       // C.4 local flag
       // Different from list construction: instead of `cutoff+buffer`,
       // only `cutoff` is needed.
-      // if i-block has a small distribution in space:
-      // xbox / 2 - xhalf > cut ==> xbox > 2*(xhalf+cut)
-      bool ilocal = xbox > 2 * (xh + cut) //
-         and ybox > 2 * (yh + cut)        //
-         and zbox > 2 * (zh + cut);
+      bool ilocal = spatialLocal(xh, yh, zh, cut, TINKER_IMAGE_ARGS);
 
       int iblock = i / WARP_SIZE;
       int ilane = threadIdx.x & (WARP_SIZE - 1);

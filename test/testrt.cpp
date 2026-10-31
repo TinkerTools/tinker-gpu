@@ -1,4 +1,5 @@
 #include "tool/error.h"
+#include "tool/platform.h"
 #include <tinker/detail/bath.hh>
 #include <tinker/detail/dlmda.hh>
 #include <tinker/detail/inform.hh>
@@ -326,6 +327,10 @@ void TestSession::end()
    m_ended = true;
    if (m_init)
       finish();
+   else
+      // initialize() threw before finish() could reset the platform it chose,
+      // which would otherwise stick to the sessions that run after this one.
+      pltfm_config = Platform::UNKNOWN;
    testEnd();
 }
 

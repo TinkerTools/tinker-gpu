@@ -199,8 +199,10 @@ TEST_CASE("NBList-ArBox", "[ff][nblist][arbox]")
 
 #if TINKER_GPULANG_CUDA
 // The kernels reach a pair through a block pair of iakpl or as a neighbor of its lower block in lst. Every pair
-// within the pruning distance must stay reachable, and every neighbor left in the pruned lst must be within it.
-static void checkPrunedList(const Spatial& st)
+// within the pruning distance of a pruned list must stay reachable, and every neighbor left in the pruned lst must
+// be within it. A list that is not pruned must reach every pair within its cutoff, and right after it was \c built
+// every pair within `cutoff+buffer`.
+static void checkSpatialList(const Spatial& st, bool built = false)
 {
    const int n = st.n;
    const int nak = (n + Spatial::BLOCK - 1) / Spatial::BLOCK;
@@ -212,31 +214,52 @@ static void checkPrunedList(const Spatial& st)
    darray::copyout(g::q0, st.niak * Spatial::BLOCK, lst.data(), st.lst);
    waitFor(g::q0);
 
-   // Minimum image of any box: round the fractional coordinates, then search the 27 nearest images.
+   // The image the kernels use, in double precision: round the fractional coordinates, and in the octahedron also
+   // move the corners across the hexagonal faces. For a skewed cell this is not always the minimum image, but the
+   // list has to agree with the kernels, not with the minimum image.
    Box box;
    boxGetCurrent(box);
+   const bool oct = box.box_shape == BoxShape::OCT;
    const real3 rc[3] = {box.recipa, box.recipb, box.recipc};
    const real3 lv[3] = {box.lvec1, box.lvec2, box.lvec3};
-   auto dist2 = [&](int i, int k) {
-      double d[3] = {s[i].x - s[k].x, s[i].y - s[k].y, s[i].z - s[k].z};
+   auto image = [&](double d[3]) {
       double f[3];
       for (int m = 0; m < 3; ++m) {
          f[m] = rc[m].x * d[0] + rc[m].y * d[1] + rc[m].z * d[2];
          f[m] -= std::round(f[m]);
       }
-      double r2 = std::numeric_limits<double>::max();
-      for (int n1 = -1; n1 <= 1; ++n1)
-         for (int n2 = -1; n2 <= 1; ++n2)
-            for (int n3 = -1; n3 <= 1; ++n3) {
-               double g[3] = {f[0] + n1, f[1] + n2, f[2] + n3}, c2 = 0;
-               for (int m = 0; m < 3; ++m) {
-                  double c = lv[m].x * g[0] + lv[m].y * g[1] + lv[m].z * g[2];
-                  c2 += c * c;
-               }
-               r2 = std::min(r2, c2);
-            }
-      return r2;
+      if (oct and std::fabs(f[0]) + std::fabs(f[1]) + std::fabs(f[2]) > 0.75)
+         for (int m = 0; m < 3; ++m)
+            f[m] -= std::copysign(0.5, f[m]);
+      for (int m = 0; m < 3; ++m)
+         d[m] = lv[m].x * f[0] + lv[m].y * f[1] + lv[m].z * f[2];
    };
+   auto dist2 = [&](int i, int k) {
+      double d[3] = {s[i].x - s[k].x, s[i].y - s[k].y, s[i].z - s[k].z};
+      image(d);
+      return d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+   };
+
+   // The tests of whole blocks rely on every atom of a block, imaged next to its first atom, lying within the half
+   // sizes and the radius around its center; this includes the last block, which may be partly filled.
+   std::vector<Spatial::Center> akc(nak), half(nak);
+   darray::copyout(g::q0, nak, akc.data(), st.akc);
+   darray::copyout(g::q0, nak, half.data(), st.half);
+   waitFor(g::q0);
+   int noutside = 0;
+   for (int b = 0; b < nak; ++b) {
+      const int i0 = b * Spatial::BLOCK;
+      for (int i = i0; i < std::min(n, i0 + Spatial::BLOCK); ++i) {
+         double d[3] = {s[i].x - s[i0].x, s[i].y - s[i0].y, s[i].z - s[i0].z};
+         image(d);
+         double u[3] = {s[i0].x + d[0] - akc[b].x, s[i0].y + d[1] - akc[b].y, s[i0].z + d[2] - akc[b].z};
+         const double tol = 1e-3;
+         bool out = std::fabs(u[0]) > half[b].x + tol or std::fabs(u[1]) > half[b].y + tol
+            or std::fabs(u[2]) > half[b].z + tol or std::sqrt(u[0] * u[0] + u[1] * u[1] + u[2] * u[2]) > half[b].w + tol;
+         noutside += out ? 1 : 0;
+      }
+   }
+   REQUIRE(noutside == 0);
 
    std::set<int> tiles(iakpl.begin(), iakpl.end());
    std::vector<std::set<int>> nb(nak);
@@ -245,17 +268,31 @@ static void checkPrunedList(const Spatial& st)
          if (int k = lst[t * Spatial::BLOCK + j])
             nb[iak[t]].insert(k);
 
-   const double c2 = st.prune_cut * st.prune_cut;
+   const bool pruned = st.prune_cut > 0;
+   const double cut = pruned ? st.prune_cut : built ? st.cutoff + st.buffer : st.cutoff;
+   const double c2 = cut * cut;
    int nmissing = 0;
+   double rmissing = 0;
    for (int i = 0; i < n; ++i) {
       for (int k = i + 1; k < n; ++k) {
-         if (dist2(i, k) > c2)
+         // The list compares single precision distances.
+         double r2 = dist2(i, k);
+         if (r2 > c2 * (1 - 1e-4))
             continue;
          int bi = i / Spatial::BLOCK, bk = k / Spatial::BLOCK;
          bool reached = bi == bk or tiles.count(bk * (bk + 1) / 2 + bi) or nb[bi].count(k);
-         nmissing += reached ? 0 : 1;
+         if (not reached) {
+            ++nmissing;
+            rmissing = std::max(rmissing, std::sqrt(r2));
+         }
       }
    }
+   INFO("shape " << (int)box.box_shape << ", checked to " << cut << " (cutoff " << st.cutoff << ", buffer " << st.buffer << ", pruned " << pruned
+                      << ", built " << built << "); farthest missing pair " << rmissing);
+   REQUIRE(nmissing == 0);
+   if (not pruned)
+      return;
+
    int nfar = 0;
    for (int b = 0; b < nak; ++b) {
       for (int k : nb[b]) {
@@ -265,10 +302,42 @@ static void checkPrunedList(const Spatial& st)
          nfar += r2 > c2 * (1 + 1e-3) ? 1 : 0;
       }
    }
-   REQUIRE(nmissing == 0);
    REQUIRE(nfar == 0);
    REQUIRE(st.niak < st.niak_full);
 }
+
+// Nudges every atom by up to 0.25 Angstrom along each axis and moves the first one by \c far along x, then refreshes
+// the lists. Moves within half of the buffer only update the sorted coordinates; a longer one rebuilds the lists.
+static void moveAtoms(std::mt19937& gen, double far)
+{
+   std::vector<pos_prec> xs(n), ys(n), zs(n);
+   std::uniform_real_distribution<double> nudge(-0.25, 0.25);
+   darray::copyout(g::q0, n, xs.data(), xpos);
+   darray::copyout(g::q0, n, ys.data(), ypos);
+   darray::copyout(g::q0, n, zs.data(), zpos);
+   waitFor(g::q0);
+   for (int i = 0; i < n; ++i) {
+      xs[i] += nudge(gen);
+      ys[i] += nudge(gen);
+      zs[i] += nudge(gen);
+   }
+   xs[0] += far;
+   darray::copyin(g::q0, n, xpos, xs.data());
+   darray::copyin(g::q0, n, ypos, ys.data());
+   darray::copyin(g::q0, n, zpos, zs.data());
+   waitFor(g::q0);
+   copyPosToXyz(true);
+}
+
+// Skewed boxes and the octahedron take their own image routines. Only the geometry of the lists is checked, so the
+// atoms need not fit the box.
+struct TestLattice
+{
+   BoxShape shape;
+   double alpha, beta, gamma;
+};
+static const TestLattice testLattices[] = {{BoxShape::MONO, 90, 100, 90}, {BoxShape::TRI, 85, 95, 100},
+   {BoxShape::TRI, 90, 90, 120}, {BoxShape::TRI, 70, 80, 65}, {BoxShape::OCT, 90, 90, 90}};
 
 TEST_CASE("NBList-Prune-Water30", "[ff][nblist][prune]")
 {
@@ -286,48 +355,98 @@ TEST_CASE("NBList-Prune-Water30", "[ff][nblist][prune]")
 
    REQUIRE(mspatial_v2_unit->prune_cut > 0);
    REQUIRE(uspatial_v2_unit->prune_cut > 0);
-   checkPrunedList(*mspatial_v2_unit);
-   checkPrunedList(*uspatial_v2_unit);
+   checkSpatialList(*mspatial_v2_unit);
+   checkSpatialList(*uspatial_v2_unit);
+   checkSpatialList(*vspatial_v2_unit, true);
 
-   // Moves within half of the buffer only update the sorted coordinates; a longer one rebuilds the list.
-   std::vector<pos_prec> xs(n), ys(n), zs(n);
    std::mt19937 gen(2026);
-   std::uniform_real_distribution<double> nudge(-0.25, 0.25);
    auto move = [&](double far) {
-      darray::copyout(g::q0, n, xs.data(), xpos);
-      darray::copyout(g::q0, n, ys.data(), ypos);
-      darray::copyout(g::q0, n, zs.data(), zpos);
-      waitFor(g::q0);
-      for (int i = 0; i < n; ++i) {
-         xs[i] += nudge(gen);
-         ys[i] += nudge(gen);
-         zs[i] += nudge(gen);
-      }
-      xs[0] += far;
-      darray::copyin(g::q0, n, xpos, xs.data());
-      darray::copyin(g::q0, n, ypos, ys.data());
-      darray::copyin(g::q0, n, zpos, zs.data());
-      waitFor(g::q0);
-      copyPosToXyz(true);
-      checkPrunedList(*mspatial_v2_unit);
-      checkPrunedList(*uspatial_v2_unit);
+      moveAtoms(gen, far);
+      checkSpatialList(*mspatial_v2_unit);
+      checkSpatialList(*uspatial_v2_unit);
+      checkSpatialList(*vspatial_v2_unit, far > 0);
    };
    move(0.0);
    move(3.0);
 
-   // Skewed boxes take their own image routines; the long move rebuilds the list in the new box.
-   for (auto sh : {BoxShape::MONO, BoxShape::TRI}) {
+   // The long move rebuilds the lists in the new box.
+   for (auto l : testLattices) {
       Box b;
-      if (sh == BoxShape::MONO)
-         boxLattice(b, sh, 30.0, 30.0, 30.0, 90.0, 100.0, 90.0);
-      else
-         boxLattice(b, sh, 30.0, 30.0, 30.0, 85.0, 95.0, 100.0);
+      boxLattice(b, l.shape, 30.0, 30.0, 30.0, l.alpha, l.beta, l.gamma);
       boxSetCurrent(b);
       move(3.0);
       move(0.0);
    }
 
    session.end();
+}
+
+// A gas of atoms spread over the box makes blocks too large for the per-axis bound on the image of their centers in a
+// skewed cell, and half of the atoms in a cluster mixes small blocks with large ones.
+TEST_CASE("NBList-Gas", "[ff][nblist]")
+{
+   TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
+   for (bool cluster : {false, true}) {
+      std::mt19937 gen(cluster ? 6 : 5);
+      std::uniform_real_distribution<double> gas(-20, 20), near(-3, 3);
+      const int na = 300;
+      std::string xyz = std::to_string(na) + "  Argon\n    40.0 40.0 40.0 90.0 90.0 90.0\n";
+      for (int i = 0; i < na; ++i) {
+         auto& u = cluster and i < na / 2 ? near : gas;
+         std::ostringstream line;
+         line << i + 1 << " Ar " << u(gen) << " " << u(gen) << " " << u(gen) << " 3\n";
+         xyz += line.str();
+      }
+      const char* x1 = "test_gas.xyz";
+      TestFile fx1("", x1, xyz);
+      TestFile fke("", "test_gas.key", "parameters amoeba09\nneighbor-list\nlist-buffer 1.0\ncutoff 9.0\nvdwterm only\n");
+      const char* argv[] = {"dummy", x1};
+      int argc = 2;
+      TestSession session(argc, argv);
+      rc_flag = calc::xyz | calc::energy;
+      session.init();
+
+      checkSpatialList(*vspatial_v2_unit, true);
+      for (auto l : testLattices) {
+         Box b;
+         boxLattice(b, l.shape, 40.0, 40.0, 40.0, l.alpha, l.beta, l.gamma);
+         boxSetCurrent(b);
+         moveAtoms(gen, 3.0);
+         checkSpatialList(*vspatial_v2_unit, true);
+         moveAtoms(gen, 0.0);
+         checkSpatialList(*vspatial_v2_unit);
+      }
+      session.end();
+   }
+}
+
+// The octahedron's minimum image crosses its hexagonal faces. The list used to drop such pairs where it imaged a
+// block of atoms once around its center, and where it rejected a block pair by the bounding boxes of the minimum
+// image of the two centers.
+TEST_CASE("NBList-Octahedron", "[ff][nblist][octahedron]")
+{
+   const char* x1 = "test_oct.xyz";
+   TestFile fx1(TINKER9_DIRSTR "/test/file/trunc8/octwater.xyz", x1);
+   TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/water03.prm");
+
+   for (std::string prune : {"on", "off"}) {
+      for (std::string buf : {"0.5", "2.0"}) {
+         const char* k = "test_oct.key";
+         TestFile fke(TINKER9_DIRSTR "/test/file/trunc8/octamoeba.key", k,
+            "\nlist-buffer " + buf + "\nlist-prune " + prune + "\n");
+         const char* argv[] = {"dummy", x1};
+         int argc = 2;
+         TestSession session(argc, argv);
+         rc_flag = calc::xyz | calc::energy;
+         session.init();
+
+         REQUIRE(box_shape == BoxShape::OCT);
+         checkSpatialList(*vspatial_v2_unit, true);
+         checkSpatialList(*mspatial_v2_unit, true);
+         checkSpatialList(*uspatial_v2_unit, true);
+         session.end();
+      }
+   }
 }
 
 TEST_CASE("NBList-Prune-Keyword", "[ff][nblist][prune]")
