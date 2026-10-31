@@ -2,7 +2,10 @@
 #include "md/misc.h"
 #include "md/pq.h"
 #include "md/rattle.h"
+#include "tool/iofortstr.h"
 #include "tool/ioprint.h"
+#include "tool/platform.h"
+#include <tinker/detail/bath.hh>
 #include <tinker/detail/mdstuf.hh>
 #include <tinker/detail/units.hh>
 
@@ -76,6 +79,15 @@ void BussiThermostat::printDetail(FILE* o)
 
 void BussiThermostat::control2(time_prec dt, bool)
 {
+   // Unless a Berendsen or Bussi barostat reads the rescaled ekin, nothing
+   // reads the host kinetic energy before a save step recomputes it, so CUDA
+   // can skip the readback and its sync. The Monte Carlo barostat uses
+   // bath::kelvin, since a Bussi run is isothermal.
+   if ((pltfm_config & Platform::CUDA) and (not bath::isobaric or FstrView(bath::barostat) == "MONTECARLO")) {
+      bussiThermostatOnDevice(dt);
+      return;
+   }
+
    double temp;
    kinetic(temp);
    bussiThermostat(dt, temp);

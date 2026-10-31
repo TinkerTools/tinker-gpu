@@ -23,6 +23,14 @@ void kinetic(T_prec& temp);
 
 /// \ingroup mdpt
 void bussiThermostat(time_prec dt, T_prec temp);
+/// bussiThermostat with the normal random number \c r and the chi-squared
+/// random number \c s of \c nfree-1 degrees of freedom given.
+void bussiThermostat(time_prec dt, T_prec temp, double r, double s);
+/// bussiThermostat of the current kinetic energy, computed and applied on the
+/// device without a host sync; the host eksum and ekin are not updated (CUDA only).
+void bussiThermostatOnDevice(time_prec dt);
+/// bussiThermostatOnDevice with the random numbers given, as in bussiThermostat.
+void bussiThermostatOnDevice(time_prec dt, double r, double s);
 
 /// \ingroup mdpt
 /// \brief Applies a box size correction as needed for the Monte Carlo barostat

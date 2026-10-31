@@ -1,8 +1,10 @@
+#include "ff/atom.h"
 #include "ff/molecule.h"
 #include "md/pq.h"
 #include "seq/launch.h"
 #include "seq/reduce.h"
 #include "tool/error.h"
+#include <tinker/detail/mdstuf.hh>
 #include <tinker/detail/units.hh>
 
 namespace tinker {
@@ -44,14 +46,14 @@ void velocityToEkin_cu(energy_prec* out, const vel_prec* restrict vx, const vel_
          out[blockIdx.x * HN + j] = sd[j][0];
 }
 
-void kineticEnergy_cu(energy_prec& eksum_out, energy_prec (&ekin_out)[3][3], int n, const double* mass,
-   const vel_prec* vx, const vel_prec* vy, const vel_prec* vz)
+// exx, eyy, ezz, exy, eyz, ezx in dptr_buf[0:6]
+static void kineticEnergyOnDevice_cu(int n, const double* mass, const vel_prec* vx, const vel_prec* vy,
+   const vel_prec* vz)
 {
    cudaStream_t st = g::s0;
    constexpr int HN = 6;
    energy_prec* dptr = reinterpret_cast<energy_prec*>(dptr_buf);
    energy_prec(*dptr6)[HN] = reinterpret_cast<energy_prec(*)[HN]>(dptr_buf);
-   energy_prec* hptr = reinterpret_cast<energy_prec*>(pinned_buf);
    int grid_siz1 = gpuGridSize(BLOCK_DIM);
    grid_siz1 = grid_siz1 / HN;
    int grid_siz2 = (n + BLOCK_DIM - 1) / BLOCK_DIM;
@@ -59,6 +61,16 @@ void kineticEnergy_cu(energy_prec& eksum_out, energy_prec (&ekin_out)[3][3], int
    const energy_prec ekcal_inv = 1.0 / units::ekcal;
    velocityToEkin_cu<BLOCK_DIM><<<grid_size, BLOCK_DIM, 0, st>>>(dptr, vx, vy, vz, mass, n, ekcal_inv);
    reduce2<energy_prec, BLOCK_DIM, HN, HN, OpPlus<energy_prec>><<<1, BLOCK_DIM, 0, st>>>(dptr6, dptr6, grid_size);
+}
+
+void kineticEnergy_cu(energy_prec& eksum_out, energy_prec (&ekin_out)[3][3], int n, const double* mass,
+   const vel_prec* vx, const vel_prec* vy, const vel_prec* vz)
+{
+   cudaStream_t st = g::s0;
+   constexpr int HN = 6;
+   energy_prec* dptr = reinterpret_cast<energy_prec*>(dptr_buf);
+   energy_prec* hptr = reinterpret_cast<energy_prec*>(pinned_buf);
+   kineticEnergyOnDevice_cu(n, mass, vx, vy, vz);
    check_rt(cudaMemcpyAsync(hptr, dptr, HN * sizeof(energy_prec), cudaMemcpyDeviceToHost, st));
    check_rt(cudaStreamSynchronize(st));
    energy_prec exx = hptr[0];
@@ -78,6 +90,46 @@ void kineticEnergy_cu(energy_prec& eksum_out, energy_prec (&ekin_out)[3][3], int
    ekin_out[2][1] = eyz;
    ekin_out[2][2] = ezz;
    eksum_out = exx + eyy + ezz;
+}
+
+// the scale factor of bussiThermostat from the kinetic energy in ek[0:3],
+// written to ek[6]
+__global__
+static void bussiScale_cu1(energy_prec* restrict ek, double c, double kelvin, int nfree, double gasconst, double r,
+   double s)
+{
+   energy_prec eksum = ek[0] + ek[1] + ek[2];
+   T_prec temp_prec = 2 * eksum / (nfree * gasconst);
+   double temp = temp_prec;
+   if (temp == 0)
+      temp = 0.1;
+
+   double d = (1 - c) * (kelvin / temp) / nfree;
+   double scale = c + (s + r * r) * d + 2 * r * sqrt(c * d);
+   scale = sqrt(scale);
+   if (r + sqrt(c / d) < 0)
+      scale = -scale;
+   ek[6] = scale;
+}
+
+__global__
+static void bussiVelScale_cu1(int n, const energy_prec* restrict ek, vel_prec* restrict vx, vel_prec* restrict vy,
+   vel_prec* restrict vz)
+{
+   const vel_prec sc = ek[6];
+   for (int i = ITHREAD; i < n; i += STRIDE) {
+      vx[i] *= sc;
+      vy[i] *= sc;
+      vz[i] *= sc;
+   }
+}
+
+void bussiThermostatOnDevice_cu(double c, double kelvin, double r, double s)
+{
+   energy_prec* dptr = reinterpret_cast<energy_prec*>(dptr_buf);
+   kineticEnergyOnDevice_cu(n, mass, vx, vy, vz);
+   bussiScale_cu1<<<1, 1, 0, g::s0>>>(dptr, c, kelvin, mdstuf::nfree, units::gasconst, r, s);
+   launch_k1s(g::s0, n, bussiVelScale_cu1, n, dptr, vx, vy, vz);
 }
 }
 

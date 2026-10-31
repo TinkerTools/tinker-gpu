@@ -74,17 +74,21 @@ void echargeEwaldReal_cu(int vers)
       echarge_cu<calc::V6, EWALD>();
 }
 
+// qgrid is the real grid of the in-place C2R FFT (fftbackOneSet), with its
+// padded rows; atoms go in the sorted order of the charge list, so that nearby
+// threads read nearby grid points
 template <class Ver, int bsorder>
 __global__
 void echarge_cu3(CountBuffer restrict nec, EnergyBuffer restrict ec, const real* restrict pchg, real f, real aewald,
-   int n, int nfft1, int nfft2, int nfft3, const real* restrict x, const real* restrict y, const real* restrict z,
-   const real* restrict qgrid, real3 reca, real3 recb, real3 recc, grad_prec* restrict gx, grad_prec* restrict gy,
-   grad_prec* restrict gz)
+   int n, const Spatial::SortedAtom* restrict sorted, int nfft1, int nfft2, int nfft3, const real* restrict x,
+   const real* restrict y, const real* restrict z, const real* restrict qgrid, real3 reca, real3 recb, real3 recc,
+   grad_prec* restrict gx, grad_prec* restrict gy, grad_prec* restrict gz)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;
    constexpr bool do_g = Ver::g;
    const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
+   const int ldx = 2 * (nfft1 / 2 + 1);
 
    real thetai1[4 * 5];
    real thetai2[4 * 5];
@@ -92,7 +96,8 @@ void echarge_cu3(CountBuffer restrict nec, EnergyBuffer restrict ec, const real*
    __shared__ real sharedarray[5 * 5 * PME_BLOCKDIM];
    real* restrict array = &sharedarray[5 * 5 * threadIdx.x];
 
-   for (int ii = ithread; ii < n; ii += blockDim.x * gridDim.x) {
+   for (int is = ithread; is < n; is += blockDim.x * gridDim.x) {
+      const int ii = sorted[is].unsorted;
       real chgi = pchg[ii];
       if (chgi == 0)
          continue;
@@ -147,20 +152,20 @@ void echarge_cu3(CountBuffer restrict nec, EnergyBuffer restrict ec, const real*
          for (int iz = 0; iz < bsorder; ++iz) {
             int zbase = igrid3 + iz;
             zbase -= (zbase >= nfft3 ? nfft3 : 0);
-            zbase *= (nfft1 * nfft2);
+            zbase *= (ldx * nfft2);
             real t3 = thetai3[4 * iz];
             real dt3 = nfft3 * thetai3[1 + 4 * iz];
             for (int iy = 0; iy < bsorder; ++iy) {
                int ybase = igrid2 + iy;
                ybase -= (ybase >= nfft2 ? nfft2 : 0);
-               ybase *= nfft1;
+               ybase *= ldx;
                real t2 = thetai2[4 * iy];
                real dt2 = nfft2 * thetai2[1 + 4 * iy];
                for (int ix = 0; ix < bsorder; ++ix) {
                   int xbase = igrid1 + ix;
                   xbase -= (xbase >= nfft1 ? nfft1 : 0);
                   int index = xbase + ybase + zbase;
-                  real term = qgrid[2 * index];
+                  real term = qgrid[index];
                   real t1 = thetai1[4 * ix];
                   real dt1 = nfft1 * thetai1[1 + 4 * ix];
                   de1 += term * dt1 * t2 * t3;
@@ -193,17 +198,10 @@ static void echargeFphiSelf_cu()
    auto stream = g::s0;
    if (use_pme_stream)
       stream = g::spme;
-   if (st.bsorder == 5) {
-      auto ker = echarge_cu3<Ver, 5>;
-      launch_k2b(stream, PME_BLOCKDIM, n, ker, //
-         nec, ec, pchg, f, aewald, n,          //
-         nfft1, nfft2, nfft3, x, y, z, st.qgrid, recipa, recipb, recipc, decx, decy, decz);
-   } else if (st.bsorder == 4) {
-      auto ker = echarge_cu3<Ver, 4>;
-      launch_k2b(stream, PME_BLOCKDIM, n, ker, //
-         nec, ec, pchg, f, aewald, n,          //
-         nfft1, nfft2, nfft3, x, y, z, st.qgrid, recipa, recipb, recipc, decx, decy, decz);
-   }
+   auto ker = st.bsorder == 5 ? echarge_cu3<Ver, 5> : echarge_cu3<Ver, 4>;
+   launch_k2b(stream, PME_BLOCKDIM, n, ker,                  //
+      nec, ec, pchg, f, aewald, n, cspatial_v2_unit->sorted, //
+      nfft1, nfft2, nfft3, x, y, z, st.qgrid, recipa, recipb, recipc, decx, decy, decz);
 }
 
 void echargeEwaldFphiSelf_cu(int vers)

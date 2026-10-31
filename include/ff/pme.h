@@ -62,7 +62,7 @@ void fftfront(PMEUnit);
 /// \ingroup pme
 void fftback(PMEUnit);
 /// \ingroup pme
-/// In-place real-to-complex FFT of the grid of gridUindOneSet.
+/// In-place real-to-complex FFT of the grid of gridUindOneSet or gridPchgOneSet.
 void fftfrontOneSet(PMEUnit);
 /// \ingroup pme
 /// In-place complex-to-real FFT of the half spectrum of fftfrontOneSet.
@@ -74,7 +74,11 @@ namespace tinker {
 /// \{
 void bsplineFill(PMEUnit, int level);
 
+/// (OpenACC and host only; CUDA spreads the charges with gridPchgOneSet.)
 void gridPchg(PMEUnit, real* pchg);
+/// Spreads the partial charges into the grid as a real grid for
+/// fftfrontOneSet (CUDA only).
+void gridPchgOneSet(PMEUnit, real* pchg);
 /// \c part, when not null, flags the sites whose C6 goes to the imaginary part
 /// of the grid, the mutated ligand of Ewald dispersion (pmestuf.f:grid_disp).
 void gridDisp(PMEUnit, real* csix, const int* part);
@@ -94,6 +98,9 @@ void pmeConv(PMEUnit, EnergyBuffer e, VirialBuffer v);
 void pmeConvDlmda(PMEUnit, PMEUnit, VirialBuffer, VirialBuffer, real wdv);
 /// pmeConv(PMEUnit) on the half spectrum of fftfrontOneSet.
 void pmeConvOneSet(PMEUnit);
+/// pmeConv(PMEUnit, EnergyBuffer, VirialBuffer) on the half spectrum of
+/// fftfrontOneSet; either buffer may be null (CUDA only).
+void pmeConvOneSet(PMEUnit, EnergyBuffer e, VirialBuffer v);
 
 void fphiMpole(PMEUnit, real (*out_fphi)[20]);
 void fphiUind(PMEUnit, real (*fdip_phi1)[10], real (*fdip_phi2)[10], real (*fdip_sum_phi)[20]);

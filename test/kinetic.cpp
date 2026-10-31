@@ -1,4 +1,9 @@
+#include "ff/atom.h"
 #include "md/misc.h"
+#include "md/pq.h"
+#include "tool/darray.h"
+#include "tool/platform.h"
+#include <tinker/detail/bath.hh>
 
 #include "test.h"
 #include "testrt.h"
@@ -40,4 +45,69 @@ TEST_CASE("Kinetic-ArBox", "[ff][kinetic][arbox]")
    REQUIRE(temp == Approx(ref_temp).margin(eps_e));
 
    session.end();
+}
+
+TEST_CASE("Bussi-OnDevice-ArBox", "[ff][kinetic][arbox]")
+{
+   const char* k = "test_arbox.key";
+   const char* d = "test_arbox.dyn";
+   const char* x = "test_arbox.xyz";
+
+   std::string k0 = "integrator  verlet\nthermostat  bussi\n";
+   TestFile fke(TINKER9_DIRSTR "/test/file/arbox/arbox.key", k, k0);
+
+   TestFile fd(TINKER9_DIRSTR "/test/file/arbox/arbox.dyn", d);
+   TestFile fx(TINKER9_DIRSTR "/test/file/arbox/arbox.xyz", x);
+   TestFile fp(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
+
+   const char* argv[] = {"dummy", x};
+   int argc = 2;
+   TestSession session(argc, argv);
+   testMdInit(298., 0);
+
+   rc_flag = calc::xyz | calc::vel | calc::mass | calc::md;
+   session.init();
+
+   // the device path is CUDA only
+   if (pltfm_config & Platform::CUDA) {
+      std::vector<vel_prec> v0x(n), v0y(n), v0z(n);
+      std::vector<vel_prec> v1x(n), v1y(n), v1z(n);
+      std::vector<vel_prec> v2x(n), v2y(n), v2z(n);
+      darray::copyout(g::q0, n, v0x.data(), vx);
+      darray::copyout(g::q0, n, v0y.data(), vy);
+      darray::copyout(g::q0, n, v0z.data(), vz);
+      waitFor(g::q0);
+
+      // the same random numbers for both paths
+      const time_prec dt = 0.002;
+      const double r = 0.75, chi2 = 600.0;
+      T_prec temp;
+      kinetic(temp);
+      bussiThermostat(dt, temp, r, chi2);
+      darray::copyout(g::q0, n, v1x.data(), vx);
+      darray::copyout(g::q0, n, v1y.data(), vy);
+      darray::copyout(g::q0, n, v1z.data(), vz);
+      waitFor(g::q0);
+
+      darray::copyin(g::q0, n, vx, v0x.data());
+      darray::copyin(g::q0, n, vy, v0y.data());
+      darray::copyin(g::q0, n, vz, v0z.data());
+      bussiThermostatOnDevice(dt, r, chi2);
+      darray::copyout(g::q0, n, v2x.data(), vx);
+      darray::copyout(g::q0, n, v2y.data(), vy);
+      darray::copyout(g::q0, n, v2z.data(), vz);
+      waitFor(g::q0);
+
+      // the velocities were rescaled, and by the same factor
+      REQUIRE(std::abs(v1x[0] / v0x[0] - 1) > 1e-4);
+      for (int i = 0; i < n; ++i) {
+         REQUIRE(v2x[i] == Approx(v1x[i]).epsilon(1e-12));
+         REQUIRE(v2y[i] == Approx(v1y[i]).epsilon(1e-12));
+         REQUIRE(v2z[i] == Approx(v1z[i]).epsilon(1e-12));
+      }
+   }
+
+   session.end();
+   bath::kelvin = 0;
+   bath::isothermal = 0;
 }

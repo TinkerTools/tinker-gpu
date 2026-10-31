@@ -84,6 +84,7 @@ static real (*dup_buf_rpole)[MPL_TOTAL];
 static real (*dup_buf_polinv)[3][3];
 static real (*dup_buf_polscale)[3][3];
 static energy_prec dup_buf_esum;
+static energy_prec dup_buf_eksum;
 static Box dup_buf_box;
 static pos_prec *dup_buf_x, *dup_buf_y, *dup_buf_z;
 static vel_prec *dup_buf_vx, *dup_buf_vy, *dup_buf_vz;
@@ -329,6 +330,9 @@ static void mdsaveDupThenWrite(int istep, time_prec dt)
    // duplicate
 
    dup_buf_esum = esum;
+   // the main thread moves on, and a thermostat may overwrite eksum, once the
+   // duplicates are made
+   dup_buf_eksum = eksum;
    boxGetCurrent(dup_buf_box);
    darray::copy(g::q0, n, dup_buf_x, xpos);
    darray::copy(g::q0, n, dup_buf_y, ypos);
@@ -479,7 +483,7 @@ static void mdsaveDupThenWrite(int istep, time_prec dt)
 
    double dt1 = dt;
    double epot1 = epot;
-   double eksum1 = eksum;
+   double eksum1 = dup_buf_eksum;
    tinker_f_mdsave(&istep, &dt1, &epot1, &eksum1);
 
    mtx_write.lock();

@@ -41,7 +41,21 @@ void kinetic(T_prec& temp)
 }
 
 namespace tinker {
+// the normal and chi-squared random numbers of one Bussi step, in this order
+static void bussiRandom(double& r, double& s)
+{
+   r = normal<double>();
+   s = chiSquared<double>(mdstuf::nfree - 1);
+}
+
 void bussiThermostat(time_prec dt_prec, T_prec temp_prec)
+{
+   double r, s;
+   bussiRandom(r, s);
+   bussiThermostat(dt_prec, temp_prec, r, s);
+}
+
+void bussiThermostat(time_prec dt_prec, T_prec temp_prec, double r, double s)
 {
    double dt = dt_prec;
    double temp = temp_prec;
@@ -56,8 +70,6 @@ void bussiThermostat(time_prec dt_prec, T_prec temp_prec)
 
    double c = std::exp(-dt / tautemp);
    double d = (1 - c) * (kelvin / temp) / nfree;
-   double r = normal<double>();
-   double s = chiSquared<double>(nfree - 1);
    double scale = c + (s + r * r) * d + 2 * r * std::sqrt(c * d);
    scale = std::sqrt(scale);
    if (r + std::sqrt(c / d) < 0)
@@ -71,6 +83,23 @@ void bussiThermostat(time_prec dt_prec, T_prec temp_prec)
          ekin[i][j] *= scale * scale;
       }
    }
+}
+
+void bussiThermostatOnDevice(time_prec dt_prec)
+{
+   double r, s;
+   bussiRandom(r, s);
+   bussiThermostatOnDevice(dt_prec, r, s);
+}
+
+TINKER_FVOID2(acc0, cu1, bussiThermostatOnDevice, double, double, double, double);
+void bussiThermostatOnDevice(time_prec dt_prec, double r, double s)
+{
+   double dt = dt_prec;
+   double tautemp = bath::tautemp;
+   double kelvin = bath::kelvin;
+   double c = std::exp(-dt / tautemp);
+   TINKER_FCALL2(acc0, cu1, bussiThermostatOnDevice, c, kelvin, r, s);
 }
 
 static void invert3(double dst[3][3], const double src[3][3])

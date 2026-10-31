@@ -297,6 +297,24 @@ inline int gridPutUnwrap(int g, int ref, int nfft)
    return ref + d;
 }
 
+// theta and its derivatives that gridPut_cu3 needs on each axis
+template <class T>
+__device__
+__host__
+constexpr int gridPutLevel()
+{
+   return eq<T, MPOLE>() ? 3 : (eq<T, PCHG>() ? 1 : 2);
+}
+
+// atoms a warp of gridPut_cu3 stages per pass, a quarter warp of lanes each
+template <class T>
+__device__
+__host__
+constexpr int gridPutAtoms()
+{
+   return eq<T, PCHG>() ? 8 : WARP_SIZE / 8;
+}
+
 // For grid point (ix, iy, iz) of an atom, the coefficients of v0, v1 (and v2):
 // its value is cz[0] * v0 + cz[1] * v1 (+ cz[2] * v2). th holds theta and its
 // derivatives, LEVEL of them per point, on the x, y, and z axes; f holds fmp, or
@@ -306,9 +324,15 @@ __device__
 inline void gridPutColumn(const real* restrict th, const real* restrict f, int ix, int iy, int part,
    real* restrict cz)
 {
-   constexpr int LEVEL = eq<T, MPOLE>() ? 3 : 2;
-   const real t0 = th[ix * LEVEL + 0], t1 = th[ix * LEVEL + 1];
-   const real u0 = th[(bsorder + iy) * LEVEL + 0], u1 = th[(bsorder + iy) * LEVEL + 1];
+   constexpr int LEVEL = gridPutLevel<T>();
+   const real t0 = th[ix * LEVEL + 0];
+   const real u0 = th[(bsorder + iy) * LEVEL + 0];
+   if CONSTEXPR (eq<T, PCHG>()) {
+      cz[0] = f[0] * t0 * u0;
+      return;
+   }
+   const real t1 = th[ix * LEVEL + 1];
+   const real u1 = th[(bsorder + iy) * LEVEL + 1];
    if CONSTEXPR (eq<T, MPOLE>()) {
       const real t2 = th[ix * LEVEL + 2], u2 = th[(bsorder + iy) * LEVEL + 2];
       cz[0] = t0 * (f[MPL_PME_0] * u0 + f[MPL_PME_Y] * u1 + f[MPL_PME_YY] * u2)
@@ -328,8 +352,9 @@ inline void gridPutColumn(const real* restrict th, const real* restrict f, int i
 // of several grid rows (gridPut_cu1, gridPut_cu2). With two sets of induced
 // dipoles, d and p take turns in the brick. A pass whose brick does not fit adds
 // to qgrid directly.
-// ONE_SET: UIND spreads fuind alone, into qgrid as the real input of an
-// in-place real-to-complex FFT (fftfrontOneSet)
+// PCHG spreads the partial charges, one plane, with theta alone.
+// ONE_SET: UIND spreads fuind alone, or PCHG the charges, into qgrid as the
+// real input of an in-place real-to-complex FFT (fftfrontOneSet)
 // CART: with ONE_SET, ptr1 holds the Cartesian dipoles, converted as in
 // cuindToFuind_cu1 while they are staged
 template <class T, int bsorder, bool ONE_SET = false, bool CART = false>
@@ -338,19 +363,21 @@ void gridPut_cu3(const real* restrict x, const real* restrict y, const real* res
    const Spatial::SortedAtom* restrict sorted, int n, int nfft1, int nfft2, int nfft3, const real* restrict ptr1,
    const real* restrict ptr2, real* restrict qgrid, real3 recip_a, real3 recip_b, real3 recip_c)
 {
-   static_assert(eq<T, MPOLE>() or eq<T, UIND>(), "");
+   static_assert(eq<T, MPOLE>() or eq<T, UIND>() or eq<T, PCHG>(), "");
    static_assert(not CART or (ONE_SET and eq<T, UIND>()), "");
    constexpr bool MP = eq<T, MPOLE>();
+   constexpr bool PC = eq<T, PCHG>();
    constexpr int NW = BLOCK_DIM / WARP_SIZE;
    // a lane stages one of 4 parts of an atom
-   constexpr int KW = WARP_SIZE / 8;
+   constexpr int KW = gridPutAtoms<T>();
+   static_assert(4 * KW <= WARP_SIZE, "");
    // 4 KB per warp, as much shared memory per block as the larger pair kernels
    constexpr int MAXPT = WARP_SIZE * WARP_SIZE;
    constexpr int bso2 = bsorder * bsorder;
-   constexpr int nplane = (MP or ONE_SET) ? 1 : 2;
-   constexpr int LEVEL = MP ? 3 : 2;             // theta and its derivatives
-   constexpr int nth = 3 * bsorder * LEVEL;      // on each axis
-   constexpr int nf = MP ? 10 : 3 * nplane;      // fmp, or fuind and fuinp
+   constexpr int nplane = (MP or PC or ONE_SET) ? 1 : 2;
+   constexpr int LEVEL = gridPutLevel<T>();          // theta and its derivatives
+   constexpr int nth = 3 * bsorder * LEVEL;          // on each axis
+   constexpr int nf = MP ? 10 : (PC ? 1 : 3 * nplane); // fmp, pchg, or fuind and fuinp
    static_assert(bso2 <= WARP_SIZE, "");
    constexpr unsigned column_lanes = (bso2 == WARP_SIZE ? ALL_LANES : (1u << bso2) - 1);
    // ONE_SET: the padded rows of an in-place real FFT
@@ -400,7 +427,9 @@ void gridPut_cu3(const real* restrict x, const real* restrict y, const real* res
             } else {
                #pragma unroll
                for (int j = 0; j < nf; ++j) {
-                  if CONSTEXPR (MP)
+                  if CONSTEXPR (PC)
+                     sf[ca][j] = ptr1[i];
+                  else if CONSTEXPR (MP)
                      sf[ca][j] = ptr1[10 * i + j];
                   else
                      sf[ca][j] = (j < 3 ? ptr1[3 * i + j] : ptr2[3 * i + j - 3]);
@@ -536,26 +565,23 @@ void gridPut_cu3(const real* restrict x, const real* restrict y, const real* res
    }
 }
 
-void gridPchg_cu(PMEUnit pme_u, real* pchg)
+void gridPchgOneSet_cu(PMEUnit pme_u, real* pchg)
 {
    auto& st = *pme_u;
    int n1 = st.nfft1;
    int n2 = st.nfft2;
    int n3 = st.nfft3;
-   int nt = n1 * n2 * n3;
 
    auto stream = g::s0;
    if (use_pme_stream)
       stream = g::spme;
    using type = std::remove_pointer<decltype(st.qgrid)>::type;
-   check_rt(cudaMemsetAsync(st.qgrid, 0, 2 * nt * sizeof(type), stream));
-   if (st.bsorder == 5) {
-      auto ker = gridPut_cu1<PCHG, 5>;
-      launch_k2s(stream, PME_BLOCKDIM, n, ker, x, y, z, n, n1, n2, n3, pchg, nullptr, st.qgrid, recipa, recipb, recipc);
-   } else if (st.bsorder == 4) {
-      auto ker = gridPut_cu1<PCHG, 4>;
-      launch_k2s(stream, PME_BLOCKDIM, n, ker, x, y, z, n, n1, n2, n3, pchg, nullptr, st.qgrid, recipa, recipb, recipc);
-   }
+   // the real grid of the in-place R2C FFT, with its padded rows
+   check_rt(cudaMemsetAsync(st.qgrid, 0, 2 * (n1 / 2 + 1) * n2 * n3 * sizeof(type), stream));
+   int nwp = (n + gridPutAtoms<PCHG>() - 1) / gridPutAtoms<PCHG>();
+   auto ker = st.bsorder == 5 ? gridPut_cu3<PCHG, 5, true> : gridPut_cu3<PCHG, 4, true>;
+   launch_k1s(stream, nwp * WARP_SIZE, ker, x, y, z, cspatial_v2_unit->sorted, n, n1, n2, n3, pchg, nullptr, st.qgrid,
+      recipa, recipb, recipc);
 }
 
 void gridDisp_cu(PMEUnit pme_u, real* csix, const int* part)
@@ -583,7 +609,7 @@ void gridMpole_cu(PMEUnit pme_u, real (*fmp)[10])
    darray::zero(g::q0, 2 * nt, st.qgrid);
    if (TINKER_CU_THETA_ON_THE_FLY_GRID_MPOLE and TINKER_CU_GRID_BRICK) {
       auto ker = gridPut_cu3<MPOLE, 5>;
-      int nwp = (n + WARP_SIZE / 8 - 1) / (WARP_SIZE / 8);
+      int nwp = (n + gridPutAtoms<MPOLE>() - 1) / gridPutAtoms<MPOLE>();
       launch_k1s(g::s0, nwp * WARP_SIZE, ker, x, y, z, mspatial_v2_unit->sorted, n, n1, n2, n3, (const real*)fmp,
          nullptr, st.qgrid, recipa, recipb, recipc);
    } else if (TINKER_CU_THETA_ON_THE_FLY_GRID_MPOLE) {
@@ -609,7 +635,7 @@ void gridUind_cu(PMEUnit pme_u, real (*fuind)[3], real (*fuinp)[3])
    darray::zero(g::q0, 2 * nt, st.qgrid);
    if (TINKER_CU_THETA_ON_THE_FLY_GRID_UIND and TINKER_CU_GRID_BRICK) {
       auto ker = gridPut_cu3<UIND, 5>;
-      int nwp = (n + WARP_SIZE / 8 - 1) / (WARP_SIZE / 8);
+      int nwp = (n + gridPutAtoms<UIND>() - 1) / gridPutAtoms<UIND>();
       launch_k1s(g::s0, nwp * WARP_SIZE, ker, x, y, z, mspatial_v2_unit->sorted, n, n1, n2, n3, (const real*)fuind,
          (const real*)fuinp, st.qgrid, recipa, recipb, recipc);
    } else if (TINKER_CU_THETA_ON_THE_FLY_GRID_UIND) {
@@ -635,7 +661,7 @@ void gridUindOneSet_cu(PMEUnit pme_u, real (*fuind)[3])
    darray::zero(g::q0, 2 * (n1 / 2 + 1) * n2 * n3, st.qgrid);
    if (TINKER_CU_THETA_ON_THE_FLY_GRID_UIND and TINKER_CU_GRID_BRICK) {
       auto ker = gridPut_cu3<UIND, 5, true>;
-      int nwp = (n + WARP_SIZE / 8 - 1) / (WARP_SIZE / 8);
+      int nwp = (n + gridPutAtoms<UIND>() - 1) / gridPutAtoms<UIND>();
       launch_k1s(g::s0, nwp * WARP_SIZE, ker, x, y, z, mspatial_v2_unit->sorted, n, n1, n2, n3, (const real*)fuind,
          nullptr, st.qgrid, recipa, recipb, recipc);
    } else if (TINKER_CU_THETA_ON_THE_FLY_GRID_UIND) {
@@ -661,7 +687,7 @@ void gridCuindOneSet_cu(PMEUnit pme_u, const real (*cind)[3])
       // the real grid of the in-place R2C FFT, with its padded rows
       darray::zero(g::q0, 2 * (n1 / 2 + 1) * n2 * n3, st.qgrid);
       auto ker = gridPut_cu3<UIND, 5, true, true>;
-      int nwp = (n + WARP_SIZE / 8 - 1) / (WARP_SIZE / 8);
+      int nwp = (n + gridPutAtoms<UIND>() - 1) / gridPutAtoms<UIND>();
       launch_k1s(g::s0, nwp * WARP_SIZE, ker, x, y, z, mspatial_v2_unit->sorted, n, n1, n2, n3, (const real*)cind,
          nullptr, st.qgrid, recipa, recipb, recipc);
    } else {
@@ -1278,6 +1304,7 @@ static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[
    TINKER_IMAGE_PARAMS, real box_volume, EnergyBuffer restrict gpu_e, VirialBuffer restrict gpu_vir,
    VirialBuffer restrict dl_vir, real wdv)
 {
+   static_assert(not(ONE_SET and DO_DL), "");
    int ithread = threadIdx.x + blockIdx.x * blockDim.x;
    int stride = blockDim.x * gridDim.x;
 
@@ -1358,6 +1385,11 @@ static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[
          if CONSTEXPR (DO_E or DO_V) {
             real struc2 = gridx * gridx + gridy * gridy;
             real eterm = 0.5f * f * expterm * struc2;
+            // ONE_SET: a point with 0 < k1 < nfft1/2 also stands for its
+            // missing conjugate at -k, which has the same struc2, hsq, and h products
+            if CONSTEXPR (ONE_SET)
+               if (k1 != 0 and 2 * k1 != nfft1)
+                  eterm *= 2;
             if CONSTEXPR (DO_E) {
                ectl += floatTo<ebuf_prec>(eterm);
             }
@@ -1439,26 +1471,37 @@ static void pmeConv_cu2(PMEUnit pme_u, PMEUnit dlpme_u, EnergyBuffer gpu_e, Viri
       TINKER_IMAGE_ARGS, box_volume, gpu_e, gpu_vir, dl_vir, wdv);
 }
 
-void pmeConv_cu(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
+template <bool ONE_SET>
+static void pmeConv_cu3(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
 {
    if (gpu_vir == nullptr) {
       if (gpu_e == nullptr) {
-         pmeConv_cu2<false, false, false>(pme_u, PMEUnit(), nullptr, nullptr, nullptr);
+         pmeConv_cu2<false, false, false, ONE_SET>(pme_u, PMEUnit(), nullptr, nullptr, nullptr);
       } else {
-         pmeConv_cu2<true, false, false>(pme_u, PMEUnit(), gpu_e, nullptr, nullptr);
+         pmeConv_cu2<true, false, false, ONE_SET>(pme_u, PMEUnit(), gpu_e, nullptr, nullptr);
       }
    } else {
       if (gpu_e == nullptr) {
-         pmeConv_cu2<false, true, false>(pme_u, PMEUnit(), nullptr, gpu_vir, nullptr);
+         pmeConv_cu2<false, true, false, ONE_SET>(pme_u, PMEUnit(), nullptr, gpu_vir, nullptr);
       } else {
-         pmeConv_cu2<true, true, false>(pme_u, PMEUnit(), gpu_e, gpu_vir, nullptr);
+         pmeConv_cu2<true, true, false, ONE_SET>(pme_u, PMEUnit(), gpu_e, gpu_vir, nullptr);
       }
    }
 }
 
+void pmeConv_cu(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
+{
+   pmeConv_cu3<false>(pme_u, gpu_e, gpu_vir);
+}
+
 void pmeConvOneSet_cu(PMEUnit pme_u)
 {
-   pmeConv_cu2<false, false, false, true>(pme_u, PMEUnit(), nullptr, nullptr, nullptr);
+   pmeConv_cu3<true>(pme_u, nullptr, nullptr);
+}
+
+void pmeConvOneSet_cu(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
+{
+   pmeConv_cu3<true>(pme_u, gpu_e, gpu_vir);
 }
 
 void pmeConvDlmda_cu(PMEUnit pme_u, PMEUnit dlpme_u, VirialBuffer gpu_vir, VirialBuffer dl_vir, real wdv)

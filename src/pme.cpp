@@ -267,14 +267,24 @@ void bsplineFill(PMEUnit pme_u, int level)
 }
 
 namespace tinker {
-TINKER_FVOID2(acc1, cu1, gridPchg, PMEUnit, real*);
+TINKER_FVOID2(acc1, cu0, gridPchg, PMEUnit, real*);
 void gridPchg(PMEUnit pme_u, real* pchg)
 {
    int bso = pme_u->bsorder;
    if (bso != 5 and bso != 4)
       TINKER_THROW(format("gridPchg(): bsorder is %d; must be 4 or 5.\n", bso));
 
-   TINKER_FCALL2(acc1, cu1, gridPchg, pme_u, pchg);
+   TINKER_FCALL2(acc1, cu0, gridPchg, pme_u, pchg);
+}
+
+TINKER_FVOID2(acc0, cu1, gridPchgOneSet, PMEUnit, real*);
+void gridPchgOneSet(PMEUnit pme_u, real* pchg)
+{
+   int bso = pme_u->bsorder;
+   if (bso != 5 and bso != 4)
+      TINKER_THROW(format("gridPchgOneSet(): bsorder is %d; must be 4 or 5.\n", bso));
+
+   TINKER_FCALL2(acc0, cu1, gridPchgOneSet, pme_u, pchg);
 }
 
 TINKER_FVOID2(acc1, cu1, gridMpole, PMEUnit, real (*)[10]);
@@ -355,6 +365,12 @@ TINKER_FVOID2(acc1, cu1, pmeConvOneSet, PMEUnit);
 void pmeConvOneSet(PMEUnit pme_u)
 {
    TINKER_FCALL2(acc1, cu1, pmeConvOneSet, pme_u);
+}
+
+TINKER_FVOID2(acc0, cu1, pmeConvOneSet, PMEUnit, EnergyBuffer, VirialBuffer);
+void pmeConvOneSet(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
+{
+   TINKER_FCALL2(acc0, cu1, pmeConvOneSet, pme_u, gpu_e, gpu_vir);
 }
 
 TINKER_FVOID2(acc0, cu1, pmeConvDlmda, PMEUnit, PMEUnit, VirialBuffer, VirialBuffer, real);

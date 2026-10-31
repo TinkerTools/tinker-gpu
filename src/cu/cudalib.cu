@@ -19,7 +19,11 @@ void cudalibDataStreamAndQ_cu(RcOp op)
       g::q0 = 0;
       g::q1 = 1;
       g::s0 = nullptr;
-      check_rt(cudaStreamCreateWithFlags(&g::s1, cudaStreamNonBlocking));
+      // PME work on s1 is the critical path next to the pair kernels on s0;
+      // a higher priority lets its blocks start before the pair kernels fill the GPU
+      int lowp, highp;
+      check_rt(cudaDeviceGetStreamPriorityRange(&lowp, &highp));
+      check_rt(cudaStreamCreateWithPriority(&g::s1, cudaStreamNonBlocking, highp));
       g::qpme = g::q1;
       g::spme = g::s1;
    }

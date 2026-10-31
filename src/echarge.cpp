@@ -144,23 +144,21 @@ void echargeEwaldRecipSelf(int vers)
    // ewald real space
 
    const PMEUnit pu = epme_unit;
-   gridPchg(pu, pchg);
-   fftfront(pu);
-   if (vers & calc::virial) {
-      if (vers & calc::energy) {
-         pmeConv(pu, ec, vir_ec);
-      } else {
-         pmeConv(pu, vir_ec);
-      }
+   EnergyBuffer e = (vers & calc::energy) ? ec : nullptr;
+   VirialBuffer v = (vers & calc::virial) ? vir_ec : nullptr;
+   if (pltfm_config & Platform::CUDA) {
+      // the charge grid is real: in-place R2C and C2R FFTs on the half spectrum
+      gridPchgOneSet(pu, pchg);
+      fftfrontOneSet(pu);
+      pmeConvOneSet(pu, e, v);
+      if (vers & calc::grad)
+         fftbackOneSet(pu);
    } else {
-      if (vers & calc::energy) {
-         pmeConv(pu, ec);
-      } else {
-         pmeConv(pu);
-      }
-   }
-   if (vers & calc::grad) {
-      fftback(pu);
+      gridPchg(pu, pchg);
+      fftfront(pu);
+      pmeConv(pu, e, v);
+      if (vers & calc::grad)
+         fftback(pu);
    }
 
    // fphi_pchg, recip, self
