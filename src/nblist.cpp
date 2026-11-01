@@ -325,8 +325,19 @@ static void spatialBuild(SpatialUnit unt)
    Spatial::dataInit(unt);
 }
 
+// The lists serve the energy terms, whose data energyData sets up only when an
+// energy, gradient or virial is requested; without it the vdw reduction arrays
+// the vdw lists read were never set up for this system.
+static bool nblistInUse()
+{
+   return rc_flag & calc::vmask;
+}
+
 void nblistData(RcOp op)
 {
+   if (not nblistInUse())
+      return;
+
    if (op & RcOp::DEALLOC) {
       NBListUnit::clear();
       vlist_unit.close();
@@ -558,6 +569,9 @@ void spatialUpdate(SpatialUnit unt)
 
 void nblistRefresh()
 {
+   if (not nblistInUse())
+      return;
+
    Nbl u = Nbl::UNDEFINED;
 
    // vlist

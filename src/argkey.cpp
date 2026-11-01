@@ -25,6 +25,14 @@ void nextarg(size_t len, char* str, bool& exist)
 }
 
 namespace tinker {
+// The number of keyword lines to read. The Fortran final frees the lines but
+// leaves the count, so a lookup made before the next keyword file is read, as
+// the platform setup of xInfo makes, sees no keywords.
+static int nkeyline()
+{
+   return keys::keyline ? keys::nkey : 0;
+}
+
 static void vstrToVal(int& v, std::string vstr)
 {
    v = std::stoi(vstr);
@@ -45,7 +53,7 @@ template <class T1, class T2>
 void getKV(std::string k, T1& v, T2 vIfKNotFound)
 {
    std::string value_str = "";
-   for (int i = 0; i < keys::nkey; ++i) {
+   for (int i = 0; i < nkeyline(); ++i) {
       FstrView record = keys::keyline[i];
       auto vs = Text::split(record.trim());
       if (vs.size()) {
@@ -66,7 +74,7 @@ template <>
 void getKV<bool, bool>(std::string k, bool& v, bool vIfKNotFound)
 {
    bool found = false;
-   for (int i = 0; i < keys::nkey; ++i) {
+   for (int i = 0; i < nkeyline(); ++i) {
       FstrView record = keys::keyline[i];
       auto vs = Text::split(record.trim());
       if (vs.size()) {
@@ -92,7 +100,7 @@ template <class T>
 void getKV(std::string k, std::vector<T>& v)
 {
    std::vector<std::string> value_str;
-   for (int i = 0; i < keys::nkey; ++i) {
+   for (int i = 0; i < nkeyline(); ++i) {
       FstrView record = keys::keyline[i];
       auto vs = Text::split(record.trim());
       if (vs.size()) {
