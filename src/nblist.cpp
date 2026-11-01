@@ -3,6 +3,7 @@
 #include "ff/echarge.h"
 #include "ff/echglj.h"
 #include "ff/elec.h"
+#include "ff/energy.h"
 #include "ff/evdw.h"
 #include "ff/hippo/edisp.h"
 #include "ff/hippo/erepel.h"
@@ -325,17 +326,9 @@ static void spatialBuild(SpatialUnit unt)
    Spatial::dataInit(unt);
 }
 
-// The lists serve the energy terms, whose data energyData sets up only when an
-// energy, gradient or virial is requested; without it the vdw reduction arrays
-// the vdw lists read were never set up for this system.
-static bool nblistInUse()
-{
-   return rc_flag & calc::vmask;
-}
-
 void nblistData(RcOp op)
 {
-   if (not nblistInUse())
+   if (not useEnergyData())
       return;
 
    if (op & RcOp::DEALLOC) {
@@ -569,7 +562,7 @@ void spatialUpdate(SpatialUnit unt)
 
 void nblistRefresh()
 {
-   if (not nblistInUse())
+   if (not useEnergyData())
       return;
 
    Nbl u = Nbl::UNDEFINED;

@@ -25,6 +25,11 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig);
 /// Entry point to the setup functions of all the potential energy terms.
 void energyData(RcOp);
 
+/// Whether this session sets up the potential energy terms, which it does
+/// only when an energy, gradient or virial is requested; without them no term,
+/// nor the neighbor lists they read, may be evaluated.
+bool useEnergyData();
+
 /// Logical flag for use of VDW, repulsion, dispersion, etc. terms.
 bool useEnergyVdw();
 
