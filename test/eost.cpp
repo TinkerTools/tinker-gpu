@@ -1,3 +1,4 @@
+#include "ff/energy.h"
 #include "ff/eost.h"
 #include "ff/ost.h"
 #include "math/const.h"
@@ -116,6 +117,9 @@ void resetost(int nl, int nf, int nhist)
    use_ost = false;
    use_meta = false;
    use_abf = false;
+   // the cases that write the mean force by hand leave the bin weights unset,
+   // so the fill is off unless a case turns it on
+   use_lmdafill = false;
 }
 
 // resetmeta -- allocate metadynamics history arrays and the bin lookup
@@ -227,6 +231,7 @@ TEST_CASE("EOST-index", "[ff][eost]")
 
 TEST_CASE("EOST-resize", "[ff][eost]")
 {
+   TestLmdaFlagGuard guard;
    resetost(5, 5, 2);
    nlmdahist = 2;
    for (int i = 1; i <= 2; ++i) {
@@ -267,6 +272,7 @@ TEST_CASE("EOST-resize", "[ff][eost]")
 
 TEST_CASE("EOST-buildindex", "[ff][eost]")
 {
+   TestLmdaFlagGuard guard;
    resetost(5, 5, 3);
    nlmdahist = 3;
    sethist(1, 0.50, 0.0, 1.0, wlmda, wflmda);
@@ -283,6 +289,7 @@ TEST_CASE("EOST-buildindex", "[ff][eost]")
 
 TEST_CASE("EOST-ensure", "[ff][eost]")
 {
+   TestLmdaFlagGuard guard;
    int k, nold, oldfli0, ilmda, iflmda;
 
    // high-side expansion preserves fli0 and old gkernel values
@@ -335,6 +342,7 @@ TEST_CASE("EOST-ensure", "[ff][eost]")
 
 TEST_CASE("EOST-gkernels", "[ff][eost]")
 {
+   TestLmdaFlagGuard guard;
    double egbias, dgdl, dgdfl, expected, height;
 
    // choose height so the normalized gaussian prefactor is one
@@ -503,6 +511,7 @@ TEST_CASE("EOST-gkernels", "[ff][eost]")
 
 TEST_CASE("EOST-fkernel", "[ff][eost]")
 {
+   TestLmdaFlagGuard guard;
    bath::kelvin = 300.0;
    double rt, expected, height;
 
@@ -562,6 +571,7 @@ TEST_CASE("EOST-fkernel", "[ff][eost]")
 
 TEST_CASE("EOST-kernelbuilds", "[ff][eost]")
 {
+   TestLmdaFlagGuard guard;
    bath::kelvin = 300.0;
    double rt, height;
    int nhist;
@@ -618,6 +628,8 @@ TEST_CASE("EOST-kernelbuilds", "[ff][eost]")
    for (int i = 1; i <= nlmda; ++i) {
       CAPTURE(i);
       COMPARE_REALS(lmdafmean[i], fmanual[i], 1.0e-12);
+      COMPARE_REALS(lmdafsum[i], fsumref[i], 1.0e-12);
+      COMPARE_REALS(lmdafwt[i], pfref[i], 1.0e-12);
    }
 
    // buildkernels must reproduce gkernel, lmdafmean and the accumulators
@@ -707,6 +719,7 @@ TEST_CASE("EOST-depcriteria", "[ff][eost]")
 
 TEST_CASE("EOST-eginterpolate", "[ff][eost]")
 {
+   TestLmdaFlagGuard guard;
    bath::kelvin = 300.0;
    double egbias0, dgdl0, dgdfl0;
    double egbias1, dgdl1, dgdfl1;
@@ -757,6 +770,7 @@ TEST_CASE("EOST-eginterpolate", "[ff][eost]")
 
 TEST_CASE("EOST-efkernel", "[ff][eost]")
 {
+   TestLmdaFlagGuard guard;
    double eostlmda, dfdl, expected;
 
    // use lmdafmean(lambda)=lambda and integrate to lambda=0.375
@@ -803,8 +817,114 @@ TEST_CASE("EOST-efkernel", "[ff][eost]")
    COMPARE_REALS(efreeTot(), 0.0, 1.0e-12);
 }
 
+TEST_CASE("EOST-fill", "[ff][eost]")
+{
+   // The OST bias takes its f term from the mean force with the rows lacking g
+   // kernel support filled, while the free energy estimate keeps the sampled
+   // rows only; the rows a gaussian reaches count as sampled, with the same row
+   // weights from both kernel build paths (test_eost.f:test_eost_fill).
+   TestLmdaFlagGuard guard;
+   bath::kelvin = 300.0;
+
+   // give data and a mean force to the two top rows only, with no gaussian at
+   // the current point so the g term is zero
+   resetost(5, 5, 4);
+   use_ost = true;
+   testSetLmdaBin(4, -20.0);
+   testSetLmdaBin(5, -40.0);
+   dedl = 0.0;
+
+   // the f term holds a mean force of -20 below lambda 0.75
+   use_lmdafill = true;
+   lambda = 1.0;
+   esum = 0.0;
+   eostBias(calc::energy);
+   COMPARE_REALS(bgbias - bostlmda, 22.5, 1.0e-12);
+   COMPARE_REALS(esum, 22.5, 1.0e-12);
+   REQUIRE(lmdadfdl == -40.0);
+   lambda = 0.3;
+   eostBias(calc::energy);
+   COMPARE_REALS(bgbias - bostlmda, 6.0, 1.0e-12);
+   REQUIRE(lmdadfdl == -20.0);
+
+   // the estimate keeps zero mean force in the unsupported rows
+   COMPARE_REALS(efreeTot(), -10.0, 1.0e-12);
+   REQUIRE(lmdafmean[1] == 0.0);
+
+   // without the fill the f term is the sampled free energy
+   use_lmdafill = false;
+   eostBias(calc::energy);
+   REQUIRE(bgbias - bostlmda == 0.0);
+   REQUIRE(lmdadfdl == 0.0);
+
+   // a gaussian at lambda 1 reaches only the two top rows
+   resetost(5, 5, 4);
+   use_ost = true;
+   nlmdahist = 1;
+   sethist(1, 1.0, 0.0, 1.0, 0.3, 1.0);
+   buildOstIndex();
+   buildKernels();
+   for (int i = 1; i <= nlmda; ++i) {
+      CAPTURE(i);
+      REQUIRE(lmdaSampled(i) == (i >= 4));
+   }
+   REQUIRE(lmdafmean[3] == 0.0);
+
+   // the g kernel and f kernel path sets the same row weights
+   std::vector<double> wtref(nlmda + 1, 0.0);
+   for (int i = 1; i <= nlmda; ++i) {
+      wtref[i] = lmdafwt[i];
+      lmdafwt[i] = -123.0;
+   }
+   buildGkernel();
+   buildFkernel();
+   for (int i = 1; i <= nlmda; ++i) {
+      CAPTURE(i);
+      COMPARE_REALS(lmdafwt[i], wtref[i], 1.0e-12);
+      REQUIRE(lmdaSampled(i) == (i >= 4));
+   }
+
+   // a gaussian of zero height, as a fully tempered deposit gives, leaves
+   // every row without data
+   resetost(5, 5, 4);
+   use_ost = true;
+   nlmdahist = 1;
+   sethist(1, 1.0, 0.0, 0.0, 0.3, 1.0);
+   buildOstIndex();
+   buildKernels();
+   for (int i = 1; i <= nlmda; ++i) {
+      CAPTURE(i);
+      REQUIRE_FALSE(lmdaSampled(i));
+      REQUIRE(lmdafsum[i] == 0.0);
+      REQUIRE(lmdafmean[i] == 0.0);
+   }
+
+   // beside a gaussian of positive height, one of zero height that reaches
+   // other cells of the same rows adds no weight, so both kernel build paths
+   // agree on the rows
+   nlmdahist = 2;
+   sethist(1, 1.0, 0.0, 1.0, 0.3, 1.0);
+   sethist(2, 1.0, 1.0, 0.0, 0.3, 1.0);
+   buildOstIndex();
+   buildKernels();
+   std::vector<double> sumref(nlmda + 1, 0.0);
+   for (int i = 1; i <= nlmda; ++i) {
+      wtref[i] = lmdafwt[i];
+      sumref[i] = lmdafsum[i];
+   }
+   buildGkernel();
+   buildFkernel();
+   for (int i = 1; i <= nlmda; ++i) {
+      CAPTURE(i);
+      COMPARE_REALS(lmdafwt[i], wtref[i], 1.0e-12);
+      COMPARE_REALS(lmdafsum[i], sumref[i], 1.0e-12);
+      REQUIRE(lmdaSampled(i) == (i >= 4));
+   }
+}
+
 TEST_CASE("EOST-meta", "[ff][eost]")
 {
+   TestLmdaFlagGuard guard;
    double vbias, dvdl, pref, expected;
 
    // one normalized 1D gaussian centered at lambda=0.5
@@ -931,6 +1051,7 @@ TEST_CASE("EOST-metadyn", "[ff][eost]")
 
 TEST_CASE("EOST-vkernelmax", "[ff][eost]")
 {
+   TestLmdaFlagGuard guard;
    // vkernelmax must hold max_j gkernel(i,j) for every lambda bin, however the
    // kernel was filled, and ostVminimax must be the minimum of it over lambda.
    bath::kelvin = 300.0;
@@ -977,6 +1098,7 @@ TEST_CASE("EOST-vkernelmax", "[ff][eost]")
 
 TEST_CASE("EOST-tempering", "[ff][eost]")
 {
+   TestLmdaFlagGuard guard;
    bath::kelvin = 300.0;
    resetost(5, 5, 1);
    hbias = 1.0e-5;
@@ -1354,6 +1476,7 @@ TEST_CASE("EOST-ostlocal", "[ff][eost]")
 
 TEST_CASE("EOST-temperkeys", "[ff][eost]")
 {
+   TestLmdaFlagGuard guard;
    // ost_mech must mirror the tempering settings parsed by the Fortran
    // mutate_ost; the keyword parsing itself is covered by test_eost.f.
    int fg0 = ost::use_ostgtemp, fl0 = ost::use_ostltemp;
@@ -1403,6 +1526,7 @@ TEST_CASE("EOST-temperkeys", "[ff][eost]")
 
 TEST_CASE("EOST-metaimage", "[ff][eost]")
 {
+   TestLmdaFlagGuard guard;
    // eMetaBias sums the same three reflecting lambda images as the g kernel.
    double vbias, dvdl;
    resetost(5, 5, 1);

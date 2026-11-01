@@ -11,8 +11,9 @@ void ost_mech();
 /// Allocates/initializes the host-side OST histogram and kernel storage.
 void eostData(RcOp op);
 
-/// Evaluates the OST bias at the current lambda and dU/dlambda, and saves its
-/// derivatives for elmdaDyn (eost.f:eostbias).
+/// Evaluates the OST bias at the current lambda and dU/dlambda, with the f term
+/// from the mean force with unsampled bins filled, and saves its derivatives
+/// for elmdaDyn (eost.f:eostbias).
 void eostBias(int vers);
 }
 

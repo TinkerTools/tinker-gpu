@@ -213,8 +213,10 @@ void addKernelPoint(int ilmda, int iflmda, double e, double ldelta, double fldel
       lmdafwt[ilmda] *= scale;
       vmax = newg;
    }
+   // a cell with no bias carries no weight, as in buildFkernel, so a gaussian
+   // of zero height leaves a row without data
    double oldweight = (oldg == 0.0) ? 0.0 : std::exp((oldg - vmax) / rt);
-   double newweight = raised ? 1.0 : std::exp((newg - vmax) / rt);
+   double newweight = (newg == 0.0) ? 0.0 : raised ? 1.0 : std::exp((newg - vmax) / rt);
    double delweight = newweight - oldweight;
    double flmda = (double)(iflmda - fli0) * wflmda;
    double dgdl = -ldelta * e / sigl2;
@@ -297,7 +299,9 @@ void addKernelHist(int ihist, bool dofkern)
    }
 }
 
-// buildfkernel -- rebuild the mean force at every lambda bin from the g kernel
+// buildfkernel -- rebuild the mean force at every lambda bin from the g kernel,
+// and keep its weighted sum and total weight in the same scaled form as
+// addKernelPoint, so a row has data exactly when its total weight is positive
 // (eost.f:buildfkernel).
 void buildFkernel()
 {
@@ -317,6 +321,10 @@ void buildFkernel()
             pf += w;
          }
       }
+      // keep the accumulators as the fused kernel build does, and set the
+      // mean force for this lambda bin
+      lmdafsum[il] = avg;
+      lmdafwt[il] = pf;
       lmdafmean[il] = (pf == 0.0) ? 0.0 : avg / pf;
    }
 }
@@ -791,12 +799,13 @@ void eostBias(int vers)
    if (not use_ost)
       return;
 
-   // Evaluate the g bias and the f (free-energy) term at the current state.
+   // Evaluate the g bias and the f (free-energy) term at the current state,
+   // where the f term uses the mean force with unsampled bins filled.
    if (ostinterpol)
       egkernelInterpolate(bgbias, bdgdl, bdgdfl);
    else
       egkernel(bgbias, bdgdl, bdgdfl);
-   efreeLmda(lambda, bostlmda, lmdadfdl);
+   efreeBias(lambda, bostlmda, lmdadfdl);
 
    if (vers & calc::energy)
       esum += bgbias - bostlmda;

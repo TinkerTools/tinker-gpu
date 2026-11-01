@@ -519,6 +519,7 @@ void dlmda_mech()
    use_lmdamc = (dlmda::use_lmdamc != 0);
    lmdamctrial = dlmda::lmdamctrial;
    lmdamcmove = dlmda::lmdamcmove;
+   use_lmdafill = (dlmda::use_lmdafill != 0);
    nlmdamctry = 0;
    nlmdamcacc = 0;
 
@@ -791,22 +792,32 @@ void elmdaDyn(int istep)
       lmdaLangevin();
 }
 
-// Free energy at lambda lmda by piecewise-linear integration of the mean force
-// of the lambda bins, and its lambda derivative (dlambda.f:efreelmda).
+// Free energy estimate at lambda lmda from the sampled mean force of the lambda
+// bins, and its lambda derivative. An unsampled bin counts as zero mean force
+// here, since the estimate uses sampled data only; the bias that drives lambda
+// fills those bins instead, via efreeBias (dlambda.f:efreelmda).
 void efreeLmda(double lmda, double& eflmda, double& dfdl)
+{
+   efreeProf(lmda, lmdafmean, eflmda, dfdl);
+}
+
+// Free energy at lambda lmda by piecewise-linear integration of the mean force
+// profile fprof given at the lambda bin centers, and its lambda derivative
+// (dlambda.f:efreeprof).
+void efreeProf(double lmda, const std::vector<double>& fprof, double& eflmda, double& dfdl)
 {
    eflmda = 0;
    dfdl = 0;
    if (lmda <= 0.0) {
-      dfdl = lmdafmean[1];
+      dfdl = fprof[1];
       return;
    }
    for (int il0 = 1; il0 <= nlmda - 1; ++il0) {
       int il1 = il0 + 1;
       double lmda0 = (double)(il0 - 1) * wlmda;
       double lmda1 = (double)(il1 - 1) * wlmda;
-      double fl0 = lmdafmean[il0];
-      double fl1 = lmdafmean[il1];
+      double fl0 = fprof[il0];
+      double fl1 = fprof[il1];
       double slope = (fl1 - fl0) / wlmda;
       if (lmda < lmda1) {
          double xx = lmda - lmda0;
@@ -816,7 +827,72 @@ void efreeLmda(double lmda, double& eflmda, double& dfdl)
       }
       eflmda += 0.5 * (fl0 + fl1) * wlmda;
    }
-   dfdl = lmdafmean[nlmda];
+   dfdl = fprof[nlmda];
+}
+
+// Free energy at lambda lmda that the adaptive bias removes, and its lambda
+// derivative, from the mean force that drives lambda, in which the unsampled
+// bins are filled from the sampled ones if use_lmdafill is set. It is the only
+// route by which filled values reach an energy or force, and no free energy
+// estimate may call it (dlambda.f:efreebias).
+void efreeBias(double lmda, double& eflmda, double& dfdl)
+{
+   // without the fill the bias follows the sampled mean force
+   if (not use_lmdafill) {
+      efreeProf(lmda, lmdafmean, eflmda, dfdl);
+      return;
+   }
+
+   // fill the unsampled bins, then integrate up to lambda
+   std::vector<bool> sampled(nlmda + 1, false);
+   for (int i = 1; i <= nlmda; ++i)
+      sampled[i] = lmdaSampled(i);
+   std::vector<double> fbias(nlmda + 1, 0.0);
+   lmdaFill(nlmda, lmdafmean, sampled, fbias);
+   efreeProf(lmda, fbias, eflmda, dfdl);
+}
+
+// Whether the mean force of a lambda bin comes from data, which is any total
+// weight in the bin: an interval sample for the adaptive biasing force, or g
+// kernel support along flambda for orthogonal space tempering, as every
+// gaussian height is positive and both OST kernel builds keep the weight
+// (dlambda.f:lmdasampled).
+bool lmdaSampled(int ilmda)
+{
+   return lmdafwt[ilmda] > 0.0;
+}
+
+// Copies the sampled mean force fsamp of nbin lambda bins into fbias and fills
+// each unsampled bin by linear interpolation between the nearest sampled bins on
+// either side, or from the nearest sampled bin if there is only one side; with
+// no sampled bin the profile is zero. Sampled bins are copied unchanged, so a
+// fully sampled profile is reproduced exactly (dlambda.f:lmdafill).
+void lmdaFill(int nbin, const std::vector<double>& fsamp, const std::vector<bool>& sampled,
+   std::vector<double>& fbias)
+{
+   // at each sampled bin, fill the unsampled bins below it back to the
+   // previous sampled bin, or to the first bin if there is none
+   int ilo = 0;
+   for (int i = 1; i <= nbin; ++i) {
+      if (not sampled[i])
+         continue;
+      if (ilo == 0) {
+         for (int k = 1; k < i; ++k)
+            fbias[k] = fsamp[i];
+      } else {
+         for (int k = ilo + 1; k < i; ++k) {
+            double t = (double)(k - ilo) / (double)(i - ilo);
+            fbias[k] = fsamp[ilo] + t * (fsamp[i] - fsamp[ilo]);
+         }
+      }
+      fbias[i] = fsamp[i];
+      ilo = i;
+   }
+
+   // bins past the last sampled bin take its mean force, and with no sampled
+   // bin the profile is zero
+   for (int k = ilo + 1; k <= nbin; ++k)
+      fbias[k] = (ilo == 0) ? 0.0 : fsamp[ilo];
 }
 
 // Total free energy change, which efreeLmda integrates over the whole lambda
@@ -903,12 +979,13 @@ void lmdaWinPhase(int istep, int& iprod)
 
 // The bias energy at the current lambda of the methods whose bias follows
 // lambda alone, adaptive biasing force and metadynamics, from the history as it
-// now stands. No saved value is changed (dlambda.f:elmdabias).
+// now stands, where the adaptive biasing force takes the bias mean force, the
+// same one eabfBias uses. No saved value is changed (dlambda.f:elmdabias).
 static double elmdaBias()
 {
    double vbias, slope;
    if (use_abf) {
-      efreeLmda(lambda, vbias, slope);
+      efreeBias(lambda, vbias, slope);
       return -vbias;
    }
    eMetaBias(lambda, vbias, slope);

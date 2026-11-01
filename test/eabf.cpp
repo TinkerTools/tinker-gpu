@@ -4,6 +4,7 @@
 #include "math/const.h"
 #include "test.h"
 #include "testrt.h"
+#include <tinker/routines.h>
 
 #include <cmath>
 #include <vector>
@@ -49,6 +50,7 @@ void resetabf(int nl, int nhist)
    use_lmdacv = false;
    lmdacvstd = 0.0;
    lmdacvrat = 0.0;
+   use_lmdafill = true;
 
    lmdaihist.assign(sizelmdahist + 1, 0);
    lmdalhist.assign(sizelmdahist + 1, 0.0);
@@ -71,15 +73,43 @@ void resetabf(int nl, int nhist)
    glkernel.clear();
    vkernelmax.clear();
 }
+
+// fills the first nbin bins of the sampled mean force fsamp with the bins
+// flagged in sampled, checks the result against ref to within eps and against
+// the Fortran lmdafill exactly, and checks that fsamp is left unchanged
+void checkFill(int nbin, const std::vector<double>& fsamp, const std::vector<bool>& sampled,
+   const std::vector<double>& ref, double eps)
+{
+   // the engine arrays are indexed 1..nbin, the Fortran ones 0..nbin-1
+   std::vector<double> f1(nbin + 1, 0.0), fbias(nbin + 1, 0.0);
+   std::vector<bool> s1(nbin + 1, false);
+   std::vector<int> sf(nbin);
+   std::vector<double> ff(fsamp.begin(), fsamp.begin() + nbin), fbiasf(nbin, 0.0);
+   for (int i = 1; i <= nbin; ++i) {
+      f1[i] = fsamp[i - 1];
+      s1[i] = sampled[i - 1];
+      sf[i - 1] = sampled[i - 1] ? 1 : 0;
+   }
+   const std::vector<double> fsave = f1;
+   lmdaFill(nbin, f1, s1, fbias);
+   tinker_f_lmdafill(&nbin, ff.data(), sf.data(), fbiasf.data());
+   for (int i = 1; i <= nbin; ++i) {
+      CAPTURE(i);
+      COMPARE_REALS(fbias[i], ref[i - 1], eps);
+      REQUIRE(fbias[i] == fbiasf[i - 1]);
+      REQUIRE(f1[i] == fsave[i]);
+   }
+}
 }
 
 TEST_CASE("EABF-bias", "[ff][eabf]")
 {
-   // seed a linear mean force f(lambda) = 2 + 4*lambda on the grid
+   // seed a linear mean force f(lambda) = 2 + 4*lambda on the grid, with data
+   // in every bin so none is filled
    TestLmdaFlagGuard guard;
    resetabf(5, 4);
    for (int i = 1; i <= nlmda; ++i)
-      lmdafmean[i] = 2.0 + 4.0 * (double)(i - 1) * wlmda;
+      testSetLmdaBin(i, 2.0 + 4.0 * (double)(i - 1) * wlmda);
    for (int k = 0; k < 9; ++k)
       vir[k] = 1.0;
    lambda = 0.3;
@@ -245,4 +275,115 @@ TEST_CASE("EABF-resize", "[ff][eabf]")
    COMPARE_REALS(lmdafhist[3], 3.0, 1.0e-12);
    REQUIRE(lmdalhist[3] == 0.25);
    COMPARE_REALS(lmdafmean[2], 2.0, 1.0e-12);
+}
+
+TEST_CASE("EABF-fill", "[ff][eabf]")
+{
+   // A copy of the nearest sampled bin past either end of the data, linear
+   // interpolation inside a gap, zero with no data, sampled bins kept exactly,
+   // and the sampled values left unchanged (test_eabf.f:test_eabf_fill).
+   const bool T = true, F = false;
+
+   // bins below the first sampled bin copy its mean force
+   checkFill(5, {0., 0., 0., -20., -40.}, {F, F, F, T, T}, {-20., -20., -20., -20., -40.}, 0.0);
+
+   // bins past the last sampled bin copy its mean force
+   checkFill(5, {-10., -20., 0., 0., 0.}, {T, T, F, F, F}, {-10., -20., -20., -20., -20.}, 0.0);
+
+   // a gap between sampled bins is interpolated linearly
+   checkFill(5, {-10., 0., 0., -40., -50.}, {T, F, F, T, T}, {-10., -20., -30., -40., -50.}, 1.0e-12);
+
+   // a bin halfway between two sampled bins takes their average
+   checkFill(3, {-10., 0., -30.}, {T, F, T}, {-10., -20., -30.}, 0.0);
+
+   // both ends and a gap are filled in the same profile
+   checkFill(5, {0., -10., 0., 0., -40.}, {F, T, F, F, T}, {-10., -10., -20., -30., -40.}, 1.0e-12);
+
+   // a sampled zero is data, and values in unsampled bins are unused
+   checkFill(5, {7., 9., 0., -20., -40.}, {F, F, T, T, T}, {0., 0., 0., -20., -40.}, 0.0);
+
+   // with no sampled bin the profile is zero
+   checkFill(5, {3., 1., 4., 1., 5.}, {F, F, F, F, F}, {0., 0., 0., 0., 0.}, 0.0);
+
+   // a fully sampled profile is reproduced exactly
+   checkFill(5, {1.1, -2.3, 3.7, 0., -5.9}, {T, T, T, T, T}, {1.1, -2.3, 3.7, 0., -5.9}, 0.0);
+
+   // a single bin keeps its data, or is zero without it
+   checkFill(1, {2.5}, {T}, {2.5}, 0.0);
+   checkFill(1, {2.5}, {F}, {0.}, 0.0);
+}
+
+TEST_CASE("EABF-fillbias", "[ff][eabf]")
+{
+   // The ABF bias and the slope saved for the lambda particle follow the
+   // filled mean force, while the free energy estimate and the bin mean force
+   // keep the sampled data only; a fully sampled profile gives the same bias
+   // with or without the fill. resetabf frees the OST kernels, so this also
+   // shows the ABF fill never reads an OST array (test_eabf.f:test_eabf_fillbias).
+   TestLmdaFlagGuard guard;
+   resetabf(5, 8);
+
+   // sample the two top bins only, at lambda 0.75 and 1
+   nlmdahist = 2;
+   lmdalhist[1] = 0.75;
+   lmdafhist[1] = -20.0;
+   lmdalhist[2] = 1.0;
+   lmdafhist[2] = -40.0;
+   for (int i = 1; i <= nlmdahist; ++i)
+      addAbfHist(i);
+
+   // the filled bias holds a mean force of -20 below lambda 0.75
+   use_lmdafill = true;
+   lambda = 1.0;
+   esum = 0.0;
+   eabfBias(calc::energy);
+   COMPARE_REALS(-bostlmda, 22.5, 1.0e-12);
+   COMPARE_REALS(esum, 22.5, 1.0e-12);
+   REQUIRE(lmdadfdl == -40.0);
+   lambda = 0.3;
+   esum = 0.0;
+   eabfBias(calc::energy);
+   COMPARE_REALS(-bostlmda, 6.0, 1.0e-12);
+   REQUIRE(lmdadfdl == -20.0);
+
+   // the bias that drives lambda is the one eabfBias removes
+   double vbias, slope;
+   efreeBias(lambda, vbias, slope);
+   REQUIRE(vbias == bostlmda);
+   REQUIRE(slope == lmdadfdl);
+
+   // the estimate keeps zero mean force in the unsampled bins
+   COMPARE_REALS(efreeTot(), -10.0, 1.0e-12);
+   REQUIRE(lmdafmean[1] == 0.0);
+   REQUIRE(lmdafmean[4] == -20.0);
+
+   // without the fill the bias is the sampled free energy
+   use_lmdafill = false;
+   lambda = 0.3;
+   eabfBias(calc::energy);
+   REQUIRE(bostlmda == 0.0);
+   REQUIRE(lmdadfdl == 0.0);
+   lambda = 0.6;
+   eabfBias(calc::energy);
+   COMPARE_REALS(-bostlmda, 0.4, 1.0e-12);
+   COMPARE_REALS(lmdadfdl, -8.0, 1.0e-12);
+
+   // once every bin is sampled the fill changes nothing
+   nlmdahist = 5;
+   lmdalhist[3] = 0.0;
+   lmdafhist[3] = 2.0;
+   lmdalhist[4] = 0.25;
+   lmdafhist[4] = 3.0;
+   lmdalhist[5] = 0.5;
+   lmdafhist[5] = -5.0;
+   for (int i = 3; i <= nlmdahist; ++i)
+      addAbfHist(i);
+   lambda = 0.6;
+   use_lmdafill = true;
+   eabfBias(calc::energy);
+   const double vfill = bostlmda, dfill = lmdadfdl;
+   use_lmdafill = false;
+   eabfBias(calc::energy);
+   REQUIRE(vfill == bostlmda);
+   REQUIRE(dfill == lmdadfdl);
 }

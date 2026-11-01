@@ -7,8 +7,9 @@ namespace tinker {
 /// bins (mutate.f:mutate_abf).
 void eabfData(RcOp op);
 
-/// Removes the ABF free energy at the current lambda from the energy and saves
-/// its lambda derivative for elmdaDyn (eabf.f:eabfbias).
+/// Removes the ABF free energy at the current lambda, from the mean force with
+/// unsampled bins filled, from the energy and saves its lambda derivative for
+/// elmdaDyn (eabf.f:eabfbias).
 void eabfBias(int vers);
 
 /// Records the lambda and dU/dlambda average of one accepted interval, adds it

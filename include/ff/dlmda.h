@@ -307,8 +307,31 @@ void lmdaLangStep(double gauss);
 /// the interval average at the end of each interval and propagates the lambda
 /// particle (dlambda.f:elmdadyn).
 void elmdaDyn(int istep);
-/// Free energy at lambda \p lmda and its lambda derivative (dlambda.f:efreelmda).
+/// Free energy estimate at lambda \p lmda and its lambda derivative from the
+/// sampled mean force, where an unsampled bin counts as zero mean force; the
+/// bias that drives lambda fills those bins instead, via efreeBias
+/// (dlambda.f:efreelmda).
 void efreeLmda(double lmda, double& eflmda, double& dfdl);
+/// Free energy at lambda \p lmda and its lambda derivative by piecewise-linear
+/// integration of the mean force profile \p fprof given at the lambda bin
+/// centers, indexed 1..nlmda (dlambda.f:efreeprof).
+void efreeProf(double lmda, const std::vector<double>& fprof, double& eflmda, double& dfdl);
+/// Free energy at lambda \p lmda that the adaptive bias removes, and its lambda
+/// derivative, from the mean force that drives lambda, in which the unsampled
+/// bins are filled from the sampled ones if use_lmdafill is set; it is the only
+/// route by which filled values reach an energy or force, and no free energy
+/// estimate may call it (dlambda.f:efreebias).
+void efreeBias(double lmda, double& eflmda, double& dfdl);
+/// Whether the mean force of lambda bin \p ilmda comes from data, which is any
+/// total weight in the bin (dlambda.f:lmdasampled).
+bool lmdaSampled(int ilmda);
+/// Copies the sampled mean force \p fsamp of \p nbin lambda bins into \p fbias
+/// and fills each bin flagged false in \p sampled by linear interpolation
+/// between the nearest sampled bins on either side, or from the nearest sampled
+/// bin if there is only one side; with no sampled bin the profile is zero. All
+/// arrays are indexed 1..nbin (dlambda.f:lmdafill).
+void lmdaFill(int nbin, const std::vector<double>& fsamp, const std::vector<bool>& sampled,
+   std::vector<double>& fbias);
 /// Total free energy change from the mean force, efreeLmda over the whole
 /// lambda range (dlambda.f:efreetot).
 double efreeTot();
@@ -455,6 +478,9 @@ TINKER_EXTERN double lmdamcmove;  ///< largest change of lambda in a trial move.
 TINKER_EXTERN int nlmdamctry;     ///< number of lambda trial moves attempted.
 TINKER_EXTERN int nlmdamcacc;     ///< number of lambda trial moves accepted.
 
+// fill of the bias mean force in lambda bins without data.
+TINKER_EXTERN bool use_lmdafill;  ///< fill unsampled bins of the bias mean force.
+
 // current-step derived quantities and interval averages. The unbiased
 // dU/dlambda is \ref dedl itself.
 TINKER_EXTERN double deffdl;      ///< effective lambda derivative for propagation.
@@ -476,7 +502,9 @@ TINKER_EXTERN std::vector<double> lmdallist; ///< lambda values saved within an 
 TINKER_EXTERN std::vector<double> lmdaflist; ///< dU/dlambda values saved within an interval.
 
 // free energy mean force per lambda bin, size nlmda+1, indexed 1..nlmda.
-TINKER_EXTERN std::vector<double> lmdafmean; ///< mean force of each lambda bin.
+TINKER_EXTERN std::vector<double> lmdafmean; ///< sampled mean force of each lambda bin, zero in a bin
+                                             ///< without data; the bias reads a filled copy built in
+                                             ///< efreeBias.
 TINKER_EXTERN std::vector<double> lmdafsum;  ///< weighted dU/dlambda sum of each lambda bin.
 TINKER_EXTERN std::vector<double> lmdafwt;   ///< total weight of each lambda bin.
 

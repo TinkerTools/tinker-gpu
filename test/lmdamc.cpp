@@ -235,9 +235,9 @@ double mcLoad()
    REQUIRE(use_lmdamc);
    REQUIRE(lmdamctrial == 1);
    if (use_abf) {
-      // give the mean force a slope
+      // give the mean force a slope in every bin, so no bin needs to be filled
       for (int i = 1; i <= nlmda; ++i)
-         lmdafmean[i] = 30.0 * (double)(i - 1) * wlmda;
+         testSetLmdaBin(i, 30.0 * (double)(i - 1) * wlmda);
    } else if (use_ost) {
       energy(calc::v4);
       hbias = 2.0;
@@ -508,6 +508,29 @@ TEST_CASE("LMDAMC-keys", "[ff][lmdamc]")
       REQUIRE(lmdamcmove == 1.0);
       s.session.end();
    }
+
+   // the fill of unsampled bins is on by default, and turned off or on by
+   // keyword, where the bare keyword turns it on
+   {
+      Setup s(kIonwat, "abf", kRc);
+      REQUIRE(use_lmdafill);
+      s.session.end();
+   }
+   {
+      Setup s(kIonwat, "abf", kRc, 0., "lambda-biasfill none\n");
+      REQUIRE_FALSE(use_lmdafill);
+      s.session.end();
+   }
+   {
+      Setup s(kIonwat, "abf", kRc, 0., "lambda-biasfill linear\n");
+      REQUIRE(use_lmdafill);
+      s.session.end();
+   }
+   {
+      Setup s(kIonwat, "abf", kRc, 0., "lambda-biasfill\n");
+      REQUIRE(use_lmdafill);
+      s.session.end();
+   }
 }
 
 TEST_CASE("LMDAMC-particle", "[ff][lmdamc]")
@@ -662,7 +685,7 @@ TEST_CASE("LMDAMC-bias-abf", "[ff][lmdamc]")
    {
       Setup s(kIonwat, "abf", kRcDyn);
       for (int i = 1; i <= nlmda; ++i)
-         lmdafmean[i] = ((double)(i - 1) * wlmda < 0.9) ? -1.0e5 : 1.0e5;
+         testSetLmdaBin(i, ((double)(i - 1) * wlmda < 0.9) ? -1.0e5 : 1.0e5);
       bath::kelvin = kelvin;
       for (int i = 0; i < 10; ++i) {
          lambda = 1.0;
@@ -684,18 +707,86 @@ TEST_CASE("LMDAMC-bias-abf", "[ff][lmdamc]")
       bath::kelvin = kelvin;
       for (int i = 0; i < 10; ++i) {
          for (int j = 1; j <= nlmda; ++j)
-            lmdafmean[j] = 0.0;
+            testClearLmdaBin(j);
          lambda = 1.0;
          energy(calc::v4);
          REQUIRE(bostlmda == 0.0);
          for (int j = 1; j <= nlmda; ++j)
-            lmdafmean[j] = 1.0e5;
+            testSetLmdaBin(j, 1.0e5);
          REQUIRE_FALSE(mcTrial(1.0, 1, esum));
       }
       REQUIRE(nlmdamctry == 10);
       s.session.end();
    }
 }
+
+// Forces an accepted lambda move inside a region without data for the method
+// mode, and checks that the energy and the slope it keeps come from the filled
+// bias, which differs there from the sampled free energy
+// (test_lmdamc.f:test_lmdamc_fill).
+void runFill(const char* mode)
+{
+   const double eps = testGetEps(1.0e-5, 1.0e-6);
+   Setup s(kIonwat, mode, kRc);
+   const double e0 = mcLoad();
+   REQUIRE(use_lmdafill);
+
+   // keep ABF data at lambda 0.9 and above, and start well below; the OST
+   // gaussian sits at the starting lambda of 0.5, so start well above it
+   double lstart;
+   if (use_abf) {
+      for (int i = 1; i <= nlmda; ++i) {
+         if ((double)(i - 1) * wlmda < 0.9)
+            testClearLmdaBin(i);
+      }
+      lstart = 0.5;
+   } else {
+      lstart = 0.8;
+   }
+
+   // an old energy far above the trial energy accepts the move
+   REQUIRE(mcTrial(lstart, 1, e0 + 1.0e6));
+   const double eacc = esum;
+
+   // the kept slope and energy are those of the filled bias, which differs
+   // from the sampled free energy away from the data
+   double vfill, dfill, vsamp, dsamp;
+   efreeBias(lambda, vfill, dfill);
+   efreeLmda(lambda, vsamp, dsamp);
+   REQUIRE(lmdadfdl == dfill);
+   REQUIRE(std::fabs(dfill - dsamp) > 1.0e-3);
+
+   // check the fill independently: ABF is below its data, so its mean force is
+   // the first sampled value all the way from zero, while OST is above its data
+   // and takes the last sampled value
+   int ifirst = 0, ilast = 0;
+   for (int i = 1; i <= nlmda; ++i) {
+      if (lmdaSampled(i)) {
+         if (ifirst == 0)
+            ifirst = i;
+         ilast = i;
+      }
+   }
+   if (use_abf) {
+      const double fedge = lmdafmean[ifirst];
+      REQUIRE(lambda < (double)(ifirst - 1) * wlmda);
+      REQUIRE(dfill == fedge);
+      COMPARE_REALS(vfill, fedge * lambda, 1.0e-9);
+   } else {
+      const double fedge = lmdafmean[ilast];
+      REQUIRE(lambda > (double)(ilast - 1) * wlmda);
+      REQUIRE(dfill == fedge);
+   }
+   const double eref = mcEnergy();
+   COMPARE_REALS(eacc, eref, eps);
+   use_lmdafill = false;
+   const double eoff = mcEnergy();
+   REQUIRE(std::fabs(eoff - eref) > 1.0e-3);
+   s.session.end();
+}
+
+TEST_CASE("LMDAMC-fill-abf", "[ff][lmdamc]") { runFill("abf"); }
+TEST_CASE("LMDAMC-fill-ost", "[ff][lmdamc]") { runFill("ost"); }
 
 TEST_CASE("LMDAMC-stale-abf", "[ff][lmdamc]") { runStale("abf"); }
 TEST_CASE("LMDAMC-stale-ost", "[ff][lmdamc]") { runStale("ost"); }
