@@ -2,7 +2,13 @@ KERNEL_VERSION_NUMBER: 23
 
 OUTPUT_DIR: src/cu/amoeba
 KERNEL_NAME: emplar_cu1
-TEMPLATE_PARAMS: template<class Ver, class ETYP>
+TEMPLATE_PARAMS: template <class Ver, class IMG, class ETYP>
+# the box shape as a template parameter, and the tiles near their centers
+# imaged once, their virial from the summed forces
+IMAGE_TEMPLATE: IMG
+LOCAL_TILES: true
+# the multipole pair forces are off the line of centers
+LOCAL_VIRIAL: symmetric
 CONSTEXPR_FLAGS: |
   constexpr bool do_e = Ver::e;
   constexpr bool do_g = Ver::g;
@@ -138,7 +144,7 @@ SCALED_PAIRWISE_INTERACTION: |
         f, aewald);
       ebuftl += floatTo<ebuf_prec>(e1);
     }
-    if CONSTEXPR (do_v) {
+    if CONSTEXPR (do_v and not tile_local) {
       vbuftlxx += floatTo<vbuf_prec>(vxx1);
       vbuftlyx += floatTo<vbuf_prec>(vyx1);
       vbuftlzx += floatTo<vbuf_prec>(vzx1);
@@ -174,7 +180,7 @@ FULL_PAIRWISE_INTERACTION: |
     if CONSTEXPR (do_e) {
       ebuftl += floatTo<ebuf_prec>(e);
     }
-    if CONSTEXPR (do_v) {
+    if CONSTEXPR (do_v and not tile_local) {
       vbuftlxx += floatTo<vbuf_prec>(vxx);
       vbuftlyx += floatTo<vbuf_prec>(vyx);
       vbuftlzx += floatTo<vbuf_prec>(vzx);

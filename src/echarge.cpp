@@ -1,4 +1,5 @@
 #include "ff/echarge.h"
+#include "ff/dlmda.h"
 #include "ff/elec.h"
 #include "ff/energy.h"
 #include "ff/nblist.h"
@@ -12,6 +13,11 @@
 #include <tinker/detail/sizes.hh>
 
 namespace tinker {
+// The real grid of the lambda derivatives of the charges, in the padded layout
+// of the charge grid, for the second lambda derivatives under Ewald
+// (echarge1.f:ecrecip1).
+static real* dlqgrid;
+
 void echargeData(RcOp op)
 {
    if (not use(Potent::CHARGE))
@@ -21,7 +27,8 @@ void echargeData(RcOp op)
 
    if (op & RcOp::DEALLOC) {
       ncexclude = 0;
-      darray::deallocate(cexclude, cexclude_scale);
+      darray::deallocate(cexclude, cexclude_scale, dlqgrid);
+      dlqgrid = nullptr;
 
       if (rc_a) {
          bufferDeallocate(rc_flag, nec);
@@ -110,6 +117,12 @@ void echargeData(RcOp op)
       darray::copyin(g::q0, ncexclude, cexclude_scale, excl.data());
       waitFor(g::q0);
 
+      dlqgrid = nullptr;
+      if (use_edlmda and use_d2lmda and useEwald() and (pltfm_config & Platform::CUDA)) {
+         const auto& st = *epme_unit;
+         darray::allocate(2 * (st.nfft1 / 2 + 1) * st.nfft2 * st.nfft3, &dlqgrid);
+      }
+
       nec = nullptr;
       ec = eng_buf_elec;
       vir_ec = vir_buf_elec;
@@ -135,7 +148,7 @@ static void echargeNonEwald(int vers)
 }
 
 namespace tinker {
-TINKER_FVOID2(acc1, cu1, echargeEwaldFphiSelf, int);
+TINKER_FVOID2(acc1, cu1, echargeEwaldFphiSelf, int, const real*);
 void echargeEwaldRecipSelf(int vers)
 {
    pmeStreamStartWait(use_pme_stream);
@@ -146,13 +159,27 @@ void echargeEwaldRecipSelf(int vers)
    const PMEUnit pu = epme_unit;
    EnergyBuffer e = (vers & calc::energy) ? ec : nullptr;
    VirialBuffer v = (vers & calc::virial) ? vir_ec : nullptr;
+   // The second lambda derivatives, and those of the force and the virial,
+   // take the potential of the charge derivatives as well, from a grid of
+   // their own; the first only needs that of the charges (echarge1.f:ecrecip1).
+   real* dlgrid = (vers & calc::energy_dlmda2) ? dlqgrid : nullptr;
    if (pltfm_config & Platform::CUDA) {
       // the charge grid is real: in-place R2C and C2R FFTs on the half spectrum
       gridPchgOneSet(pu, pchg);
       fftfrontOneSet(pu);
-      pmeConvOneSet(pu, e, v);
-      if (vers & calc::grad)
+      if (dlgrid) {
+         gridPchgOneSet(pu, pchg_dq, dlgrid);
+         fftfrontOneSet(pu, dlgrid);
+         VirialBuffer dv = (vers & calc::virial_dlmda) ? dvirdl_buf : nullptr;
+         pmeConvOneSetDlmda(pu, dlgrid, e, v, dv, elecChain().d1);
+      } else {
+         pmeConvOneSet(pu, e, v);
+      }
+      if (vers & calc::grad) {
          fftbackOneSet(pu);
+         if (dlgrid)
+            fftbackOneSet(pu, dlgrid);
+      }
    } else {
       gridPchg(pu, pchg);
       fftfront(pu);
@@ -163,7 +190,7 @@ void echargeEwaldRecipSelf(int vers)
 
    // fphi_pchg, recip, self
 
-   TINKER_FCALL2(acc1, cu1, echargeEwaldFphiSelf, vers);
+   TINKER_FCALL2(acc1, cu1, echargeEwaldFphiSelf, vers, dlgrid);
    echargeEwaldBackground(vers);
 
    pmeStreamFinishRecord(use_pme_stream);
@@ -191,20 +218,24 @@ void echarge(int vers)
          darray::zero(g::q0, n, decx, decy, decz);
    }
 
-   pchgEnsureElec();
+   lmdaChannel(LmdaTerm::ELEC).zero(vers);
+
+   // The charges take their lambda derivatives as lmdaDrv decides
+   // (dlambda.f:chgdlflags).
+   const int dlvers = lmdaDerivVers(vers, edlmdaActive());
    if (useEwald()) {
       // The analysis buffers are zeroed and reduced inside this function, on
       // the main stream. The PME stream must not start before the zeroing and
       // must have finished before the reduction, whatever "vers" is.
       const bool pme_stream_a = use_pme_stream and rc_a;
       pmeStreamStartRecord(pme_stream_a);
-      echargeEwaldRecipSelf(vers);
-      TINKER_FCALL2(acc1, cu1, echargeEwaldReal, vers);
+      echargeEwaldRecipSelf(dlvers);
+      TINKER_FCALL2(acc1, cu1, echargeEwaldReal, dlvers);
       pmeStreamFinishWait(pme_stream_a);
    } else {
-      echargeNonEwald(vers);
+      echargeNonEwald(dlvers);
    }
-   exfield(vers, 0);
+   exfield(dlvers, 0);
 
    if (rc_a) {
       if (do_e) {
@@ -225,5 +256,6 @@ void echarge(int vers)
       if (do_g)
          sumGradient(gx_elec, gy_elec, gz_elec, decx, decy, decz);
    }
+   lmdaChannel(LmdaTerm::ELEC).flush(vers);
 }
 }

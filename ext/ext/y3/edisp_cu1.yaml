@@ -1,6 +1,10 @@
 OUTPUT_DIR: src/cu/hippo
 KERNEL_NAME: edisp_cu1
-TEMPLATE_PARAMS: template <class Ver, class DTYP>
+TEMPLATE_PARAMS: template <class Ver, class IMG, class DTYP, bool REL, bool DHAL>
+# the box shape as a template parameter, and the tiles near their centers
+# imaged once
+IMAGE_TEMPLATE: IMG
+LOCAL_TILES: true
 CONSTEXPR_FLAGS: |
   constexpr bool do_a = Ver::a;
   constexpr bool do_e = Ver::e;
@@ -10,6 +14,7 @@ CONSTEXPR_FLAGS: |
   constexpr bool do_dl2 = Ver::e_dlmda2;
   constexpr bool do_gdl = Ver::g_dlmda;
   constexpr bool do_vdl = Ver::v_dlmda;
+  static_assert(not do_vdl or do_gdl, "");
 
 COUNT:
   - nd
@@ -40,7 +45,7 @@ SCALE_1X_TYPE: real_const_array
 
 EXTRA_PARAMS: |
   , const real* restrict csix, const real* restrict adisp, real aewald
-  , const int* restrict mut, Vdw vcouple, DispSoft ds
+  , const int* restrict mutg, int mutcls, Vdw vcouple, DispSoft ds1, DispSoft ds2, DispHal dh
 # IMPLICIT_PARAMS:
 
 I_VARIABLES:
@@ -49,14 +54,14 @@ I_VARIABLES:
   - register real zi   from:z
   - register real ci   from:csix
   - register real ai   from:adisp
-  - register int  imut from:mut
+  - register int  imutg from:mutg
 K_VARIABLES:
   - register real xk   from:x
   - register real yk   from:y
   - register real zk   from:z
   - register real ck   from:csix
   - register real ak   from:adisp
-  - register int  kmut from:mut
+  - register int  kmutg from:mutg
 I_FORCE:
   - register real gxi addto:gx
   - register real gyi addto:gy
@@ -79,19 +84,23 @@ SCALED_PAIRWISE_INTERACTION: |
   real yr = @yi@ - @yk@;
   real zr = @zi@ - @zk@;
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  // REL: the class of a pair of ligand groups, the two ligands never
+  // interacting; otherwise whether the pair is mutated, as plain runs need
+  int mc = REL ? pair_mutcls(mutcls, @imutg@, @kmutg@) : int(pair_mutik(vcouple, @imutg@, @kmutg@));
+  if (r2 <= off * off and incl and mc >= 0) {
     real r = REAL_SQRT(r2);
     // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
     real rr1 = REAL_RSQRT_V2(r2);
     real e, de, dle, dle2, dlde;
-    bool mutik = pair_mutik(vcouple, @imut@, @kmut@);
-    pair_disp<do_g, DTYP, 0, do_dl1, do_dl2, do_gdl>(r, r2, rr1,
-      scalea, aewald, @ci@, @ai@, @ck@, @ak@, mutik, ds, cut, off,
+    pair_disp<do_g, DTYP, 0, do_dl1, do_dl2, do_gdl, DHAL>(r, r2, rr1,
+      scalea, aewald, @ci@, @ai@, @ck@, @ak@, mc, ds1, (REL ? ds2 : ds1), cut, off, dh,
       e, de, dle, dle2, dlde);
     if CONSTEXPR (do_e) {
       edtl += floatTo<ebuf_prec>(e);
+      // a pair counts if its damped pair, which the tail of a hal vdW weights
+      // by zero inside the vdW switch, does (edisp3.f)
       if CONSTEXPR (do_a) {
-        if (scalea != 0 and e != 0)
+        if (scalea != 0 and e != 0 and (not DHAL or r > dh.cut))
           ndtl += 1;
       }
     }
@@ -107,7 +116,7 @@ SCALED_PAIRWISE_INTERACTION: |
       @gxk@ -= dedx;
       @gyk@ -= dedy;
       @gzk@ -= dedz;
-      if CONSTEXPR (do_v) {
+      if CONSTEXPR (do_v and not tile_local) {
         vdtlxx += floatTo<vbuf_prec>(xr * dedx);
         vdtlyx += floatTo<vbuf_prec>(yr * dedx);
         vdtlzx += floatTo<vbuf_prec>(zr * dedx);
@@ -122,25 +131,9 @@ SCALED_PAIRWISE_INTERACTION: |
     if CONSTEXPR (do_dl2)
       d2vdl2tl += floatTo<ebuf_prec>(dle2);
     if CONSTEXPR (do_gdl) {
-      real dldx, dldy, dldz;
-      dlde *= rr1;
-      dldx = dlde * xr;
-      dldy = dlde * yr;
-      dldz = dlde * zr;
-      @dgxi@ += dldx;
-      @dgyi@ += dldy;
-      @dgzi@ += dldz;
-      @dgxk@ -= dldx;
-      @dgyk@ -= dldy;
-      @dgzk@ -= dldz;
-      if CONSTEXPR (do_vdl) {
-        dvvirdltlxx += floatTo<vbuf_prec>(xr * dldx);
-        dvvirdltlyx += floatTo<vbuf_prec>(yr * dldx);
-        dvvirdltlzx += floatTo<vbuf_prec>(zr * dldx);
-        dvvirdltlyy += floatTo<vbuf_prec>(yr * dldy);
-        dvvirdltlzy += floatTo<vbuf_prec>(zr * dldy);
-        dvvirdltlzz += floatTo<vbuf_prec>(zr * dldz);
-      }
+      pair_dlforce<true, (do_vdl and not tile_local)>(dlde * rr1, xr, yr, zr, @dgxi@, @dgyi@, @dgzi@,
+        @dgxk@, @dgyk@, @dgzk@, dvvirdltlxx, dvvirdltlyx, dvvirdltlzx,
+        dvvirdltlyy, dvvirdltlzy, dvvirdltlzz);
     }
   } // end if (include)
 FULL_PAIRWISE_INTERACTION: |
@@ -148,19 +141,21 @@ FULL_PAIRWISE_INTERACTION: |
   real yr = @yi@ - @yk@;
   real zr = @zi@ - @zk@;
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  // REL: the class of a pair of ligand groups, the two ligands never
+  // interacting; otherwise whether the pair is mutated, as plain runs need
+  int mc = REL ? pair_mutcls(mutcls, @imutg@, @kmutg@) : int(pair_mutik(vcouple, @imutg@, @kmutg@));
+  if (r2 <= off * off and incl and mc >= 0) {
     real r = REAL_SQRT(r2);
     // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
     real rr1 = REAL_RSQRT_V2(r2);
     real e, de, dle, dle2, dlde;
-    bool mutik = pair_mutik(vcouple, @imut@, @kmut@);
-    pair_disp<do_g, DTYP, 1, do_dl1, do_dl2, do_gdl>(r, r2, rr1,
-      1, aewald, @ci@, @ai@, @ck@, @ak@, mutik, ds, cut, off,
+    pair_disp<do_g, DTYP, 1, do_dl1, do_dl2, do_gdl, DHAL>(r, r2, rr1,
+      1, aewald, @ci@, @ai@, @ck@, @ak@, mc, ds1, (REL ? ds2 : ds1), cut, off, dh,
       e, de, dle, dle2, dlde);
     if CONSTEXPR (do_e) {
       edtl += floatTo<ebuf_prec>(e);
       if CONSTEXPR (do_a) {
-        if (e != 0)
+        if (e != 0 and (not DHAL or r > dh.cut))
           ndtl += 1;
       }
     }
@@ -176,7 +171,7 @@ FULL_PAIRWISE_INTERACTION: |
       @gxk@ -= dedx;
       @gyk@ -= dedy;
       @gzk@ -= dedz;
-      if CONSTEXPR (do_v) {
+      if CONSTEXPR (do_v and not tile_local) {
         vdtlxx += floatTo<vbuf_prec>(xr * dedx);
         vdtlyx += floatTo<vbuf_prec>(yr * dedx);
         vdtlzx += floatTo<vbuf_prec>(zr * dedx);
@@ -191,24 +186,8 @@ FULL_PAIRWISE_INTERACTION: |
     if CONSTEXPR (do_dl2)
       d2vdl2tl += floatTo<ebuf_prec>(dle2);
     if CONSTEXPR (do_gdl) {
-      real dldx, dldy, dldz;
-      dlde *= rr1;
-      dldx = dlde * xr;
-      dldy = dlde * yr;
-      dldz = dlde * zr;
-      @dgxi@ += dldx;
-      @dgyi@ += dldy;
-      @dgzi@ += dldz;
-      @dgxk@ -= dldx;
-      @dgyk@ -= dldy;
-      @dgzk@ -= dldz;
-      if CONSTEXPR (do_vdl) {
-        dvvirdltlxx += floatTo<vbuf_prec>(xr * dldx);
-        dvvirdltlyx += floatTo<vbuf_prec>(yr * dldx);
-        dvvirdltlzx += floatTo<vbuf_prec>(zr * dldx);
-        dvvirdltlyy += floatTo<vbuf_prec>(yr * dldy);
-        dvvirdltlzy += floatTo<vbuf_prec>(zr * dldy);
-        dvvirdltlzz += floatTo<vbuf_prec>(zr * dldz);
-      }
+      pair_dlforce<true, (do_vdl and not tile_local)>(dlde * rr1, xr, yr, zr, @dgxi@, @dgyi@, @dgzi@,
+        @dgxk@, @dgyk@, @dgzk@, dvvirdltlxx, dvvirdltlyx, dvvirdltlzx,
+        dvvirdltlyy, dvvirdltlzy, dvvirdltlzz);
     }
   } // end if (include)

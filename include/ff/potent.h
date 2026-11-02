@@ -1,4 +1,5 @@
 #pragma once
+#include "tool/rcman.h"
 
 namespace tinker {
 /// \ingroup ff
@@ -49,4 +50,9 @@ bool use(Potent term);
 /// \ingroup ff
 /// \return Pre-stored number of bonded interactions.
 int countBondedTerm(Potent term);
+
+/// \ingroup ff
+/// Refuses, as it allocates, the potential setups Fortran accepts and tinker9
+/// does not compute; it runs before any term is set up.
+void unsupportedData(RcOp);
 }

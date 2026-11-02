@@ -1,6 +1,12 @@
 OUTPUT_DIR: src/cu/hippo
 KERNEL_NAME: empoleChgpen_cu1
-TEMPLATE_PARAMS: template <class Ver, class ETYP, Chgpen CP, bool CFLX>
+TEMPLATE_PARAMS: template <class Ver, class IMG, class ETYP, Chgpen CP, bool CFLX>
+# the box shape as a template parameter, and the tiles near their centers
+# imaged once, their virial from the summed forces
+IMAGE_TEMPLATE: IMG
+LOCAL_TILES: true
+# the multipole pair forces are off the line of centers
+LOCAL_VIRIAL: symmetric
 CONSTEXPR_FLAGS: |
   constexpr bool do_a = Ver::a;
   constexpr bool do_e = Ver::e;
@@ -142,7 +148,7 @@ SCALED_PAIRWISE_INTERACTION: |
       @tyk@ += pgrad.ttmk[1];
       @tzk@ += pgrad.ttmk[2];
     }
-    if CONSTEXPR (do_v) {
+    if CONSTEXPR (do_v and not tile_local) {
       vemtlxx += floatTo<vbuf_prec>(-xr * pgrad.frcx);
       vemtlyx += floatTo<vbuf_prec>(-0.5f * (yr * pgrad.frcx + xr * pgrad.frcy));
       vemtlzx += floatTo<vbuf_prec>(-0.5f * (zr * pgrad.frcx + xr * pgrad.frcz));
@@ -207,7 +213,7 @@ FULL_PAIRWISE_INTERACTION: |
       @tyk@ += pgrad.ttmk[1];
       @tzk@ += pgrad.ttmk[2];
     }
-    if CONSTEXPR (do_v) {
+    if CONSTEXPR (do_v and not tile_local) {
       vemtlxx += floatTo<vbuf_prec>(-xr * pgrad.frcx);
       vemtlyx += floatTo<vbuf_prec>(-0.5f * (yr * pgrad.frcx + xr * pgrad.frcy));
       vemtlzx += floatTo<vbuf_prec>(-0.5f * (zr * pgrad.frcx + xr * pgrad.frcz));

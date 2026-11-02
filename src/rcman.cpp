@@ -40,6 +40,7 @@ void finish()
 #include "ff/energy.h"
 #include "ff/molecule.h"
 #include "ff/nblist.h"
+#include "ff/potent.h"
 #include "ff/watermc.h"
 #include "md/misc.h"
 #include "md/pq.h"
@@ -67,6 +68,7 @@ void deviceData(RcOp op)
    RcMan cpl42{coupleData, op};
    RcMan molecule42{moleculeData, op};
    RcMan group42{groupData, op};
+   RcMan unsupported42{unsupportedData, op};
 
    RcMan energy42{energyData, op};
    RcMan wiggle42{induceWiggleData, op};

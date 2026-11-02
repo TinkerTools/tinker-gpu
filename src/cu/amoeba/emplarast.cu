@@ -14,6 +14,7 @@
 #include "seq/launch.h"
 #include "seq/pair_mplar.h"
 #include "seq/triangle.h"
+#include "tool/error.h"
 
 // The single topology flavour of the fused multipole/polarization kernel.
 // rpole holds the unscaled multipoles here, and the pair kernel applies each
@@ -49,24 +50,32 @@ static void emplarast_cu(const real (*uind)[3], const real (*uinp)[3])
 
       // The self term is one site against itself, so it scales as lambda
       // squared and empoleSelfDlmda_cu already differentiates it.
-      if CONSTEXPR (Ver::e) {
-         auto ker0 = empoleSelfDlmda_cu<Ver>;
-         launch_k1b(g::s0, n, ker0, //
-            nullptr, em, demdl_buf, d2emdl2_buf, rpole, emGroup(), grpSelfScale(elecPairScale()), n, f, aewald);
-      }
+      if CONSTEXPR (Ver::e)
+         empoleSelfDlmdaAmoeba<Ver>(nullptr, em, f, aewald);
    }
+   // An annihilated site has no multipole and no induced dipole, so a group
+   // without a scale or a slope is left out of the live groups.
+   const GrpScale esc = grpScale(elam);
+   const real del = elecChain().d1;
+   auto bits = static_cast<unsigned>(elecLiveMask());
+   for (int g = 0; g < 3; ++g)
+      if (esc.s[g] == 0 and esc.ds[g] == 0)
+         bits &= ~(1u << g);
+   const RdtMask live = static_cast<RdtMask>(bits);
+
    int ngrid = gpuGridSize(BLOCK_DIM);
    auto kera = emplarast_cu1a<Ver, ETYP>;
    kera<<<ngrid, BLOCK_DIM, 0, g::s0>>>(TINKER_IMAGE_ARGS, em, demdl_buf, vir_em, demx, demy, demz, off, trqx, trqy,
-      trqz, rpole, uind, uinp, emGroup(), f, aewald, grpScale(elam), deldlmda, elecLiveMask(), //
-      st.sorted, st.niak, st.iak, st.lst);
+      trqz, rpole, uind, uinp, emGroup(), f, aewald, esc, del, live, //
+      st.sorted, st.niak, st.iak, st.lst, st.akc);
    auto kerb = emplarast_cu1b<Ver, ETYP>;
    kerb<<<ngrid, BLOCK_DIM, 0, g::s0>>>(TINKER_IMAGE_ARGS, em, demdl_buf, vir_em, demx, demy, demz, off, trqx, trqy,
-      trqz, rpole, uind, uinp, emGroup(), f, aewald, grpScale(elam), deldlmda, elecLiveMask(), //
-      st.sorted, st.n, st.nakpl, st.iakpl);
-   auto kerc = emplarast_cu1c<Ver, ETYP>;
+      trqz, rpole, uind, uinp, emGroup(), f, aewald, esc, del, live, //
+      st.sorted, st.n, st.nakpl, st.iakpl, st.akc);
+   // the exclusion pairs take no Ewald term (their body is NON_EWALD)
+   auto kerc = emplarast_cu1c<Ver, NON_EWALD>;
    kerc<<<ngrid, BLOCK_DIM, 0, g::s0>>>(TINKER_IMAGE_ARGS, em, demdl_buf, vir_em, demx, demy, demz, off, trqx, trqy,
-      trqz, rpole, uind, uinp, emGroup(), f, aewald, grpScale(elam), deldlmda, elecLiveMask(), //
+      trqz, rpole, uind, uinp, emGroup(), f, aewald, esc, del, live, //
       nmdpuexclude, mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z);
 }
 
@@ -90,6 +99,8 @@ static void emplarastVers_cu(int vers, const real (*uind)[3], const real (*uinp)
       emplarast_cu<calc::V7, ETYP>(uind, uinp);
    else if (vers == calc::v8)
       emplarast_cu<calc::V8, ETYP>(uind, uinp);
+   else
+      TINKER_THROW(format("emplarast does not take version %d.", vers));
 }
 
 void emplarAst_cu(int vers)

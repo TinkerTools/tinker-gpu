@@ -1,22 +1,41 @@
 OUTPUT_DIR: src/cu
 KERNEL_NAME: elj_cu1
-TEMPLATE_PARAMS: template <class Ver>
+TEMPLATE_PARAMS: template <class Ver, class IMG, bool REL, bool SOFTCORE>
+# the box shape as a template parameter, and the tiles near their centers
+# imaged once, their virial from the summed forces
+IMAGE_TEMPLATE: IMG
+LOCAL_TILES: true
 CONSTEXPR_FLAGS: |
   constexpr bool do_e = Ver::e;
   constexpr bool do_a = Ver::a;
   constexpr bool do_g = Ver::g;
   constexpr bool do_v = Ver::v;
+  constexpr bool do_dl1 = Ver::e_dlmda1;
+  constexpr bool do_dl2 = Ver::e_dlmda2;
+  constexpr bool do_gdl = Ver::g_dlmda;
+  constexpr bool do_vdl = Ver::v_dlmda;
+  static_assert(not do_vdl or do_gdl, "");
 
 COUNT:
   - nev
 ENERGY:
   - ev
+ENERGY_DLMDA1:
+  - devdl
+ENERGY_DLMDA2:
+  - d2evdl2
 VIRIAL:
   - vev
+VIRIAL_DLMDA:
+  - devvirdl
 GRADIENT:
   - gx
   - gy
   - gz
+GRADIENT_DLMDA:
+  - dfdlx
+  - dfdly
+  - dfdlz
 
 CUT_DISTANCE: cut
 OFF_DISTANCE: 'off'
@@ -26,7 +45,8 @@ SCALE_1X_TYPE: real_const_array
 
 EXTRA_PARAMS: |
   , int njvdw, const real* restrict radmin, const real* restrict epsilon
-  , const int* restrict jvdw, const int* restrict mut, real vlam, Vdw vcouple
+  , const int* restrict jvdw, const int* restrict mutg, int mutcls
+  , SoftCoreLmda lp1, SoftCoreLmda lp2
 # IMPLICIT_PARAMS:
 
 I_VARIABLES:
@@ -34,13 +54,13 @@ I_VARIABLES:
   - register real yi   from:y
   - register real zi   from:z
   - register int ijvdw from:jvdw
-  - register int imut  from:mut
+  - register int imutg from:mutg onlyif:SOFTCORE
 K_VARIABLES:
   - register real xk   from:x
   - register real yk   from:y
   - register real zk   from:z
   - register int kjvdw from:jvdw
-  - register int kmut  from:mut
+  - register int kmutg from:mutg onlyif:SOFTCORE
 
 I_FORCE:
   - register real fix addto:gx
@@ -50,23 +70,46 @@ K_FORCE:
   - register real fkx addto:gx
   - register real fky addto:gy
   - register real fkz addto:gz
+I_FORCE_DLMDA:
+  - register real dfix addto:dfdlx
+  - register real dfiy addto:dfdly
+  - register real dfiz addto:dfdlz
+K_FORCE_DLMDA:
+  - register real dfkx addto:dfdlx
+  - register real dfky addto:dfdly
+  - register real dfkz addto:dfdlz
 
 SCALED_PAIRWISE_INTERACTION: |
   real xr = @xi@ - @xk@;
   real yr = @yi@ - @yk@;
   real zr = @zi@ - @zk@;
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+  // relative calculation (REL) never interacting; without SOFTCORE no atom
+  // follows lambda
+  int mc = SOFTCORE ? pair_mutcls(mutcls, @imutg@, @kmutg@) : 0;
+  if (r2 <= off * off and incl and (not REL or mc >= 0)) {
     real r = REAL_SQRT(r2);
     // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
     real invr = REAL_RSQRT_V2(r2);
     real rv = radmin[@ijvdw@ * njvdw + @kjvdw@];
     real eps = epsilon[@ijvdw@ * njvdw + @kjvdw@];
+    // Ligand 2 couples as the complement of vlambda; a mutated pair is also the
+    // pair that carries dE/dL (elj1.f).
+    const bool mutik = mc > 0;
+    const SoftCoreLmda lp = pair_vdw_softcore<REL>(mc, lp1, lp2);
     real e, de;
-    real vlambda = pair_vlambda(vlam, vcouple, @imut@, @kmut@);
-    pair_lj_v3<do_g, true, 0>(r, invr, vlambda, scalea, rv, eps, cut, off, e, de);
+    PairVdwLambda dl = {0, 0, 0};
+    pair_lj_v3<do_g, SOFTCORE, 0, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, invr, lp, scalea, rv, eps, cut, off, e, de,
+      &dl, mutik);
     if CONSTEXPR (do_e) {
       evtl += floatTo<ebuf_prec>(e);
+      if (mutik) {
+        if CONSTEXPR (do_dl1)
+          devdltl += floatTo<ebuf_prec>(dl.dedl);
+        if CONSTEXPR (do_dl2)
+          d2evdl2tl += floatTo<ebuf_prec>(dl.d2edl2);
+      }
       if CONSTEXPR (do_a) {
         if (scalea != 0 and e != 0)
           nevtl += 1;
@@ -74,7 +117,9 @@ SCALED_PAIRWISE_INTERACTION: |
     }
     if CONSTEXPR (do_g) {
       real dedx, dedy, dedz;
-      de = de * invr;
+      // Two sites at the same point have no direction to push along.
+      real rinv = pair_lj_rinv(invr);
+      de = de * rinv;
       dedx = de * xr;
       dedy = de * yr;
       dedz = de * zr;
@@ -84,7 +129,12 @@ SCALED_PAIRWISE_INTERACTION: |
       @fkx@ -= dedx;
       @fky@ -= dedy;
       @fkz@ -= dedz;
-      if CONSTEXPR (do_v) {
+      if (mutik) {
+        pair_dlforce<do_gdl, (do_vdl and not tile_local)>(dl.dlde * rinv, xr, yr, zr, @dfix@, @dfiy@, @dfiz@,
+          @dfkx@, @dfky@, @dfkz@, devvirdltlxx, devvirdltlyx, devvirdltlzx,
+          devvirdltlyy, devvirdltlzy, devvirdltlzz);
+      }
+      if CONSTEXPR (do_v and not tile_local) {
         vevtlxx += floatTo<vbuf_prec>(xr * dedx);
         vevtlyx += floatTo<vbuf_prec>(yr * dedx);
         vevtlzx += floatTo<vbuf_prec>(zr * dedx);
@@ -100,17 +150,32 @@ FULL_PAIRWISE_INTERACTION: |
   real yr = @yi@ - @yk@;
   real zr = @zi@ - @zk@;
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+  // relative calculation (REL) never interacting; without SOFTCORE no atom
+  // follows lambda
+  int mc = SOFTCORE ? pair_mutcls(mutcls, @imutg@, @kmutg@) : 0;
+  if (r2 <= off * off and incl and (not REL or mc >= 0)) {
     real r = REAL_SQRT(r2);
     // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
     real invr = REAL_RSQRT_V2(r2);
     real rv = radmin[@ijvdw@ * njvdw + @kjvdw@];
     real eps = epsilon[@ijvdw@ * njvdw + @kjvdw@];
+    // Ligand 2 couples as the complement of vlambda; a mutated pair is also the
+    // pair that carries dE/dL (elj1.f).
+    const bool mutik = mc > 0;
+    const SoftCoreLmda lp = pair_vdw_softcore<REL>(mc, lp1, lp2);
     real e, de;
-    real vlambda = pair_vlambda(vlam, vcouple, @imut@, @kmut@);
-    pair_lj_v3<do_g, true, 1>(r, invr, vlambda, 1, rv, eps, cut, off, e, de);
+    PairVdwLambda dl = {0, 0, 0};
+    pair_lj_v3<do_g, SOFTCORE, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, invr, lp, 1, rv, eps, cut, off, e, de, &dl,
+      mutik);
     if CONSTEXPR (do_e) {
       evtl += floatTo<ebuf_prec>(e);
+      if (mutik) {
+        if CONSTEXPR (do_dl1)
+          devdltl += floatTo<ebuf_prec>(dl.dedl);
+        if CONSTEXPR (do_dl2)
+          d2evdl2tl += floatTo<ebuf_prec>(dl.d2edl2);
+      }
       if CONSTEXPR (do_a) {
         if (e != 0)
           nevtl += 1;
@@ -118,7 +183,9 @@ FULL_PAIRWISE_INTERACTION: |
     }
     if CONSTEXPR (do_g) {
       real dedx, dedy, dedz;
-      de = de * invr;
+      // Two sites at the same point have no direction to push along.
+      real rinv = pair_lj_rinv(invr);
+      de = de * rinv;
       dedx = de * xr;
       dedy = de * yr;
       dedz = de * zr;
@@ -128,7 +195,12 @@ FULL_PAIRWISE_INTERACTION: |
       @fkx@ -= dedx;
       @fky@ -= dedy;
       @fkz@ -= dedz;
-      if CONSTEXPR (do_v) {
+      if (mutik) {
+        pair_dlforce<do_gdl, (do_vdl and not tile_local)>(dl.dlde * rinv, xr, yr, zr, @dfix@, @dfiy@, @dfiz@,
+          @dfkx@, @dfky@, @dfkz@, devvirdltlxx, devvirdltlyx, devvirdltlzx,
+          devvirdltlyy, devvirdltlzy, devvirdltlzz);
+      }
+      if CONSTEXPR (do_v and not tile_local) {
         vevtlxx += floatTo<vbuf_prec>(xr * dedx);
         vevtlyx += floatTo<vbuf_prec>(yr * dedx);
         vevtlzx += floatTo<vbuf_prec>(zr * dedx);

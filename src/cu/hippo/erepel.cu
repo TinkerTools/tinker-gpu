@@ -18,13 +18,19 @@ static void erepel_cu2()
    const auto& st = *mspatial_v2_unit;
    real cut = switchCut(Switch::REPULS);
    real off = switchOff(Switch::REPULS);
-   const SoftCoreLmda rs = repelSoft(Ver::e_dlmda1);
+   // A relative calculation labels atoms by ligand group (pair_mutcls).
+   const int* grp = emGroup();
+   constexpr bool dodl = lmdaDodl(Ver::value);
+   const SoftCoreLmda rs1 = repelSoft(1, dodl), rs2 = repelSoft(2, dodl);
 
    int ngrid = gpuGridSize(BLOCK_DIM);
-   erepel_cu1<Ver><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nrep, er, devdl_buf, d2evdl2_buf, vir_er,
-      dvirdl_buf, derx, dery, derz, dfdlx, dfdly, dfdlz, cut, off, st.si2.bit0, nrepexclude, repexclude,
-      repexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, trqx, trqy, trqz,
-      dltrqx, dltrqy, dltrqz, rrepole, sizpr, elepr, dmppr, mut, vcouple, rs);
+   boxShapeDispatch(box_shape, [&](auto img) {
+      using IMG = decltype(img);
+      erepel_cu1<Ver, IMG><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nrep, er, devdl_buf, d2evdl2_buf, vir_er,
+         dvirdl_buf, derx, dery, derz, dfdlx, dfdly, dfdlz, cut, off, st.si2.bit0, nrepexclude, repexclude,
+         repexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, st.akc, trqx, trqy, trqz,
+         dltrqx, dltrqy, dltrqz, rrepole, sizpr, elepr, dmppr, grp, vdwMutclsTable(), rs1, rs2);
+   });
 }
 
 void erepel_cu(int vers)

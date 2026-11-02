@@ -6,11 +6,12 @@
 
 namespace tinker {
 /// \ingroup repel
-/// The soft core scaling of a mutated Pauli repulsion pair at the current vlam,
+/// The soft core scaling of a Pauli repulsion pair of ligand group \c ig, 1 or
+/// 2 (pair_mutcls), at its lambda,
 /// \f$ s = \lambda^n r / \sqrt{\alpha \lambda^m (1-\lambda)^p + r^2} \f$
-/// (erepsc.f:repsc), with its main lambda derivative coefficients only if
-/// \c dodl (erepsc.f:repsc4).
-SoftCoreLmda repelSoft(bool dodl);
+/// (erepsc.f:erepsc), with its main lambda derivative coefficients only if
+/// \c dodl (erepsc.f:erepsc4).
+SoftCoreLmda repelSoft(int ig, bool dodl);
 
 /// \ingroup repel
 void erepelData(RcOp);

@@ -1,6 +1,7 @@
 #pragma once
 #include "ff/dlmda.h"
 #include "ff/energy.h"
+#include "ff/spatial.h"
 
 #include "tinker9.h"
 
@@ -110,6 +111,9 @@ public:
    int getGradientCount() const;                ///< Number of atoms read from the \c Anlyt rows.
    int getNumerGradientCount() const;           ///< Number of atoms read from the \c Numer rows.
    void getEnergyCountByName(std::string name, double& energy, int& count);
+   /// \brief As getEnergyCountByName(), with zeros for a component the file
+   /// does not list, as analyze leaves out a term with no interactions.
+   void getEnergyCountOrZero(std::string name, double& energy, int& count);
 
    /// \brief The lambda-derivative blocks, all zero if the file has none.
    const TestLmdaReference& getLmda() const;
@@ -161,6 +165,31 @@ struct AtomData
 
 /// \brief Reads AMOEBA file
 std::vector<std::vector<AtomData>> readAmoebaCoordinateFile(const std::string& fname);
+
+/// \brief The energy, virial and gradient of energy(calc::v1), with their main
+/// lambda derivatives where the run takes them and zeros where it does not.
+struct TestLmdaSnapshot
+{
+   double e, dedl, d2edl2;
+   double vir[9], dvirdl[9];
+   std::vector<double> g, dfdl;
+};
+
+/// \brief Runs energy(calc::v1) and records it.
+TestLmdaSnapshot testLmdaSnapshot();
+
+/// \brief Checks that two snapshots of one system agree: the energies and their
+/// lambda derivatives to \c eps_e, the virials and theirs to \c eps_v, and the
+/// largest difference of a gradient component or of its lambda derivative to
+/// \c eps_g.
+void testLmdaCompare(const TestLmdaSnapshot& a, const TestLmdaSnapshot& b, double eps_e, double eps_g, double eps_v);
+
+/// \brief The blocks of a spatial list whose tiles image once (LOCAL_TILES in
+/// ck3.py), with the block centers in \c akc.
+int testCountLocal(const Spatial& st, std::vector<Spatial::Center>& akc);
+
+/// \brief The blocks of a spatial list whose tiles image once.
+int testCountLocal(const Spatial& st);
 
 /// \}
 }

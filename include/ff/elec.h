@@ -84,11 +84,14 @@ void empoleEwaldBackground(int vers,          ///< Energy version.
                            int dlvers,        ///< Lambda-derivative version, as from lmdaDerivVers().
                            bool cflux = false ///< Whether pole carries the charge flux.
 );
-/// \copydoc empoleEwaldBackground
+/// The same correction for the net partial charge (echarge1.f), which carries
+/// no charge flux. \c vers is the lambda-derivative version, as from
+/// lmdaDerivVers(), which also selects the energy, virial and count terms.
 void echargeEwaldBackground(int vers);
-/// Brings the partial charges to the electrostatic lambda. Free energy
-/// perturbation moves that lambda between energy calls; in every other run the
-/// charges are scaled once, as they are copied in.
+/// Brings the partial charges, and their lambda derivatives, to the
+/// electrostatic lambda, on the device, while a ligand group can follow it.
+/// Called at the start of each energy evaluation, before the PME stream is
+/// let go: the charges are scaled on the main stream.
 void pchgEnsureElec();
 
 //====================================================================//

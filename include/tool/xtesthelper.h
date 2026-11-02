@@ -163,6 +163,12 @@ int testgradFlags(const FdTestOptions& opts);
 /// The molecular system must already be built and #initialize called.
 TestgradResult testgradEvaluate(const FdTestOptions& opts);
 
+/// The central difference gradient of atom \c i with step \c eps, with the
+/// extra sites of four-site waters kept on their frames by #syncXyzFromHost.
+/// The host coordinates are restored; the device ones are left displaced until
+/// the next #syncXyzFromHost.
+void testgradNumericalAtom(int i, double eps, double* g);
+
 /// Prints one frame of \c xtestgrad results.
 void testgradPrint(FILE* out, const FdTestOptions& opts, const TestgradResult& r, int digits);
 

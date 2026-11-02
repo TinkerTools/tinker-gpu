@@ -7,6 +7,9 @@ namespace tinker {
 /// \ingroup disp
 /// \{
 bool useDEwald();
+/// Whether the tail of a buffered 14-7 vdW is handed to an Ewald dispersion
+/// sum whose C6 values are mapped from it (cutoffs.f, kdisp.f:kdsphal).
+bool useDHal();
 void edispData(RcOp);
 void edisp(int vers);
 
@@ -24,22 +27,30 @@ struct DispSoft
    real rs2, rrs2;    ///< the switch radius squared and its reciprocal
 };
 
-/// How the reciprocal and self terms of Ewald dispersion weight a mutated
-/// ligand by the lambda power of its soft core (edisp.f:dspmutwt4). With
-/// \c split, the grid holds the environment C6 in its real part and the ligand
-/// C6, the sites \c part flags, in its imaginary part; the convolution
-/// separates the two transforms from the copy \c qfwd of the forward
-/// transform. The weight derivatives are taken with respect to the main lambda.
-struct DispSplit
+/// The window of the vdW switch over which an Ewald dispersion tail mapped
+/// from a buffered 14-7 vdW takes over from it, the real space pairs weighted
+/// by \f$ w = 1 - S(r) \f$, zero up to \c cut and one from \c off on, and
+/// whether its sites are damped (edspsc.f:dhalwt).
+struct DispHal
 {
-   bool split;
-   real wel; ///< ligand-environment weight
-   real wll; ///< ligand-ligand weight
-   real dwel, dwll;
-   real d2wel, d2wll;
-   const int* part;
-   const real (*qfwd)[2];
-   real (*qdl)[2]; ///< the lambda derivative of the potential, for the force one
+   real cut, off;
+   bool damp;
+};
+/// The window and damping of useDHal(), or, without it, the full weight from
+/// zero on with damping.
+DispHal dispHal();
+
+/// The reciprocal and self terms of Ewald dispersion with mutated ligands
+/// (edisp.f:dspslot). The C6 of the environment and of each ligand group goes
+/// to one of up to three real grids, or slots: groups whose pair weights match
+/// share a slot, and a group with no weight left is not placed at all. A pair
+/// of sites in slots \c s and \c t is weighted by \c w[s][t], with its lambda
+/// derivatives \c dw and \c d2w taken with respect to the main lambda.
+struct DispSlots
+{
+   int nslot;
+   int slot[3]; ///< the slot of the environment and of ligands 1 and 2, or -1
+   real w[3][3], dw[3][3], d2w[3][3];
 };
 /// \}
 }

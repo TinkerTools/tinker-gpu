@@ -1,11 +1,12 @@
 // ck.py Version 3.1.0
-template <class ETYP>
+template <class IMG, class ETYP>
 __global__
 void ufield_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict uinfo, int nexclude,
    const int (*restrict exclude)[2], const real* restrict exclude_scale, const real* restrict x, const real* restrict y,
    const real* restrict z, const Spatial::SortedAtom* restrict sorted, int nakpl, const int* restrict iakpl, int niak,
-   const int* restrict iak, const int* restrict lst, const real (*restrict uind)[3], const real (*restrict uinp)[3],
-   real (*restrict field)[3], real (*restrict fieldp)[3], real aewald, const int* restrict grp, RdtMask live)
+   const int* restrict iak, const int* restrict lst, const Spatial::Center* restrict akc,
+   const real (*restrict uind)[3], const real (*restrict uinp)[3], real (*restrict field)[3],
+   real (*restrict fieldp)[3], real aewald, const int* restrict grp, RdtMask live)
 {
    using d::jpolar;
    using d::njpolar;
@@ -74,7 +75,7 @@ void ufield_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict u
       real xr = xk - xi;
       real yr = yk - yi;
       real zr = zk - zi;
-      real r2 = image2(xr, yr, zr);
+      real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
       // a pair with a dead group has no multipole or induced dipole;
       // grp is null when every group is live
       if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
@@ -150,38 +151,91 @@ void ufield_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict u
       __syncwarp();
 
       unsigned int uinfo0 = uinfo[iw * WARP_SIZE + ilane];
-      for (int j = 0; j < WARP_SIZE; ++j) {
-         int srclane = (ilane + j) & (WARP_SIZE - 1);
-         int klane = srclane + threadIdx.x - ilane;
-         bool incl = iid < kid and kid < n;
-         int srcmask = 1 << srclane;
-         incl = incl and (uinfo0 & srcmask) == 0;
-         real scalea = 1;
-         real xr = xk - xi;
-         real yr = yk - yi;
-         real zr = zk - zi;
-         real r2 = image2(xr, yr, zr);
-         // a pair with a dead group has no multipole or induced dipole;
-         // grp is null when every group is live
-         if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
-            real pga = thlval[njpolar * jpi[klane] + jpk];
-            pair_ufield_v2<ETYP>(r2, xr, yr, zr, scalea, aewald, uidx[klane], uidy[klane], uidz[klane], uipx[klane],
-               uipy[klane], uipz[klane], pdi[klane], pga, ukdx, ukdy, ukdz, ukpx, ukpy, ukpz, pdk, fidx, fidy, fidz,
-               fipx, fipy, fipz, fkdx, fkdy, fkdz, fkpx, fkpy, fkpz);
-         } // end if (include)
+      real xc = akc[ty].x;
+      real yc = akc[ty].y;
+      real zc = akc[ty].z;
+      const bool ilocal = akc[ty].w != 0;
+      if (ilocal) {
+         real xr, yr, zr;
+         xr = xi - xc;
+         yr = yi - yc;
+         zr = zi - zc;
+         IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+         xi = xr;
+         yi = yr;
+         zi = zr;
+         xr = xk - xc;
+         yr = yk - yc;
+         zr = zk - zc;
+         IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+         xk = xr;
+         yk = yr;
+         zk = zr;
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            int klane = srclane + threadIdx.x - ilane;
+            bool incl = iid < kid and kid < n;
+            int srcmask = 1 << srclane;
+            incl = incl and (uinfo0 & srcmask) == 0;
+            real scalea = 1;
+            real xr = xk - xi;
+            real yr = yk - yi;
+            real zr = zk - zi;
+            real r2 = (xr * xr + yr * yr + zr * zr);
+            // a pair with a dead group has no multipole or induced dipole;
+            // grp is null when every group is live
+            if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
+               real pga = thlval[njpolar * jpi[klane] + jpk];
+               pair_ufield_v2<ETYP>(r2, xr, yr, zr, scalea, aewald, uidx[klane], uidy[klane], uidz[klane], uipx[klane],
+                  uipy[klane], uipz[klane], pdi[klane], pga, ukdx, ukdy, ukdz, ukpx, ukpy, ukpz, pdk, fidx, fidy, fidz,
+                  fipx, fipy, fipz, fkdx, fkdy, fkdz, fkpx, fkpy, fkpz);
+            } // end if (include)
 
-         iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
-         xi = __shfl_sync(ALL_LANES, xi, ilane + 1);
-         yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
-         zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
-         fidx = __shfl_sync(ALL_LANES, fidx, ilane + 1);
-         fidy = __shfl_sync(ALL_LANES, fidy, ilane + 1);
-         fidz = __shfl_sync(ALL_LANES, fidz, ilane + 1);
-         fipx = __shfl_sync(ALL_LANES, fipx, ilane + 1);
-         fipy = __shfl_sync(ALL_LANES, fipy, ilane + 1);
-         fipz = __shfl_sync(ALL_LANES, fipz, ilane + 1);
+            iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
+            xi = __shfl_sync(ALL_LANES, xi, ilane + 1);
+            yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
+            zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
+            fidx = __shfl_sync(ALL_LANES, fidx, ilane + 1);
+            fidy = __shfl_sync(ALL_LANES, fidy, ilane + 1);
+            fidz = __shfl_sync(ALL_LANES, fidz, ilane + 1);
+            fipx = __shfl_sync(ALL_LANES, fipx, ilane + 1);
+            fipy = __shfl_sync(ALL_LANES, fipy, ilane + 1);
+            fipz = __shfl_sync(ALL_LANES, fipz, ilane + 1);
+         }
+
+      } else {
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            int klane = srclane + threadIdx.x - ilane;
+            bool incl = iid < kid and kid < n;
+            int srcmask = 1 << srclane;
+            incl = incl and (uinfo0 & srcmask) == 0;
+            real scalea = 1;
+            real xr = xk - xi;
+            real yr = yk - yi;
+            real zr = zk - zi;
+            real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+            // a pair with a dead group has no multipole or induced dipole;
+            // grp is null when every group is live
+            if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
+               real pga = thlval[njpolar * jpi[klane] + jpk];
+               pair_ufield_v2<ETYP>(r2, xr, yr, zr, scalea, aewald, uidx[klane], uidy[klane], uidz[klane], uipx[klane],
+                  uipy[klane], uipz[klane], pdi[klane], pga, ukdx, ukdy, ukdz, ukpx, ukpy, ukpz, pdk, fidx, fidy, fidz,
+                  fipx, fipy, fipz, fkdx, fkdy, fkdz, fkpx, fkpy, fkpz);
+            } // end if (include)
+
+            iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
+            xi = __shfl_sync(ALL_LANES, xi, ilane + 1);
+            yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
+            zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
+            fidx = __shfl_sync(ALL_LANES, fidx, ilane + 1);
+            fidy = __shfl_sync(ALL_LANES, fidy, ilane + 1);
+            fidz = __shfl_sync(ALL_LANES, fidz, ilane + 1);
+            fipx = __shfl_sync(ALL_LANES, fipx, ilane + 1);
+            fipy = __shfl_sync(ALL_LANES, fipy, ilane + 1);
+            fipz = __shfl_sync(ALL_LANES, fipz, ilane + 1);
+         }
       }
-
       atomic_add(fidx, &field[i][0]);
       atomic_add(fidy, &field[i][1]);
       atomic_add(fidz, &field[i][2]);
@@ -242,35 +296,85 @@ void ufield_cu1(int n, TINKER_IMAGE_PARAMS, real off, const unsigned* restrict u
       gk = (grp ? grp[k] : 0);
       __syncwarp();
 
-      for (int j = 0; j < WARP_SIZE; ++j) {
-         int srclane = (ilane + j) & (WARP_SIZE - 1);
-         int klane = srclane + threadIdx.x - ilane;
-         bool incl = atomk > 0;
-         real scalea = 1;
-         real xr = xk - xi;
-         real yr = yk - yi;
-         real zr = zk - zi;
-         real r2 = image2(xr, yr, zr);
-         // a pair with a dead group has no multipole or induced dipole;
-         // grp is null when every group is live
-         if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
-            real pga = thlval[njpolar * jpi[klane] + jpk];
-            pair_ufield_v2<ETYP>(r2, xr, yr, zr, scalea, aewald, uidx[klane], uidy[klane], uidz[klane], uipx[klane],
-               uipy[klane], uipz[klane], pdi[klane], pga, ukdx, ukdy, ukdz, ukpx, ukpy, ukpz, pdk, fidx, fidy, fidz,
-               fipx, fipy, fipz, fkdx, fkdy, fkdz, fkpx, fkpy, fkpz);
-         } // end if (include)
+      real xc = akc[ty].x;
+      real yc = akc[ty].y;
+      real zc = akc[ty].z;
+      const bool ilocal = akc[ty].w != 0;
+      if (ilocal) {
+         real xr, yr, zr;
+         xr = xi - xc;
+         yr = yi - yc;
+         zr = zi - zc;
+         IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+         xi = xr;
+         yi = yr;
+         zi = zr;
+         xr = xk - xc;
+         yr = yk - yc;
+         zr = zk - zc;
+         IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+         xk = xr;
+         yk = yr;
+         zk = zr;
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            int klane = srclane + threadIdx.x - ilane;
+            bool incl = atomk > 0;
+            real scalea = 1;
+            real xr = xk - xi;
+            real yr = yk - yi;
+            real zr = zk - zi;
+            real r2 = (xr * xr + yr * yr + zr * zr);
+            // a pair with a dead group has no multipole or induced dipole;
+            // grp is null when every group is live
+            if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
+               real pga = thlval[njpolar * jpi[klane] + jpk];
+               pair_ufield_v2<ETYP>(r2, xr, yr, zr, scalea, aewald, uidx[klane], uidy[klane], uidz[klane], uipx[klane],
+                  uipy[klane], uipz[klane], pdi[klane], pga, ukdx, ukdy, ukdz, ukpx, ukpy, ukpz, pdk, fidx, fidy, fidz,
+                  fipx, fipy, fipz, fkdx, fkdy, fkdz, fkpx, fkpy, fkpz);
+            } // end if (include)
 
-         xi = __shfl_sync(ALL_LANES, xi, ilane + 1);
-         yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
-         zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
-         fidx = __shfl_sync(ALL_LANES, fidx, ilane + 1);
-         fidy = __shfl_sync(ALL_LANES, fidy, ilane + 1);
-         fidz = __shfl_sync(ALL_LANES, fidz, ilane + 1);
-         fipx = __shfl_sync(ALL_LANES, fipx, ilane + 1);
-         fipy = __shfl_sync(ALL_LANES, fipy, ilane + 1);
-         fipz = __shfl_sync(ALL_LANES, fipz, ilane + 1);
+            xi = __shfl_sync(ALL_LANES, xi, ilane + 1);
+            yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
+            zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
+            fidx = __shfl_sync(ALL_LANES, fidx, ilane + 1);
+            fidy = __shfl_sync(ALL_LANES, fidy, ilane + 1);
+            fidz = __shfl_sync(ALL_LANES, fidz, ilane + 1);
+            fipx = __shfl_sync(ALL_LANES, fipx, ilane + 1);
+            fipy = __shfl_sync(ALL_LANES, fipy, ilane + 1);
+            fipz = __shfl_sync(ALL_LANES, fipz, ilane + 1);
+         }
+
+      } else {
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            int klane = srclane + threadIdx.x - ilane;
+            bool incl = atomk > 0;
+            real scalea = 1;
+            real xr = xk - xi;
+            real yr = yk - yi;
+            real zr = zk - zi;
+            real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+            // a pair with a dead group has no multipole or induced dipole;
+            // grp is null when every group is live
+            if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
+               real pga = thlval[njpolar * jpi[klane] + jpk];
+               pair_ufield_v2<ETYP>(r2, xr, yr, zr, scalea, aewald, uidx[klane], uidy[klane], uidz[klane], uipx[klane],
+                  uipy[klane], uipz[klane], pdi[klane], pga, ukdx, ukdy, ukdz, ukpx, ukpy, ukpz, pdk, fidx, fidy, fidz,
+                  fipx, fipy, fipz, fkdx, fkdy, fkdz, fkpx, fkpy, fkpz);
+            } // end if (include)
+
+            xi = __shfl_sync(ALL_LANES, xi, ilane + 1);
+            yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
+            zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
+            fidx = __shfl_sync(ALL_LANES, fidx, ilane + 1);
+            fidy = __shfl_sync(ALL_LANES, fidy, ilane + 1);
+            fidz = __shfl_sync(ALL_LANES, fidz, ilane + 1);
+            fipx = __shfl_sync(ALL_LANES, fipx, ilane + 1);
+            fipy = __shfl_sync(ALL_LANES, fipy, ilane + 1);
+            fipz = __shfl_sync(ALL_LANES, fipz, ilane + 1);
+         }
       }
-
       atomic_add(fidx, &field[i][0]);
       atomic_add(fidy, &field[i][1]);
       atomic_add(fidz, &field[i][2]);

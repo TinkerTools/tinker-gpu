@@ -1,6 +1,7 @@
 #include "md/misc.h"
 #include "md/pq.h"
 #include "md/rattle.h"
+#include "tool/xtesthelper.h"
 
 #include "test.h"
 #include "testrt.h"
@@ -305,6 +306,53 @@ TEST_CASE("Water4-Minimize", "[ff][rattle][water4]")
 
    COMPARE_REALS(e, ref_e, eps_e);
    COMPARE_REALS(grms, ref_grms, eps_g);
+
+   session.end();
+}
+
+// energy() leaves no gradient on the extra sites, and what it gives the O-H-H
+// atoms of a water is the derivative of the energy as the extra site moves with
+// them, which the numerical gradient of testgrad follows by putting the extra
+// sites back on their frames after every displacement (test_water4.f:
+// test_water4_grad); the numerical gradient of an extra site is then zero.
+TEST_CASE("Water4-Grad", "[ff][water4][testgrad]")
+{
+   const char* k = "test_water4.key";
+   const char* x1 = "test_water4.xyz";
+
+   TestFile fke(TINKER9_DIRSTR "/test/file/tip4p/tip4p.key", k);
+   TestFile fx1(TINKER9_DIRSTR "/test/file/tip4p/tip4p.xyz", x1);
+
+   const char* argv[] = {"dummy", x1};
+   int argc = 2;
+
+   TestSession session(argc, argv);
+   rc_flag = calc::xyz | calc::mass | calc::energy | calc::grad;
+   session.init();
+
+   energy(rc_flag);
+   std::vector<double> g;
+   copyGradientFlat(calc::grad, g);
+   for (int iw = 0; iw < freeze::nwat4; ++iw) {
+      int id = freeze::iwat4[4 * iw + 3] - 1;
+      for (int j = 0; j < 3; ++j)
+         REQUIRE(g[3 * id + j] == 0);
+   }
+
+   // the default step of testgrad, whose truncation reaches 0.016 on the
+   // oxygen; mixed precision noise grows past it at smaller steps
+   const double step = 1.0e-2;
+   const double eps = 3.0e-2;
+   for (int m = 0; m < 4; ++m) {
+      int i = freeze::iwat4[m] - 1;
+      double fd[3];
+      testgradNumericalAtom(i, step, fd);
+      for (int j = 0; j < 3; ++j) {
+         CAPTURE(m, j, g[3 * i + j]);
+         COMPARE_REALS(fd[j], g[3 * i + j], eps);
+      }
+   }
+   syncXyzFromHost();
 
    session.end();
 }

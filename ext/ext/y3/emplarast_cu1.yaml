@@ -2,7 +2,12 @@ KERNEL_VERSION_NUMBER: 23
 
 OUTPUT_DIR: src/cu/amoeba
 KERNEL_NAME: emplarast_cu1
-TEMPLATE_PARAMS: template<class Ver, class ETYP>
+TEMPLATE_PARAMS: template <class Ver, class ETYP>
+# one copy for every box shape, imaged at run time (lambda runs only), and
+# the tiles near their centers imaged once, their virial from the summed forces
+LOCAL_TILES: true
+# the multipole pair forces are off the line of centers
+LOCAL_VIRIAL: symmetric
 CONSTEXPR_FLAGS: |
   constexpr bool do_e = Ver::e;
   constexpr bool do_g = Ver::g;
@@ -107,11 +112,11 @@ SCALED_PAIRWISE_INTERACTION: |
   real yr = @yk@ - @yi@;
   real zr = @zk@ - @zi@;
   real r2 = image2(xr, yr, zr);
-  real si = esc.s[@gi@], dsi = esc.ds[@gi@];
-  real sk = esc.s[@gk@], dsk = esc.ds[@gk@];
-  // an annihilated site has no multipole and no induced dipole
-  bool weighted = (si != 0 or dsi != 0) and (sk != 0 or dsk != 0);
-  if (r2 <= off * off and incl and weighted and grpPairLive(live, @gi@, @gk@)) {
+  // the live groups leave out an annihilated site, which has no multipole
+  // and no induced dipole
+  if (r2 <= off * off and incl and grpPairLive(live, @gi@, @gk@)) {
+    real si = esc.s[@gi@], dsi = esc.ds[@gi@];
+    real sk = esc.s[@gk@], dsk = esc.ds[@gk@];
     real e1, vxx1, vyx1, vzx1, vyy1, vzy1, vzz1;
     if CONSTEXPR (do_g) {
       // the energy comes from pairMplarEnergyAst below
@@ -147,7 +152,7 @@ SCALED_PAIRWISE_INTERACTION: |
       if CONSTEXPR (do_dl1)
         demdltl += floatTo<ebuf_prec>(e2.y);
     }
-    if CONSTEXPR (do_v) {
+    if CONSTEXPR (do_v and not tile_local) {
       vbuftlxx += floatTo<vbuf_prec>(vxx1);
       vbuftlyx += floatTo<vbuf_prec>(vyx1);
       vbuftlzx += floatTo<vbuf_prec>(vzx1);
@@ -161,11 +166,11 @@ FULL_PAIRWISE_INTERACTION: |
   real yr = @yk@ - @yi@;
   real zr = @zk@ - @zi@;
   real r2 = image2(xr, yr, zr);
-  real si = esc.s[@gi@], dsi = esc.ds[@gi@];
-  real sk = esc.s[@gk@], dsk = esc.ds[@gk@];
-  // an annihilated site has no multipole and no induced dipole
-  bool weighted = (si != 0 or dsi != 0) and (sk != 0 or dsk != 0);
-  if (r2 <= off * off and incl and weighted and grpPairLive(live, @gi@, @gk@)) {
+  // the live groups leave out an annihilated site, which has no multipole
+  // and no induced dipole
+  if (r2 <= off * off and incl and grpPairLive(live, @gi@, @gk@)) {
+    real si = esc.s[@gi@], dsi = esc.ds[@gi@];
+    real sk = esc.s[@gk@], dsk = esc.ds[@gk@];
     real pga = thlval[njpolar * jpi[klane] + jpk];
     real e, vxx, vyx, vzx, vyy, vzy, vzz;
     real edl = 0;
@@ -189,7 +194,7 @@ FULL_PAIRWISE_INTERACTION: |
       if CONSTEXPR (do_dl1)
         demdltl += floatTo<ebuf_prec>(edl);
     }
-    if CONSTEXPR (do_v) {
+    if CONSTEXPR (do_v and not tile_local) {
       vbuftlxx += floatTo<vbuf_prec>(vxx);
       vbuftlyx += floatTo<vbuf_prec>(vyx);
       vbuftlzx += floatTo<vbuf_prec>(vzx);

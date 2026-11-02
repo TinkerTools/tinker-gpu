@@ -1,6 +1,12 @@
 OUTPUT_DIR: src/cu/amoeba
 KERNEL_NAME: epolardt_cu1
-TEMPLATE_PARAMS: template<class Ver, class ETYP>
+TEMPLATE_PARAMS: template <class Ver, class ETYP>
+# one copy for every box shape, imaged at run time (lambda runs only), and
+# the tiles near their centers imaged once, their virial from the summed forces
+# (scaled by wa, and by wb for its lambda derivative)
+LOCAL_TILES: true
+# the multipole pair forces are off the line of centers
+LOCAL_VIRIAL: symmetric
 CONSTEXPR_FLAGS: |
   constexpr bool do_e = Ver::e and Ver::a;
   constexpr bool do_a = Ver::a;
@@ -160,7 +166,7 @@ SCALED_PAIRWISE_INTERACTION: |
           neptl += 1;
       }
     }
-    if CONSTEXPR (do_v) {
+    if CONSTEXPR (do_v and not tile_local) {
       real tvxx = vxx + vxx1;
       real tvyx = vyx + vyx1;
       real tvzx = vzx + vzx1;
@@ -212,7 +218,7 @@ FULL_PAIRWISE_INTERACTION: |
           neptl += 1;
       }
     }
-    if CONSTEXPR (do_v) {
+    if CONSTEXPR (do_v and not tile_local) {
       veptlxx += floatTo<vbuf_prec>(wa * vxx);
       veptlyx += floatTo<vbuf_prec>(wa * vyx);
       veptlzx += floatTo<vbuf_prec>(wa * vzx);

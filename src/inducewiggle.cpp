@@ -21,7 +21,7 @@ static bool s_on = false;       // keyword INDUCE-WIGGLE in MD
 static bool s_failed = false;   // a solver failed in this energy evaluation
 static bool s_retrying = false; // atoms were wiggled; disable the predictor
 static int s_ntry = 0;          // wiggles for the current energy evaluation
-static bool s_trial = false;    // an InducedTrial is alive
+MAYBE_UNUSED static bool s_trial = false; // an InducedTrial is alive (read only by assert)
 static bool s_bypass = false;   // and its solves bypass the predictor history
 // What a trial puts back, created on the first trial of a polarizable system.
 // It is freed with the system and never at exit, where a run that ends on an

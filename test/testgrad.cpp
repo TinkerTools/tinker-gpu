@@ -35,14 +35,17 @@ const Fixture kFixtures[] = {
    {"10_aplus_polpair", "aplus2022/tetramer.xyz", "aplus2022/AMOEBAplus_Org.prm"},
    {"11_hippo_ast_l05", "dmso/dmso.xyz", "hippo/hippo19.prm", 2.0e-2},
    {"12_hipwat_group_inter", "testgrad/hipwat.xyz", "commit_aad9340c/water21.prm"},
-   // Ewald dispersion of the DMSO box is 4e-3 off in mixed precision, with or
-   // without the mutation; a double build reproduces it
-   {"16_hippo_dewald_dec_l05", "dmso/dmso.xyz", "hippo/hippo19.prm", 2.0e-2, 1.0e-4, 6.0e-3},
+   {"13_hipwat_group_inter_mlist", "testgrad/hipwat.xyz", "commit_aad9340c/water21.prm"},
+   {"14_hipwat_group_ost_l04", "testgrad/hipwat.xyz", "commit_aad9340c/water21.prm"},
+   {"15_hipwat_group_ost_mlist_l04", "testgrad/hipwat.xyz", "commit_aad9340c/water21.prm"},
+   {"16_hippo_dewald_dec_l05", "dmso/dmso.xyz", "hippo/hippo19.prm", 2.0e-2},
    {"17_hipwat_group_ct_replica", "testgrad/hipwat.xyz", "commit_aad9340c/water21.prm"},
    {"18_hippo_rep_sc_real_l04", "dmso/dmso.xyz", "hippo/hippo19.prm", 2.0e-2},
-   // 7e-3 off in mixed precision for the same reason, mutated or not
-   {"19_hippo_disp_sc_l04", "dmso/dmso.xyz", "hippo/hippo19.prm", 2.0e-2, 1.0e-4, 1.0e-2},
+   {"19_hippo_disp_sc_l04", "dmso/dmso.xyz", "hippo/hippo19.prm", 2.0e-2},
    {"21_hippo_dewald_group_l04", "dmso/dmso.xyz", "hippo/hippo19.prm"},
+   {"22_water_dhal_nlist", "testgrad/water2.xyz", "commit_6bd0b6fd/water03.prm"},
+   {"25_water_dhal_override", "testgrad/water2.xyz", "commit_6bd0b6fd/water03.prm"},
+   {"26_water_dhal_beyond_vcut", "testgrad/water2.xyz", "commit_6bd0b6fd/water03.prm"},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
@@ -59,7 +62,8 @@ const Fixture& fx(const char* name)
 // Finite difference stepsize, in Angstroms.
 constexpr double kEps = 1.0e-2;
 
-void runFixture(const Fixture& fx)
+// keys, if given, is added to the key file of the fixture.
+void runFixture(const Fixture& fx, const char* keys = nullptr)
 {
    // The lambda fixtures leave the derivative machinery switched on; clear it
    // once the case ends, however it ends.
@@ -70,7 +74,7 @@ void runFixture(const Fixture& fx)
 
    TestFile fxyz(files + fx.xyz, xyzname);
    std::string keyname = std::string(fx.name) + ".key";
-   TestFile fkey(files + "testgrad/" + keyname, keyname);
+   TestFile fkey(files + "testgrad/" + keyname, keyname, keys ? keys : "");
    TestFile fprm(files + fx.prm);
 
    const char* argv[] = {"dummy", xyzname.c_str(), "-k", keyname.c_str()};
@@ -106,9 +110,10 @@ void runFixture(const Fixture& fx)
    session.end();
 }
 
-// A fixture whose key tinker9 refuses as it sets up. The throw comes from
-// elecData(), before pmeData() opens anything a later case could trip on.
-void runRefusedFixture(const Fixture& fx)
+// A fixture whose key tinker9 refuses as it sets up, with a message containing
+// what, so that a throw for another reason does not pass. The throws come
+// before pmeData() opens anything a later case could trip on.
+void runRefusedFixture(const Fixture& fx, const char* what)
 {
    TestLmdaFlagReset lmdaReset;
 
@@ -126,7 +131,7 @@ void runRefusedFixture(const Fixture& fx)
    FdTestOptions opts;
    opts.analyt = true;
    rc_flag = testgradFlags(opts);
-   REQUIRE_THROWS(session.init());
+   REQUIRE_THROWS_WITH(session.init(), Catch::Matchers::ContainsSubstring(what));
 }
 }
 
@@ -149,12 +154,32 @@ TEST_CASE("TESTGRAD-19_hippo_disp_sc_l04", "[ff][testgrad][hippo][disp]") { runF
 // Pauli repulsion of a decoupled DMSO with a non-integer REPEL-SOFTCORE
 // exponent and shift shape, by neighbor list (test_testgrad.f case 18).
 TEST_CASE("TESTGRAD-18_hippo_rep_sc_real_l04", "[ff][testgrad][hippo][repel]") { runFixture(fx("18_hippo_rep_sc_real_l04")); }
+// the refusal of atom group weights (groupData)
+const char* const kGroupWeights = "Atom group weights";
 // tinker9 applies no atom group weights to any term, so it refuses these keys
 // rather than compute the unweighted energy (test_testgrad.f cases 12 to 15,
 // 17 with charge transfer alone, and 21 with Ewald dispersion alone).
-TEST_CASE("TESTGRAD-12_hipwat_group_inter", "[ff][testgrad][hippo]") { runRefusedFixture(fx("12_hipwat_group_inter")); }
-TEST_CASE("TESTGRAD-17_hipwat_group_ct_replica", "[ff][testgrad][hippo]") { runRefusedFixture(fx("17_hipwat_group_ct_replica")); }
-TEST_CASE("TESTGRAD-21_hippo_dewald_group_l04", "[ff][testgrad][hippo][disp]") { runRefusedFixture(fx("21_hippo_dewald_group_l04")); }
+TEST_CASE("TESTGRAD-12_hipwat_group_inter", "[ff][testgrad][hippo]") { runRefusedFixture(fx("12_hipwat_group_inter"), kGroupWeights); }
+TEST_CASE("TESTGRAD-13_hipwat_group_inter_mlist", "[ff][testgrad][hippo]") { runRefusedFixture(fx("13_hipwat_group_inter_mlist"), kGroupWeights); }
+TEST_CASE("TESTGRAD-14_hipwat_group_ost_l04", "[ff][testgrad][hippo]") { runRefusedFixture(fx("14_hipwat_group_ost_l04"), kGroupWeights); }
+TEST_CASE("TESTGRAD-15_hipwat_group_ost_mlist_l04", "[ff][testgrad][hippo]") { runRefusedFixture(fx("15_hipwat_group_ost_mlist_l04"), kGroupWeights); }
+TEST_CASE("TESTGRAD-17_hipwat_group_ct_replica", "[ff][testgrad][hippo]") { runRefusedFixture(fx("17_hipwat_group_ct_replica"), kGroupWeights); }
+TEST_CASE("TESTGRAD-21_hippo_dewald_group_l04", "[ff][testgrad][hippo][disp]") { runRefusedFixture(fx("21_hippo_dewald_group_l04"), kGroupWeights); }
+// The buffered 14-7 vdW of AMOEBA water hands its tail to Ewald dispersion,
+// with C6 values mapped from it on every site, and with an explicit undamped
+// C6 on the oxygen class and zero on one oxygen (test_testgrad.f cases 22 and
+// 25; 23 and 24 need replica images).
+TEST_CASE("TESTGRAD-22_water_dhal_nlist", "[ff][testgrad][disp][dhal]") { runFixture(fx("22_water_dhal_nlist")); }
+TEST_CASE("TESTGRAD-25_water_dhal_override", "[ff][testgrad][disp][dhal]") { runFixture(fx("25_water_dhal_override")); }
+// Fixture 22 with an Ewald dispersion cutoff beyond the vdW cutoff, where the
+// tail carries its whole weight (test_testgrad.f case 26).
+TEST_CASE("TESTGRAD-26_water_dhal_beyond_vcut", "[ff][testgrad][disp][dhal]") { runFixture(fx("26_water_dhal_beyond_vcut")); }
+// The Ewald tail takes the place of the vdW long-range correction, which the
+// same fixture leaves out when asked for it (ehal1.f).
+TEST_CASE("TESTGRAD-22_water_dhal_nlist-vcorr", "[ff][testgrad][disp][dhal]")
+{
+   runFixture(fx("22_water_dhal_nlist"), "\nvdw-correction\n");
+}
 
 #if TINKER_GPULANG_CUDA
 TEST_CASE("TESTGRAD-04_water_ast_ye_l10", "[ff][testgrad][ast]") { runFixture(fx("04_water_ast_ye_l10")); }

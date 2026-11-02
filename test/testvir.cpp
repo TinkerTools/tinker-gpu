@@ -19,6 +19,8 @@ struct Fixture
    const char* prm; ///< Parameters, under test/file.
    double atol = 1.0e-3; ///< Tolerance of the analytical virial in mixed precision.
    double ntol = 5.0e-2; ///< Tolerance of the numerical virial in mixed precision.
+   double step = 0.02;   ///< Finite difference stepsize of the lattice vectors, in Angstroms.
+   double dstep = 0.02;  ///< The stepsize in double precision.
 };
 
 const Fixture kFixtures[] = {
@@ -31,12 +33,18 @@ const Fixture kFixtures[] = {
    {"07_mpole_lambda_nlist_l05", "testvir/ionwat.xyz", "commit_ebe3611e/amoeba09.prm"},
    {"08_mpole_cflux_lambda_l04", "testvir/apgas.xyz", "commit_152ecec0/AMOEBAplus_Org.prm"},
    {"09_mpole_cflux_l04", "testvir/apgas.xyz", "commit_152ecec0/AMOEBAplus_Org.prm"},
-   // Ewald dispersion of the DMSO box: in mixed precision, with or without the
-   // mutation, the analytical diagonal is 8e-3 off and the numerical yz 0.12
-   {"10_disp_dewald_ann_l05", "dmso/dmso.xyz", "hippo/hippo19.prm", 1.5e-2, 0.15},
+   // the numerical virial of the DMSO box, a finite difference of mixed
+   // precision energies, is 0.11 off in yz
+   {"10_disp_dewald_ann_l05", "dmso/dmso.xyz", "hippo/hippo19.prm", 1.0e-3, 0.15},
    // the long range dispersion correction with a wide taper window, whose
    // virial is minus its energy
    {"12_disp_corr", "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
+   // the box has steep Lennard-Jones contacts, its yy virial -28400: at the
+   // default step their truncation takes the numerical virial 1.6 off, 7e-3
+   // at 2e-3 in double precision, while the single precision pair energies
+   // leave it 1.8 off at 1e-2 in mixed precision and more at any other step
+   {"15_tip3_ljchg_lambda_nlist_l05", "testlmda/tip3box.xyz", "commit_350df099/amber99sb.prm", 1.0e-3, 3.0, 1.0e-2,
+      2.0e-3},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
@@ -71,7 +79,7 @@ void runFixture(const Fixture& fx)
    rc_flag = testvirFlags();
    session.init();
 
-   auto r = testvirEvaluate();
+   auto r = testvirEvaluate(testGetEps(fx.step, fx.dstep));
    REQUIRE(r.numer);
    TestReference ref(std::string(TINKER9_DIRSTR "/test/ref/testvir/") + fx.name + ".txt");
 
@@ -103,6 +111,8 @@ TEST_CASE("TESTVIR-09_mpole_cflux_l04", "[ff][testvir][cflux]") { runFixture(fx(
 // Ewald dispersion of an annihilated DMSO, whose reciprocal and self terms
 // follow the van der Waals lambda (test_testvir.f case 10).
 TEST_CASE("TESTVIR-10_disp_dewald_ann_l05", "[ff][testvir][hippo][disp]") { runFixture(fx("10_disp_dewald_ann_l05")); }
+// Case 11 needs replica images, its 7 A charge transfer cutoff reaching past
+// half of its 12 A box, which tinker9 does not have.
 TEST_CASE("TESTVIR-12_disp_corr", "[ff][testvir][hippo][disp]") { runFixture(fx("12_disp_corr")); }
 
 #if TINKER_GPULANG_CUDA
@@ -111,6 +121,11 @@ TEST_CASE("TESTVIR-07_mpole_lambda_nlist_l05", "[ff][testvir][ast]") { runFixtur
 // 09 through the multipole lambda derivative, where the background term's flux
 // virial comes from the net flux change of each lambda group.
 TEST_CASE("TESTVIR-08_mpole_cflux_lambda_l04", "[ff][testvir][ast][cflux]") { runFixture(fx("08_mpole_cflux_lambda_l04")); }
+// A TIP3P water decoupled from an AMBER box through the soft core
+// Lennard-Jones and scaled partial charges, with the lambda derivatives on,
+// under Ewald with a neighbor list and the long range correction
+// (test_testvir.f case 15).
+TEST_CASE("TESTVIR-15_tip3_ljchg_lambda_nlist_l05", "[ff][testvir][charge][lj]") { runFixture(fx("15_tip3_ljchg_lambda_nlist_l05")); }
 #endif
 
 // tinker9 has no vacuum cell dipole term, so pmeData() refuses EWALD-BOUNDARY.

@@ -83,6 +83,7 @@ spatial.cpp
 switch.cpp
 termbuf.cpp
 tinkersuppl.cpp
+unsupported.cpp
 watermc.cpp
 xanalyze.cpp
 xbar.cpp

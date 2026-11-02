@@ -41,18 +41,25 @@ static void emplar_cu(const real (*uind)[3], const real (*uinp)[3])
             nullptr, em, rpole, n, f, aewald);
       }
    }
+   const int* dead = elecDeadGroups();
+   const RdtMask live = elecLiveMask();
    int ngrid = gpuGridSize(BLOCK_DIM);
-   auto kera = emplar_cu1a<Ver, ETYP>;
-   kera<<<ngrid, BLOCK_DIM, 0, g::s0>>>(TINKER_IMAGE_ARGS, em, vir_em, demx, demy, demz, off, trqx, trqy, trqz, rpole,
-      uind, uinp, f, aewald, elecDeadGroups(), elecLiveMask(), //
-      st.sorted, st.niak, st.iak, st.lst);
-   auto kerb = emplar_cu1b<Ver, ETYP>;
-   kerb<<<ngrid, BLOCK_DIM, 0, g::s0>>>(TINKER_IMAGE_ARGS, em, vir_em, demx, demy, demz, off, trqx, trqy, trqz, rpole,
-      uind, uinp, f, aewald, elecDeadGroups(), elecLiveMask(), //
-      st.sorted, st.n, st.nakpl, st.iakpl);
-   auto kerc = emplar_cu1c<Ver, ETYP>;
+   boxShapeDispatch(box_shape, [&](auto img) {
+      using IMG = decltype(img);
+      auto kera = emplar_cu1a<Ver, IMG, ETYP>;
+      kera<<<ngrid, BLOCK_DIM, 0, g::s0>>>(TINKER_IMAGE_ARGS, em, vir_em, demx, demy, demz, off, trqx, trqy, trqz,
+         rpole, uind, uinp, f, aewald, dead, live, //
+         st.sorted, st.niak, st.iak, st.lst, st.akc);
+      auto kerb = emplar_cu1b<Ver, IMG, ETYP>;
+      kerb<<<ngrid, BLOCK_DIM, 0, g::s0>>>(TINKER_IMAGE_ARGS, em, vir_em, demx, demy, demz, off, trqx, trqy, trqz,
+         rpole, uind, uinp, f, aewald, dead, live, //
+         st.sorted, st.n, st.nakpl, st.iakpl, st.akc);
+   });
+   // The exclusion pairs take no Ewald term (their body is NON_EWALD) and are
+   // few, so one copy serves both ETYP and every box shape.
+   auto kerc = emplar_cu1c<Ver, PbcGeneral, NON_EWALD>;
    kerc<<<ngrid, BLOCK_DIM, 0, g::s0>>>(TINKER_IMAGE_ARGS, em, vir_em, demx, demy, demz, off, trqx, trqy, trqz, rpole,
-      uind, uinp, f, aewald, elecDeadGroups(), elecLiveMask(), //
+      uind, uinp, f, aewald, dead, live, //
       nmdpuexclude, mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z);
 }
 

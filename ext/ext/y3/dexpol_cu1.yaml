@@ -1,6 +1,13 @@
 OUTPUT_DIR: src/cu/hippo
 KERNEL_NAME: dexpol_cu1
-TEMPLATE_PARAMS: template<class Ver>
+TEMPLATE_PARAMS: template <class Ver, class IMG>
+# the box shape as a template parameter, and the tiles near their centers
+# imaged once, their virial from the summed forces (scaled by wa, and by wb
+# for its lambda derivative)
+IMAGE_TEMPLATE: IMG
+LOCAL_TILES: true
+# the exchange polarization pair forces are off the line of centers
+LOCAL_VIRIAL: symmetric
 CONSTEXPR_FLAGS: |
   constexpr bool do_g = Ver::g;
   constexpr bool do_v = Ver::v;
@@ -86,7 +93,7 @@ FULL_PAIRWISE_INTERACTION: |
     @frcyk@ -= frc[1];
     @frczk@ -= frc[2];
 
-    if CONSTEXPR (do_v) {
+    if CONSTEXPR (do_v and not tile_local) {
       real vxx = -xr * frc[0];
       real vxy = -0.5f * (yr * frc[0] + xr * frc[1]);
       real vxz = -0.5f * (zr * frc[0] + xr * frc[2]);

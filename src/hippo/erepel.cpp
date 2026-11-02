@@ -167,9 +167,9 @@ void erepelData(RcOp op)
    }
 }
 
-SoftCoreLmda repelSoft(bool dodl)
+SoftCoreLmda repelSoft(int ig, bool dodl)
 {
-   return softCoreLmda(vlam, scexpr, scalphar, scexprm, scexprp, dvldlmda, d2vldlmda2, dodl);
+   return grpSoftCore(ig, {scexpr, scalphar, scexprm, scexprp}, dodl);
 }
 
 TINKER_FVOID2(acc1, cu1, rotrepole);
@@ -216,7 +216,7 @@ void erepel(int vers)
    // The lambda derivatives follow vlambda and go to the van der Waals
    // channels, while its map has slope or curvature (erepel1.f).
    const int dlvers = lmdaDerivVers(vers, vdlmdaActive());
-   vdwLmdaZero(vers);
+   lmdaChannel(LmdaTerm::VDW).zero(vers);
    repoleInit(dlvers);
 
    TINKER_FCALL2(acc1, cu1, erepel, dlvers);
@@ -224,7 +224,7 @@ void erepel(int vers)
    torque(vers, derx, dery, derz);
    if (dlvers & (calc::grad_dlmda | calc::virial_dlmda))
       torque(vers, dfdlx, dfdly, dfdlz, dltrqx, dltrqy, dltrqz, dvirdl_buf);
-   vdwLmdaFlush(vers);
+   lmdaChannel(LmdaTerm::VDW).flush(vers);
    if (do_v) {
       VirialBuffer u2 = vir_trq;
       virial_prec v2[9];

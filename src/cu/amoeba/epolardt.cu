@@ -61,10 +61,10 @@ static void epolardt_cu(const real (*uind)[3], const real (*uinp)[3], real wa, r
    if CONSTEXPR (do_g)
       darray::zero(g::q0, n, ufld, dufld);
    int ngrid = gpuGridSize(BLOCK_DIM);
-   epolardt_cu1<Ver, ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nep, ep,
-      vir_ep, dvirdl_buf, depx, depy, depz, dfdlx, dfdly, dfdlz, off, st.si1.bit0, nmdpuexclude, mdpuexclude,
-      mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, ufld, dufld,
-      rpole, uind, uinp, f, aewald, wa, wb, elecDeadGroups(), elecLiveMask());
+   epolardt_cu1<Ver, ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nep, ep, vir_ep, dvirdl_buf, depx,
+      depy, depz, dfdlx, dfdly, dfdlz, off, st.si1.bit0, nmdpuexclude, mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z,
+      st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, st.akc, ufld, dufld, rpole, uind, uinp, f, aewald, wa, wb,
+      elecDeadGroups(), elecLiveMask());
 
    // torque
    if CONSTEXPR (do_g) {

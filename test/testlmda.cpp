@@ -8,6 +8,7 @@
 #include "testrt.h"
 #include "tinker9.h"
 
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <string>
@@ -45,7 +46,9 @@ const Fixture kFixtures[] = {
    {"08_water_ast_vcorr_annih_l05"},
    {"09_water_ast_vcorr_l06exp"},
    {"10_water_rels_vdwm_vcorr_annih_l05"},
-   {"11_water_rels_vdwm_vcorr_l050", 2.0e-3, 2.0},
+   // at a step of 2e-3 the round-off of the other terms puts the numerical
+   // d2E 0.19 off as a rule and up to 0.76 now and then, on the old build too
+   {"11_water_rels_vdwm_vcorr_l050", 2.0e-3, 5.0},
    {"12_water_rels_lig1_l085", 4.0e-3, 3.0},
    {"13_water_rels_lig2_l015", 4.0e-3, 3.0, 5.0e-4},
    {"14_water_rels_lig1_ne_l085", 4.0e-3, 3.0},
@@ -101,6 +104,7 @@ const Fixture kFixtures[] = {
    {"50_aptetra_pol_ewald_dt_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/aptetra.xyz", "commit_152ecec0/AMOEBAplus_Org.prm"},
    {"52_apgas_pol_ewald_dt_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/apgas.xyz", "commit_152ecec0/AMOEBAplus_Org.prm"},
    {"54_hipmix_pol_ewald_dt_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
+   {"55_hipwat_group_ost_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/hipwat.xyz", "commit_aad9340c/water21.prm"},
    {"56_hipwat_pol_split_dt_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/hipwat.xyz", "commit_aad9340c/water21.prm", 4.0e-3},
    {"59_aptetra_pol_mlist_dt_l04", 1.0e-2, 1.0, 5.0e-4, "testlmda/aptetra.xyz", "commit_152ecec0/AMOEBAplus_Org.prm"},
    {"60_aptetra_rel_lig1_l085", 4.0e-3, 3.0, 6.0e-4, "testlmda/aptetra.xyz", "commit_152ecec0/AMOEBAplus_Org.prm",
@@ -195,6 +199,65 @@ const Fixture kFixtures[] = {
    // at 1e-3 and quarters the mixed precision round-off of the finite difference
    // d2E/dL2, 0.06 to 0.24 at a step of 5e-3 depending on the build and the GPU
    {"125_hipmix_dsp_ewald_inv_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/hipmix.xyz", "commit_4a558d00/hippo19.prm"},
+   {"126_water_rep_rels_vdwm_l05", 1.0e-2, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_aad9340c/water21.prm"},
+   {"127_water_rep_rels_vdwm_nlist_l05", 1.0e-2, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_aad9340c/water21.prm"},
+   {"128_water_rep_rels_vdwm_annih_l05", 1.0e-2, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_aad9340c/water21.prm"},
+   // the quintic map leaves 0.55 of truncation in d2E/dL2 at a step of 1e-2,
+   // 0.1 at 5e-3, where mixed precision round-off starts to grow
+   {"129_water_rep_rels_vdwm_qnt_l035", 5.0e-3, 2.0, 1.0e-4, "testlmda/water2.xyz", "commit_aad9340c/water21.prm"},
+   // mid-way through the quintic window of the 0.4 wide vdwm leg, a step of
+   // 1e-2 leaves 0.7 of truncation in dE/dL and 4e-3 still 0.11; at 1e-3 every
+   // numerical gap is under 0.05
+   {"130_water_rep_rels3_l050", 1.0e-3, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_aad9340c/water21.prm"},
+   {"131_water_rep_rels3_l085", 1.0e-2, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_aad9340c/water21.prm"},
+   {"132_water_rep_rels3_l015", 1.0e-2, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_aad9340c/water21.prm"},
+   {"134_water_dsp_rels_vdwm_l05", 1.0e-2, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_aad9340c/water21.prm"},
+   {"135_water_dsp_rels_vdwm_nlist_l05", 1.0e-2, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_aad9340c/water21.prm"},
+   {"136_water_dsp_rels_vdwm_annih_l05", 1.0e-2, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_aad9340c/water21.prm"},
+   {"137_water_dsp_rels_vdwm_corr_l03", 1.0e-2, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_aad9340c/water21.prm"},
+   {"138_water_dsp_ewald_rels_vdwm_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_aad9340c/water21.prm"},
+   {"139_water_dsp_ewald_rels_vdwm_nlist_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_aad9340c/water21.prm"},
+   {"140_water_dsp_ewald_rels_vdwm_annih_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_aad9340c/water21.prm"},
+   {"141_water_dsp_ewald_rels_vdwm_qnt_l035", 1.0e-2, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_aad9340c/water21.prm"},
+   // mid-way through the vdwm leg as 130 is, where a step of 1e-2 leaves 0.09
+   // of truncation in dE/dL
+   {"142_water_dsp_ewald_rels3_l050", 1.0e-3, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_aad9340c/water21.prm"},
+   {"143_water_dsp_ewald_rels3_l085", 1.0e-2, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_aad9340c/water21.prm"},
+   {"144_water_dsp_ewald_rels3_l015", 1.0e-2, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_aad9340c/water21.prm"},
+   {"146_water_dsp_ewald_annih_all_l00", 1.0e-2, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_aad9340c/water21.prm"},
+   {"147_water_dhal_l05", 1.0e-2, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_6bd0b6fd/water03.prm"},
+   {"148_water_dhal_rels_vdwm_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_6bd0b6fd/water03.prm"},
+   // mid-way through the 0.3 wide quintic ligand legs, as the staged charging
+   // fixtures are: a step of 1e-2 leaves 0.46 of truncation in dE/dL, and
+   // mixed precision round-off in d2E/dL2 reaches 0.4 at 4e-3
+   {"149_water_dhal_rels3_l015", 4.0e-3, 3.0, 1.0e-4, "testlmda/water2.xyz", "commit_6bd0b6fd/water03.prm"},
+   {"150_water_dhal_rels3_l085", 4.0e-3, 3.0, 1.0e-4, "testlmda/water2.xyz", "commit_6bd0b6fd/water03.prm"},
+   {"151_water_dhal_rels_vdwm_damp_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/water2.xyz", "commit_6bd0b6fd/water03.prm"},
+   // The TIP3P box under Ewald in mixed precision: the float atomics of the
+   // charge grid and the single precision charge scaling leave d2E/dL2 a
+   // numerical difference 0.1 +/- 0.1 off at this step, up to 0.25, by either
+   // the fused or the separate charge and Lennard-Jones kernels; a larger step
+   // lets the soft core truncation into dV/dL.
+   {"153_tip3_lj_l04", 1.0e-2, 2.0, 1.0e-4, "testlmda/tip3box.xyz", "commit_350df099/amber99sb.prm"},
+   {"154_tip3_lj_nlist_soft_l03", 1.0e-2, 2.0, 1.0e-4, "testlmda/tip3box.xyz", "commit_350df099/amber99sb.prm"},
+   {"155_tip3_lj_lights_annih_l03", 1.0e-2, 2.0, 1.0e-4, "testlmda/tip3box.xyz", "commit_350df099/amber99sb.prm"},
+   {"156_tip3_chg_l04", 1.0e-2, 2.0, 1.0e-4, "testlmda/tip3box.xyz", "commit_350df099/amber99sb.prm"},
+   // the charge scaling alone takes this one -0.24 +/- 0.06 off, up to -0.42
+   {"157_tip3_both_nlist_l06", 1.0e-2, 3.0, 1.0e-4, "testlmda/tip3box.xyz", "commit_350df099/amber99sb.prm"},
+   {"158_tip3_both_lights_inv_l05", 1.0e-2, 2.0, 1.0e-4, "testlmda/tip3box.xyz", "commit_350df099/amber99sb.prm"},
+   {"160_trp_both_cut_neutral_l05", 1.0e-2, 1.0, 1.0e-4, "trpcage/trp_charmm.xyz", "commit_11e84c69/charmm19.prm"},
+   {"162_trp_chg_exfield_l05", 1.0e-2, 1.0, 1.0e-4, "trpcage/trp_charmm.xyz", "commit_11e84c69/charmm19.prm"},
+   {"163_tip3_rels_lig2_l04", 1.0e-2, 2.0, 1.0e-4, "testlmda/tip3box.xyz", "commit_350df099/amber99sb.prm"},
+   {"164_tip3_rels_vdwm_nlist_l04", 1.0e-2, 2.0, 1.0e-4, "testlmda/tip3box.xyz", "commit_350df099/amber99sb.prm"},
+   // mid-way through the 0.3 wide quintic ligand legs, as 149 and 150 are, on
+   // a larger box: a step of 1e-2 leaves 0.3 of truncation in dE/dL, while at
+   // 4e-3 the float atomics of the charge grid move d2E/dL2 by up to 0.9; at
+   // 6e-3 they leave 0.13 and 0.22 of truncation in dE/dL and dF/dL and up to
+   // 0.55 of round-off in d2E/dL2, and the squared slope of the map takes the
+   // mixed precision analytical d2E/dL2 2.7e-3 off
+   {"165_tip3_rels3_l015", 6.0e-3, 4.0, 1.0e-4, "testlmda/tip3box.xyz", "commit_350df099/amber99sb.prm", 3.0e-3},
+   {"166_tip3_rels3_lights_l085", 6.0e-3, 4.0, 1.0e-4, "testlmda/tip3box.xyz", "commit_350df099/amber99sb.prm", 3.0e-3},
+   {"167_trp_chg_ewald_l05", 1.0e-2, 1.0, 1.0e-4, "trpcage/trp_charmm.xyz", "commit_11e84c69/charmm19.prm"},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
@@ -278,9 +341,17 @@ void runFixture(const Fixture& fx, bool analyz = true)
    const double eps_n1 = 5.0e-2 * fx.ntol;
    const double eps_n2 = 2.0e-1 * fx.ntol;
    const double eps_nf = 1.0e-1 * fx.ntol;
+   // No looser than half the value above a floor at the truncation error, so
+   // that a numerical derivative of zero cannot pass for a small one. In mixed
+   // precision round-off dominates the second derivative, which keeps its
+   // absolute tolerance there.
+   const double floor_n2 = testGetEps(eps_n2, 2.0e-2 * fx.ntol);
+   auto nearRef = [](double eps, double ref, double floor) {
+      return std::min(eps, std::max(0.5 * std::abs(ref), floor));
+   };
    for (int k = 0; k < nterm; ++k) {
-      COMPARE_REALS(r.ndedl[k], ref.dedl[k], eps_n1);
-      COMPARE_REALS(r.nd2edl2[k], ref.d2edl2[k], eps_n2);
+      COMPARE_REALS(r.ndedl[k], ref.dedl[k], nearRef(eps_n1, ref.dedl[k], 2.0e-3 * fx.ntol));
+      COMPARE_REALS(r.nd2edl2[k], ref.d2edl2[k], nearRef(eps_n2, ref.d2edl2[k], floor_n2));
    }
    COMPARE_GRADIENT_FLAT(r.ndfdl, ref.lgrad, eps_nf);
    COMPARE_VIR9(r.ndvirdl, ref.dvdl, eps_nf);
@@ -318,9 +389,10 @@ void runRepeatedFixture(const Fixture& fx)
    session.end();
 }
 
-// A fixture whose key tinker9 refuses as it sets up. The throw comes from
-// elecData(), before pmeData() opens anything a later case could trip on.
-void runRefusedFixture(const Fixture& fx)
+// A fixture whose key tinker9 refuses as it sets up, with a message containing
+// what, so that a throw for another reason does not pass. The throws come
+// before pmeData() opens anything a later case could trip on.
+void runRefusedFixture(const Fixture& fx, const char* what)
 {
    TestLmdaFlagReset lmdaReset;
 
@@ -339,7 +411,7 @@ void runRefusedFixture(const Fixture& fx)
    opts.analyt = true;
    opts.numer = true;
    rc_flag = testlmdaFlags(opts);
-   REQUIRE_THROWS(session.init());
+   REQUIRE_THROWS_WITH(session.init(), Catch::Matchers::ContainsSubstring(what));
 }
 
 // The long range correction from its class sums against Fortran evcorr1 at a
@@ -379,7 +451,7 @@ void runLrcFixture(const Fixture& fx, bool dsp)
       else
          tinker_f_evcorr1({const_cast<char*>("VDW   "), 6}, &elrc, &vlrc, &delrc, &dvlrc, &d2elrc);
       // with respect to vlambda itself
-      const LmdaFn f = lrcEval(ls, vl, 1, 0);
+      const LmdaFn f = lrcEval(ls, {vl, 1, 0}, true);
       const double e = f.f, de = f.d1, d2e = f.d2;
       auto near = [](double a, double b) { return std::fabs(a - b) <= 1.0e-12 * std::fabs(b) + 1.0e-15; };
       CAPTURE(fx.name, e / vol, elrc, de / vol, delrc, d2e / vol, d2elrc);
@@ -550,6 +622,11 @@ TEST_CASE("TESTLMDA-45_hipwat_pol_ewald_dt_l04", "[ff][testlmda][cflux][adtpol]"
 TEST_CASE("TESTLMDA-50_aptetra_pol_ewald_dt_l04", "[ff][testlmda][cflux][adtpol]") { runFixture(fx("50_aptetra_pol_ewald_dt_l04")); }
 TEST_CASE("TESTLMDA-52_apgas_pol_ewald_dt_l04", "[ff][testlmda][cflux][adtpol]") { runFixture(fx("52_apgas_pol_ewald_dt_l04")); }
 TEST_CASE("TESTLMDA-54_hipmix_pol_ewald_dt_l04", "[ff][testlmda][cflux][adtpol]") { runFixture(fx("54_hipmix_pol_ewald_dt_l04")); }
+// Atom group weights on HIPPO water with charge flux, which tinker9 refuses
+// (test_testlmda.f case 55).
+// the refusal of atom group weights (groupData)
+const char* const kGroupWeights = "Atom group weights";
+TEST_CASE("TESTLMDA-55_hipwat_group_ost_l04", "[ff][testlmda][cflux]") { runRefusedFixture(fx("55_hipwat_group_ost_l04"), kGroupWeights); }
 TEST_CASE("TESTLMDA-56_hipwat_pol_split_dt_l04", "[ff][testlmda][cflux][adtpol]") { runFixture(fx("56_hipwat_pol_split_dt_l04")); }
 TEST_CASE("TESTLMDA-59_aptetra_pol_mlist_dt_l04", "[ff][testlmda][cflux][adtpol]") { runFixture(fx("59_aptetra_pol_mlist_dt_l04")); }
 TEST_CASE("TESTLMDA-60_aptetra_rel_lig1_l085", "[ff][testlmda][cflux][rdt]") { runFixture(fx("60_aptetra_rel_lig1_l085")); }
@@ -582,7 +659,7 @@ TEST_CASE("TESTLMDA-77_hipwat_ct_lin_dt_l00", "[ff][testlmda][ct]") { runFixture
 TEST_CASE("TESTLMDA-78_hipwat_pol_ct_split_st_l04", "[ff][testlmda][ct]") { runFixture(fx("78_hipwat_pol_ct_split_st_l04")); }
 TEST_CASE("TESTLMDA-79_hipwat_pol_ct_ewald_dt_l04", "[ff][testlmda][ct]") { runFixture(fx("79_hipwat_pol_ct_ewald_dt_l04")); }
 TEST_CASE("TESTLMDA-80_aptetra_ct_st_l04", "[ff][testlmda][ct]") { runFixture(fx("80_aptetra_ct_st_l04")); }
-TEST_CASE("TESTLMDA-82_hipwat_ct_group_ost_l04", "[ff][testlmda][ct]") { runRefusedFixture(fx("82_hipwat_ct_group_ost_l04")); }
+TEST_CASE("TESTLMDA-82_hipwat_ct_group_ost_l04", "[ff][testlmda][ct]") { runRefusedFixture(fx("82_hipwat_ct_group_ost_l04"), kGroupWeights); }
 TEST_CASE("TESTLMDA-83_hipwat_ct_off_st_l04", "[ff][testlmda][ct]") { runFixture(fx("83_hipwat_ct_off_st_l04")); }
 TEST_CASE("TESTLMDA-84_aptetra_ct_rel_lig1_st_l085", "[ff][testlmda][ct][rdt]") { runFixture(fx("84_aptetra_ct_rel_lig1_st_l085")); }
 TEST_CASE("TESTLMDA-85_aptetra_ct_rel_lig2_st_l015", "[ff][testlmda][ct][rdt]") { runFixture(fx("85_aptetra_ct_rel_lig2_st_l015")); }
@@ -622,7 +699,7 @@ TEST_CASE("TESTLMDA-109_hipmix_dsp_ewald_l10", "[ff][testlmda][disp]") { runFixt
 TEST_CASE("TESTLMDA-110_hipmix_dsp_d1_n1_l04", "[ff][testlmda][disp]") { runFixture(fx("110_hipmix_dsp_d1_n1_l04")); }
 // The reciprocal space lambda derivative of the force reuses the PME grid.
 TEST_CASE("TESTLMDA-repeat-105_hipmix_dsp_ewald_l04", "[ff][testlmda][disp]") { runRepeatedFixture(fx("105_hipmix_dsp_ewald_l04")); }
-TEST_CASE("TESTLMDA-112_hipmix_dsp_ewald_group_l04", "[ff][testlmda][disp]") { runRefusedFixture(fx("112_hipmix_dsp_ewald_group_l04")); }
+TEST_CASE("TESTLMDA-112_hipmix_dsp_ewald_group_l04", "[ff][testlmda][disp]") { runRefusedFixture(fx("112_hipmix_dsp_ewald_group_l04"), kGroupWeights); }
 // The long range dispersion correction follows the lambda power of the soft
 // core, alone, under annihilation, with an exponent of one, and with an
 // exponent of two at lambda 0 (test_testlmda.f cases 113 to 116).
@@ -667,6 +744,72 @@ TEST_CASE("TESTLMDA-125_hipmix_dsp_ewald_inv_l04", "[ff][testlmda][disp]") { run
 // cases 118 and 119).
 TEST_CASE("TESTLMDA-118_water_vsoft_m15_p3_l05", "[ff][testlmda]") { runFixture(fx("118_water_vsoft_m15_p3_l05")); }
 TEST_CASE("TESTLMDA-119_water_vsoft_m05_p1_l03", "[ff][testlmda]") { runFixture(fx("119_water_vsoft_m05_p1_l03")); }
+// HIPPO Pauli repulsion and damped dispersion on the staged relative legs: the
+// van der Waals leg by double loop and neighbor list, under annihilation, with
+// a quintic map, and the three legs of one schedule (test_testlmda.f cases 126
+// to 137; 133 needs replica images).
+TEST_CASE("TESTLMDA-126_water_rep_rels_vdwm_l05", "[ff][testlmda][rdt][repel]") { runFixture(fx("126_water_rep_rels_vdwm_l05")); }
+TEST_CASE("TESTLMDA-127_water_rep_rels_vdwm_nlist_l05", "[ff][testlmda][rdt][repel]") { runFixture(fx("127_water_rep_rels_vdwm_nlist_l05")); }
+TEST_CASE("TESTLMDA-128_water_rep_rels_vdwm_annih_l05", "[ff][testlmda][rdt][repel]") { runFixture(fx("128_water_rep_rels_vdwm_annih_l05")); }
+TEST_CASE("TESTLMDA-129_water_rep_rels_vdwm_qnt_l035", "[ff][testlmda][rdt][repel]") { runFixture(fx("129_water_rep_rels_vdwm_qnt_l035")); }
+TEST_CASE("TESTLMDA-130_water_rep_rels3_l050", "[ff][testlmda][rdt][repel]") { runFixture(fx("130_water_rep_rels3_l050")); }
+TEST_CASE("TESTLMDA-131_water_rep_rels3_l085", "[ff][testlmda][rdt][repel]") { runFixture(fx("131_water_rep_rels3_l085")); }
+TEST_CASE("TESTLMDA-132_water_rep_rels3_l015", "[ff][testlmda][rdt][repel]") { runFixture(fx("132_water_rep_rels3_l015")); }
+TEST_CASE("TESTLMDA-134_water_dsp_rels_vdwm_l05", "[ff][testlmda][rdt][disp]") { runFixture(fx("134_water_dsp_rels_vdwm_l05")); }
+TEST_CASE("TESTLMDA-135_water_dsp_rels_vdwm_nlist_l05", "[ff][testlmda][rdt][disp]") { runFixture(fx("135_water_dsp_rels_vdwm_nlist_l05")); }
+TEST_CASE("TESTLMDA-136_water_dsp_rels_vdwm_annih_l05", "[ff][testlmda][rdt][disp]") { runFixture(fx("136_water_dsp_rels_vdwm_annih_l05")); }
+TEST_CASE("TESTLMDA-137_water_dsp_rels_vdwm_corr_l03", "[ff][testlmda][rdt][disp]") { runFixture(fx("137_water_dsp_rels_vdwm_corr_l03")); }
+// HIPPO Ewald dispersion on the staged relative legs, whose reciprocal space
+// carries the environment and the two ligands in slots of their own: the van
+// der Waals leg by double loop and neighbor list, under annihilation, with a
+// quintic map, and the three legs of one schedule, where the slots merge or
+// drop (test_testlmda.f cases 138 to 144; 145 needs replica images).
+TEST_CASE("TESTLMDA-138_water_dsp_ewald_rels_vdwm_l04", "[ff][testlmda][rdt][disp]") { runFixture(fx("138_water_dsp_ewald_rels_vdwm_l04")); }
+TEST_CASE("TESTLMDA-139_water_dsp_ewald_rels_vdwm_nlist_l04", "[ff][testlmda][rdt][disp]") { runFixture(fx("139_water_dsp_ewald_rels_vdwm_nlist_l04")); }
+TEST_CASE("TESTLMDA-140_water_dsp_ewald_rels_vdwm_annih_l04", "[ff][testlmda][rdt][disp]") { runFixture(fx("140_water_dsp_ewald_rels_vdwm_annih_l04")); }
+TEST_CASE("TESTLMDA-141_water_dsp_ewald_rels_vdwm_qnt_l035", "[ff][testlmda][rdt][disp]") { runFixture(fx("141_water_dsp_ewald_rels_vdwm_qnt_l035")); }
+TEST_CASE("TESTLMDA-142_water_dsp_ewald_rels3_l050", "[ff][testlmda][rdt][disp]") { runFixture(fx("142_water_dsp_ewald_rels3_l050")); }
+TEST_CASE("TESTLMDA-143_water_dsp_ewald_rels3_l085", "[ff][testlmda][rdt][disp]") { runFixture(fx("143_water_dsp_ewald_rels3_l085")); }
+TEST_CASE("TESTLMDA-144_water_dsp_ewald_rels3_l015", "[ff][testlmda][rdt][disp]") { runFixture(fx("144_water_dsp_ewald_rels3_l015")); }
+// Single topology Ewald dispersion with every atom annihilated, at lambda 0
+// (test_testlmda.f case 146), where every derivative vanishes; its energy and
+// gradient are those of mutate 281.
+TEST_CASE("TESTLMDA-146_water_dsp_ewald_annih_all_l00", "[ff][testlmda][disp]") { runFixture(fx("146_water_dsp_ewald_annih_all_l00")); }
+// The Ewald dispersion tail of the buffered 14-7 vdW of AMOEBA water, whose
+// lambda power follows that of the vdW: decoupled, on the relative legs, and
+// with damped sites (test_testlmda.f cases 147 to 151; 152 needs replica
+// images).
+TEST_CASE("TESTLMDA-147_water_dhal_l05", "[ff][testlmda][disp][dhal]") { runFixture(fx("147_water_dhal_l05")); }
+TEST_CASE("TESTLMDA-148_water_dhal_rels_vdwm_l04", "[ff][testlmda][disp][dhal]") { runFixture(fx("148_water_dhal_rels_vdwm_l04")); }
+TEST_CASE("TESTLMDA-149_water_dhal_rels3_l015", "[ff][testlmda][disp][dhal]") { runFixture(fx("149_water_dhal_rels3_l015")); }
+TEST_CASE("TESTLMDA-150_water_dhal_rels3_l085", "[ff][testlmda][disp][dhal]") { runFixture(fx("150_water_dhal_rels3_l085")); }
+TEST_CASE("TESTLMDA-151_water_dhal_rels_vdwm_damp_l04", "[ff][testlmda][disp][dhal]") { runFixture(fx("151_water_dhal_rels_vdwm_damp_l04")); }
+// Lennard-Jones TIP3P water ligand: the double loop, a neighbor list with an
+// LJ-SOFTCORE of m 1 and p 2, and annihilation by the method of lights
+// (test_testlmda.f cases 153 to 155).
+TEST_CASE("TESTLMDA-153_tip3_lj_l04", "[ff][testlmda][lj]") { runFixture(fx("153_tip3_lj_l04")); }
+TEST_CASE("TESTLMDA-154_tip3_lj_nlist_soft_l03", "[ff][testlmda][lj]") { runFixture(fx("154_tip3_lj_nlist_soft_l03")); }
+TEST_CASE("TESTLMDA-155_tip3_lj_lights_annih_l03", "[ff][testlmda][lj]") { runFixture(fx("155_tip3_lj_lights_annih_l03")); }
+// Partial charges of a TIP3P water ligand: under Ewald alone, both terms by
+// neighbor list and by the method of lights with the inverse power map, the
+// Trp-cage in an external field, and the staged relative legs, where the
+// charges of the other ligand vanish, by double loop, by neighbor list and by
+// the method of lights (test_testlmda.f cases 156 to 166).
+TEST_CASE("TESTLMDA-156_tip3_chg_l04", "[ff][testlmda][charge]") { runFixture(fx("156_tip3_chg_l04")); }
+TEST_CASE("TESTLMDA-157_tip3_both_nlist_l06", "[ff][testlmda][charge]") { runFixture(fx("157_tip3_both_nlist_l06")); }
+TEST_CASE("TESTLMDA-158_tip3_both_lights_inv_l05", "[ff][testlmda][charge]") { runFixture(fx("158_tip3_both_lights_inv_l05")); }
+TEST_CASE("TESTLMDA-162_trp_chg_exfield_l05", "[ff][testlmda][charge]") { runFixture(fx("162_trp_chg_exfield_l05")); }
+TEST_CASE("TESTLMDA-163_tip3_rels_lig2_l04", "[ff][testlmda][charge]") { runFixture(fx("163_tip3_rels_lig2_l04")); }
+TEST_CASE("TESTLMDA-164_tip3_rels_vdwm_nlist_l04", "[ff][testlmda][charge]") { runFixture(fx("164_tip3_rels_vdwm_nlist_l04")); }
+TEST_CASE("TESTLMDA-165_tip3_rels3_l015", "[ff][testlmda][charge]") { runFixture(fx("165_tip3_rels3_l015")); }
+TEST_CASE("TESTLMDA-166_tip3_rels3_lights_l085", "[ff][testlmda][charge]") { runFixture(fx("166_tip3_rels3_lights_l085")); }
+// Neutral group cutoffs, which tinker9 does not have, refused as they set up.
+TEST_CASE("TESTLMDA-160_trp_both_cut_neutral_l05", "[ff][testlmda][charge]") { runRefusedFixture(fx("160_trp_both_cut_neutral_l05"), "NEUTRAL-GROUPS"); }
+
+// The Trp-cage of 162 under Ewald summation with its net charged first residue
+// as the ligand, so the uniform background charge follows lambda
+// (test_testlmda.f case 167).
+TEST_CASE("TESTLMDA-167_trp_chg_ewald_l05", "[ff][testlmda][charge]") { runFixture(fx("167_trp_chg_ewald_l05")); }
 
 // Every fixture once more without analysis, as dynamics runs it.
 TEST_CASE("TESTLMDA-DYN-01_water_adt_l05", "[ff][testlmda][dyn]") { runFixture(fx("01_water_adt_l05"), false); }
@@ -778,6 +921,8 @@ TEST_CASE("TESTLMDA-DYN-108_hipmix_dsp_ewald_n2_l00", "[ff][testlmda][dyn][disp]
 TEST_CASE("TESTLMDA-DYN-109_hipmix_dsp_ewald_l10", "[ff][testlmda][dyn][disp]") { runFixture(fx("109_hipmix_dsp_ewald_l10"), false); }
 TEST_CASE("TESTLMDA-DYN-110_hipmix_dsp_d1_n1_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("110_hipmix_dsp_d1_n1_l04"), false); }
 TEST_CASE("TESTLMDA-DYN-113_hipmix_dsp_corr_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("113_hipmix_dsp_corr_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-114_hipmix_dsp_corr_annih_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("114_hipmix_dsp_corr_annih_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-115_hipmix_dsp_corr_n1_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("115_hipmix_dsp_corr_n1_l04"), false); }
 TEST_CASE("TESTLMDA-DYN-116_hipmix_dsp_corr_n2_l00", "[ff][testlmda][dyn][disp]") { runFixture(fx("116_hipmix_dsp_corr_n2_l00"), false); }
 TEST_CASE("TESTLMDA-DYN-120_hipmix_dsp_ewald_exp3_l08", "[ff][testlmda][dyn][disp]") { runFixture(fx("120_hipmix_dsp_ewald_exp3_l08"), false); }
 TEST_CASE("TESTLMDA-DYN-121_hipmix_dsp_corr_exp3_l06", "[ff][testlmda][dyn][disp]") { runFixture(fx("121_hipmix_dsp_corr_exp3_l06"), false); }
@@ -787,4 +932,40 @@ TEST_CASE("TESTLMDA-DYN-124_hipmix_dsp_corr_qnt_l06", "[ff][testlmda][dyn][disp]
 TEST_CASE("TESTLMDA-DYN-125_hipmix_dsp_ewald_inv_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("125_hipmix_dsp_ewald_inv_l04"), false); }
 TEST_CASE("TESTLMDA-DYN-118_water_vsoft_m15_p3_l05", "[ff][testlmda][dyn]") { runFixture(fx("118_water_vsoft_m15_p3_l05"), false); }
 TEST_CASE("TESTLMDA-DYN-119_water_vsoft_m05_p1_l03", "[ff][testlmda][dyn]") { runFixture(fx("119_water_vsoft_m05_p1_l03"), false); }
+TEST_CASE("TESTLMDA-DYN-126_water_rep_rels_vdwm_l05", "[ff][testlmda][dyn][rdt]") { runFixture(fx("126_water_rep_rels_vdwm_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-127_water_rep_rels_vdwm_nlist_l05", "[ff][testlmda][dyn][rdt]") { runFixture(fx("127_water_rep_rels_vdwm_nlist_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-128_water_rep_rels_vdwm_annih_l05", "[ff][testlmda][dyn][rdt]") { runFixture(fx("128_water_rep_rels_vdwm_annih_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-129_water_rep_rels_vdwm_qnt_l035", "[ff][testlmda][dyn][rdt]") { runFixture(fx("129_water_rep_rels_vdwm_qnt_l035"), false); }
+TEST_CASE("TESTLMDA-DYN-130_water_rep_rels3_l050", "[ff][testlmda][dyn][rdt]") { runFixture(fx("130_water_rep_rels3_l050"), false); }
+TEST_CASE("TESTLMDA-DYN-131_water_rep_rels3_l085", "[ff][testlmda][dyn][rdt]") { runFixture(fx("131_water_rep_rels3_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-132_water_rep_rels3_l015", "[ff][testlmda][dyn][rdt]") { runFixture(fx("132_water_rep_rels3_l015"), false); }
+TEST_CASE("TESTLMDA-DYN-134_water_dsp_rels_vdwm_l05", "[ff][testlmda][dyn][rdt]") { runFixture(fx("134_water_dsp_rels_vdwm_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-135_water_dsp_rels_vdwm_nlist_l05", "[ff][testlmda][dyn][rdt]") { runFixture(fx("135_water_dsp_rels_vdwm_nlist_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-136_water_dsp_rels_vdwm_annih_l05", "[ff][testlmda][dyn][rdt]") { runFixture(fx("136_water_dsp_rels_vdwm_annih_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-137_water_dsp_rels_vdwm_corr_l03", "[ff][testlmda][dyn][rdt]") { runFixture(fx("137_water_dsp_rels_vdwm_corr_l03"), false); }
+TEST_CASE("TESTLMDA-DYN-138_water_dsp_ewald_rels_vdwm_l04", "[ff][testlmda][dyn][rdt]") { runFixture(fx("138_water_dsp_ewald_rels_vdwm_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-139_water_dsp_ewald_rels_vdwm_nlist_l04", "[ff][testlmda][dyn][rdt]") { runFixture(fx("139_water_dsp_ewald_rels_vdwm_nlist_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-140_water_dsp_ewald_rels_vdwm_annih_l04", "[ff][testlmda][dyn][rdt]") { runFixture(fx("140_water_dsp_ewald_rels_vdwm_annih_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-141_water_dsp_ewald_rels_vdwm_qnt_l035", "[ff][testlmda][dyn][rdt]") { runFixture(fx("141_water_dsp_ewald_rels_vdwm_qnt_l035"), false); }
+TEST_CASE("TESTLMDA-DYN-142_water_dsp_ewald_rels3_l050", "[ff][testlmda][dyn][rdt]") { runFixture(fx("142_water_dsp_ewald_rels3_l050"), false); }
+TEST_CASE("TESTLMDA-DYN-143_water_dsp_ewald_rels3_l085", "[ff][testlmda][dyn][rdt]") { runFixture(fx("143_water_dsp_ewald_rels3_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-144_water_dsp_ewald_rels3_l015", "[ff][testlmda][dyn][rdt]") { runFixture(fx("144_water_dsp_ewald_rels3_l015"), false); }
+TEST_CASE("TESTLMDA-DYN-146_water_dsp_ewald_annih_all_l00", "[ff][testlmda][dyn][disp]") { runFixture(fx("146_water_dsp_ewald_annih_all_l00"), false); }
+TEST_CASE("TESTLMDA-DYN-147_water_dhal_l05", "[ff][testlmda][dyn][dhal]") { runFixture(fx("147_water_dhal_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-148_water_dhal_rels_vdwm_l04", "[ff][testlmda][dyn][dhal]") { runFixture(fx("148_water_dhal_rels_vdwm_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-149_water_dhal_rels3_l015", "[ff][testlmda][dyn][dhal]") { runFixture(fx("149_water_dhal_rels3_l015"), false); }
+TEST_CASE("TESTLMDA-DYN-150_water_dhal_rels3_l085", "[ff][testlmda][dyn][dhal]") { runFixture(fx("150_water_dhal_rels3_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-151_water_dhal_rels_vdwm_damp_l04", "[ff][testlmda][dyn][dhal]") { runFixture(fx("151_water_dhal_rels_vdwm_damp_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-153_tip3_lj_l04", "[ff][testlmda][dyn][lj]") { runFixture(fx("153_tip3_lj_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-154_tip3_lj_nlist_soft_l03", "[ff][testlmda][dyn][lj]") { runFixture(fx("154_tip3_lj_nlist_soft_l03"), false); }
+TEST_CASE("TESTLMDA-DYN-155_tip3_lj_lights_annih_l03", "[ff][testlmda][dyn][lj]") { runFixture(fx("155_tip3_lj_lights_annih_l03"), false); }
+TEST_CASE("TESTLMDA-DYN-156_tip3_chg_l04", "[ff][testlmda][dyn][charge]") { runFixture(fx("156_tip3_chg_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-157_tip3_both_nlist_l06", "[ff][testlmda][dyn][charge]") { runFixture(fx("157_tip3_both_nlist_l06"), false); }
+TEST_CASE("TESTLMDA-DYN-158_tip3_both_lights_inv_l05", "[ff][testlmda][dyn][charge]") { runFixture(fx("158_tip3_both_lights_inv_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-162_trp_chg_exfield_l05", "[ff][testlmda][dyn][charge]") { runFixture(fx("162_trp_chg_exfield_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-163_tip3_rels_lig2_l04", "[ff][testlmda][dyn][charge]") { runFixture(fx("163_tip3_rels_lig2_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-164_tip3_rels_vdwm_nlist_l04", "[ff][testlmda][dyn][charge]") { runFixture(fx("164_tip3_rels_vdwm_nlist_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-165_tip3_rels3_l015", "[ff][testlmda][dyn][charge]") { runFixture(fx("165_tip3_rels3_l015"), false); }
+TEST_CASE("TESTLMDA-DYN-166_tip3_rels3_lights_l085", "[ff][testlmda][dyn][charge]") { runFixture(fx("166_tip3_rels3_lights_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-167_trp_chg_ewald_l05", "[ff][testlmda][dyn][charge]") { runFixture(fx("167_trp_chg_ewald_l05"), false); }
 #endif

@@ -34,11 +34,12 @@
 #include <cmath>
 
 namespace tinker {
-// The net charge of the partial charges, for the Ewald uniform background
-// charge correction, as pchg is copied in.
-static double pchg_net;
-// The lambda the partial charges were last scaled to, and the ligand they
-// charged there.
+// The net partial charge of each lambda group, unscaled, for the Ewald uniform
+// background charge correction, to which the group scales are applied per
+// evaluation.
+static double pchg_net[3];
+// The lambda the scaled partial charges were last built for, with the ligand
+// that charged there.
 static double pchg_lmda;
 static RdtMask pchg_lmda_mask;
 
@@ -52,53 +53,69 @@ static bool pole_net_orig;
 // geometry, summed on the device in fixed point.
 static fixed* pole_net_flux;
 
-static void pchgBuild(double lmda);
+TINKER_FVOID2(acc1, cu1, pchgScale, real*, real*, const real*, const int*, GrpScale);
+// Scales the partial charges of each atom group from their unscaled values
+// (mutate.f:altelec), along with their derivatives with respect to elambda,
+// each the unscaled charge times the slope of its group scale
+// (dlambda.f:chgdlmda).
+static void pchgScale(double lmda)
+{
+   TINKER_FCALL2(acc1, cu1, pchgScale, pchg, pchg_dq, pchgorig, emGroup(), grpScale(lmda));
+   pchg_lmda = lmda;
+   pchg_lmda_mask = chargeMask();
+}
+
 static void pchgData(RcOp op)
 {
    if (not use(Potent::CHARGE))
       return;
 
    if (op & RcOp::DEALLOC) {
-      darray::deallocate(pchg);
+      darray::deallocate(pchg, pchg_dq, pchgorig);
+      pchg = nullptr;
+      pchg_dq = nullptr;
+      pchgorig = nullptr;
    }
 
    if (op & RcOp::ALLOC) {
       darray::allocate(n, &pchg);
+      // Only a ligand group follows lambda, and only with the lambda
+      // derivatives do the charges take theirs.
+      pchgorig = nullptr;
+      pchg_dq = nullptr;
+      if (mutant::nmut > 0)
+         darray::allocate(n, &pchgorig);
+      if (use_edlmda)
+         darray::allocate(n, &pchg_dq);
    }
 
-   if (op & RcOp::INIT)
-      pchgBuild(elam);
-}
-
-// Scales the partial charges of each atom group from their unscaled values
-// (mutate.f:altelec).
-static void pchgBuild(double lmda)
-{
-   std::vector<real> pchgbuf(n);
-   const GrpScale esc = grpScale(lmda);
-   for (int i = 0; i < n; ++i) {
-      int itype = atoms::type[i] - 1;
-      pchgbuf[i] = kchrge::chg[itype] * esc.s[mutant::mutg[i]];
+   if (op & RcOp::INIT) {
+      std::vector<real> chgbuf(n);
+      std::fill_n(pchg_net, 3, 0.0);
+      for (int i = 0; i < n; ++i) {
+         double c = kchrge::chg[atoms::type[i] - 1];
+         chgbuf[i] = c;
+         // In double precision, so that a neutral cell sums to zero.
+         pchg_net[hostGroup(i)] += c;
+      }
+      if (pchg_dq)
+         darray::zero(g::q0, n, pchg_dq);
+      darray::copyin(g::q0, n, pchgorig ? pchgorig : pchg, chgbuf.data());
+      waitFor(g::q0);
+      if (pchgorig)
+         pchgScale(elam);
    }
-   // In double precision, so that a neutral cell sums to zero.
-   pchg_net = 0;
-   for (int i = 0; i < n; ++i)
-      pchg_net += kchrge::chg[atoms::type[i] - 1] * esc.s[mutant::mutg[i]];
-   darray::copyin(g::q0, n, pchg, pchgbuf.data());
-   waitFor(g::q0);
-   pchg_lmda = lmda;
-   pchg_lmda_mask = chargeMask();
 }
 
 void pchgEnsureElec()
 {
-   // Elsewhere the charges are scaled once, as they are copied in.
-   if (not use_fep or not use(Potent::CHARGE))
+   // Without a ligand group the charges are only copied in.
+   if (not pchgorig)
       return;
    if (elam == pchg_lmda and chargeMask() == pchg_lmda_mask)
       return;
 
-   pchgBuild(elam);
+   pchgScale(elam);
    // the fused charge and Lennard-Jones kernel keeps a sorted copy
    if (clistVersion() & Nbl::SPATIAL)
       cspatial_v2_unit->fresh |= cspatial_fresh_mask_echglj;
@@ -255,7 +272,7 @@ static void mpoleData(RcOp op)
       for (int i = 0; i < n; ++i) {
          int b2 = mpole::maxpole * i;
          if (pole_net_orig) {
-            int g = use_rel ? mutant::mutg[i] : (mutant::mutg[i] != 0 ? 1 : 0);
+            int g = hostGroup(i);
             pole_net[g] += dlmda::poleorig[b2];
          } else {
             pole_net[0] += mpole::pole[b2];
@@ -1028,8 +1045,20 @@ static void empoleEwaldBackgroundFlux(int vers, int dlvers, real aewald)
    VirialBuffer dvb = (grp and (dlvers & calc::virial_dlmda)) ? dvirdl_buf : nullptr;
    real* p = (vers & calc::grad) ? pot : nullptr;
    real* dlp = (grp and (dlvers & calc::grad_dlmda)) ? dlpot : nullptr;
-   TINKER_FCALL2(acc1, cu1, ewaldBackgroundFlux, pole_net_flux, grp, grpScale(elam), fterm, deldlmda, d2eldlmda2,
-      nc, eb, dl1b, dl2b, vb, dvb, p, dlp);
+   const LmdaFn e = elecChain();
+   TINKER_FCALL2(acc1, cu1, ewaldBackgroundFlux, pole_net_flux, grp, grpScale(elam), fterm, e.d1, e.d2, nc, eb, dl1b,
+      dl2b, vb, dvb, p, dlp);
+}
+
+// The net charge of the groups' unscaled sums at their scales, and its
+// derivative with respect to elambda, linear in the scales (echarge1.f:ecself1)
+static void grpNet(const GrpScale& esc, const double (&net)[3], double& q, double& dq)
+{
+   q = 0, dq = 0;
+   for (int g = 0; g < 3; ++g) {
+      q += esc.s[g] * net[g];
+      dq += esc.ds[g] * net[g];
+   }
 }
 
 void empoleEwaldBackground(int vers, int dlvers, bool cflux)
@@ -1041,22 +1070,19 @@ void empoleEwaldBackground(int vers, int dlvers, bool cflux)
    }
 
    double q = pole_net[0], dq = 0;
-   if (pole_net_orig) {
-      const GrpScale esc = grpScale(elam);
-      q = 0;
-      for (int g = 0; g < 3; ++g) {
-         q += esc.s[g] * pole_net[g];
-         dq += esc.ds[g] * pole_net[g];
-      }
-   }
-   ewaldBackground(
-      vers, dlvers, q, dq, deldlmda, d2eldlmda2, aewald, nem, em, demdl_buf, d2emdl2_buf, vir_em, dvirdl_buf);
+   if (pole_net_orig)
+      grpNet(grpScale(elam), pole_net, q, dq);
+   const LmdaFn e = elecChain();
+   ewaldBackground(vers, dlvers, q, dq, e.d1, e.d2, aewald, nem, em, demdl_buf, d2emdl2_buf, vir_em, dvirdl_buf);
 }
 
 void echargeEwaldBackground(int vers)
 {
-   double q = pchg_net;
-   ewaldBackground(vers, 0, q, 0, 0, 0, epme_unit->aewald, nec, ec, nullptr, nullptr, vir_ec, nullptr);
+   double q, dq;
+   grpNet(grpScale(elam), pchg_net, q, dq);
+   const LmdaFn e = elecChain();
+   ewaldBackground(
+      vers, vers, q, dq, e.d1, e.d2, epme_unit->aewald, nec, ec, demdl_buf, d2emdl2_buf, vir_ec, dvirdl_buf);
 }
 
 TINKER_FVOID2(acc1, cu1, exfieldCharge, int);

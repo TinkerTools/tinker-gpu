@@ -63,9 +63,10 @@ static void ehal_acc1()
    const real off2 = off * off;
    const int maxnlst = vlist_unit->maxnlst;
    const auto* vlst = vlist_unit.deviceptr();
-   // The soft core power and softening of vlam, taken once here instead of per
-   // pair. Without lambda derivatives pair_hal_v2 reads only p0 and sc.
-   const SoftCoreLmda lpm = softCoreLmda(vlam, scexp, scalphav, scexpm, scexpp, 0, 0, false);
+   // The soft core power and softening, taken once here instead of per pair;
+   // OpenACC refuses relative free energy, so the ligand is group 1. Without
+   // lambda derivatives pair_hal_v2 reads only p0 and sc.
+   const SoftCoreLmda lpm = halSoft(1, false);
    const real vlamexp = lpm.p0;
    const real vlamsc = lpm.sc;
 

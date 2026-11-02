@@ -7,6 +7,7 @@
 #include "seq/add.h"
 #include "seq/launch.h"
 #include "seq/pair_chgtrn.h"
+#include "seq/pair_vlambda.h"
 #include "seq/pairchgtrnaplus.h"
 #include "seq/triangle.h"
 #include <cassert>
@@ -24,10 +25,13 @@ static void echgtrn_cu2()
 
    // The lambda derivatives of charge transfer go with polarization.
    int ngrid = gpuGridSize(BLOCK_DIM);
-   echgtrn_cu1<Ver, CT><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nct, ect, depdl_buf, d2epdl2_buf,
-      vir_ect, dvirdl_buf, dectx, decty, dectz, dfdlx, dfdly, dfdlz, cut, off, st.si1.bit0, nmdwexclude, mdwexclude,
-      mdwexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, chgct, dmpct, f,
-      emGroup(), ctScale());
+   boxShapeDispatch(box_shape, [&](auto img) {
+      using IMG = decltype(img);
+      echgtrn_cu1<Ver, IMG, CT><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nct, ect, depdl_buf,
+         d2epdl2_buf, vir_ect, dvirdl_buf, dectx, decty, dectz, dfdlx, dfdly, dfdlz, cut, off, st.si1.bit0, nmdwexclude,
+         mdwexclude, mdwexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, st.akc,
+         chgct, dmpct, f, emGroup(), ctScale());
+   });
 }
 
 template <Chgtrn CT>

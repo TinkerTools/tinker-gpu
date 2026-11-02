@@ -1,5 +1,6 @@
 #include "ff/atom.h"
 #include "ff/dlmda.h"
+#include "ff/echarge.h"
 #include "ff/egvop.h"
 #include "ff/elec.h"
 #include "ff/energy.h"
@@ -101,7 +102,9 @@ static LambdaEvaluation evaluateAtOffset(double lmda0, double delta)
    // count with it (testlmda.f); energy_vdw already holds energy_er and
    // energy_edsp.
    eout.energy.vdw = energy_vdw;
-   eout.energy.mpole = energy_em;
+   // Partial charges follow the electrostatic lambda and count with the
+   // multipoles (testlmda.f).
+   eout.energy.mpole = energy_em + (use(Potent::CHARGE) ? energy_ec : 0);
    // Charge transfer follows the polarization lambda and counts with it
    // (testlmda.f).
    eout.energy.polar = energy_ep + (use(Potent::CHGTRN) ? energy_ect : 0);

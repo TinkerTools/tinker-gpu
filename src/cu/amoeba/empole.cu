@@ -9,6 +9,7 @@
 #include "seq/emselfamoeba.h"
 #include "seq/launch.h"
 #include "seq/pair_mpole.h"
+#include "seq/pair_vlambda.h"
 #include "seq/triangle.h"
 #include <tinker/detail/extfld.hh>
 
@@ -37,8 +38,7 @@ static void empole_cu()
 
       if CONSTEXPR (do_e) {
          if CONSTEXPR (eq<LTYP, DLMDA>()) {
-            launch_k1b(g::s0, n, empoleSelfDlmda_cu<Ver>, //
-               nem, em, demdl_buf, d2emdl2_buf, rpole, emGroup(), grpSelfScale(elecPairScale()), n, f, aewald);
+            empoleSelfDlmdaAmoeba<Ver>(nem, em, f, aewald);
          } else {
             launch_k1b(g::s0, n, empoleSelf_cu<do_a>, //
                nem, em, rpole, n, f, aewald);
@@ -49,12 +49,16 @@ static void empole_cu()
    if CONSTEXPR (eq<LTYP, DLMDA>()) {
       empoledlmda_cu1<Ver, ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, demdl_buf,
          d2emdl2_buf, vir_em, dvirdl_buf, demx, demy, demz, dfdlx, dfdly, dfdlz, off, st.si1.bit0, nmdpuexclude,
-         mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, trqx,
-         trqy, trqz, dltrqx, dltrqy, dltrqz, rpole, emGroup(), f, aewald, elecPairScale());
+         mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst,
+         st.akc, trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, rpole, emGroup(), f, aewald, elecPairScale());
    } else {
-      empole_cu1<Ver, ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, vir_em, demx, demy, demz,
-         off, st.si1.bit0, nmdpuexclude, mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl,
-         st.niak, st.iak, st.lst, trqx, trqy, trqz, rpole, f, aewald, elecDeadGroups(), elecLiveMask());
+      boxShapeDispatch(box_shape, [&](auto img) {
+         using IMG = decltype(img);
+         empole_cu1<Ver, IMG, ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, vir_em, demx,
+            demy, demz, off, st.si1.bit0, nmdpuexclude, mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z, st.sorted,
+            st.nakpl, st.iakpl, st.niak, st.iak, st.lst, st.akc, trqx, trqy, trqz, rpole, f, aewald, elecDeadGroups(),
+            elecLiveMask());
+      });
    }
 }
 
@@ -318,9 +322,10 @@ static void exfieldDipoleDlmda_cu2()
 {
    real f = electric / dielec;
    real ef1 = extfld::texfld[0], ef2 = extfld::texfld[1], ef3 = extfld::texfld[2];
+   const LmdaFn el = elecChain();
    launch_k1b(g::s0, n, exfieldDipoleDlmda_cu1<Ver>, nem, em, demdl_buf, vir_em, dvirdl_buf, demx, demy, demz,
       dfdlx, dfdly, dfdlz, trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, n, f, ef1, ef2, ef3, rpole, emGroup(), grpScale(elam),
-      x, y, z, d2emdl2_buf, deldlmda, d2eldlmda2);
+      x, y, z, d2emdl2_buf, el.d1, el.d2);
 }
 
 void exfieldDipoleDlmda_cu(int vers)

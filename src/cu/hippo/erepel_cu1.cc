@@ -1,5 +1,5 @@
 // ck.py Version 3.1.0
-template <class Ver>
+template <class Ver, class IMG>
 __global__
 void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffer restrict er,
    EnergyBuffer restrict dvdl, EnergyBuffer restrict d2vdl2, VirialBuffer restrict vr, VirialBuffer restrict dvvirdl,
@@ -7,10 +7,11 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
    grad_prec* restrict dfvdly, grad_prec* restrict dfvdlz, real cut, real off, const unsigned* restrict rinfo,
    int nexclude, const int (*restrict exclude)[2], const real* restrict exclude_scale, const real* restrict x,
    const real* restrict y, const real* restrict z, const Spatial::SortedAtom* restrict sorted, int nakpl,
-   const int* restrict iakpl, int niak, const int* restrict iak, const int* restrict lst, real* restrict trqx,
-   real* restrict trqy, real* restrict trqz, real* restrict dltrqx, real* restrict dltrqy, real* restrict dltrqz,
-   const real (*restrict rpole)[10], const real* restrict sizpr, const real* restrict elepr, const real* restrict dmppr,
-   const int* restrict mut, Vdw vcouple, SoftCoreLmda rs)
+   const int* restrict iakpl, int niak, const int* restrict iak, const int* restrict lst,
+   const Spatial::Center* restrict akc, real* restrict trqx, real* restrict trqy, real* restrict trqz,
+   real* restrict dltrqx, real* restrict dltrqy, real* restrict dltrqz, const real (*restrict rpole)[10],
+   const real* restrict sizpr, const real* restrict elepr, const real* restrict dmppr, const int* restrict mutg,
+   int mutcls, SoftCoreLmda rs1, SoftCoreLmda rs2)
 {
    constexpr bool do_a = Ver::a;
    constexpr bool do_e = Ver::e;
@@ -21,6 +22,7 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
    constexpr bool do_gdl = Ver::g_dlmda;
    constexpr bool do_tdl = Ver::g_dlmda or Ver::v_dlmda;
    constexpr bool do_vdl = Ver::v_dlmda;
+   static_assert(not do_vdl or do_gdl, "");
    const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
    const int iwarp = ithread / WARP_SIZE;
    const int nwarp = blockDim.x * gridDim.x / WARP_SIZE;
@@ -65,10 +67,10 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
    __shared__ real xi[BLOCK_DIM], yi[BLOCK_DIM], zi[BLOCK_DIM], ci[BLOCK_DIM], dix[BLOCK_DIM], diy[BLOCK_DIM],
       diz[BLOCK_DIM], qixx[BLOCK_DIM], qixy[BLOCK_DIM], qixz[BLOCK_DIM], qiyy[BLOCK_DIM], qiyz[BLOCK_DIM],
       qizz[BLOCK_DIM], sizi[BLOCK_DIM], dmpi[BLOCK_DIM], vali[BLOCK_DIM];
-   __shared__ int imut[BLOCK_DIM];
+   __shared__ int imutg[BLOCK_DIM];
    __shared__ real xk[BLOCK_DIM], yk[BLOCK_DIM], zk[BLOCK_DIM], dkx[BLOCK_DIM], dky[BLOCK_DIM], dkz[BLOCK_DIM];
    real ck, qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, sizk, dmpk, valk;
-   int kmut;
+   int kmutg;
    real gxi, gyi, gzi, txi, tyi, tzi, dltxi, dltyi, dltzi;
    real gxk, gyk, gzk, txk, tyk, tzk, dltxk, dltyk, dltzk;
    real dgxi, dgyi, dgzi;
@@ -130,7 +132,7 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
       sizi[klane] = sizpr[i];
       dmpi[klane] = dmppr[i];
       vali[klane] = elepr[i];
-      imut[klane] = mut[i];
+      imutg[klane] = mutg[i];
       xk[threadIdx.x] = x[k];
       yk[threadIdx.x] = y[k];
       zk[threadIdx.x] = z[k];
@@ -147,9 +149,10 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
       sizk = sizpr[k];
       dmpk = dmppr[k];
       valk = elepr[k];
-      kmut = mut[k];
+      kmutg = mutg[k];
 
       constexpr bool incl = true;
+      constexpr bool tile_local = false;
       real xr = xk[threadIdx.x] - xi[klane];
       real yr = yk[threadIdx.x] - yi[klane];
       real zr = zk[threadIdx.x] - zi[klane];
@@ -158,14 +161,15 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
       PairRepelGrad pgrad, dlgrad;
       zero(pgrad);
 
-      real r2 = image2(xr, yr, zr);
-      if (r2 <= off * off and incl) {
-         bool mutik = pair_mutik(vcouple, imut[klane], kmut);
+      real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+      // The two ligands of a relative calculation never interact.
+      int mc = pair_mutcls(mutcls, imutg[klane], kmutg);
+      if (r2 <= off * off and incl and mc >= 0) {
          pair_repel<do_g, do_dl1, do_dl2, do_tdl>( //
-            r2, scalea, mutik, rs, cut, off, xr, yr, zr, sizi[klane], dmpi[klane], vali[klane], ci[klane], dix[klane],
-            diy[klane], diz[klane], qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], sizk,
-            dmpk, valk, ck, dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x], qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, e,
-            pgrad, dle, dle2, dlgrad);
+            r2, scalea, mc > 0, pair_softcore(mc == 2, rs1, rs2), cut, off, xr, yr, zr, sizi[klane], dmpi[klane],
+            vali[klane], ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane], qixy[klane], qixz[klane],
+            qiyy[klane], qiyz[klane], qizz[klane], sizk, dmpk, valk, ck, dkx[threadIdx.x], dky[threadIdx.x],
+            dkz[threadIdx.x], qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, e, pgrad, dle, dle2, dlgrad);
 
          if CONSTEXPR (do_a)
             if (e != 0)
@@ -187,7 +191,7 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
             tyk += pgrad.ttqk[1];
             tzk += pgrad.ttqk[2];
          }
-         if CONSTEXPR (do_v) {
+         if CONSTEXPR (do_v and not tile_local) {
             vrtlxx += floatTo<vbuf_prec>(-xr * pgrad.frcx);
             vrtlyx += floatTo<vbuf_prec>(-0.5f * (yr * pgrad.frcx + xr * pgrad.frcy));
             vrtlzx += floatTo<vbuf_prec>(-0.5f * (zr * pgrad.frcx + xr * pgrad.frcz));
@@ -216,7 +220,7 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
             dltyk += dlgrad.ttqk[1];
             dltzk += dlgrad.ttqk[2];
          }
-         if CONSTEXPR (do_vdl) {
+         if CONSTEXPR (do_vdl and not tile_local) {
             dvvirdltlxx += floatTo<vbuf_prec>(-xr * dlgrad.frcx);
             dvvirdltlyx += floatTo<vbuf_prec>(-0.5f * (yr * dlgrad.frcx + xr * dlgrad.frcy));
             dvvirdltlzx += floatTo<vbuf_prec>(-0.5f * (zr * dlgrad.frcx + xr * dlgrad.frcz));
@@ -321,7 +325,7 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
       sizi[threadIdx.x] = sizpr[i];
       dmpi[threadIdx.x] = dmppr[i];
       vali[threadIdx.x] = elepr[i];
-      imut[threadIdx.x] = mut[i];
+      imutg[threadIdx.x] = mutg[i];
       xk[threadIdx.x] = sorted[atomk].x;
       yk[threadIdx.x] = sorted[atomk].y;
       zk[threadIdx.x] = sorted[atomk].z;
@@ -338,114 +342,266 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
       sizk = sizpr[k];
       dmpk = dmppr[k];
       valk = elepr[k];
-      kmut = mut[k];
+      kmutg = mutg[k];
       __syncwarp();
 
       unsigned int rinfo0 = rinfo[iw * WARP_SIZE + ilane];
-      for (int j = 0; j < WARP_SIZE; ++j) {
-         int srclane = (ilane + j) & (WARP_SIZE - 1);
-         int klane = srclane + threadIdx.x - ilane;
-         bool incl = iid < kid and kid < n;
-         int srcmask = 1 << srclane;
-         incl = incl and (rinfo0 & srcmask) == 0;
-         real scalea = 1;
-         real xr = xk[threadIdx.x] - xi[klane];
-         real yr = yk[threadIdx.x] - yi[klane];
-         real zr = zk[threadIdx.x] - zi[klane];
+      real xc = akc[ty].x;
+      real yc = akc[ty].y;
+      real zc = akc[ty].z;
+      const bool ilocal = akc[ty].w != 0;
+      if (ilocal) {
+         real xr, yr, zr;
+         xr = xi[threadIdx.x] - xc;
+         yr = yi[threadIdx.x] - yc;
+         zr = zi[threadIdx.x] - zc;
+         IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+         xi[threadIdx.x] = xr;
+         yi[threadIdx.x] = yr;
+         zi[threadIdx.x] = zr;
+         xr = xk[threadIdx.x] - xc;
+         yr = yk[threadIdx.x] - yc;
+         zr = zk[threadIdx.x] - zc;
+         IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+         xk[threadIdx.x] = xr;
+         yk[threadIdx.x] = yr;
+         zk[threadIdx.x] = zr;
+         __syncwarp();
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            int klane = srclane + threadIdx.x - ilane;
+            bool incl = iid < kid and kid < n;
+            int srcmask = 1 << srclane;
+            incl = incl and (rinfo0 & srcmask) == 0;
+            real scalea = 1;
+            constexpr bool tile_local = true;
+            real xr = xk[threadIdx.x] - xi[klane];
+            real yr = yk[threadIdx.x] - yi[klane];
+            real zr = zk[threadIdx.x] - zi[klane];
 
-         real e, dle, dle2;
-         PairRepelGrad pgrad, dlgrad;
-         zero(pgrad);
+            real e, dle, dle2;
+            PairRepelGrad pgrad, dlgrad;
+            zero(pgrad);
 
-         real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
-            bool mutik = pair_mutik(vcouple, imut[klane], kmut);
-            pair_repel<do_g, do_dl1, do_dl2, do_tdl>( //
-               r2, scalea, mutik, rs, cut, off, xr, yr, zr, sizi[klane], dmpi[klane], vali[klane], ci[klane],
-               dix[klane], diy[klane], diz[klane], qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane],
-               qizz[klane], sizk, dmpk, valk, ck, dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x], qkxx, qkxy,
-               qkxz, qkyy, qkyz, qkzz, e, pgrad, dle, dle2, dlgrad);
+            real r2 = (xr * xr + yr * yr + zr * zr);
+            // The two ligands of a relative calculation never interact.
+            int mc = pair_mutcls(mutcls, imutg[klane], kmutg);
+            if (r2 <= off * off and incl and mc >= 0) {
+               pair_repel<do_g, do_dl1, do_dl2, do_tdl>( //
+                  r2, scalea, mc > 0, pair_softcore(mc == 2, rs1, rs2), cut, off, xr, yr, zr, sizi[klane], dmpi[klane],
+                  vali[klane], ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane], qixy[klane], qixz[klane],
+                  qiyy[klane], qiyz[klane], qizz[klane], sizk, dmpk, valk, ck, dkx[threadIdx.x], dky[threadIdx.x],
+                  dkz[threadIdx.x], qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, e, pgrad, dle, dle2, dlgrad);
 
-            if CONSTEXPR (do_a)
-               if (e != 0)
-                  nrtl += 1;
-            if CONSTEXPR (do_e)
-               ertl += floatTo<ebuf_prec>(e);
+               if CONSTEXPR (do_a)
+                  if (e != 0)
+                     nrtl += 1;
+               if CONSTEXPR (do_e)
+                  ertl += floatTo<ebuf_prec>(e);
+               if CONSTEXPR (do_g) {
+                  gxi += pgrad.frcx;
+                  gyi += pgrad.frcy;
+                  gzi += pgrad.frcz;
+                  gxk -= pgrad.frcx;
+                  gyk -= pgrad.frcy;
+                  gzk -= pgrad.frcz;
+
+                  txi += pgrad.ttqi[0];
+                  tyi += pgrad.ttqi[1];
+                  tzi += pgrad.ttqi[2];
+                  txk += pgrad.ttqk[0];
+                  tyk += pgrad.ttqk[1];
+                  tzk += pgrad.ttqk[2];
+               }
+               if CONSTEXPR (do_v and not tile_local) {
+                  vrtlxx += floatTo<vbuf_prec>(-xr * pgrad.frcx);
+                  vrtlyx += floatTo<vbuf_prec>(-0.5f * (yr * pgrad.frcx + xr * pgrad.frcy));
+                  vrtlzx += floatTo<vbuf_prec>(-0.5f * (zr * pgrad.frcx + xr * pgrad.frcz));
+                  vrtlyy += floatTo<vbuf_prec>(-yr * pgrad.frcy);
+                  vrtlzy += floatTo<vbuf_prec>(-0.5f * (zr * pgrad.frcy + yr * pgrad.frcz));
+                  vrtlzz += floatTo<vbuf_prec>(-zr * pgrad.frcz);
+               }
+               // lambda derivatives of a mutated pair (erepel1.f)
+               if CONSTEXPR (do_dl1)
+                  dvdltl += floatTo<ebuf_prec>(dle);
+               if CONSTEXPR (do_dl2)
+                  d2vdl2tl += floatTo<ebuf_prec>(dle2);
+               if CONSTEXPR (do_gdl) {
+                  dgxi += dlgrad.frcx;
+                  dgyi += dlgrad.frcy;
+                  dgzi += dlgrad.frcz;
+                  dgxk -= dlgrad.frcx;
+                  dgyk -= dlgrad.frcy;
+                  dgzk -= dlgrad.frcz;
+               }
+               if CONSTEXPR (do_tdl) {
+                  dltxi += dlgrad.ttqi[0];
+                  dltyi += dlgrad.ttqi[1];
+                  dltzi += dlgrad.ttqi[2];
+                  dltxk += dlgrad.ttqk[0];
+                  dltyk += dlgrad.ttqk[1];
+                  dltzk += dlgrad.ttqk[2];
+               }
+               if CONSTEXPR (do_vdl and not tile_local) {
+                  dvvirdltlxx += floatTo<vbuf_prec>(-xr * dlgrad.frcx);
+                  dvvirdltlyx += floatTo<vbuf_prec>(-0.5f * (yr * dlgrad.frcx + xr * dlgrad.frcy));
+                  dvvirdltlzx += floatTo<vbuf_prec>(-0.5f * (zr * dlgrad.frcx + xr * dlgrad.frcz));
+                  dvvirdltlyy += floatTo<vbuf_prec>(-yr * dlgrad.frcy);
+                  dvvirdltlzy += floatTo<vbuf_prec>(-0.5f * (zr * dlgrad.frcy + yr * dlgrad.frcz));
+                  dvvirdltlzz += floatTo<vbuf_prec>(-zr * dlgrad.frcz);
+               }
+            } // end if (include)
+
+            iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
             if CONSTEXPR (do_g) {
-               gxi += pgrad.frcx;
-               gyi += pgrad.frcy;
-               gzi += pgrad.frcz;
-               gxk -= pgrad.frcx;
-               gyk -= pgrad.frcy;
-               gzk -= pgrad.frcz;
-
-               txi += pgrad.ttqi[0];
-               tyi += pgrad.ttqi[1];
-               tzi += pgrad.ttqi[2];
-               txk += pgrad.ttqk[0];
-               tyk += pgrad.ttqk[1];
-               tzk += pgrad.ttqk[2];
+               gxi = __shfl_sync(ALL_LANES, gxi, ilane + 1);
+               gyi = __shfl_sync(ALL_LANES, gyi, ilane + 1);
+               gzi = __shfl_sync(ALL_LANES, gzi, ilane + 1);
+               txi = __shfl_sync(ALL_LANES, txi, ilane + 1);
+               tyi = __shfl_sync(ALL_LANES, tyi, ilane + 1);
+               tzi = __shfl_sync(ALL_LANES, tzi, ilane + 1);
+               if CONSTEXPR (do_tdl) {
+                  dltxi = __shfl_sync(ALL_LANES, dltxi, ilane + 1);
+                  dltyi = __shfl_sync(ALL_LANES, dltyi, ilane + 1);
+                  dltzi = __shfl_sync(ALL_LANES, dltzi, ilane + 1);
+               }
             }
-            if CONSTEXPR (do_v) {
-               vrtlxx += floatTo<vbuf_prec>(-xr * pgrad.frcx);
-               vrtlyx += floatTo<vbuf_prec>(-0.5f * (yr * pgrad.frcx + xr * pgrad.frcy));
-               vrtlzx += floatTo<vbuf_prec>(-0.5f * (zr * pgrad.frcx + xr * pgrad.frcz));
-               vrtlyy += floatTo<vbuf_prec>(-yr * pgrad.frcy);
-               vrtlzy += floatTo<vbuf_prec>(-0.5f * (zr * pgrad.frcy + yr * pgrad.frcz));
-               vrtlzz += floatTo<vbuf_prec>(-zr * pgrad.frcz);
-            }
-            // lambda derivatives of a mutated pair (erepel1.f)
-            if CONSTEXPR (do_dl1)
-               dvdltl += floatTo<ebuf_prec>(dle);
-            if CONSTEXPR (do_dl2)
-               d2vdl2tl += floatTo<ebuf_prec>(dle2);
             if CONSTEXPR (do_gdl) {
-               dgxi += dlgrad.frcx;
-               dgyi += dlgrad.frcy;
-               dgzi += dlgrad.frcz;
-               dgxk -= dlgrad.frcx;
-               dgyk -= dlgrad.frcy;
-               dgzk -= dlgrad.frcz;
-            }
-            if CONSTEXPR (do_tdl) {
-               dltxi += dlgrad.ttqi[0];
-               dltyi += dlgrad.ttqi[1];
-               dltzi += dlgrad.ttqi[2];
-               dltxk += dlgrad.ttqk[0];
-               dltyk += dlgrad.ttqk[1];
-               dltzk += dlgrad.ttqk[2];
-            }
-            if CONSTEXPR (do_vdl) {
-               dvvirdltlxx += floatTo<vbuf_prec>(-xr * dlgrad.frcx);
-               dvvirdltlyx += floatTo<vbuf_prec>(-0.5f * (yr * dlgrad.frcx + xr * dlgrad.frcy));
-               dvvirdltlzx += floatTo<vbuf_prec>(-0.5f * (zr * dlgrad.frcx + xr * dlgrad.frcz));
-               dvvirdltlyy += floatTo<vbuf_prec>(-yr * dlgrad.frcy);
-               dvvirdltlzy += floatTo<vbuf_prec>(-0.5f * (zr * dlgrad.frcy + yr * dlgrad.frcz));
-               dvvirdltlzz += floatTo<vbuf_prec>(-zr * dlgrad.frcz);
-            }
-         } // end if (include)
-
-         iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
-         if CONSTEXPR (do_g) {
-            gxi = __shfl_sync(ALL_LANES, gxi, ilane + 1);
-            gyi = __shfl_sync(ALL_LANES, gyi, ilane + 1);
-            gzi = __shfl_sync(ALL_LANES, gzi, ilane + 1);
-            txi = __shfl_sync(ALL_LANES, txi, ilane + 1);
-            tyi = __shfl_sync(ALL_LANES, tyi, ilane + 1);
-            tzi = __shfl_sync(ALL_LANES, tzi, ilane + 1);
-            if CONSTEXPR (do_tdl) {
-               dltxi = __shfl_sync(ALL_LANES, dltxi, ilane + 1);
-               dltyi = __shfl_sync(ALL_LANES, dltyi, ilane + 1);
-               dltzi = __shfl_sync(ALL_LANES, dltzi, ilane + 1);
+               dgxi = __shfl_sync(ALL_LANES, dgxi, ilane + 1);
+               dgyi = __shfl_sync(ALL_LANES, dgyi, ilane + 1);
+               dgzi = __shfl_sync(ALL_LANES, dgzi, ilane + 1);
             }
          }
-         if CONSTEXPR (do_gdl) {
-            dgxi = __shfl_sync(ALL_LANES, dgxi, ilane + 1);
-            dgyi = __shfl_sync(ALL_LANES, dgyi, ilane + 1);
-            dgzi = __shfl_sync(ALL_LANES, dgzi, ilane + 1);
+
+         if CONSTEXPR (do_v) {
+            vrtlxx += floatTo<vbuf_prec>(xi[threadIdx.x] * gxi + xk[threadIdx.x] * gxk);
+            vrtlyx += floatTo<vbuf_prec>(0.5f
+               * (yi[threadIdx.x] * gxi + yk[threadIdx.x] * gxk + xi[threadIdx.x] * gyi + xk[threadIdx.x] * gyk));
+            vrtlzx += floatTo<vbuf_prec>(0.5f
+               * (zi[threadIdx.x] * gxi + zk[threadIdx.x] * gxk + xi[threadIdx.x] * gzi + xk[threadIdx.x] * gzk));
+            vrtlyy += floatTo<vbuf_prec>(yi[threadIdx.x] * gyi + yk[threadIdx.x] * gyk);
+            vrtlzy += floatTo<vbuf_prec>(0.5f
+               * (zi[threadIdx.x] * gyi + zk[threadIdx.x] * gyk + yi[threadIdx.x] * gzi + yk[threadIdx.x] * gzk));
+            vrtlzz += floatTo<vbuf_prec>(zi[threadIdx.x] * gzi + zk[threadIdx.x] * gzk);
+         }
+         if CONSTEXPR (do_vdl) {
+            dvvirdltlxx += floatTo<vbuf_prec>(xi[threadIdx.x] * dgxi + xk[threadIdx.x] * dgxk);
+            dvvirdltlyx += floatTo<vbuf_prec>(0.5f
+               * (yi[threadIdx.x] * dgxi + yk[threadIdx.x] * dgxk + xi[threadIdx.x] * dgyi + xk[threadIdx.x] * dgyk));
+            dvvirdltlzx += floatTo<vbuf_prec>(0.5f
+               * (zi[threadIdx.x] * dgxi + zk[threadIdx.x] * dgxk + xi[threadIdx.x] * dgzi + xk[threadIdx.x] * dgzk));
+            dvvirdltlyy += floatTo<vbuf_prec>(yi[threadIdx.x] * dgyi + yk[threadIdx.x] * dgyk);
+            dvvirdltlzy += floatTo<vbuf_prec>(0.5f
+               * (zi[threadIdx.x] * dgyi + zk[threadIdx.x] * dgyk + yi[threadIdx.x] * dgzi + yk[threadIdx.x] * dgzk));
+            dvvirdltlzz += floatTo<vbuf_prec>(zi[threadIdx.x] * dgzi + zk[threadIdx.x] * dgzk);
+         }
+      } else {
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            int klane = srclane + threadIdx.x - ilane;
+            bool incl = iid < kid and kid < n;
+            int srcmask = 1 << srclane;
+            incl = incl and (rinfo0 & srcmask) == 0;
+            real scalea = 1;
+            constexpr bool tile_local = false;
+            real xr = xk[threadIdx.x] - xi[klane];
+            real yr = yk[threadIdx.x] - yi[klane];
+            real zr = zk[threadIdx.x] - zi[klane];
+
+            real e, dle, dle2;
+            PairRepelGrad pgrad, dlgrad;
+            zero(pgrad);
+
+            real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+            // The two ligands of a relative calculation never interact.
+            int mc = pair_mutcls(mutcls, imutg[klane], kmutg);
+            if (r2 <= off * off and incl and mc >= 0) {
+               pair_repel<do_g, do_dl1, do_dl2, do_tdl>( //
+                  r2, scalea, mc > 0, pair_softcore(mc == 2, rs1, rs2), cut, off, xr, yr, zr, sizi[klane], dmpi[klane],
+                  vali[klane], ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane], qixy[klane], qixz[klane],
+                  qiyy[klane], qiyz[klane], qizz[klane], sizk, dmpk, valk, ck, dkx[threadIdx.x], dky[threadIdx.x],
+                  dkz[threadIdx.x], qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, e, pgrad, dle, dle2, dlgrad);
+
+               if CONSTEXPR (do_a)
+                  if (e != 0)
+                     nrtl += 1;
+               if CONSTEXPR (do_e)
+                  ertl += floatTo<ebuf_prec>(e);
+               if CONSTEXPR (do_g) {
+                  gxi += pgrad.frcx;
+                  gyi += pgrad.frcy;
+                  gzi += pgrad.frcz;
+                  gxk -= pgrad.frcx;
+                  gyk -= pgrad.frcy;
+                  gzk -= pgrad.frcz;
+
+                  txi += pgrad.ttqi[0];
+                  tyi += pgrad.ttqi[1];
+                  tzi += pgrad.ttqi[2];
+                  txk += pgrad.ttqk[0];
+                  tyk += pgrad.ttqk[1];
+                  tzk += pgrad.ttqk[2];
+               }
+               if CONSTEXPR (do_v and not tile_local) {
+                  vrtlxx += floatTo<vbuf_prec>(-xr * pgrad.frcx);
+                  vrtlyx += floatTo<vbuf_prec>(-0.5f * (yr * pgrad.frcx + xr * pgrad.frcy));
+                  vrtlzx += floatTo<vbuf_prec>(-0.5f * (zr * pgrad.frcx + xr * pgrad.frcz));
+                  vrtlyy += floatTo<vbuf_prec>(-yr * pgrad.frcy);
+                  vrtlzy += floatTo<vbuf_prec>(-0.5f * (zr * pgrad.frcy + yr * pgrad.frcz));
+                  vrtlzz += floatTo<vbuf_prec>(-zr * pgrad.frcz);
+               }
+               // lambda derivatives of a mutated pair (erepel1.f)
+               if CONSTEXPR (do_dl1)
+                  dvdltl += floatTo<ebuf_prec>(dle);
+               if CONSTEXPR (do_dl2)
+                  d2vdl2tl += floatTo<ebuf_prec>(dle2);
+               if CONSTEXPR (do_gdl) {
+                  dgxi += dlgrad.frcx;
+                  dgyi += dlgrad.frcy;
+                  dgzi += dlgrad.frcz;
+                  dgxk -= dlgrad.frcx;
+                  dgyk -= dlgrad.frcy;
+                  dgzk -= dlgrad.frcz;
+               }
+               if CONSTEXPR (do_tdl) {
+                  dltxi += dlgrad.ttqi[0];
+                  dltyi += dlgrad.ttqi[1];
+                  dltzi += dlgrad.ttqi[2];
+                  dltxk += dlgrad.ttqk[0];
+                  dltyk += dlgrad.ttqk[1];
+                  dltzk += dlgrad.ttqk[2];
+               }
+               if CONSTEXPR (do_vdl and not tile_local) {
+                  dvvirdltlxx += floatTo<vbuf_prec>(-xr * dlgrad.frcx);
+                  dvvirdltlyx += floatTo<vbuf_prec>(-0.5f * (yr * dlgrad.frcx + xr * dlgrad.frcy));
+                  dvvirdltlzx += floatTo<vbuf_prec>(-0.5f * (zr * dlgrad.frcx + xr * dlgrad.frcz));
+                  dvvirdltlyy += floatTo<vbuf_prec>(-yr * dlgrad.frcy);
+                  dvvirdltlzy += floatTo<vbuf_prec>(-0.5f * (zr * dlgrad.frcy + yr * dlgrad.frcz));
+                  dvvirdltlzz += floatTo<vbuf_prec>(-zr * dlgrad.frcz);
+               }
+            } // end if (include)
+
+            iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
+            if CONSTEXPR (do_g) {
+               gxi = __shfl_sync(ALL_LANES, gxi, ilane + 1);
+               gyi = __shfl_sync(ALL_LANES, gyi, ilane + 1);
+               gzi = __shfl_sync(ALL_LANES, gzi, ilane + 1);
+               txi = __shfl_sync(ALL_LANES, txi, ilane + 1);
+               tyi = __shfl_sync(ALL_LANES, tyi, ilane + 1);
+               tzi = __shfl_sync(ALL_LANES, tzi, ilane + 1);
+               if CONSTEXPR (do_tdl) {
+                  dltxi = __shfl_sync(ALL_LANES, dltxi, ilane + 1);
+                  dltyi = __shfl_sync(ALL_LANES, dltyi, ilane + 1);
+                  dltzi = __shfl_sync(ALL_LANES, dltzi, ilane + 1);
+               }
+            }
+            if CONSTEXPR (do_gdl) {
+               dgxi = __shfl_sync(ALL_LANES, dgxi, ilane + 1);
+               dgyi = __shfl_sync(ALL_LANES, dgyi, ilane + 1);
+               dgzi = __shfl_sync(ALL_LANES, dgzi, ilane + 1);
+            }
          }
       }
-
       if CONSTEXPR (do_g) {
          atomic_add(gxi, gx, i);
          atomic_add(gyi, gy, i);
@@ -536,7 +692,7 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
       sizi[threadIdx.x] = sizpr[i];
       dmpi[threadIdx.x] = dmppr[i];
       vali[threadIdx.x] = elepr[i];
-      imut[threadIdx.x] = mut[i];
+      imutg[threadIdx.x] = mutg[i];
       xk[threadIdx.x] = sorted[atomk].x;
       yk[threadIdx.x] = sorted[atomk].y;
       zk[threadIdx.x] = sorted[atomk].z;
@@ -553,110 +709,259 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
       sizk = sizpr[k];
       dmpk = dmppr[k];
       valk = elepr[k];
-      kmut = mut[k];
+      kmutg = mutg[k];
       __syncwarp();
 
-      for (int j = 0; j < WARP_SIZE; ++j) {
-         int srclane = (ilane + j) & (WARP_SIZE - 1);
-         int klane = srclane + threadIdx.x - ilane;
-         bool incl = atomk > 0;
-         real scalea = 1;
-         real xr = xk[threadIdx.x] - xi[klane];
-         real yr = yk[threadIdx.x] - yi[klane];
-         real zr = zk[threadIdx.x] - zi[klane];
+      real xc = akc[ty].x;
+      real yc = akc[ty].y;
+      real zc = akc[ty].z;
+      const bool ilocal = akc[ty].w != 0;
+      if (ilocal) {
+         real xr, yr, zr;
+         xr = xi[threadIdx.x] - xc;
+         yr = yi[threadIdx.x] - yc;
+         zr = zi[threadIdx.x] - zc;
+         IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+         xi[threadIdx.x] = xr;
+         yi[threadIdx.x] = yr;
+         zi[threadIdx.x] = zr;
+         xr = xk[threadIdx.x] - xc;
+         yr = yk[threadIdx.x] - yc;
+         zr = zk[threadIdx.x] - zc;
+         IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+         xk[threadIdx.x] = xr;
+         yk[threadIdx.x] = yr;
+         zk[threadIdx.x] = zr;
+         __syncwarp();
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            int klane = srclane + threadIdx.x - ilane;
+            bool incl = atomk > 0;
+            real scalea = 1;
+            constexpr bool tile_local = true;
+            real xr = xk[threadIdx.x] - xi[klane];
+            real yr = yk[threadIdx.x] - yi[klane];
+            real zr = zk[threadIdx.x] - zi[klane];
 
-         real e, dle, dle2;
-         PairRepelGrad pgrad, dlgrad;
-         zero(pgrad);
+            real e, dle, dle2;
+            PairRepelGrad pgrad, dlgrad;
+            zero(pgrad);
 
-         real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
-            bool mutik = pair_mutik(vcouple, imut[klane], kmut);
-            pair_repel<do_g, do_dl1, do_dl2, do_tdl>( //
-               r2, scalea, mutik, rs, cut, off, xr, yr, zr, sizi[klane], dmpi[klane], vali[klane], ci[klane],
-               dix[klane], diy[klane], diz[klane], qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane],
-               qizz[klane], sizk, dmpk, valk, ck, dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x], qkxx, qkxy,
-               qkxz, qkyy, qkyz, qkzz, e, pgrad, dle, dle2, dlgrad);
+            real r2 = (xr * xr + yr * yr + zr * zr);
+            // The two ligands of a relative calculation never interact.
+            int mc = pair_mutcls(mutcls, imutg[klane], kmutg);
+            if (r2 <= off * off and incl and mc >= 0) {
+               pair_repel<do_g, do_dl1, do_dl2, do_tdl>( //
+                  r2, scalea, mc > 0, pair_softcore(mc == 2, rs1, rs2), cut, off, xr, yr, zr, sizi[klane], dmpi[klane],
+                  vali[klane], ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane], qixy[klane], qixz[klane],
+                  qiyy[klane], qiyz[klane], qizz[klane], sizk, dmpk, valk, ck, dkx[threadIdx.x], dky[threadIdx.x],
+                  dkz[threadIdx.x], qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, e, pgrad, dle, dle2, dlgrad);
 
-            if CONSTEXPR (do_a)
-               if (e != 0)
-                  nrtl += 1;
-            if CONSTEXPR (do_e)
-               ertl += floatTo<ebuf_prec>(e);
+               if CONSTEXPR (do_a)
+                  if (e != 0)
+                     nrtl += 1;
+               if CONSTEXPR (do_e)
+                  ertl += floatTo<ebuf_prec>(e);
+               if CONSTEXPR (do_g) {
+                  gxi += pgrad.frcx;
+                  gyi += pgrad.frcy;
+                  gzi += pgrad.frcz;
+                  gxk -= pgrad.frcx;
+                  gyk -= pgrad.frcy;
+                  gzk -= pgrad.frcz;
+
+                  txi += pgrad.ttqi[0];
+                  tyi += pgrad.ttqi[1];
+                  tzi += pgrad.ttqi[2];
+                  txk += pgrad.ttqk[0];
+                  tyk += pgrad.ttqk[1];
+                  tzk += pgrad.ttqk[2];
+               }
+               if CONSTEXPR (do_v and not tile_local) {
+                  vrtlxx += floatTo<vbuf_prec>(-xr * pgrad.frcx);
+                  vrtlyx += floatTo<vbuf_prec>(-0.5f * (yr * pgrad.frcx + xr * pgrad.frcy));
+                  vrtlzx += floatTo<vbuf_prec>(-0.5f * (zr * pgrad.frcx + xr * pgrad.frcz));
+                  vrtlyy += floatTo<vbuf_prec>(-yr * pgrad.frcy);
+                  vrtlzy += floatTo<vbuf_prec>(-0.5f * (zr * pgrad.frcy + yr * pgrad.frcz));
+                  vrtlzz += floatTo<vbuf_prec>(-zr * pgrad.frcz);
+               }
+               // lambda derivatives of a mutated pair (erepel1.f)
+               if CONSTEXPR (do_dl1)
+                  dvdltl += floatTo<ebuf_prec>(dle);
+               if CONSTEXPR (do_dl2)
+                  d2vdl2tl += floatTo<ebuf_prec>(dle2);
+               if CONSTEXPR (do_gdl) {
+                  dgxi += dlgrad.frcx;
+                  dgyi += dlgrad.frcy;
+                  dgzi += dlgrad.frcz;
+                  dgxk -= dlgrad.frcx;
+                  dgyk -= dlgrad.frcy;
+                  dgzk -= dlgrad.frcz;
+               }
+               if CONSTEXPR (do_tdl) {
+                  dltxi += dlgrad.ttqi[0];
+                  dltyi += dlgrad.ttqi[1];
+                  dltzi += dlgrad.ttqi[2];
+                  dltxk += dlgrad.ttqk[0];
+                  dltyk += dlgrad.ttqk[1];
+                  dltzk += dlgrad.ttqk[2];
+               }
+               if CONSTEXPR (do_vdl and not tile_local) {
+                  dvvirdltlxx += floatTo<vbuf_prec>(-xr * dlgrad.frcx);
+                  dvvirdltlyx += floatTo<vbuf_prec>(-0.5f * (yr * dlgrad.frcx + xr * dlgrad.frcy));
+                  dvvirdltlzx += floatTo<vbuf_prec>(-0.5f * (zr * dlgrad.frcx + xr * dlgrad.frcz));
+                  dvvirdltlyy += floatTo<vbuf_prec>(-yr * dlgrad.frcy);
+                  dvvirdltlzy += floatTo<vbuf_prec>(-0.5f * (zr * dlgrad.frcy + yr * dlgrad.frcz));
+                  dvvirdltlzz += floatTo<vbuf_prec>(-zr * dlgrad.frcz);
+               }
+            } // end if (include)
+
             if CONSTEXPR (do_g) {
-               gxi += pgrad.frcx;
-               gyi += pgrad.frcy;
-               gzi += pgrad.frcz;
-               gxk -= pgrad.frcx;
-               gyk -= pgrad.frcy;
-               gzk -= pgrad.frcz;
-
-               txi += pgrad.ttqi[0];
-               tyi += pgrad.ttqi[1];
-               tzi += pgrad.ttqi[2];
-               txk += pgrad.ttqk[0];
-               tyk += pgrad.ttqk[1];
-               tzk += pgrad.ttqk[2];
+               gxi = __shfl_sync(ALL_LANES, gxi, ilane + 1);
+               gyi = __shfl_sync(ALL_LANES, gyi, ilane + 1);
+               gzi = __shfl_sync(ALL_LANES, gzi, ilane + 1);
+               txi = __shfl_sync(ALL_LANES, txi, ilane + 1);
+               tyi = __shfl_sync(ALL_LANES, tyi, ilane + 1);
+               tzi = __shfl_sync(ALL_LANES, tzi, ilane + 1);
+               if CONSTEXPR (do_tdl) {
+                  dltxi = __shfl_sync(ALL_LANES, dltxi, ilane + 1);
+                  dltyi = __shfl_sync(ALL_LANES, dltyi, ilane + 1);
+                  dltzi = __shfl_sync(ALL_LANES, dltzi, ilane + 1);
+               }
             }
-            if CONSTEXPR (do_v) {
-               vrtlxx += floatTo<vbuf_prec>(-xr * pgrad.frcx);
-               vrtlyx += floatTo<vbuf_prec>(-0.5f * (yr * pgrad.frcx + xr * pgrad.frcy));
-               vrtlzx += floatTo<vbuf_prec>(-0.5f * (zr * pgrad.frcx + xr * pgrad.frcz));
-               vrtlyy += floatTo<vbuf_prec>(-yr * pgrad.frcy);
-               vrtlzy += floatTo<vbuf_prec>(-0.5f * (zr * pgrad.frcy + yr * pgrad.frcz));
-               vrtlzz += floatTo<vbuf_prec>(-zr * pgrad.frcz);
-            }
-            // lambda derivatives of a mutated pair (erepel1.f)
-            if CONSTEXPR (do_dl1)
-               dvdltl += floatTo<ebuf_prec>(dle);
-            if CONSTEXPR (do_dl2)
-               d2vdl2tl += floatTo<ebuf_prec>(dle2);
             if CONSTEXPR (do_gdl) {
-               dgxi += dlgrad.frcx;
-               dgyi += dlgrad.frcy;
-               dgzi += dlgrad.frcz;
-               dgxk -= dlgrad.frcx;
-               dgyk -= dlgrad.frcy;
-               dgzk -= dlgrad.frcz;
-            }
-            if CONSTEXPR (do_tdl) {
-               dltxi += dlgrad.ttqi[0];
-               dltyi += dlgrad.ttqi[1];
-               dltzi += dlgrad.ttqi[2];
-               dltxk += dlgrad.ttqk[0];
-               dltyk += dlgrad.ttqk[1];
-               dltzk += dlgrad.ttqk[2];
-            }
-            if CONSTEXPR (do_vdl) {
-               dvvirdltlxx += floatTo<vbuf_prec>(-xr * dlgrad.frcx);
-               dvvirdltlyx += floatTo<vbuf_prec>(-0.5f * (yr * dlgrad.frcx + xr * dlgrad.frcy));
-               dvvirdltlzx += floatTo<vbuf_prec>(-0.5f * (zr * dlgrad.frcx + xr * dlgrad.frcz));
-               dvvirdltlyy += floatTo<vbuf_prec>(-yr * dlgrad.frcy);
-               dvvirdltlzy += floatTo<vbuf_prec>(-0.5f * (zr * dlgrad.frcy + yr * dlgrad.frcz));
-               dvvirdltlzz += floatTo<vbuf_prec>(-zr * dlgrad.frcz);
-            }
-         } // end if (include)
-
-         if CONSTEXPR (do_g) {
-            gxi = __shfl_sync(ALL_LANES, gxi, ilane + 1);
-            gyi = __shfl_sync(ALL_LANES, gyi, ilane + 1);
-            gzi = __shfl_sync(ALL_LANES, gzi, ilane + 1);
-            txi = __shfl_sync(ALL_LANES, txi, ilane + 1);
-            tyi = __shfl_sync(ALL_LANES, tyi, ilane + 1);
-            tzi = __shfl_sync(ALL_LANES, tzi, ilane + 1);
-            if CONSTEXPR (do_tdl) {
-               dltxi = __shfl_sync(ALL_LANES, dltxi, ilane + 1);
-               dltyi = __shfl_sync(ALL_LANES, dltyi, ilane + 1);
-               dltzi = __shfl_sync(ALL_LANES, dltzi, ilane + 1);
+               dgxi = __shfl_sync(ALL_LANES, dgxi, ilane + 1);
+               dgyi = __shfl_sync(ALL_LANES, dgyi, ilane + 1);
+               dgzi = __shfl_sync(ALL_LANES, dgzi, ilane + 1);
             }
          }
-         if CONSTEXPR (do_gdl) {
-            dgxi = __shfl_sync(ALL_LANES, dgxi, ilane + 1);
-            dgyi = __shfl_sync(ALL_LANES, dgyi, ilane + 1);
-            dgzi = __shfl_sync(ALL_LANES, dgzi, ilane + 1);
+
+         if CONSTEXPR (do_v) {
+            vrtlxx += floatTo<vbuf_prec>(xi[threadIdx.x] * gxi + xk[threadIdx.x] * gxk);
+            vrtlyx += floatTo<vbuf_prec>(0.5f
+               * (yi[threadIdx.x] * gxi + yk[threadIdx.x] * gxk + xi[threadIdx.x] * gyi + xk[threadIdx.x] * gyk));
+            vrtlzx += floatTo<vbuf_prec>(0.5f
+               * (zi[threadIdx.x] * gxi + zk[threadIdx.x] * gxk + xi[threadIdx.x] * gzi + xk[threadIdx.x] * gzk));
+            vrtlyy += floatTo<vbuf_prec>(yi[threadIdx.x] * gyi + yk[threadIdx.x] * gyk);
+            vrtlzy += floatTo<vbuf_prec>(0.5f
+               * (zi[threadIdx.x] * gyi + zk[threadIdx.x] * gyk + yi[threadIdx.x] * gzi + yk[threadIdx.x] * gzk));
+            vrtlzz += floatTo<vbuf_prec>(zi[threadIdx.x] * gzi + zk[threadIdx.x] * gzk);
+         }
+         if CONSTEXPR (do_vdl) {
+            dvvirdltlxx += floatTo<vbuf_prec>(xi[threadIdx.x] * dgxi + xk[threadIdx.x] * dgxk);
+            dvvirdltlyx += floatTo<vbuf_prec>(0.5f
+               * (yi[threadIdx.x] * dgxi + yk[threadIdx.x] * dgxk + xi[threadIdx.x] * dgyi + xk[threadIdx.x] * dgyk));
+            dvvirdltlzx += floatTo<vbuf_prec>(0.5f
+               * (zi[threadIdx.x] * dgxi + zk[threadIdx.x] * dgxk + xi[threadIdx.x] * dgzi + xk[threadIdx.x] * dgzk));
+            dvvirdltlyy += floatTo<vbuf_prec>(yi[threadIdx.x] * dgyi + yk[threadIdx.x] * dgyk);
+            dvvirdltlzy += floatTo<vbuf_prec>(0.5f
+               * (zi[threadIdx.x] * dgyi + zk[threadIdx.x] * dgyk + yi[threadIdx.x] * dgzi + yk[threadIdx.x] * dgzk));
+            dvvirdltlzz += floatTo<vbuf_prec>(zi[threadIdx.x] * dgzi + zk[threadIdx.x] * dgzk);
+         }
+      } else {
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            int klane = srclane + threadIdx.x - ilane;
+            bool incl = atomk > 0;
+            real scalea = 1;
+            constexpr bool tile_local = false;
+            real xr = xk[threadIdx.x] - xi[klane];
+            real yr = yk[threadIdx.x] - yi[klane];
+            real zr = zk[threadIdx.x] - zi[klane];
+
+            real e, dle, dle2;
+            PairRepelGrad pgrad, dlgrad;
+            zero(pgrad);
+
+            real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+            // The two ligands of a relative calculation never interact.
+            int mc = pair_mutcls(mutcls, imutg[klane], kmutg);
+            if (r2 <= off * off and incl and mc >= 0) {
+               pair_repel<do_g, do_dl1, do_dl2, do_tdl>( //
+                  r2, scalea, mc > 0, pair_softcore(mc == 2, rs1, rs2), cut, off, xr, yr, zr, sizi[klane], dmpi[klane],
+                  vali[klane], ci[klane], dix[klane], diy[klane], diz[klane], qixx[klane], qixy[klane], qixz[klane],
+                  qiyy[klane], qiyz[klane], qizz[klane], sizk, dmpk, valk, ck, dkx[threadIdx.x], dky[threadIdx.x],
+                  dkz[threadIdx.x], qkxx, qkxy, qkxz, qkyy, qkyz, qkzz, e, pgrad, dle, dle2, dlgrad);
+
+               if CONSTEXPR (do_a)
+                  if (e != 0)
+                     nrtl += 1;
+               if CONSTEXPR (do_e)
+                  ertl += floatTo<ebuf_prec>(e);
+               if CONSTEXPR (do_g) {
+                  gxi += pgrad.frcx;
+                  gyi += pgrad.frcy;
+                  gzi += pgrad.frcz;
+                  gxk -= pgrad.frcx;
+                  gyk -= pgrad.frcy;
+                  gzk -= pgrad.frcz;
+
+                  txi += pgrad.ttqi[0];
+                  tyi += pgrad.ttqi[1];
+                  tzi += pgrad.ttqi[2];
+                  txk += pgrad.ttqk[0];
+                  tyk += pgrad.ttqk[1];
+                  tzk += pgrad.ttqk[2];
+               }
+               if CONSTEXPR (do_v and not tile_local) {
+                  vrtlxx += floatTo<vbuf_prec>(-xr * pgrad.frcx);
+                  vrtlyx += floatTo<vbuf_prec>(-0.5f * (yr * pgrad.frcx + xr * pgrad.frcy));
+                  vrtlzx += floatTo<vbuf_prec>(-0.5f * (zr * pgrad.frcx + xr * pgrad.frcz));
+                  vrtlyy += floatTo<vbuf_prec>(-yr * pgrad.frcy);
+                  vrtlzy += floatTo<vbuf_prec>(-0.5f * (zr * pgrad.frcy + yr * pgrad.frcz));
+                  vrtlzz += floatTo<vbuf_prec>(-zr * pgrad.frcz);
+               }
+               // lambda derivatives of a mutated pair (erepel1.f)
+               if CONSTEXPR (do_dl1)
+                  dvdltl += floatTo<ebuf_prec>(dle);
+               if CONSTEXPR (do_dl2)
+                  d2vdl2tl += floatTo<ebuf_prec>(dle2);
+               if CONSTEXPR (do_gdl) {
+                  dgxi += dlgrad.frcx;
+                  dgyi += dlgrad.frcy;
+                  dgzi += dlgrad.frcz;
+                  dgxk -= dlgrad.frcx;
+                  dgyk -= dlgrad.frcy;
+                  dgzk -= dlgrad.frcz;
+               }
+               if CONSTEXPR (do_tdl) {
+                  dltxi += dlgrad.ttqi[0];
+                  dltyi += dlgrad.ttqi[1];
+                  dltzi += dlgrad.ttqi[2];
+                  dltxk += dlgrad.ttqk[0];
+                  dltyk += dlgrad.ttqk[1];
+                  dltzk += dlgrad.ttqk[2];
+               }
+               if CONSTEXPR (do_vdl and not tile_local) {
+                  dvvirdltlxx += floatTo<vbuf_prec>(-xr * dlgrad.frcx);
+                  dvvirdltlyx += floatTo<vbuf_prec>(-0.5f * (yr * dlgrad.frcx + xr * dlgrad.frcy));
+                  dvvirdltlzx += floatTo<vbuf_prec>(-0.5f * (zr * dlgrad.frcx + xr * dlgrad.frcz));
+                  dvvirdltlyy += floatTo<vbuf_prec>(-yr * dlgrad.frcy);
+                  dvvirdltlzy += floatTo<vbuf_prec>(-0.5f * (zr * dlgrad.frcy + yr * dlgrad.frcz));
+                  dvvirdltlzz += floatTo<vbuf_prec>(-zr * dlgrad.frcz);
+               }
+            } // end if (include)
+
+            if CONSTEXPR (do_g) {
+               gxi = __shfl_sync(ALL_LANES, gxi, ilane + 1);
+               gyi = __shfl_sync(ALL_LANES, gyi, ilane + 1);
+               gzi = __shfl_sync(ALL_LANES, gzi, ilane + 1);
+               txi = __shfl_sync(ALL_LANES, txi, ilane + 1);
+               tyi = __shfl_sync(ALL_LANES, tyi, ilane + 1);
+               tzi = __shfl_sync(ALL_LANES, tzi, ilane + 1);
+               if CONSTEXPR (do_tdl) {
+                  dltxi = __shfl_sync(ALL_LANES, dltxi, ilane + 1);
+                  dltyi = __shfl_sync(ALL_LANES, dltyi, ilane + 1);
+                  dltzi = __shfl_sync(ALL_LANES, dltzi, ilane + 1);
+               }
+            }
+            if CONSTEXPR (do_gdl) {
+               dgxi = __shfl_sync(ALL_LANES, dgxi, ilane + 1);
+               dgyi = __shfl_sync(ALL_LANES, dgyi, ilane + 1);
+               dgzi = __shfl_sync(ALL_LANES, dgzi, ilane + 1);
+            }
          }
       }
-
       if CONSTEXPR (do_g) {
          atomic_add(gxi, gx, i);
          atomic_add(gyi, gy, i);

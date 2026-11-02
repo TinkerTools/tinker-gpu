@@ -28,7 +28,8 @@ TINKER_EXTERN real (*cvexclude_scale)[2];
 
 TINKER_EXTERN bool vdwpr_in_use;
 
-TINKER_EXTERN int* mut_coalesced;     // n
+TINKER_EXTERN int* mut_coalesced;     // n, the ligand groups (emGroup)
 TINKER_EXTERN real* chg_coalesced;    // n
 TINKER_EXTERN real* radeps_coalesced; // 2*n
+TINKER_EXTERN real* dq_coalesced;     // n, with lambda derivatives
 }

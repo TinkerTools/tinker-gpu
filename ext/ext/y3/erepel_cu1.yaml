@@ -1,6 +1,12 @@
 OUTPUT_DIR: src/cu/hippo
 KERNEL_NAME: erepel_cu1
-TEMPLATE_PARAMS: template <class Ver>
+TEMPLATE_PARAMS: template <class Ver, class IMG>
+# the box shape as a template parameter, and the tiles near their centers
+# imaged once, their virial from the summed forces
+IMAGE_TEMPLATE: IMG
+LOCAL_TILES: true
+# the multipole pair forces are off the line of centers
+LOCAL_VIRIAL: symmetric
 CONSTEXPR_FLAGS: |
   constexpr bool do_a = Ver::a;
   constexpr bool do_e = Ver::e;
@@ -11,6 +17,7 @@ CONSTEXPR_FLAGS: |
   constexpr bool do_gdl = Ver::g_dlmda;
   constexpr bool do_tdl = Ver::g_dlmda or Ver::v_dlmda;
   constexpr bool do_vdl = Ver::v_dlmda;
+  static_assert(not do_vdl or do_gdl, "");
 
 COUNT:
   - nr
@@ -50,9 +57,9 @@ EXTRA_PARAMS: |
   , const real* restrict sizpr
   , const real* restrict elepr
   , const real* restrict dmppr
-  , const int*  restrict mut
-  , Vdw vcouple
-  , SoftCoreLmda rs
+  , const int*  restrict mutg
+  , int mutcls
+  , SoftCoreLmda rs1, SoftCoreLmda rs2
 # IMPLICIT_PARAMS:
 
 I_VARIABLES:
@@ -72,7 +79,7 @@ I_VARIABLES:
   - shared real sizi from:sizpr
   - shared real dmpi from:dmppr
   - shared real vali from:elepr
-  - shared int  imut from:mut
+  - shared int  imutg from:mutg
 K_VARIABLES:
   - shared   real xk  from:x
   - shared   real yk  from:y
@@ -90,7 +97,7 @@ K_VARIABLES:
   - register real sizk from:sizpr
   - register real dmpk from:dmppr
   - register real valk from:elepr
-  - register int  kmut from:mut
+  - register int  kmutg from:mutg
 I_FORCE:
   - register real gxi addto:gx
   - register real gyi addto:gy
@@ -131,10 +138,11 @@ FULL_PAIRWISE_INTERACTION: |
   zero(pgrad);
 
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
-    bool mutik = pair_mutik(vcouple, @imut@, @kmut@);
+  // The two ligands of a relative calculation never interact.
+  int mc = pair_mutcls(mutcls, @imutg@, @kmutg@);
+  if (r2 <= off * off and incl and mc >= 0) {
     pair_repel<do_g, do_dl1, do_dl2, do_tdl>( //
-      r2, scalea, mutik, rs, cut, off, xr, yr, zr,
+      r2, scalea, mc > 0, pair_softcore(mc == 2, rs1, rs2), cut, off, xr, yr, zr,
       @sizi@, @dmpi@, @vali@, @ci@, @dix@, @diy@, @diz@, @qixx@, @qixy@,
       @qixz@, @qiyy@, @qiyz@, @qizz@,
       @sizk@, @dmpk@, @valk@, @ck@, @dkx@, @dky@, @dkz@, @qkxx@, @qkxy@,
@@ -162,7 +170,7 @@ FULL_PAIRWISE_INTERACTION: |
       @tyk@ += pgrad.ttqk[1];
       @tzk@ += pgrad.ttqk[2];
     }
-    if CONSTEXPR (do_v) {
+    if CONSTEXPR (do_v and not tile_local) {
         vrtlxx += floatTo<vbuf_prec>(-xr * pgrad.frcx);
         vrtlyx += floatTo<vbuf_prec>(-0.5f * (yr * pgrad.frcx + xr * pgrad.frcy));
         vrtlzx += floatTo<vbuf_prec>(-0.5f * (zr * pgrad.frcx + xr * pgrad.frcz));
@@ -191,7 +199,7 @@ FULL_PAIRWISE_INTERACTION: |
       @dltyk@ += dlgrad.ttqk[1];
       @dltzk@ += dlgrad.ttqk[2];
     }
-    if CONSTEXPR (do_vdl) {
+    if CONSTEXPR (do_vdl and not tile_local) {
         dvvirdltlxx += floatTo<vbuf_prec>(-xr * dlgrad.frcx);
         dvvirdltlyx += floatTo<vbuf_prec>(-0.5f * (yr * dlgrad.frcx + xr * dlgrad.frcy));
         dvvirdltlzx += floatTo<vbuf_prec>(-0.5f * (zr * dlgrad.frcx + xr * dlgrad.frcz));

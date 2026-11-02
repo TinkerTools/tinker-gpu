@@ -524,8 +524,9 @@ void epolarData(RcOp op)
       std::vector<double> polbuf(n);
       const GrpScale psc = grpScale(plam);
       for (int i = 0; i < n; ++i) {
-         if (use_prst and mutant::mutg[i] != 0)
-            polbuf[i] = psc.s[mutant::mutg[i]] * dlmda::polarityorig[i];
+         const int g = hostGroup(i);
+         if (use_prst and g != 0)
+            polbuf[i] = psc.s[g] * dlmda::polarityorig[i];
          else
             polbuf[i] = polar::polarity[i];
       }
@@ -554,16 +555,8 @@ void epolarSetActiveMask()
    for (int i = 0; i < n; ++i) {
       if (dlmda::polarityorig[i] == 0)
          continue;
-      auto atom_mask = RdtMask::ENV;
-      if (use_rel) {
-         if (mutant::mutg[i] == 1)
-            atom_mask = RdtMask::LIGA;
-         else if (mutant::mutg[i] == 2)
-            atom_mask = RdtMask::LIGB;
-      } else if (mutant::mutg[i] != 0) {
-         atom_mask = RdtMask::LIGA;
-      }
-      polar_active_mask |= static_cast<unsigned>(atom_mask);
+      // the mask bit of a group, as grpLive() reads it
+      polar_active_mask |= 1u << hostGroup(i);
    }
 }
 
@@ -783,13 +776,13 @@ static void epolarBegin(int vers)
 {
    zeroOnHost(energy_ep, virial_ep);
    epolarZeroWork(vers);
-   polarLmdaZero(vers);
+   lmdaChannel(LmdaTerm::POLAR).zero(vers);
 }
 
 static void epolarFinish(int vers)
 {
    ep_buf.flush(vers);
-   polarLmdaFlush(vers);
+   lmdaChannel(LmdaTerm::POLAR).flush(vers);
 }
 
 static bool epolarStateHasActiveSite(RdtMask mask)

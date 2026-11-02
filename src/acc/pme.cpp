@@ -8,31 +8,39 @@
 
 namespace tinker {
 // ONE_SET: UIND spreads fuind alone, into qgrid as the real input of an
-// in-place real-to-complex FFT (fftfrontOneSet)
+// in-place real-to-complex FFT (fftfrontOneSet), and DISP spreads each site
+// into the real grid of its slot, ptr2 holding where the grid starts in
+// slots, of which gsize reals are zeroed first (gridDispSlots)
 template <class T, bool ONE_SET = false>
-static void gridPut_acc(PMEUnit pme_u, real* ptr1, real* ptr2)
+static void gridPut_acc(PMEUnit pme_u, real* ptr1, real* ptr2, real* slots = nullptr, int gsize = 0)
 {
    auto& st = *pme_u;
-   auto* qgrid = st.qgrid;
+   constexpr bool SLOTS = eq<T, DISP>() and ONE_SET;
+   auto* qgrid = SLOTS ? slots : st.qgrid;
 
    MAYBE_UNUSED const real* pchg = ptr1;
    MAYBE_UNUSED const real(*fmp)[10] = (real(*)[10])ptr1;
    MAYBE_UNUSED const real(*fuind)[3] = (real(*)[3])ptr1;
    MAYBE_UNUSED const real(*fuinp)[3] = (real(*)[3])ptr2;
-   MAYBE_UNUSED const int* dpart = (const int*)ptr2;
+   MAYBE_UNUSED const int* doffset = (const int*)ptr2;
 
    const int nfft1 = st.nfft1;
    const int nfft2 = st.nfft2;
    const int nfft3 = st.nfft3;
    const int bsorder = st.bsorder;
    assert(bsorder <= 5);
+   // ONE_SET: the padded rows of an in-place real FFT
+   const int ldx = ONE_SET ? 2 * (nfft1 / 2 + 1) : nfft1;
 
    // ONE_SET: the real grid of the in-place R2C FFT, with its padded rows
-   darray::zero(g::q0, (ONE_SET ? 2 * (nfft1 / 2 + 1) : 2 * nfft1) * nfft2 * nfft3, st.qgrid);
+   if CONSTEXPR (SLOTS)
+      darray::zero(g::q0, gsize, qgrid);
+   else
+      darray::zero(g::q0, (ONE_SET ? 2 * (nfft1 / 2 + 1) : 2 * nfft1) * nfft2 * nfft3, qgrid);
 
    #pragma acc parallel loop independent async\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(pchg,fmp,fuind,fuinp,dpart,x,y,z,qgrid)
+               deviceptr(pchg,fmp,fuind,fuinp,doffset,x,y,z,qgrid)
    for (int i = 0; i < n; ++i) {
       real thetai1[4 * 5];
       real thetai2[4 * 5];
@@ -75,8 +83,14 @@ static void gridPut_acc(PMEUnit pme_u, real* ptr1, real* ptr2)
          real pchgi = pchg[i];
          if (pchgi == 0)
             continue;
-         // the mutated ligand of Ewald dispersion fills the imaginary part
-         int ip = (eq<T, DISP>() and dpart and dpart[i]) ? 1 : 0;
+         // a complex grid holds one real grid in its real parts
+         int base = 0, stride = 2;
+         if CONSTEXPR (SLOTS) {
+            base = doffset[i];
+            if (base < 0)
+               continue;
+            stride = 1;
+         }
 
          bsplgen<1>(w1, thetai1, bsorder);
          bsplgen<1>(w2, thetai2, bsorder);
@@ -86,13 +100,13 @@ static void gridPut_acc(PMEUnit pme_u, real* ptr1, real* ptr2)
          for (int iz = 0; iz < bsorder; ++iz) {
             int zbase = igrid3 + iz;
             zbase -= (zbase >= nfft3 ? nfft3 : 0);
-            zbase *= (nfft1 * nfft2);
+            zbase *= (ldx * nfft2);
             real v0 = thetai3[4 * iz] * pchgi;
             #pragma acc loop seq
             for (int iy = 0; iy < bsorder; ++iy) {
                int ybase = igrid2 + iy;
                ybase -= (ybase >= nfft2 ? nfft2 : 0);
-               ybase *= nfft1;
+               ybase *= ldx;
                real u0 = thetai2[4 * iy] * v0;
                #pragma acc loop seq
                for (int ix = 0; ix < bsorder; ++ix) {
@@ -100,7 +114,7 @@ static void gridPut_acc(PMEUnit pme_u, real* ptr1, real* ptr2)
                   xbase -= (xbase >= nfft1 ? nfft1 : 0);
                   int index = xbase + ybase + zbase;
                   real term = thetai1[4 * ix] * u0;
-                  atomic_add(term, qgrid, 2 * index + ip);
+                  atomic_add(term, qgrid, base + stride * index);
                }
             } // end for (int iy)
          }
@@ -158,8 +172,6 @@ static void gridPut_acc(PMEUnit pme_u, real* ptr1, real* ptr2)
       } // end if (MPOLE)
 
       if CONSTEXPR (eq<T, UIND>()) {
-         // ONE_SET: the padded rows of an in-place real FFT
-         const int ldx = 2 * (nfft1 / 2 + 1);
          bsplgen<2>(w1, thetai1, bsorder);
          bsplgen<2>(w2, thetai2, bsorder);
          bsplgen<2>(w3, thetai3, bsorder);
@@ -213,9 +225,14 @@ void gridPchg_acc(PMEUnit pme_u, real* pchg)
    gridPut_acc<PCHG>(pme_u, pchg, nullptr);
 }
 
-void gridDisp_acc(PMEUnit pme_u, real* csix, const int* part)
+void gridDisp_acc(PMEUnit pme_u, real* csix)
 {
-   gridPut_acc<DISP>(pme_u, csix, (real*)part);
+   gridPut_acc<DISP>(pme_u, csix, nullptr);
+}
+
+void gridDispSlots_acc(PMEUnit pme_u, real* csix, const int* offset, int size, real* grids)
+{
+   gridPut_acc<DISP, true>(pme_u, csix, (real*)offset, grids, size);
 }
 
 void gridMpole_acc(PMEUnit pme_u, real (*fmp)[10])
@@ -239,10 +256,13 @@ void gridCuindOneSet_acc(PMEUnit pme_u, const real (*cind)[3])
    gridPut_acc<UIND, true>(pme_u, (real*)fuind, nullptr);
 }
 
-// ONE_SET: the half spectrum, k1 <= nfft1/2, of a real grid, fftfrontOneSet
+// ONE_SET: the half spectrum, k1 <= nfft1/2, of a real grid, fftfrontOneSet,
+// for the potential alone
 template <bool DO_E, bool DO_V, bool ONE_SET = false>
 static void pmeConv_acc1(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
 {
+   // the energy and virial of the half spectrum would count its points twice
+   static_assert(not ONE_SET or not(DO_E or DO_V), "");
    auto& st = *pme_u;
    real(*restrict qgrid)[2] = reinterpret_cast<real(*)[2]>(st.qgrid);
    const real* bsmod1 = st.bsmod1;
@@ -319,6 +339,38 @@ static void pmeConv_acc1(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir
                atomic_add(vxx, vxy, vxz, vyy, vyz, vzz, gpu_vir, i & (bufsize - 1));
             }
          } // end if (e or v)
+      }
+
+      // ONE_SET: on a plane of Nyquist indices the missing conjugate is not at
+      // -k, and the potential, which must stay Hermitian as a full transform's
+      // real part is, takes the mean influence function of the two, which
+      // differ only in a skewed box (dspWaves)
+      if CONSTEXPR (ONE_SET) {
+         const bool skew = box_shape == BoxShape::MONO or box_shape == BoxShape::TRI;
+         if (skew and (2 * k1 == nfft1 or 2 * k2 == nfft2 or 2 * k3 == nfft3)) {
+            int p1 = k1 ? nfft1 - k1 : 0;
+            int p2 = k2 ? nfft2 - k2 : 0;
+            int p3 = k3 ? nfft3 - k3 : 0;
+            int s1 = (p1 < (nfft1 + 1) / 2) ? p1 : (p1 - nfft1);
+            int s2 = (p2 < (nfft2 + 1) / 2) ? p2 : (p2 - nfft2);
+            int s3 = (p3 < (nfft3 + 1) / 2) ? p3 : (p3 - nfft3);
+            real g1 = recipa.x * s1 + recipb.x * s2 + recipc.x * s3;
+            real g2 = recipa.y * s1 + recipb.y * s2 + recipc.y * s3;
+            real g3 = recipa.z * s1 + recipb.z * s2 + recipc.z * s3;
+            real gsq = g1 * g1 + g2 * g2 + g3 * g3;
+            real gterm = -pterm * gsq;
+            real expp = 0;
+            if (gterm > -50) {
+               real denom = gsq * pi * box_volume * bsmod1[p1] * bsmod2[p2] * bsmod3[p3];
+               expp = REAL_EXP(gterm) / denom;
+               if (box_shape == BoxShape::UNBOUND)
+                  expp *= (1 - REAL_COS(pi * lvec1.x * REAL_SQRT(gsq)));
+               else if (box_shape == BoxShape::OCT)
+                  if ((p1 + p2 + p3) & 1)
+                     expp = 0;
+            }
+            expterm = (expterm + expp) / 2;
+         }
       }
 
       // complete the transformation of the PME grid

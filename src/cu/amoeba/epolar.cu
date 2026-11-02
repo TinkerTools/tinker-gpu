@@ -130,7 +130,7 @@ void epolarAstDeriv_cu(EnergyBuffer depdl, const real (*ud)[3], const real (*up)
    const real (*dfd)[3], const real (*dfp)[3], const real (*f0d)[3], const real (*f0p)[3],  //
    const real (*ufd)[3], const real (*ufp)[3], bool expol, const real (*polinv)[3][3], const real (*dpscdl)[3][3])
 {
-   const real f = -0.5 * (electric / dielec) * dpldlmda;
+   const real f = -0.5 * (electric / dielec) * polarChain().d1;
    launch_k1b(g::s0, n, epolarAstDeriv_cu1, n, f, depdl, ud, up, dfd, dfp, f0d, f0p, ufd, ufp,
       polarity_inv, polarityorig, emGroup(), grpScale(plam), expol, polinv, dpscdl);
 }
@@ -183,9 +183,12 @@ static void epolar_cu(const real (*uind)[3], const real (*uinp)[3])
    if CONSTEXPR (do_g)
       darray::zero(g::q0, n, ufld, dufld);
    int ngrid = gpuGridSize(BLOCK_DIM);
-   epolar_cu1<Ver, ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nep, ep, vir_ep, depx, depy, depz,
-      off, st.si1.bit0, nmdpuexclude, mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl,
-      st.niak, st.iak, st.lst, ufld, dufld, rpole, uind, uinp, f, aewald, elecDeadGroups(), elecLiveMask());
+   boxShapeDispatch(box_shape, [&](auto img) {
+      using IMG = decltype(img);
+      epolar_cu1<Ver, IMG, ETYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nep, ep, vir_ep, depx, depy, depz,
+         off, st.si1.bit0, nmdpuexclude, mdpuexclude, mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl,
+         st.niak, st.iak, st.lst, st.akc, ufld, dufld, rpole, uind, uinp, f, aewald, elecDeadGroups(), elecLiveMask());
+   });
 
    // torque
    if CONSTEXPR (do_g) {

@@ -477,9 +477,13 @@ TEST_CASE("WaterMC-Ligand-Coupling", "[ff][watermc]")
       vlam = vl;
       REQUIRE(waterMcOverlapDistance(ow) == 1.0);
       REQUIRE(waterMcOverlapDistance(lig) == 1.0 * vl);
+      // ligand 2 exists only in a relative calculation
+      const bool rel0 = use_rel;
+      use_rel = true;
       mutant::mutg[lig] = 2;
       REQUIRE(waterMcOverlapDistance(lig) == 1.0 * (1 - vl));
       mutant::mutg[lig] = g0;
+      use_rel = rel0;
    }
    vlam = vlam0;
 

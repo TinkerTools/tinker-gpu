@@ -15,6 +15,7 @@
 #include <tinker/detail/atoms.hh>
 #include <tinker/detail/bound.hh>
 #include <tinker/detail/couple.hh>
+#include <tinker/detail/dsppot.hh>
 #include <tinker/detail/kdsp.hh>
 #include <tinker/detail/keys.hh>
 #include <tinker/detail/mutant.hh>
@@ -45,9 +46,10 @@ static LrcSums vdw_lrc;
 void vdwSoftcoreData(RcOp op)
 {
    // mpoleScale() reads the ligand groups whenever poleorig exists, and the
-   // multipole and polarization pair kernels read them to skip dead groups.
+   // multipole, polarization and partial charge pair kernels read them to skip
+   // dead groups, as the partial charges do to follow lambda.
    if ((not use(Potent::VDW)) and (not use(Potent::REPULS)) and (not use(Potent::DISP)) and (not use(Potent::CHGTRN))
-      and (not use(Potent::MPOLE)) and (not use(Potent::POLAR)) and (not usePoleorig()))
+      and (not use(Potent::MPOLE)) and (not use(Potent::POLAR)) and (not use(Potent::CHARGE)) and (not usePoleorig()))
       return;
 
    if (op & RcOp::DEALLOC)
@@ -115,6 +117,9 @@ void evdwData(RcOp op)
       gzred_dlmda = nullptr;
 
       vdw_lrc = {};
+      // A later session without energy terms skips the allocation, so its
+      // neighbor list must not take the freed HAL arrays (nblistData).
+      vdwtyp = Vdw::NONE;
    }
 
    if (op & RcOp::ALLOC) {
@@ -149,7 +154,8 @@ void evdwData(RcOp op)
       else if (str2 == "CUBIC-MEAN")
          radrule = Vdw::CUBIC_MEAN;
       else
-         assert(false);
+         // MMFF94 (kvdw.f), which the tables of Fortran already hold
+         radrule = Vdw::NONE;
 
       FstrView str3 = vdwpot::epsrule;
       if (str3 == "ARITHMETIC")
@@ -163,7 +169,9 @@ void evdwData(RcOp op)
       else if (str3 == "W-H")
          epsrule = Vdw::W_H;
       else
-         assert(false);
+         // MMFF94 or HARMONIC (kvdw.f), which the tables of Fortran already
+         // hold
+         epsrule = Vdw::NONE;
 
       const int dlmask = lmdaDerivMask(rc_flag, use_vdlmda);
       if (vdwtyp == Vdw::HAL) {
@@ -517,16 +525,14 @@ void evdwData(RcOp op)
       }
 
       vdw_lrc = {};
-      if (vdwpot::use_vcorr)
+      // an Ewald dispersion tail takes over from the correction (ehal1.f)
+      if (vdwpot::use_vcorr and not dsppot::use_dhal)
          lrcSetup(vdw_lrc, false);
    }
 }
 
 void lrcSetup(LrcSums& ls, bool dsp)
 {
-   // dispersion has no relative free energy treatment (mutate.f), so it never
-   // has a ligand 2
-   assert(not(dsp and use_rel));
    ls = {0, 0, 0, 1, 1};
    if (not bound::use_bounds)
       return;
@@ -537,9 +543,13 @@ void lrcSetup(LrcSums& ls, bool dsp)
    // of the damped dispersion leaves only its lambda power on a mutated pair.
    if (dsp) {
       ls.nw = mutant::scexpd;
+      ls.nb = mutant::scexpd;
    } else if (vdwtyp == Vdw::HAL) {
       ls.nw = mutant::scexp;
       ls.nb = mutant::scexp;
+   } else if (vdwtyp == Vdw::LJ) {
+      ls.nw = mutant::scexplj;
+      ls.nb = mutant::scexplj;
    }
 
    // The coefficients of the switching function.
@@ -572,13 +582,15 @@ void lrcSetup(LrcSums& ls, bool dsp)
          bvt.push_back(0);
       }
       jvt[k] += 1;
-      if (mutant::mutg[i] == 1)
+      const int g = hostGroup(i);
+      if (g == 1)
          avt[k] += 1;
-      if (mutant::mutg[i] == 2)
+      if (g == 2)
          bvt[k] += 1;
    }
 
-   // Sum the pairs of each class, with ligand 2 coupling as the complement of
+   // Sum the pairs of each class of the two groups (mutant::mutcls, as
+   // vdwClassWeights weights them), with ligand 2 coupling as the complement of
    // vlambda and no interaction between the two ligand groups.
    const int nvt = ivt.size();
    const double ghal = vdwpot::ghal, dhal = vdwpot::dhal;
@@ -594,17 +606,16 @@ void lrcSetup(LrcSums& ls, bool dsp)
          double fka = avt[k];
          double fkb = bvt[k];
          double fke = jvt[k] - fka - fkb;
-         double ee = fie * fke;
-         double ea = fie * fka + fia * fke;
-         double eb = fie * fkb + fib * fke;
-         double aa = fia * fka;
-         double bb = fib * fkb;
-         double f0, f1, f2;
-         if (mutant::vcouple == 0) {
-            f0 = ee + aa + bb, f1 = ea, f2 = eb;
-         } else {
-            f0 = ee, f1 = ea + aa, f2 = eb + bb;
+         const double fig[3] = {fie, fia, fib}, fkg[3] = {fke, fka, fkb};
+         double fc[3] = {0, 0, 0};
+         for (int g = 0; g < 3; ++g) {
+            for (int h = 0; h < 3; ++h) {
+               int c = mutant::mutcls[h][g];
+               if (c >= 0)
+                  fc[c] += fig[g] * fkg[h];
+            }
          }
+         double f0 = fc[0], f1 = fc[1], f2 = fc[2];
          if (k == i)
             f0 *= 0.5, f1 *= 0.5, f2 *= 0.5;
 
@@ -659,11 +670,10 @@ void lrcSetup(LrcSums& ls, bool dsp)
    }
 }
 
-LmdaFn lrcEval(const LrcSums& ls, double vl, double dl, double d2l)
+LmdaFn lrcEval(const LrcSums& ls, const LmdaFn& v, bool dodl)
 {
-   const bool dodl = dl != 0 or d2l != 0;
-   const LmdaFn w = lmdaPwrChain(vl, ls.nw, dl, d2l, dodl);
-   const LmdaFn b = lmdaPwrChain(1 - vl, ls.nb, -dl, -d2l, dodl);
+   const LmdaFn w = lmdaPwrChain(v, ls.nw, dodl);
+   const LmdaFn b = lmdaPwrChain(lmdaComplement(v), ls.nb, dodl);
    return {ls.s0 + w.f * ls.s1 + b.f * ls.s2, w.d1 * ls.s1 + b.d1 * ls.s2, w.d2 * ls.s1 + b.d2 * ls.s2};
 }
 
@@ -671,8 +681,9 @@ void lrcApply(int vers, int dlvers, const LrcSums& ls, energy_prec& eterm, viria
 {
    auto do_e = vers & calc::energy;
    auto do_v = vers & calc::virial;
-   const bool dodl = dlvers & calc::energy_dlmda1;
-   const LmdaFn e = lrcEval(ls, vlam, dodl ? dvldlmda : 0, dodl ? d2vldlmda2 : 0);
+   const bool dodl = lmdaDodl(dlvers);
+   const LmdaFn v = vdwChain();
+   const LmdaFn e = lrcEval(ls, v, dodl);
    const double vol = boxVolume();
 
    if (do_e) {
@@ -734,20 +745,18 @@ void evdw(int vers)
    if (rc_a and do_a)
       darray::zero(g::q0, bufferSize(), nev);
    ev_buf.zero(vers);
-   vdwLmdaZero(vers);
+   lmdaChannel(LmdaTerm::VDW).zero(vers);
 
    evdwKernel(vers);
-   lrcApply(vers, lmdaDerivVers(vers, vdlmdaActive()), vdw_lrc, energy_ev, virial_ev);
+   evdwLrcApply(vers, lmdaDerivVers(vers, vdlmdaActive()));
 
    ev_buf.flush(vers);
-   vdwLmdaFlush(vers);
+   lmdaChannel(LmdaTerm::VDW).flush(vers);
 }
 
-void evdwLrcVol(energy_prec& elrc, virial_prec& vlrc)
+void evdwLrcApply(int vers, int dlvers)
 {
-   const LmdaFn e = lrcEval(vdw_lrc, vlam, 0, 0);
-   elrc = e.f;
-   vlrc = -e.f;
+   lrcApply(vers, dlvers, vdw_lrc, energy_ev, virial_ev);
 }
 }
 
@@ -755,7 +764,17 @@ namespace tinker {
 TINKER_FVOID2(acc1, cu1, elj, int);
 void elj(int vers)
 {
-   TINKER_FCALL2(acc1, cu1, elj, vers);
+   TINKER_FCALL2(acc1, cu1, elj, lmdaDerivVers(vers, vdlmdaActive()));
+}
+
+SoftCoreLmda ljSoft(int ig, bool dodl)
+{
+   return grpSoftCore(ig, {mutant::scexplj, mutant::scalphalj, mutant::scexpljm, mutant::scexpljp}, dodl);
+}
+
+SoftCoreLmda halSoft(int ig, bool dodl)
+{
+   return grpSoftCore(ig, {scexp, scalphav, scexpm, scexpp}, dodl);
 }
 
 TINKER_FVOID2(acc0, cu1, elj14, int);

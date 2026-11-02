@@ -1,6 +1,10 @@
 OUTPUT_DIR: src/cu/hippo
 KERNEL_NAME: ufieldChgpen_cu1
-TEMPLATE_PARAMS: template <class ETYP>
+TEMPLATE_PARAMS: template <class IMG, class ETYP>
+# the box shape as a template parameter, and the tiles near their centers
+# imaged once
+IMAGE_TEMPLATE: IMG
+LOCAL_TILES: true
 # CONSTEXPR_FLAGS:
 
 # COUNT:

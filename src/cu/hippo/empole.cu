@@ -13,6 +13,7 @@
 #include "seq/pair_mpole_chgpen.h"
 #include "seq/pairmpoleaplus.h"
 #include "seq/triangle.h"
+#include "tool/error.h"
 #include <cassert>
 
 namespace tinker {
@@ -41,10 +42,13 @@ static void empoleChgpen_cu()
    }
 
    int ngrid = gpuGridSize(BLOCK_DIM);
-   empoleChgpen_cu1<Ver, ETYP, CP, CFLX><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em, vir_em, demx,
-      demy, demz, off, st.si1.bit0, nmdwexclude, mdwexclude, mdwexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl,
-      st.iakpl, st.niak, st.iak, st.lst, trqx, trqy, trqz, pot, rpole, pcore, pval, palpha, aewald, f, elecDeadGroups(),
-      elecLiveMask());
+   boxShapeDispatch(box_shape, [&](auto img) {
+      using IMG = decltype(img);
+      empoleChgpen_cu1<Ver, IMG, ETYP, CP, CFLX><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em,
+         vir_em, demx, demy, demz, off, st.si1.bit0, nmdwexclude, mdwexclude, mdwexclude_scale, st.x, st.y, st.z,
+         st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, st.akc, trqx, trqy, trqz, pot, rpole, pcore, pval,
+         palpha, aewald, f, elecDeadGroups(), elecLiveMask());
+   });
 }
 
 void empoleChgpenNonEwald_cu(int vers, int use_cf)
@@ -54,12 +58,12 @@ void empoleChgpenNonEwald_cu(int vers, int use_cf)
    if (use_cf) {
       if (vers == calc::v0) {
          // empoleChgpen_cu<calc::V0, NON_EWALD, CP, 1>();
-         assert(false && "CFLX must compute gradient.");
+         TINKER_THROW("CFLX must compute gradient.");
       } else if (vers == calc::v1) {
          empoleChgpen_cu<calc::V1, NON_EWALD, CP, 1>();
       } else if (vers == calc::v3) {
          // empoleChgpen_cu<calc::V3, NON_EWALD, CP, 1>();
-         assert(false && "CFLX must compute gradient.");
+         TINKER_THROW("CFLX must compute gradient.");
       } else if (vers == calc::v4) {
          empoleChgpen_cu<calc::V4, NON_EWALD, CP, 1>();
       } else if (vers == calc::v5) {
@@ -91,12 +95,12 @@ void empoleChgpenEwaldRealSelf_cu(int vers, int use_cf)
    if (use_cf) {
       if (vers == calc::v0) {
          // empoleChgpen_cu<calc::V0, EWALD, CP, 1>();
-         assert(false && "CFLX must compute gradient.");
+         TINKER_THROW("CFLX must compute gradient.");
       } else if (vers == calc::v1) {
          empoleChgpen_cu<calc::V1, EWALD, CP, 1>();
       } else if (vers == calc::v3) {
          // empoleChgpen_cu<calc::V3, EWALD, CP, 1>();
-         assert(false && "CFLX must compute gradient.");
+         TINKER_THROW("CFLX must compute gradient.");
       } else if (vers == calc::v4) {
          empoleChgpen_cu<calc::V4, EWALD, CP, 1>();
       } else if (vers == calc::v5) {
@@ -128,12 +132,12 @@ void empoleAplusNonEwald_cu(int vers, int use_cf)
    if (use_cf) {
       if (vers == calc::v0) {
          // empoleChgpen_cu<calc::V0, NON_EWALD, CP, 1>();
-         assert(false && "CFLX must compute gradient.");
+         TINKER_THROW("CFLX must compute gradient.");
       } else if (vers == calc::v1) {
          empoleChgpen_cu<calc::V1, NON_EWALD, CP, 1>();
       } else if (vers == calc::v3) {
          // empoleChgpen_cu<calc::V3, NON_EWALD, CP, 1>();
-         assert(false && "CFLX must compute gradient.");
+         TINKER_THROW("CFLX must compute gradient.");
       } else if (vers == calc::v4) {
          empoleChgpen_cu<calc::V4, NON_EWALD, CP, 1>();
       } else if (vers == calc::v5) {
@@ -165,12 +169,12 @@ void empoleAplusEwaldRealSelf_cu(int vers, int use_cf)
    if (use_cf) {
       if (vers == calc::v0) {
          // empoleChgpen_cu<calc::V0, EWALD, CP, 1>();
-         assert(false && "CFLX must compute gradient.");
+         TINKER_THROW("CFLX must compute gradient.");
       } else if (vers == calc::v1) {
          empoleChgpen_cu<calc::V1, EWALD, CP, 1>();
       } else if (vers == calc::v3) {
          // empoleChgpen_cu<calc::V3, EWALD, CP, 1>();
-         assert(false && "CFLX must compute gradient.");
+         TINKER_THROW("CFLX must compute gradient.");
       } else if (vers == calc::v4) {
          empoleChgpen_cu<calc::V4, EWALD, CP, 1>();
       } else if (vers == calc::v5) {
@@ -327,12 +331,12 @@ void empoleChgpenEwaldRecip_cu(int vers, int use_cf)
    if (use_cf) {
       if (vers == calc::v0)
          // empoleEwaldRecipGeneric_cu<calc::V0, 1>();
-         assert(false && "CFLX must compute gradient.");
+         TINKER_THROW("CFLX must compute gradient.");
       else if (vers == calc::v1)
          empoleEwaldRecipGeneric_cu<calc::V1, 1>();
       else if (vers == calc::v3)
          // empoleEwaldRecipGeneric_cu<calc::V3, 1>();
-         assert(false && "CFLX must compute gradient.");
+         TINKER_THROW("CFLX must compute gradient.");
       else if (vers == calc::v4)
          empoleEwaldRecipGeneric_cu<calc::V4, 1>();
       else if (vers == calc::v5)

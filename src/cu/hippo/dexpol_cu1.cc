@@ -1,14 +1,15 @@
 // ck.py Version 3.1.0
-template <class Ver>
+template <class Ver, class IMG>
 __global__
 void dexpol_cu1(int n, TINKER_IMAGE_PARAMS, VirialBuffer restrict vep, VirialBuffer restrict dvep,
    grad_prec* restrict gx, grad_prec* restrict gy, grad_prec* restrict gz, grad_prec* restrict dgx,
    grad_prec* restrict dgy, grad_prec* restrict dgz, real cut, real off, const unsigned* restrict dinfo, int nexclude,
    const int (*restrict exclude)[2], const real (*restrict exclude_scale)[3], const real* restrict x,
    const real* restrict y, const real* restrict z, const Spatial::SortedAtom* restrict sorted, int nakpl,
-   const int* restrict iakpl, int niak, const int* restrict iak, const int* restrict lst, const real* restrict polarity,
-   const real (*restrict uind)[3], const real* restrict kpep, const real* restrict prepep, const real* restrict dmppep,
-   const int* restrict lpep, ExpolScr scrtyp, real f, real wa, real wb)
+   const int* restrict iakpl, int niak, const int* restrict iak, const int* restrict lst,
+   const Spatial::Center* restrict akc, const real* restrict polarity, const real (*restrict uind)[3],
+   const real* restrict kpep, const real* restrict prepep, const real* restrict dmppep, const int* restrict lpep,
+   ExpolScr scrtyp, real f, real wa, real wb)
 {
    constexpr bool do_g = Ver::g;
    constexpr bool do_v = Ver::v;
@@ -87,10 +88,11 @@ void dexpol_cu1(int n, TINKER_IMAGE_PARAMS, VirialBuffer restrict vep, VirialBuf
       eplk = lpep[k];
 
       constexpr bool incl = true;
+      constexpr bool tile_local = false;
       real xr = xk[threadIdx.x] - xi[klane];
       real yr = yk[threadIdx.x] - yi[klane];
       real zr = zk[threadIdx.x] - zi[klane];
-      real r2 = image2(xr, yr, zr);
+      real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
       if ((eplk or epli[klane]) and r2 <= off * off and incl) {
          real r = REAL_SQRT(r2);
          real ski = (poli[klane] != 0 ? springi[klane] / poli[klane] : 0);
@@ -105,7 +107,7 @@ void dexpol_cu1(int n, TINKER_IMAGE_PARAMS, VirialBuffer restrict vep, VirialBuf
          frcyk -= frc[1];
          frczk -= frc[2];
 
-         if CONSTEXPR (do_v) {
+         if CONSTEXPR (do_v and not tile_local) {
             real vxx = -xr * frc[0];
             real vxy = -0.5f * (yr * frc[0] + xr * frc[1]);
             real vxz = -0.5f * (zr * frc[0] + xr * frc[2]);
@@ -197,63 +199,178 @@ void dexpol_cu1(int n, TINKER_IMAGE_PARAMS, VirialBuffer restrict vep, VirialBuf
       __syncwarp();
 
       unsigned int dinfo0 = dinfo[iw * WARP_SIZE + ilane];
-      for (int j = 0; j < WARP_SIZE; ++j) {
-         int srclane = (ilane + j) & (WARP_SIZE - 1);
-         int klane = srclane + threadIdx.x - ilane;
-         bool incl = iid < kid and kid < n;
-         int srcmask = 1 << srclane;
-         incl = incl and (dinfo0 & srcmask) == 0;
-         real scaleb = 1;
-         real xr = xk[threadIdx.x] - xi[klane];
-         real yr = yk[threadIdx.x] - yi[klane];
-         real zr = zk[threadIdx.x] - zi[klane];
-         real r2 = image2(xr, yr, zr);
-         if ((eplk or epli[klane]) and r2 <= off * off and incl) {
-            real r = REAL_SQRT(r2);
-            real ski = (poli[klane] != 0 ? springi[klane] / poli[klane] : 0);
-            real skk = (polk != 0 ? springk / polk : 0);
-            real frc[3];
-            pair_dexpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, uix[klane], uiy[klane], uiz[klane], ukx, uky, ukz, ski,
-               sizi[klane], alphai[klane], skk, sizk, alphak, f, frc);
-            frcxi += frc[0];
-            frcyi += frc[1];
-            frczi += frc[2];
-            frcxk -= frc[0];
-            frcyk -= frc[1];
-            frczk -= frc[2];
+      real xc = akc[ty].x;
+      real yc = akc[ty].y;
+      real zc = akc[ty].z;
+      const bool ilocal = akc[ty].w != 0;
+      if (ilocal) {
+         real xr, yr, zr;
+         xr = xi[threadIdx.x] - xc;
+         yr = yi[threadIdx.x] - yc;
+         zr = zi[threadIdx.x] - zc;
+         IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+         xi[threadIdx.x] = xr;
+         yi[threadIdx.x] = yr;
+         zi[threadIdx.x] = zr;
+         xr = xk[threadIdx.x] - xc;
+         yr = yk[threadIdx.x] - yc;
+         zr = zk[threadIdx.x] - zc;
+         IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+         xk[threadIdx.x] = xr;
+         yk[threadIdx.x] = yr;
+         zk[threadIdx.x] = zr;
+         __syncwarp();
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            int klane = srclane + threadIdx.x - ilane;
+            bool incl = iid < kid and kid < n;
+            int srcmask = 1 << srclane;
+            incl = incl and (dinfo0 & srcmask) == 0;
+            real scaleb = 1;
+            constexpr bool tile_local = true;
+            real xr = xk[threadIdx.x] - xi[klane];
+            real yr = yk[threadIdx.x] - yi[klane];
+            real zr = zk[threadIdx.x] - zi[klane];
+            real r2 = (xr * xr + yr * yr + zr * zr);
+            if ((eplk or epli[klane]) and r2 <= off * off and incl) {
+               real r = REAL_SQRT(r2);
+               real ski = (poli[klane] != 0 ? springi[klane] / poli[klane] : 0);
+               real skk = (polk != 0 ? springk / polk : 0);
+               real frc[3];
+               pair_dexpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, uix[klane], uiy[klane], uiz[klane], ukx, uky, ukz,
+                  ski, sizi[klane], alphai[klane], skk, sizk, alphak, f, frc);
+               frcxi += frc[0];
+               frcyi += frc[1];
+               frczi += frc[2];
+               frcxk -= frc[0];
+               frcyk -= frc[1];
+               frczk -= frc[2];
 
-            if CONSTEXPR (do_v) {
-               real vxx = -xr * frc[0];
-               real vxy = -0.5f * (yr * frc[0] + xr * frc[1]);
-               real vxz = -0.5f * (zr * frc[0] + xr * frc[2]);
-               real vyy = -yr * frc[1];
-               real vyz = -0.5f * (zr * frc[1] + yr * frc[2]);
-               real vzz = -zr * frc[2];
-               veptlxx += floatTo<vbuf_prec>(wa * vxx);
-               veptlyx += floatTo<vbuf_prec>(wa * vxy);
-               veptlzx += floatTo<vbuf_prec>(wa * vxz);
-               veptlyy += floatTo<vbuf_prec>(wa * vyy);
-               veptlzy += floatTo<vbuf_prec>(wa * vyz);
-               veptlzz += floatTo<vbuf_prec>(wa * vzz);
-               if CONSTEXPR (do_vdl) {
-                  dveptlxx += floatTo<vbuf_prec>(wb * vxx);
-                  dveptlyx += floatTo<vbuf_prec>(wb * vxy);
-                  dveptlzx += floatTo<vbuf_prec>(wb * vxz);
-                  dveptlyy += floatTo<vbuf_prec>(wb * vyy);
-                  dveptlzy += floatTo<vbuf_prec>(wb * vyz);
-                  dveptlzz += floatTo<vbuf_prec>(wb * vzz);
+               if CONSTEXPR (do_v and not tile_local) {
+                  real vxx = -xr * frc[0];
+                  real vxy = -0.5f * (yr * frc[0] + xr * frc[1]);
+                  real vxz = -0.5f * (zr * frc[0] + xr * frc[2]);
+                  real vyy = -yr * frc[1];
+                  real vyz = -0.5f * (zr * frc[1] + yr * frc[2]);
+                  real vzz = -zr * frc[2];
+                  veptlxx += floatTo<vbuf_prec>(wa * vxx);
+                  veptlyx += floatTo<vbuf_prec>(wa * vxy);
+                  veptlzx += floatTo<vbuf_prec>(wa * vxz);
+                  veptlyy += floatTo<vbuf_prec>(wa * vyy);
+                  veptlzy += floatTo<vbuf_prec>(wa * vyz);
+                  veptlzz += floatTo<vbuf_prec>(wa * vzz);
+                  if CONSTEXPR (do_vdl) {
+                     dveptlxx += floatTo<vbuf_prec>(wb * vxx);
+                     dveptlyx += floatTo<vbuf_prec>(wb * vxy);
+                     dveptlzx += floatTo<vbuf_prec>(wb * vxz);
+                     dveptlyy += floatTo<vbuf_prec>(wb * vyy);
+                     dveptlzy += floatTo<vbuf_prec>(wb * vyz);
+                     dveptlzz += floatTo<vbuf_prec>(wb * vzz);
+                  }
                }
+            }
+
+            iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
+            if CONSTEXPR (do_g) {
+               frcxi = __shfl_sync(ALL_LANES, frcxi, ilane + 1);
+               frcyi = __shfl_sync(ALL_LANES, frcyi, ilane + 1);
+               frczi = __shfl_sync(ALL_LANES, frczi, ilane + 1);
             }
          }
 
-         iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
-         if CONSTEXPR (do_g) {
-            frcxi = __shfl_sync(ALL_LANES, frcxi, ilane + 1);
-            frcyi = __shfl_sync(ALL_LANES, frcyi, ilane + 1);
-            frczi = __shfl_sync(ALL_LANES, frczi, ilane + 1);
+         if CONSTEXPR (do_v) {
+            veptlxx += floatTo<vbuf_prec>(wa * (xi[threadIdx.x] * frcxi + xk[threadIdx.x] * frcxk));
+            veptlyx += floatTo<vbuf_prec>(wa
+               * (0.5f
+                  * (yi[threadIdx.x] * frcxi + yk[threadIdx.x] * frcxk + xi[threadIdx.x] * frcyi
+                     + xk[threadIdx.x] * frcyk)));
+            veptlzx += floatTo<vbuf_prec>(wa
+               * (0.5f
+                  * (zi[threadIdx.x] * frcxi + zk[threadIdx.x] * frcxk + xi[threadIdx.x] * frczi
+                     + xk[threadIdx.x] * frczk)));
+            veptlyy += floatTo<vbuf_prec>(wa * (yi[threadIdx.x] * frcyi + yk[threadIdx.x] * frcyk));
+            veptlzy += floatTo<vbuf_prec>(wa
+               * (0.5f
+                  * (zi[threadIdx.x] * frcyi + zk[threadIdx.x] * frcyk + yi[threadIdx.x] * frczi
+                     + yk[threadIdx.x] * frczk)));
+            veptlzz += floatTo<vbuf_prec>(wa * (zi[threadIdx.x] * frczi + zk[threadIdx.x] * frczk));
+         }
+         if CONSTEXPR (do_vdl) {
+            dveptlxx += floatTo<vbuf_prec>(wb * (xi[threadIdx.x] * frcxi + xk[threadIdx.x] * frcxk));
+            dveptlyx += floatTo<vbuf_prec>(wb
+               * (0.5f
+                  * (yi[threadIdx.x] * frcxi + yk[threadIdx.x] * frcxk + xi[threadIdx.x] * frcyi
+                     + xk[threadIdx.x] * frcyk)));
+            dveptlzx += floatTo<vbuf_prec>(wb
+               * (0.5f
+                  * (zi[threadIdx.x] * frcxi + zk[threadIdx.x] * frcxk + xi[threadIdx.x] * frczi
+                     + xk[threadIdx.x] * frczk)));
+            dveptlyy += floatTo<vbuf_prec>(wb * (yi[threadIdx.x] * frcyi + yk[threadIdx.x] * frcyk));
+            dveptlzy += floatTo<vbuf_prec>(wb
+               * (0.5f
+                  * (zi[threadIdx.x] * frcyi + zk[threadIdx.x] * frcyk + yi[threadIdx.x] * frczi
+                     + yk[threadIdx.x] * frczk)));
+            dveptlzz += floatTo<vbuf_prec>(wb * (zi[threadIdx.x] * frczi + zk[threadIdx.x] * frczk));
+         }
+      } else {
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            int klane = srclane + threadIdx.x - ilane;
+            bool incl = iid < kid and kid < n;
+            int srcmask = 1 << srclane;
+            incl = incl and (dinfo0 & srcmask) == 0;
+            real scaleb = 1;
+            constexpr bool tile_local = false;
+            real xr = xk[threadIdx.x] - xi[klane];
+            real yr = yk[threadIdx.x] - yi[klane];
+            real zr = zk[threadIdx.x] - zi[klane];
+            real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+            if ((eplk or epli[klane]) and r2 <= off * off and incl) {
+               real r = REAL_SQRT(r2);
+               real ski = (poli[klane] != 0 ? springi[klane] / poli[klane] : 0);
+               real skk = (polk != 0 ? springk / polk : 0);
+               real frc[3];
+               pair_dexpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, uix[klane], uiy[klane], uiz[klane], ukx, uky, ukz,
+                  ski, sizi[klane], alphai[klane], skk, sizk, alphak, f, frc);
+               frcxi += frc[0];
+               frcyi += frc[1];
+               frczi += frc[2];
+               frcxk -= frc[0];
+               frcyk -= frc[1];
+               frczk -= frc[2];
+
+               if CONSTEXPR (do_v and not tile_local) {
+                  real vxx = -xr * frc[0];
+                  real vxy = -0.5f * (yr * frc[0] + xr * frc[1]);
+                  real vxz = -0.5f * (zr * frc[0] + xr * frc[2]);
+                  real vyy = -yr * frc[1];
+                  real vyz = -0.5f * (zr * frc[1] + yr * frc[2]);
+                  real vzz = -zr * frc[2];
+                  veptlxx += floatTo<vbuf_prec>(wa * vxx);
+                  veptlyx += floatTo<vbuf_prec>(wa * vxy);
+                  veptlzx += floatTo<vbuf_prec>(wa * vxz);
+                  veptlyy += floatTo<vbuf_prec>(wa * vyy);
+                  veptlzy += floatTo<vbuf_prec>(wa * vyz);
+                  veptlzz += floatTo<vbuf_prec>(wa * vzz);
+                  if CONSTEXPR (do_vdl) {
+                     dveptlxx += floatTo<vbuf_prec>(wb * vxx);
+                     dveptlyx += floatTo<vbuf_prec>(wb * vxy);
+                     dveptlzx += floatTo<vbuf_prec>(wb * vxz);
+                     dveptlyy += floatTo<vbuf_prec>(wb * vyy);
+                     dveptlzy += floatTo<vbuf_prec>(wb * vyz);
+                     dveptlzz += floatTo<vbuf_prec>(wb * vzz);
+                  }
+               }
+            }
+
+            iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
+            if CONSTEXPR (do_g) {
+               frcxi = __shfl_sync(ALL_LANES, frcxi, ilane + 1);
+               frcyi = __shfl_sync(ALL_LANES, frcyi, ilane + 1);
+               frczi = __shfl_sync(ALL_LANES, frczi, ilane + 1);
+            }
          }
       }
-
       if CONSTEXPR (do_g) {
          atomic_add(wa * frcxi, gx, i);
          if CONSTEXPR (do_gdl)
@@ -316,60 +433,172 @@ void dexpol_cu1(int n, TINKER_IMAGE_PARAMS, VirialBuffer restrict vep, VirialBuf
       eplk = lpep[k];
       __syncwarp();
 
-      for (int j = 0; j < WARP_SIZE; ++j) {
-         int srclane = (ilane + j) & (WARP_SIZE - 1);
-         int klane = srclane + threadIdx.x - ilane;
-         bool incl = atomk > 0;
-         real scaleb = 1;
-         real xr = xk[threadIdx.x] - xi[klane];
-         real yr = yk[threadIdx.x] - yi[klane];
-         real zr = zk[threadIdx.x] - zi[klane];
-         real r2 = image2(xr, yr, zr);
-         if ((eplk or epli[klane]) and r2 <= off * off and incl) {
-            real r = REAL_SQRT(r2);
-            real ski = (poli[klane] != 0 ? springi[klane] / poli[klane] : 0);
-            real skk = (polk != 0 ? springk / polk : 0);
-            real frc[3];
-            pair_dexpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, uix[klane], uiy[klane], uiz[klane], ukx, uky, ukz, ski,
-               sizi[klane], alphai[klane], skk, sizk, alphak, f, frc);
-            frcxi += frc[0];
-            frcyi += frc[1];
-            frczi += frc[2];
-            frcxk -= frc[0];
-            frcyk -= frc[1];
-            frczk -= frc[2];
+      real xc = akc[ty].x;
+      real yc = akc[ty].y;
+      real zc = akc[ty].z;
+      const bool ilocal = akc[ty].w != 0;
+      if (ilocal) {
+         real xr, yr, zr;
+         xr = xi[threadIdx.x] - xc;
+         yr = yi[threadIdx.x] - yc;
+         zr = zi[threadIdx.x] - zc;
+         IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+         xi[threadIdx.x] = xr;
+         yi[threadIdx.x] = yr;
+         zi[threadIdx.x] = zr;
+         xr = xk[threadIdx.x] - xc;
+         yr = yk[threadIdx.x] - yc;
+         zr = zk[threadIdx.x] - zc;
+         IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+         xk[threadIdx.x] = xr;
+         yk[threadIdx.x] = yr;
+         zk[threadIdx.x] = zr;
+         __syncwarp();
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            int klane = srclane + threadIdx.x - ilane;
+            bool incl = atomk > 0;
+            real scaleb = 1;
+            constexpr bool tile_local = true;
+            real xr = xk[threadIdx.x] - xi[klane];
+            real yr = yk[threadIdx.x] - yi[klane];
+            real zr = zk[threadIdx.x] - zi[klane];
+            real r2 = (xr * xr + yr * yr + zr * zr);
+            if ((eplk or epli[klane]) and r2 <= off * off and incl) {
+               real r = REAL_SQRT(r2);
+               real ski = (poli[klane] != 0 ? springi[klane] / poli[klane] : 0);
+               real skk = (polk != 0 ? springk / polk : 0);
+               real frc[3];
+               pair_dexpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, uix[klane], uiy[klane], uiz[klane], ukx, uky, ukz,
+                  ski, sizi[klane], alphai[klane], skk, sizk, alphak, f, frc);
+               frcxi += frc[0];
+               frcyi += frc[1];
+               frczi += frc[2];
+               frcxk -= frc[0];
+               frcyk -= frc[1];
+               frczk -= frc[2];
 
-            if CONSTEXPR (do_v) {
-               real vxx = -xr * frc[0];
-               real vxy = -0.5f * (yr * frc[0] + xr * frc[1]);
-               real vxz = -0.5f * (zr * frc[0] + xr * frc[2]);
-               real vyy = -yr * frc[1];
-               real vyz = -0.5f * (zr * frc[1] + yr * frc[2]);
-               real vzz = -zr * frc[2];
-               veptlxx += floatTo<vbuf_prec>(wa * vxx);
-               veptlyx += floatTo<vbuf_prec>(wa * vxy);
-               veptlzx += floatTo<vbuf_prec>(wa * vxz);
-               veptlyy += floatTo<vbuf_prec>(wa * vyy);
-               veptlzy += floatTo<vbuf_prec>(wa * vyz);
-               veptlzz += floatTo<vbuf_prec>(wa * vzz);
-               if CONSTEXPR (do_vdl) {
-                  dveptlxx += floatTo<vbuf_prec>(wb * vxx);
-                  dveptlyx += floatTo<vbuf_prec>(wb * vxy);
-                  dveptlzx += floatTo<vbuf_prec>(wb * vxz);
-                  dveptlyy += floatTo<vbuf_prec>(wb * vyy);
-                  dveptlzy += floatTo<vbuf_prec>(wb * vyz);
-                  dveptlzz += floatTo<vbuf_prec>(wb * vzz);
+               if CONSTEXPR (do_v and not tile_local) {
+                  real vxx = -xr * frc[0];
+                  real vxy = -0.5f * (yr * frc[0] + xr * frc[1]);
+                  real vxz = -0.5f * (zr * frc[0] + xr * frc[2]);
+                  real vyy = -yr * frc[1];
+                  real vyz = -0.5f * (zr * frc[1] + yr * frc[2]);
+                  real vzz = -zr * frc[2];
+                  veptlxx += floatTo<vbuf_prec>(wa * vxx);
+                  veptlyx += floatTo<vbuf_prec>(wa * vxy);
+                  veptlzx += floatTo<vbuf_prec>(wa * vxz);
+                  veptlyy += floatTo<vbuf_prec>(wa * vyy);
+                  veptlzy += floatTo<vbuf_prec>(wa * vyz);
+                  veptlzz += floatTo<vbuf_prec>(wa * vzz);
+                  if CONSTEXPR (do_vdl) {
+                     dveptlxx += floatTo<vbuf_prec>(wb * vxx);
+                     dveptlyx += floatTo<vbuf_prec>(wb * vxy);
+                     dveptlzx += floatTo<vbuf_prec>(wb * vxz);
+                     dveptlyy += floatTo<vbuf_prec>(wb * vyy);
+                     dveptlzy += floatTo<vbuf_prec>(wb * vyz);
+                     dveptlzz += floatTo<vbuf_prec>(wb * vzz);
+                  }
                }
+            }
+
+            if CONSTEXPR (do_g) {
+               frcxi = __shfl_sync(ALL_LANES, frcxi, ilane + 1);
+               frcyi = __shfl_sync(ALL_LANES, frcyi, ilane + 1);
+               frczi = __shfl_sync(ALL_LANES, frczi, ilane + 1);
             }
          }
 
-         if CONSTEXPR (do_g) {
-            frcxi = __shfl_sync(ALL_LANES, frcxi, ilane + 1);
-            frcyi = __shfl_sync(ALL_LANES, frcyi, ilane + 1);
-            frczi = __shfl_sync(ALL_LANES, frczi, ilane + 1);
+         if CONSTEXPR (do_v) {
+            veptlxx += floatTo<vbuf_prec>(wa * (xi[threadIdx.x] * frcxi + xk[threadIdx.x] * frcxk));
+            veptlyx += floatTo<vbuf_prec>(wa
+               * (0.5f
+                  * (yi[threadIdx.x] * frcxi + yk[threadIdx.x] * frcxk + xi[threadIdx.x] * frcyi
+                     + xk[threadIdx.x] * frcyk)));
+            veptlzx += floatTo<vbuf_prec>(wa
+               * (0.5f
+                  * (zi[threadIdx.x] * frcxi + zk[threadIdx.x] * frcxk + xi[threadIdx.x] * frczi
+                     + xk[threadIdx.x] * frczk)));
+            veptlyy += floatTo<vbuf_prec>(wa * (yi[threadIdx.x] * frcyi + yk[threadIdx.x] * frcyk));
+            veptlzy += floatTo<vbuf_prec>(wa
+               * (0.5f
+                  * (zi[threadIdx.x] * frcyi + zk[threadIdx.x] * frcyk + yi[threadIdx.x] * frczi
+                     + yk[threadIdx.x] * frczk)));
+            veptlzz += floatTo<vbuf_prec>(wa * (zi[threadIdx.x] * frczi + zk[threadIdx.x] * frczk));
+         }
+         if CONSTEXPR (do_vdl) {
+            dveptlxx += floatTo<vbuf_prec>(wb * (xi[threadIdx.x] * frcxi + xk[threadIdx.x] * frcxk));
+            dveptlyx += floatTo<vbuf_prec>(wb
+               * (0.5f
+                  * (yi[threadIdx.x] * frcxi + yk[threadIdx.x] * frcxk + xi[threadIdx.x] * frcyi
+                     + xk[threadIdx.x] * frcyk)));
+            dveptlzx += floatTo<vbuf_prec>(wb
+               * (0.5f
+                  * (zi[threadIdx.x] * frcxi + zk[threadIdx.x] * frcxk + xi[threadIdx.x] * frczi
+                     + xk[threadIdx.x] * frczk)));
+            dveptlyy += floatTo<vbuf_prec>(wb * (yi[threadIdx.x] * frcyi + yk[threadIdx.x] * frcyk));
+            dveptlzy += floatTo<vbuf_prec>(wb
+               * (0.5f
+                  * (zi[threadIdx.x] * frcyi + zk[threadIdx.x] * frcyk + yi[threadIdx.x] * frczi
+                     + yk[threadIdx.x] * frczk)));
+            dveptlzz += floatTo<vbuf_prec>(wb * (zi[threadIdx.x] * frczi + zk[threadIdx.x] * frczk));
+         }
+      } else {
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            int klane = srclane + threadIdx.x - ilane;
+            bool incl = atomk > 0;
+            real scaleb = 1;
+            constexpr bool tile_local = false;
+            real xr = xk[threadIdx.x] - xi[klane];
+            real yr = yk[threadIdx.x] - yi[klane];
+            real zr = zk[threadIdx.x] - zi[klane];
+            real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+            if ((eplk or epli[klane]) and r2 <= off * off and incl) {
+               real r = REAL_SQRT(r2);
+               real ski = (poli[klane] != 0 ? springi[klane] / poli[klane] : 0);
+               real skk = (polk != 0 ? springk / polk : 0);
+               real frc[3];
+               pair_dexpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, uix[klane], uiy[klane], uiz[klane], ukx, uky, ukz,
+                  ski, sizi[klane], alphai[klane], skk, sizk, alphak, f, frc);
+               frcxi += frc[0];
+               frcyi += frc[1];
+               frczi += frc[2];
+               frcxk -= frc[0];
+               frcyk -= frc[1];
+               frczk -= frc[2];
+
+               if CONSTEXPR (do_v and not tile_local) {
+                  real vxx = -xr * frc[0];
+                  real vxy = -0.5f * (yr * frc[0] + xr * frc[1]);
+                  real vxz = -0.5f * (zr * frc[0] + xr * frc[2]);
+                  real vyy = -yr * frc[1];
+                  real vyz = -0.5f * (zr * frc[1] + yr * frc[2]);
+                  real vzz = -zr * frc[2];
+                  veptlxx += floatTo<vbuf_prec>(wa * vxx);
+                  veptlyx += floatTo<vbuf_prec>(wa * vxy);
+                  veptlzx += floatTo<vbuf_prec>(wa * vxz);
+                  veptlyy += floatTo<vbuf_prec>(wa * vyy);
+                  veptlzy += floatTo<vbuf_prec>(wa * vyz);
+                  veptlzz += floatTo<vbuf_prec>(wa * vzz);
+                  if CONSTEXPR (do_vdl) {
+                     dveptlxx += floatTo<vbuf_prec>(wb * vxx);
+                     dveptlyx += floatTo<vbuf_prec>(wb * vxy);
+                     dveptlzx += floatTo<vbuf_prec>(wb * vxz);
+                     dveptlyy += floatTo<vbuf_prec>(wb * vyy);
+                     dveptlzy += floatTo<vbuf_prec>(wb * vyz);
+                     dveptlzz += floatTo<vbuf_prec>(wb * vzz);
+                  }
+               }
+            }
+
+            if CONSTEXPR (do_g) {
+               frcxi = __shfl_sync(ALL_LANES, frcxi, ilane + 1);
+               frcyi = __shfl_sync(ALL_LANES, frcyi, ilane + 1);
+               frczi = __shfl_sync(ALL_LANES, frczi, ilane + 1);
+            }
          }
       }
-
       if CONSTEXPR (do_g) {
          atomic_add(wa * frcxi, gx, i);
          if CONSTEXPR (do_gdl)

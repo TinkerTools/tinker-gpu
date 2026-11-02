@@ -3,13 +3,20 @@
 #include <tinker/detail/bath.hh>
 #include <tinker/detail/dlmda.hh>
 #include <tinker/detail/inform.hh>
+#include <tinker/detail/keys.hh>
 #include <tinker/detail/mutant.hh>
 #include <tinker/routines.h>
 
+#include "test.h"
 #include "testrt.h"
 #include "tinker9.h"
+#include "tool/darray.h"
+#include "tool/gpucard.h"
+#include "tool/xtesthelper.h"
 
+#include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -213,6 +220,14 @@ void TestReference::getEnergyCountByName(std::string name, double& energy, int& 
    count = std::get<1>(it);
 }
 
+void TestReference::getEnergyCountOrZero(std::string name, double& energy, int& count)
+{
+   Text::upcase(name);
+   auto it = pimpl->engcnt.find(name);
+   energy = it == pimpl->engcnt.end() ? 0 : std::get<0>(it->second);
+   count = it == pimpl->engcnt.end() ? 0 : std::get<1>(it->second);
+}
+
 const double (*TestReference::getVirial() const)[3]
 {
    return pimpl->virial;
@@ -275,6 +290,9 @@ void testBeginWithArgs(int argc, const char** argv)
 void testEnd()
 {
    tinker_f_final();
+   // final.f frees the keyword lines but keeps their count, which a case
+   // that reads no key file, such as Info (platformData), would walk.
+   keys::nkey = 0;
    tinkerFortranRuntimeEnd();
 }
 
@@ -421,5 +439,59 @@ std::vector<ModelFrame> readAmoebaCoordinateFile(const std::string& fname)
    }
 
    return all_frames;
+}
+
+TestLmdaSnapshot testLmdaSnapshot()
+{
+   TestLmdaSnapshot r;
+   energy(calc::v1);
+   r.e = esum;
+   r.dedl = use_dlmda ? dedl : 0;
+   r.d2edl2 = use_d2lmda ? d2edl2 : 0;
+   for (int k = 0; k < 9; ++k) {
+      r.vir[k] = vir[k];
+      r.dvirdl[k] = use_d2lmda ? dvirdl[k] : 0;
+   }
+   copyGradientFlat(calc::grad, r.g);
+   r.dfdl.assign(r.g.size(), 0);
+   if (use_d2lmda)
+      copyGradientFlat(calc::grad, r.dfdl, dfdlx, dfdly, dfdlz);
+   return r;
+}
+
+void testLmdaCompare(const TestLmdaSnapshot& a, const TestLmdaSnapshot& b, double eps_e, double eps_g, double eps_v)
+{
+   COMPARE_REALS(a.e, b.e, eps_e);
+   COMPARE_REALS(a.dedl, b.dedl, eps_e);
+   COMPARE_REALS(a.d2edl2, b.d2edl2, eps_e);
+   for (int k = 0; k < 9; ++k) {
+      COMPARE_REALS(a.vir[k], b.vir[k], eps_v);
+      COMPARE_REALS(a.dvirdl[k], b.dvirdl[k], eps_v);
+   }
+   double dg = 0, ddl = 0;
+   for (size_t k = 0; k < a.g.size(); ++k) {
+      dg = std::max(dg, std::abs(a.g[k] - b.g[k]));
+      ddl = std::max(ddl, std::abs(a.dfdl[k] - b.dfdl[k]));
+   }
+   CHECK(dg <= eps_g);
+   CHECK(ddl <= eps_g);
+}
+
+int testCountLocal(const Spatial& st, std::vector<Spatial::Center>& akc)
+{
+   const int nblock = (st.n + WARP_SIZE - 1) / WARP_SIZE;
+   akc.resize(nblock);
+   darray::copyout(g::q0, nblock, akc.data(), st.akc);
+   waitFor(g::q0);
+   int nlocal = 0;
+   for (const auto& b : akc)
+      nlocal += b.w != 0;
+   return nlocal;
+}
+
+int testCountLocal(const Spatial& st)
+{
+   std::vector<Spatial::Center> akc;
+   return testCountLocal(st, akc);
 }
 }

@@ -4,6 +4,7 @@
 #include "test.h"
 #include "testrt.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -144,6 +145,51 @@ TEST_CASE("DLMDA-taper-derivatives", "[ff][dlmda]")
       double fd2 = (dtaperAt(x + h, cut, off) - dtaperAt(x - h, cut, off)) / (2 * h);
       COMPARE_REALS(d2t, fd2, 1.0e-5);
    }
+}
+
+// The soft core coefficients against finite differences of v^n T(h) with
+// h = alpha v^m (1-v)^p and v = x + 0.3 x^2 of the main lambda x, including the
+// endpoints v = 0 and 1, where n or m below 2 used to lose b2 (one-sided
+// differences there).
+TEST_CASE("DLMDA-softcore-coefficients", "[ff][dlmda]")
+{
+   // turns the lambda flags back off however the case ends
+   TestLmdaFlagReset lmdaReset;
+   use_d2lmda = true;
+
+   const double alpha = 0.5, h = 1.0e-4;
+   auto vof = [](double x) { return x + 0.3 * x * x; };
+   auto tof = [](double s, int k) {
+      double q = 1 / (1 + s);
+      return k == 0 ? q * q : (k == 1 ? -2 * q * q * q : 6 * q * q * q * q);
+   };
+   const double x1 = (std::sqrt(1 + 1.2) - 1) / 0.6; // v(x1) = 1
+   for (double n : {1.0, 2.0, 5.0})
+      for (double m : {0.0, 1.0, 2.0})
+         for (double p : {1.0, 2.0})
+            for (double x : {0.0, 0.25, x1}) {
+               auto e = [&](double y) {
+                  double v = vof(y);
+                  return std::pow(v, n) * tof(alpha * std::pow(v, m) * std::pow(1 - v, p), 0);
+               };
+               double d1, d2;
+               if (x == 0) {
+                  d1 = (-3 * e(0) + 4 * e(h) - e(2 * h)) / (2 * h);
+                  d2 = (2 * e(0) - 5 * e(h) + 4 * e(2 * h) - e(3 * h)) / (h * h);
+               } else if (x == x1) {
+                  d1 = (3 * e(x) - 4 * e(x - h) + e(x - 2 * h)) / (2 * h);
+                  d2 = (2 * e(x) - 5 * e(x - h) + 4 * e(x - 2 * h) - e(x - 3 * h)) / (h * h);
+               } else {
+                  d1 = (e(x + h) - e(x - h)) / (2 * h);
+                  d2 = (e(x + h) - 2 * e(x) + e(x - h)) / (h * h);
+               }
+               const SoftCoreLmda s = softCoreLmda(vof(x), n, alpha, m, p, 1 + 0.6 * x, 0.6, true);
+               const double t0 = tof(s.sc, 0), t1 = tof(s.sc, 1), t2 = tof(s.sc, 2);
+               CAPTURE(n, m, p, x);
+               COMPARE_REALS(s.p0 * t0, e(x), 1.0e-6);
+               COMPARE_REALS(s.a1 * t0 + s.b1 * t1, d1, 1.0e-5 * std::max(1.0, std::fabs(d1)));
+               COMPARE_REALS(s.a2 * t0 + s.b2 * t1 + s.c2 * t2, d2, 1.0e-4 * std::max(1.0, std::fabs(d2)));
+            }
 }
 
 TEST_CASE("DLMDA-taper-matches-switch", "[ff][dlmda]")
@@ -483,7 +529,7 @@ TEST_CASE("DLMDA-relstage-pinned-endpoints", "[ff][dlmda]")
 
    setStagedLeg(RelStage::VDWM);
    mapAt(0.5);
-   dtNeed(dtWeight(plam, epdtexp, dpldlmda, d2pldlmda2), need0, need1);
+   dtNeed(lmdaPwrChain(plam, epdtexp, dpldlmda, d2pldlmda2, true), need0, need1);
    REQUIRE(need0);
    REQUIRE_FALSE(need1);
 }

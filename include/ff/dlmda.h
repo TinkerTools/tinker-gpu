@@ -59,26 +59,10 @@ enum class RelStage
    LIG1  ///< charge ligand 1 with ligand 2 annihilated
 };
 
-/// Parses a Fortran character*3 map selector into an Lmdamap value.
-Lmdamap lmdamapFrom(const char* s);
-
-/// Parses a Fortran character*3 theta map selector into a LmdaThMap value.
-LmdaThMap lmdaThMapFrom(const char* s);
-
-/// Parses a Fortran character*4 leg selector into a RelStage value.
-RelStage relStageFrom(const char* s);
-
 /// \f$ x^a \f$ with its first derivative, and its second only if \c do2
 /// (dlambda.f:lmdapwr). A derivative whose coefficient vanishes is zero, so a
 /// zero \c x never reaches a negative power in the constant or linear case.
 void lmdaPwr(double x, double a, bool do2, double& f, double& df, double& d2f);
-
-/// The soft core shift \f$ f = c x^a (1-x)^b \f$ with \f$ f_1 = x f' \f$ and,
-/// only if \c do2, \f$ f_2 = x^2 f'' \f$ (dlambda.f:lmdapow). The powers of
-/// \c x keep both finite at zero for any nonnegative \c a, and a term whose
-/// coefficient vanishes is skipped, so neither factor reaches a negative power
-/// at an endpoint.
-void lmdaPow(double x, double c, double a, double b, bool do2, double& f, double& f1, double& f2);
 
 /// \ingroup ff
 /// A function of a sub-lambda and its first two derivatives with respect to
@@ -99,6 +83,9 @@ LmdaFn lmdaChain(double f, double df, double d2f, double dl, double d2l);
 /// derivatives unless \c dodl.
 LmdaFn lmdaPwrChain(double x, double a, double dl, double d2l, bool dodl);
 
+/// The same of a sub-lambda \c v given with its main lambda derivatives.
+LmdaFn lmdaPwrChain(const LmdaFn& v, double a, bool dodl);
+
 /// \ingroup ff
 /// The soft core of a pair coupling at lambda \f$ v \f$: its scale
 /// \f$ p_0 = v^n \f$ and its shift \f$ s = \alpha v^m (1-v)^p \f$, with the
@@ -117,16 +104,57 @@ struct SoftCoreLmda
 };
 
 /// The soft core terms at lambda \c v, with the derivative coefficients only if
-/// \c dodl, carried to the main lambda by \c dl and \c d2l. The coefficients
-/// keep Fortran's factored products of \f$ v^{n-1} \f$ and \f$ v^{n-2} \f$ with
-/// the lambda-scaled shift derivatives of lmdaPow, and drop a product whose
-/// coefficient vanishes, so they stay finite at \c v = 0.
+/// \c dodl, carried to the main lambda by \c dl and \c d2l. Each product of
+/// the scale and shift derivatives is expanded into powers of \c v and
+/// \c 1-v, so it takes its true limit at \c v = 0 or 1, also when \c n or
+/// \c m is below 2.
 SoftCoreLmda softCoreLmda(double v, double n, double alpha, double m, double p, double dl, double d2l, bool dodl);
 
-/// The power law interpolation weight \f$ x^n \f$ of the coupled dual topology
-/// endpoint (dlambda.f:lmdapwr), carried to the main lambda by lmdaChain
-/// (lmdaPwrChain).
-LmdaFn dtWeight(double x, int nexp, double dl, double d2l);
+/// The soft core parameters of one van der Waals-like term: the exponent \c n
+/// of its scale and the prefactor \c alpha and exponents \c m and \c p of its
+/// shift.
+struct SoftCoreParams
+{
+   double n, alpha, m, p;
+};
+
+/// The soft core of ligand group \c ig, 1 or 2, at its van der Waals lambda
+/// (vdwGroupLmda), with the derivative coefficients only if \c dodl
+/// (dlambda.f:grpsoft, grpsoftd).
+SoftCoreLmda grpSoftCore(int ig, const SoftCoreParams& sc, bool dodl);
+
+/// The class of every pair of atom groups, 0 for the environment and 1 or 2 for
+/// a ligand, as Fortran mutant::mutcls holds it (dlambda.f:grppcls), plus one
+/// in two bits each at bits 2 (3 i + k), for pair_mutcls().
+int vdwMutclsTable();
+
+/// The van der Waals lambda of ligand group \c ig, 1 or 2, with its chain rule
+/// factors to the main lambda: ligand 2 of a relative calculation couples as
+/// the complement of vlambda (dlambda.f:grpvlmda).
+LmdaFn vdwGroupLmda(int ig);
+
+/// The electrostatic, polarization and van der Waals lambdas with their
+/// derivatives to the main lambda while each term takes lambda derivatives
+/// (edlmdaActive and its siblings), zero derivatives otherwise, for the launchers
+/// of lambda kernels.
+LmdaFn elecChain();
+LmdaFn polarChain();
+LmdaFn vdwChain();
+
+/// \f$ v_g^n \f$ of ligand group \c ig at its van der Waals lambda, carried to
+/// the main lambda, with no derivatives unless \c dodl (dlambda.f:grpvlmda,
+/// lmdapwr).
+LmdaFn vdwGroupPower(double n, int ig, bool dodl);
+
+/// The weight of each pair of atom groups at power \c n of the van der Waals
+/// lambda, \f$ v_c^n \f$ for the class \c c of the pair (mutant::mutcls), none
+/// between the two ligands of a relative calculation, with its derivatives only
+/// if \c dodl (dlambda.f:grpvwt).
+void vdwClassWeights(double n, bool dodl, LmdaFn (&w)[3][3]);
+
+/// The complement \f$ 1-v \f$ of a sub-lambda function, as ligand 2 of a
+/// relative calculation couples.
+LmdaFn lmdaComplement(const LmdaFn& v);
 
 /// Live dual topology endpoint test (dlambda.f:relneed). An endpoint has to be
 /// built only when it carries weight or a lambda derivative of weight \c w.
@@ -149,6 +177,10 @@ GrpScale grpScale(double lmda);
 /// The per-atom group array the group scale is indexed by: the ternary
 /// relative labels when relative, the 0/1 mutation flags otherwise.
 const int* emGroup();
+
+/// The group of atom \c i on the host as emGroup labels it: 0 for the
+/// environment, 1 for a mutated atom, and 1 or 2 by ligand when relative.
+int hostGroup(int i);
 
 /// The atoms that charge with the coupling value: ligand 2 in the LIG2 leg of
 /// the staged relative schedule, ligand 1 (or the mutated atoms) otherwise.
@@ -187,11 +219,6 @@ inline bool grpPairScaleLive(const GrpPairScale& ps, int gi, int gk)
 {
    return (ps.live >> (3 * gi + gk)) & 1u;
 }
-
-/// The single topology pair scale: the product of the two group scales of
-/// \c g, carried to the main lambda by \c dl and \c d2l, so a pair inside a
-/// charging ligand goes as lambda squared.
-GrpPairScale grpPairScale(const GrpScale& g, double dl, double d2l);
 
 /// The multipole pair scale at the electrostatic lambda (empole4.f).
 GrpPairScale elecPairScale();
@@ -377,10 +404,10 @@ TINKER_EXTERN bool use_ti;
 TINKER_EXTERN bool use_fep;
 TINKER_EXTERN bool use_abf;
 
-// Only the first lambda derivative is built unless use_d2lmda asks for the
-// second, force and virial ones (dlambda.f zeroes them otherwise). Single
-// topology polarization, which has no chain rule past the first, is only
-// chosen when use_d2lmda is off.
+/// Only the first lambda derivative is built unless use_d2lmda asks for the
+/// second, force and virial ones (dlambda.f zeroes them otherwise). Single
+/// topology polarization, which has no chain rule past the first, is only
+/// chosen when use_d2lmda is off.
 inline int lmdaDerivMask(int flag, bool term_driven)
 {
    if (not term_driven)
@@ -399,16 +426,20 @@ inline int lmdaDerivMask(int flag, bool term_driven)
    return b;
 }
 
+/// The version a term driven by lambda takes: v1 and v4 gain the lambda
+/// derivative bits of lmdaDerivMask (v7 to v10), the others stay plain.
 inline int lmdaDerivVers(int vers, bool term_driven)
 {
-   if (not term_driven)
+   if (vers != calc::v1 and vers != calc::v4)
       return vers;
-   bool reduced = not use_d2lmda;
-   if (vers == calc::v1)
-      return reduced ? calc::v7 : calc::v9;
-   if (vers == calc::v4)
-      return reduced ? calc::v8 : calc::v10;
-   return vers;
+   return vers | lmdaDerivMask(vers, term_driven);
+}
+
+/// Whether version \c vers takes lambda derivatives; every version
+/// lmdaDerivVers builds takes at least the first.
+constexpr bool lmdaDodl(int vers)
+{
+   return vers & calc::energy_dlmda1;
 }
 
 /// The one main lambda, mirroring mutant::lambda. Whichever method owns it --
@@ -650,22 +681,25 @@ private:
 };
 
 /// \ingroup ff
-/// The polarization lambda channels, depdl_buf and d2epdl2_buf, which charge
-/// transfer shares with polarization (echgtrn1.f adds to depdl). One owner
-/// allocates them whenever either term is on, and each term zeroes them before
-/// its own kernels and flushes them after, so the two shares add up in depdl.
-void polarLmdaData(RcOp op);
-void polarLmdaZero(int vers);
-void polarLmdaFlush(int vers);
+/// The sub-lambdas whose terms share one pair of lambda-derivative channels.
+enum class LmdaTerm
+{
+   ELEC,  ///< demdl_buf and d2emdl2_buf: atomic multipoles and partial charges (echarge1.f adds to demdl)
+   POLAR, ///< depdl_buf and d2epdl2_buf: polarization and charge transfer (echgtrn1.f adds to depdl)
+   VDW,   ///< devdl_buf and d2evdl2_buf: van der Waals, Pauli repulsion and damped dispersion (erepel1.f and
+          ///< edisp1.f add to devdl)
+};
 
 /// \ingroup ff
-/// The van der Waals lambda channels, devdl_buf and d2evdl2_buf, which Pauli
-/// repulsion and damped dispersion share with van der Waals (erepel1.f and
-/// edisp1.f add to devdl), managed as polarLmdaData() manages the polarization
-/// ones.
-void vdwLmdaData(RcOp op);
-void vdwLmdaZero(int vers);
-void vdwLmdaFlush(int vers);
+/// The channels of the terms of sub-lambda \c t. One owner allocates them
+/// whenever any of those terms is on (lmdaChannelsData), and each term zeroes
+/// them before its own kernels and flushes them after, so the shares add up in
+/// the term's scalar.
+LmdaBuffer& lmdaChannel(LmdaTerm t);
+
+/// \ingroup ff
+/// Manages the three pairs of lambda-derivative channels.
+void lmdaChannelsData(RcOp op);
 
 TINKER_EXTERN VirialBuffer dvirdl_buf;
 

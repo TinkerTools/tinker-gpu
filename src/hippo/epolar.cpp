@@ -201,7 +201,7 @@ void epolarChgpen(int vers)
    if (rc_a and do_a)
       darray::zero(g::q0, bufferSize(), nep);
    ep_buf.zero(vers);
-   polarLmdaZero(vers);
+   lmdaChannel(LmdaTerm::POLAR).zero(vers);
 
    // Dual topology solves at each endpoint and weights them (epolar4.f:
    // epolar4f); single topology solves once at the polarization lambda.
@@ -216,7 +216,7 @@ void epolarChgpen(int vers)
       });
 
    ep_buf.flush(vers);
-   polarLmdaFlush(vers);
+   lmdaChannel(LmdaTerm::POLAR).flush(vers);
 }
 }
 

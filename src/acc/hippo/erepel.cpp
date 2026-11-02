@@ -29,8 +29,9 @@ static void erepel_acc1()
    size_t bufsize = bufferSize();
 
    PairRepelGrad pgrad;
-   // OpenACC refuses every lambda mode, so only the soft core scaling is needed.
-   const SoftCoreLmda rs = repelSoft(false);
+   // OpenACC refuses every lambda mode, relative free energy included, so only
+   // the soft core scaling of a single ligand is needed.
+   const SoftCoreLmda rs = repelSoft(1, false);
 
    MAYBE_UNUSED int GRID_DIM = gpuGridSize(BLOCK_DIM);
    #pragma acc parallel async num_gangs(GRID_DIM) vector_length(BLOCK_DIM)\

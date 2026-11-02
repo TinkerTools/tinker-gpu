@@ -1,5 +1,5 @@
 // ck.py Version 3.1.0
-template <class Ver, class DTYP>
+template <class Ver, class IMG, class DTYP, bool REL, bool DHAL>
 __global__
 void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer restrict ed,
    EnergyBuffer restrict dvdl, EnergyBuffer restrict d2vdl2, VirialBuffer restrict vd, VirialBuffer restrict dvvirdl,
@@ -7,8 +7,9 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
    grad_prec* restrict dfvdly, grad_prec* restrict dfvdlz, real cut, real off, const unsigned* restrict dinfo,
    int nexclude, const int (*restrict exclude)[2], const real* restrict exclude_scale, const real* restrict x,
    const real* restrict y, const real* restrict z, const Spatial::SortedAtom* restrict sorted, int nakpl,
-   const int* restrict iakpl, int niak, const int* restrict iak, const int* restrict lst, const real* restrict csix,
-   const real* restrict adisp, real aewald, const int* restrict mut, Vdw vcouple, DispSoft ds)
+   const int* restrict iakpl, int niak, const int* restrict iak, const int* restrict lst,
+   const Spatial::Center* restrict akc, const real* restrict csix, const real* restrict adisp, real aewald,
+   const int* restrict mutg, int mutcls, Vdw vcouple, DispSoft ds1, DispSoft ds2, DispHal dh)
 {
    constexpr bool do_a = Ver::a;
    constexpr bool do_e = Ver::e;
@@ -18,6 +19,7 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
    constexpr bool do_dl2 = Ver::e_dlmda2;
    constexpr bool do_gdl = Ver::g_dlmda;
    constexpr bool do_vdl = Ver::v_dlmda;
+   static_assert(not do_vdl or do_gdl, "");
    const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
    const int iwarp = ithread / WARP_SIZE;
    const int nwarp = blockDim.x * gridDim.x / WARP_SIZE;
@@ -60,9 +62,9 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
       dvvirdltlzz = 0;
    }
    real xi, yi, zi, ci, ai;
-   int imut;
+   int imutg;
    real xk, yk, zk, ck, ak;
-   int kmut;
+   int kmutg;
    real gxi, gyi, gzi;
    real gxk, gyk, gzk;
    real dgxi, dgyi, dgzi;
@@ -96,31 +98,36 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
       zi = z[i];
       ci = csix[i];
       ai = adisp[i];
-      imut = mut[i];
+      imutg = mutg[i];
       xk = x[k];
       yk = y[k];
       zk = z[k];
       ck = csix[k];
       ak = adisp[k];
-      kmut = mut[k];
+      kmutg = mutg[k];
 
       constexpr bool incl = true;
+      constexpr bool tile_local = false;
       real xr = xi - xk;
       real yr = yi - yk;
       real zr = zi - zk;
-      real r2 = image2(xr, yr, zr);
-      if (r2 <= off * off and incl) {
+      real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+      // REL: the class of a pair of ligand groups, the two ligands never
+      // interacting; otherwise whether the pair is mutated, as plain runs need
+      int mc = REL ? pair_mutcls(mutcls, imutg, kmutg) : int(pair_mutik(vcouple, imutg, kmutg));
+      if (r2 <= off * off and incl and mc >= 0) {
          real r = REAL_SQRT(r2);
          // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
          real rr1 = REAL_RSQRT_V2(r2);
          real e, de, dle, dle2, dlde;
-         bool mutik = pair_mutik(vcouple, imut, kmut);
-         pair_disp<do_g, DTYP, 0, do_dl1, do_dl2, do_gdl>(r, r2, rr1, scalea, aewald, ci, ai, ck, ak, mutik, ds, cut,
-            off, e, de, dle, dle2, dlde);
+         pair_disp<do_g, DTYP, 0, do_dl1, do_dl2, do_gdl, DHAL>(r, r2, rr1, scalea, aewald, ci, ai, ck, ak, mc, ds1,
+            (REL ? ds2 : ds1), cut, off, dh, e, de, dle, dle2, dlde);
          if CONSTEXPR (do_e) {
             edtl += floatTo<ebuf_prec>(e);
+            // a pair counts if its damped pair, which the tail of a hal vdW weights
+            // by zero inside the vdW switch, does (edisp3.f)
             if CONSTEXPR (do_a) {
-               if (scalea != 0 and e != 0)
+               if (scalea != 0 and e != 0 and (not DHAL or r > dh.cut))
                   ndtl += 1;
             }
          }
@@ -136,7 +143,7 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
             gxk -= dedx;
             gyk -= dedy;
             gzk -= dedz;
-            if CONSTEXPR (do_v) {
+            if CONSTEXPR (do_v and not tile_local) {
                vdtlxx += floatTo<vbuf_prec>(xr * dedx);
                vdtlyx += floatTo<vbuf_prec>(yr * dedx);
                vdtlzx += floatTo<vbuf_prec>(zr * dedx);
@@ -151,25 +158,8 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
          if CONSTEXPR (do_dl2)
             d2vdl2tl += floatTo<ebuf_prec>(dle2);
          if CONSTEXPR (do_gdl) {
-            real dldx, dldy, dldz;
-            dlde *= rr1;
-            dldx = dlde * xr;
-            dldy = dlde * yr;
-            dldz = dlde * zr;
-            dgxi += dldx;
-            dgyi += dldy;
-            dgzi += dldz;
-            dgxk -= dldx;
-            dgyk -= dldy;
-            dgzk -= dldz;
-            if CONSTEXPR (do_vdl) {
-               dvvirdltlxx += floatTo<vbuf_prec>(xr * dldx);
-               dvvirdltlyx += floatTo<vbuf_prec>(yr * dldx);
-               dvvirdltlzx += floatTo<vbuf_prec>(zr * dldx);
-               dvvirdltlyy += floatTo<vbuf_prec>(yr * dldy);
-               dvvirdltlzy += floatTo<vbuf_prec>(zr * dldy);
-               dvvirdltlzz += floatTo<vbuf_prec>(zr * dldz);
-            }
+            pair_dlforce<true, (do_vdl and not tile_local)>(dlde * rr1, xr, yr, zr, dgxi, dgyi, dgzi, dgxk, dgyk, dgzk,
+               dvvirdltlxx, dvvirdltlyx, dvvirdltlzx, dvvirdltlyy, dvvirdltlzy, dvvirdltlzz);
          }
       } // end if (include)
 
@@ -225,107 +215,208 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
       zi = sorted[atomi].z;
       ci = csix[i];
       ai = adisp[i];
-      imut = mut[i];
+      imutg = mutg[i];
       xk = sorted[atomk].x;
       yk = sorted[atomk].y;
       zk = sorted[atomk].z;
       ck = csix[k];
       ak = adisp[k];
-      kmut = mut[k];
+      kmutg = mutg[k];
 
       unsigned int dinfo0 = dinfo[iw * WARP_SIZE + ilane];
-      for (int j = 0; j < WARP_SIZE; ++j) {
-         int srclane = (ilane + j) & (WARP_SIZE - 1);
-         bool incl = iid < kid and kid < n;
-         int srcmask = 1 << srclane;
-         incl = incl and (dinfo0 & srcmask) == 0;
-         real xr = xi - xk;
-         real yr = yi - yk;
-         real zr = zi - zk;
-         real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
-            real r = REAL_SQRT(r2);
-            // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
-            real rr1 = REAL_RSQRT_V2(r2);
-            real e, de, dle, dle2, dlde;
-            bool mutik = pair_mutik(vcouple, imut, kmut);
-            pair_disp<do_g, DTYP, 1, do_dl1, do_dl2, do_gdl>(r, r2, rr1, 1, aewald, ci, ai, ck, ak, mutik, ds, cut, off,
-               e, de, dle, dle2, dlde);
-            if CONSTEXPR (do_e) {
-               edtl += floatTo<ebuf_prec>(e);
-               if CONSTEXPR (do_a) {
-                  if (e != 0)
-                     ndtl += 1;
+      real xc = akc[ty].x;
+      real yc = akc[ty].y;
+      real zc = akc[ty].z;
+      const bool ilocal = akc[ty].w != 0;
+      if (ilocal) {
+         real xr, yr, zr;
+         xr = xi - xc;
+         yr = yi - yc;
+         zr = zi - zc;
+         IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+         xi = xr;
+         yi = yr;
+         zi = zr;
+         xr = xk - xc;
+         yr = yk - yc;
+         zr = zk - zc;
+         IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+         xk = xr;
+         yk = yr;
+         zk = zr;
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            bool incl = iid < kid and kid < n;
+            int srcmask = 1 << srclane;
+            incl = incl and (dinfo0 & srcmask) == 0;
+            constexpr bool tile_local = true;
+            real xr = xi - xk;
+            real yr = yi - yk;
+            real zr = zi - zk;
+            real r2 = (xr * xr + yr * yr + zr * zr);
+            // REL: the class of a pair of ligand groups, the two ligands never
+            // interacting; otherwise whether the pair is mutated, as plain runs need
+            int mc = REL ? pair_mutcls(mutcls, imutg, kmutg) : int(pair_mutik(vcouple, imutg, kmutg));
+            if (r2 <= off * off and incl and mc >= 0) {
+               real r = REAL_SQRT(r2);
+               // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
+               real rr1 = REAL_RSQRT_V2(r2);
+               real e, de, dle, dle2, dlde;
+               pair_disp<do_g, DTYP, 1, do_dl1, do_dl2, do_gdl, DHAL>(r, r2, rr1, 1, aewald, ci, ai, ck, ak, mc, ds1,
+                  (REL ? ds2 : ds1), cut, off, dh, e, de, dle, dle2, dlde);
+               if CONSTEXPR (do_e) {
+                  edtl += floatTo<ebuf_prec>(e);
+                  if CONSTEXPR (do_a) {
+                     if (e != 0 and (not DHAL or r > dh.cut))
+                        ndtl += 1;
+                  }
                }
-            }
-            if CONSTEXPR (do_g) {
-               real dedx, dedy, dedz;
-               de *= rr1;
-               dedx = de * xr;
-               dedy = de * yr;
-               dedz = de * zr;
-               gxi += dedx;
-               gyi += dedy;
-               gzi += dedz;
-               gxk -= dedx;
-               gyk -= dedy;
-               gzk -= dedz;
-               if CONSTEXPR (do_v) {
-                  vdtlxx += floatTo<vbuf_prec>(xr * dedx);
-                  vdtlyx += floatTo<vbuf_prec>(yr * dedx);
-                  vdtlzx += floatTo<vbuf_prec>(zr * dedx);
-                  vdtlyy += floatTo<vbuf_prec>(yr * dedy);
-                  vdtlzy += floatTo<vbuf_prec>(zr * dedy);
-                  vdtlzz += floatTo<vbuf_prec>(zr * dedz);
+               if CONSTEXPR (do_g) {
+                  real dedx, dedy, dedz;
+                  de *= rr1;
+                  dedx = de * xr;
+                  dedy = de * yr;
+                  dedz = de * zr;
+                  gxi += dedx;
+                  gyi += dedy;
+                  gzi += dedz;
+                  gxk -= dedx;
+                  gyk -= dedy;
+                  gzk -= dedz;
+                  if CONSTEXPR (do_v and not tile_local) {
+                     vdtlxx += floatTo<vbuf_prec>(xr * dedx);
+                     vdtlyx += floatTo<vbuf_prec>(yr * dedx);
+                     vdtlzx += floatTo<vbuf_prec>(zr * dedx);
+                     vdtlyy += floatTo<vbuf_prec>(yr * dedy);
+                     vdtlzy += floatTo<vbuf_prec>(zr * dedy);
+                     vdtlzz += floatTo<vbuf_prec>(zr * dedz);
+                  }
                }
-            }
-            // lambda derivatives of a mutated pair (edisp1.f)
-            if CONSTEXPR (do_dl1)
-               dvdltl += floatTo<ebuf_prec>(dle);
-            if CONSTEXPR (do_dl2)
-               d2vdl2tl += floatTo<ebuf_prec>(dle2);
-            if CONSTEXPR (do_gdl) {
-               real dldx, dldy, dldz;
-               dlde *= rr1;
-               dldx = dlde * xr;
-               dldy = dlde * yr;
-               dldz = dlde * zr;
-               dgxi += dldx;
-               dgyi += dldy;
-               dgzi += dldz;
-               dgxk -= dldx;
-               dgyk -= dldy;
-               dgzk -= dldz;
-               if CONSTEXPR (do_vdl) {
-                  dvvirdltlxx += floatTo<vbuf_prec>(xr * dldx);
-                  dvvirdltlyx += floatTo<vbuf_prec>(yr * dldx);
-                  dvvirdltlzx += floatTo<vbuf_prec>(zr * dldx);
-                  dvvirdltlyy += floatTo<vbuf_prec>(yr * dldy);
-                  dvvirdltlzy += floatTo<vbuf_prec>(zr * dldy);
-                  dvvirdltlzz += floatTo<vbuf_prec>(zr * dldz);
+               // lambda derivatives of a mutated pair (edisp1.f)
+               if CONSTEXPR (do_dl1)
+                  dvdltl += floatTo<ebuf_prec>(dle);
+               if CONSTEXPR (do_dl2)
+                  d2vdl2tl += floatTo<ebuf_prec>(dle2);
+               if CONSTEXPR (do_gdl) {
+                  pair_dlforce<true, (do_vdl and not tile_local)>(dlde * rr1, xr, yr, zr, dgxi, dgyi, dgzi, dgxk, dgyk,
+                     dgzk, dvvirdltlxx, dvvirdltlyx, dvvirdltlzx, dvvirdltlyy, dvvirdltlzy, dvvirdltlzz);
                }
-            }
-         } // end if (include)
+            } // end if (include)
 
-         iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
-         xi = __shfl_sync(ALL_LANES, xi, ilane + 1);
-         yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
-         zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
-         ci = __shfl_sync(ALL_LANES, ci, ilane + 1);
-         ai = __shfl_sync(ALL_LANES, ai, ilane + 1);
-         imut = __shfl_sync(ALL_LANES, imut, ilane + 1);
-         if CONSTEXPR (do_g) {
-            gxi = __shfl_sync(ALL_LANES, gxi, ilane + 1);
-            gyi = __shfl_sync(ALL_LANES, gyi, ilane + 1);
-            gzi = __shfl_sync(ALL_LANES, gzi, ilane + 1);
+            iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
+            xi = __shfl_sync(ALL_LANES, xi, ilane + 1);
+            yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
+            zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
+            ci = __shfl_sync(ALL_LANES, ci, ilane + 1);
+            ai = __shfl_sync(ALL_LANES, ai, ilane + 1);
+            imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
+            if CONSTEXPR (do_g) {
+               gxi = __shfl_sync(ALL_LANES, gxi, ilane + 1);
+               gyi = __shfl_sync(ALL_LANES, gyi, ilane + 1);
+               gzi = __shfl_sync(ALL_LANES, gzi, ilane + 1);
+            }
+            if CONSTEXPR (do_gdl) {
+               dgxi = __shfl_sync(ALL_LANES, dgxi, ilane + 1);
+               dgyi = __shfl_sync(ALL_LANES, dgyi, ilane + 1);
+               dgzi = __shfl_sync(ALL_LANES, dgzi, ilane + 1);
+            }
          }
-         if CONSTEXPR (do_gdl) {
-            dgxi = __shfl_sync(ALL_LANES, dgxi, ilane + 1);
-            dgyi = __shfl_sync(ALL_LANES, dgyi, ilane + 1);
-            dgzi = __shfl_sync(ALL_LANES, dgzi, ilane + 1);
+
+         if CONSTEXPR (do_v) {
+            vdtlxx += floatTo<vbuf_prec>(xi * gxi + xk * gxk);
+            vdtlyx += floatTo<vbuf_prec>(yi * gxi + yk * gxk);
+            vdtlzx += floatTo<vbuf_prec>(zi * gxi + zk * gxk);
+            vdtlyy += floatTo<vbuf_prec>(yi * gyi + yk * gyk);
+            vdtlzy += floatTo<vbuf_prec>(zi * gyi + zk * gyk);
+            vdtlzz += floatTo<vbuf_prec>(zi * gzi + zk * gzk);
+         }
+         if CONSTEXPR (do_vdl) {
+            dvvirdltlxx += floatTo<vbuf_prec>(xi * dgxi + xk * dgxk);
+            dvvirdltlyx += floatTo<vbuf_prec>(yi * dgxi + yk * dgxk);
+            dvvirdltlzx += floatTo<vbuf_prec>(zi * dgxi + zk * dgxk);
+            dvvirdltlyy += floatTo<vbuf_prec>(yi * dgyi + yk * dgyk);
+            dvvirdltlzy += floatTo<vbuf_prec>(zi * dgyi + zk * dgyk);
+            dvvirdltlzz += floatTo<vbuf_prec>(zi * dgzi + zk * dgzk);
+         }
+      } else {
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            bool incl = iid < kid and kid < n;
+            int srcmask = 1 << srclane;
+            incl = incl and (dinfo0 & srcmask) == 0;
+            constexpr bool tile_local = false;
+            real xr = xi - xk;
+            real yr = yi - yk;
+            real zr = zi - zk;
+            real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+            // REL: the class of a pair of ligand groups, the two ligands never
+            // interacting; otherwise whether the pair is mutated, as plain runs need
+            int mc = REL ? pair_mutcls(mutcls, imutg, kmutg) : int(pair_mutik(vcouple, imutg, kmutg));
+            if (r2 <= off * off and incl and mc >= 0) {
+               real r = REAL_SQRT(r2);
+               // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
+               real rr1 = REAL_RSQRT_V2(r2);
+               real e, de, dle, dle2, dlde;
+               pair_disp<do_g, DTYP, 1, do_dl1, do_dl2, do_gdl, DHAL>(r, r2, rr1, 1, aewald, ci, ai, ck, ak, mc, ds1,
+                  (REL ? ds2 : ds1), cut, off, dh, e, de, dle, dle2, dlde);
+               if CONSTEXPR (do_e) {
+                  edtl += floatTo<ebuf_prec>(e);
+                  if CONSTEXPR (do_a) {
+                     if (e != 0 and (not DHAL or r > dh.cut))
+                        ndtl += 1;
+                  }
+               }
+               if CONSTEXPR (do_g) {
+                  real dedx, dedy, dedz;
+                  de *= rr1;
+                  dedx = de * xr;
+                  dedy = de * yr;
+                  dedz = de * zr;
+                  gxi += dedx;
+                  gyi += dedy;
+                  gzi += dedz;
+                  gxk -= dedx;
+                  gyk -= dedy;
+                  gzk -= dedz;
+                  if CONSTEXPR (do_v and not tile_local) {
+                     vdtlxx += floatTo<vbuf_prec>(xr * dedx);
+                     vdtlyx += floatTo<vbuf_prec>(yr * dedx);
+                     vdtlzx += floatTo<vbuf_prec>(zr * dedx);
+                     vdtlyy += floatTo<vbuf_prec>(yr * dedy);
+                     vdtlzy += floatTo<vbuf_prec>(zr * dedy);
+                     vdtlzz += floatTo<vbuf_prec>(zr * dedz);
+                  }
+               }
+               // lambda derivatives of a mutated pair (edisp1.f)
+               if CONSTEXPR (do_dl1)
+                  dvdltl += floatTo<ebuf_prec>(dle);
+               if CONSTEXPR (do_dl2)
+                  d2vdl2tl += floatTo<ebuf_prec>(dle2);
+               if CONSTEXPR (do_gdl) {
+                  pair_dlforce<true, (do_vdl and not tile_local)>(dlde * rr1, xr, yr, zr, dgxi, dgyi, dgzi, dgxk, dgyk,
+                     dgzk, dvvirdltlxx, dvvirdltlyx, dvvirdltlzx, dvvirdltlyy, dvvirdltlzy, dvvirdltlzz);
+               }
+            } // end if (include)
+
+            iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
+            xi = __shfl_sync(ALL_LANES, xi, ilane + 1);
+            yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
+            zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
+            ci = __shfl_sync(ALL_LANES, ci, ilane + 1);
+            ai = __shfl_sync(ALL_LANES, ai, ilane + 1);
+            imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
+            if CONSTEXPR (do_g) {
+               gxi = __shfl_sync(ALL_LANES, gxi, ilane + 1);
+               gyi = __shfl_sync(ALL_LANES, gyi, ilane + 1);
+               gzi = __shfl_sync(ALL_LANES, gzi, ilane + 1);
+            }
+            if CONSTEXPR (do_gdl) {
+               dgxi = __shfl_sync(ALL_LANES, dgxi, ilane + 1);
+               dgyi = __shfl_sync(ALL_LANES, dgyi, ilane + 1);
+               dgzi = __shfl_sync(ALL_LANES, dgzi, ilane + 1);
+            }
          }
       }
-
       if CONSTEXPR (do_g) {
          atomic_add(gxi, gx, i);
          atomic_add(gyi, gy, i);
@@ -372,102 +463,199 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
       zi = sorted[atomi].z;
       ci = csix[i];
       ai = adisp[i];
-      imut = mut[i];
+      imutg = mutg[i];
       xk = sorted[atomk].x;
       yk = sorted[atomk].y;
       zk = sorted[atomk].z;
       ck = csix[k];
       ak = adisp[k];
-      kmut = mut[k];
+      kmutg = mutg[k];
 
-      for (int j = 0; j < WARP_SIZE; ++j) {
-         bool incl = atomk > 0;
-         real xr = xi - xk;
-         real yr = yi - yk;
-         real zr = zi - zk;
-         real r2 = image2(xr, yr, zr);
-         if (r2 <= off * off and incl) {
-            real r = REAL_SQRT(r2);
-            // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
-            real rr1 = REAL_RSQRT_V2(r2);
-            real e, de, dle, dle2, dlde;
-            bool mutik = pair_mutik(vcouple, imut, kmut);
-            pair_disp<do_g, DTYP, 1, do_dl1, do_dl2, do_gdl>(r, r2, rr1, 1, aewald, ci, ai, ck, ak, mutik, ds, cut, off,
-               e, de, dle, dle2, dlde);
-            if CONSTEXPR (do_e) {
-               edtl += floatTo<ebuf_prec>(e);
-               if CONSTEXPR (do_a) {
-                  if (e != 0)
-                     ndtl += 1;
+      real xc = akc[ty].x;
+      real yc = akc[ty].y;
+      real zc = akc[ty].z;
+      const bool ilocal = akc[ty].w != 0;
+      if (ilocal) {
+         real xr, yr, zr;
+         xr = xi - xc;
+         yr = yi - yc;
+         zr = zi - zc;
+         IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+         xi = xr;
+         yi = yr;
+         zi = zr;
+         xr = xk - xc;
+         yr = yk - yc;
+         zr = zk - zc;
+         IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+         xk = xr;
+         yk = yr;
+         zk = zr;
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            bool incl = atomk > 0;
+            constexpr bool tile_local = true;
+            real xr = xi - xk;
+            real yr = yi - yk;
+            real zr = zi - zk;
+            real r2 = (xr * xr + yr * yr + zr * zr);
+            // REL: the class of a pair of ligand groups, the two ligands never
+            // interacting; otherwise whether the pair is mutated, as plain runs need
+            int mc = REL ? pair_mutcls(mutcls, imutg, kmutg) : int(pair_mutik(vcouple, imutg, kmutg));
+            if (r2 <= off * off and incl and mc >= 0) {
+               real r = REAL_SQRT(r2);
+               // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
+               real rr1 = REAL_RSQRT_V2(r2);
+               real e, de, dle, dle2, dlde;
+               pair_disp<do_g, DTYP, 1, do_dl1, do_dl2, do_gdl, DHAL>(r, r2, rr1, 1, aewald, ci, ai, ck, ak, mc, ds1,
+                  (REL ? ds2 : ds1), cut, off, dh, e, de, dle, dle2, dlde);
+               if CONSTEXPR (do_e) {
+                  edtl += floatTo<ebuf_prec>(e);
+                  if CONSTEXPR (do_a) {
+                     if (e != 0 and (not DHAL or r > dh.cut))
+                        ndtl += 1;
+                  }
                }
-            }
+               if CONSTEXPR (do_g) {
+                  real dedx, dedy, dedz;
+                  de *= rr1;
+                  dedx = de * xr;
+                  dedy = de * yr;
+                  dedz = de * zr;
+                  gxi += dedx;
+                  gyi += dedy;
+                  gzi += dedz;
+                  gxk -= dedx;
+                  gyk -= dedy;
+                  gzk -= dedz;
+                  if CONSTEXPR (do_v and not tile_local) {
+                     vdtlxx += floatTo<vbuf_prec>(xr * dedx);
+                     vdtlyx += floatTo<vbuf_prec>(yr * dedx);
+                     vdtlzx += floatTo<vbuf_prec>(zr * dedx);
+                     vdtlyy += floatTo<vbuf_prec>(yr * dedy);
+                     vdtlzy += floatTo<vbuf_prec>(zr * dedy);
+                     vdtlzz += floatTo<vbuf_prec>(zr * dedz);
+                  }
+               }
+               // lambda derivatives of a mutated pair (edisp1.f)
+               if CONSTEXPR (do_dl1)
+                  dvdltl += floatTo<ebuf_prec>(dle);
+               if CONSTEXPR (do_dl2)
+                  d2vdl2tl += floatTo<ebuf_prec>(dle2);
+               if CONSTEXPR (do_gdl) {
+                  pair_dlforce<true, (do_vdl and not tile_local)>(dlde * rr1, xr, yr, zr, dgxi, dgyi, dgzi, dgxk, dgyk,
+                     dgzk, dvvirdltlxx, dvvirdltlyx, dvvirdltlzx, dvvirdltlyy, dvvirdltlzy, dvvirdltlzz);
+               }
+            } // end if (include)
+
+            xi = __shfl_sync(ALL_LANES, xi, ilane + 1);
+            yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
+            zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
+            ci = __shfl_sync(ALL_LANES, ci, ilane + 1);
+            ai = __shfl_sync(ALL_LANES, ai, ilane + 1);
+            imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
             if CONSTEXPR (do_g) {
-               real dedx, dedy, dedz;
-               de *= rr1;
-               dedx = de * xr;
-               dedy = de * yr;
-               dedz = de * zr;
-               gxi += dedx;
-               gyi += dedy;
-               gzi += dedz;
-               gxk -= dedx;
-               gyk -= dedy;
-               gzk -= dedz;
-               if CONSTEXPR (do_v) {
-                  vdtlxx += floatTo<vbuf_prec>(xr * dedx);
-                  vdtlyx += floatTo<vbuf_prec>(yr * dedx);
-                  vdtlzx += floatTo<vbuf_prec>(zr * dedx);
-                  vdtlyy += floatTo<vbuf_prec>(yr * dedy);
-                  vdtlzy += floatTo<vbuf_prec>(zr * dedy);
-                  vdtlzz += floatTo<vbuf_prec>(zr * dedz);
-               }
+               gxi = __shfl_sync(ALL_LANES, gxi, ilane + 1);
+               gyi = __shfl_sync(ALL_LANES, gyi, ilane + 1);
+               gzi = __shfl_sync(ALL_LANES, gzi, ilane + 1);
             }
-            // lambda derivatives of a mutated pair (edisp1.f)
-            if CONSTEXPR (do_dl1)
-               dvdltl += floatTo<ebuf_prec>(dle);
-            if CONSTEXPR (do_dl2)
-               d2vdl2tl += floatTo<ebuf_prec>(dle2);
             if CONSTEXPR (do_gdl) {
-               real dldx, dldy, dldz;
-               dlde *= rr1;
-               dldx = dlde * xr;
-               dldy = dlde * yr;
-               dldz = dlde * zr;
-               dgxi += dldx;
-               dgyi += dldy;
-               dgzi += dldz;
-               dgxk -= dldx;
-               dgyk -= dldy;
-               dgzk -= dldz;
-               if CONSTEXPR (do_vdl) {
-                  dvvirdltlxx += floatTo<vbuf_prec>(xr * dldx);
-                  dvvirdltlyx += floatTo<vbuf_prec>(yr * dldx);
-                  dvvirdltlzx += floatTo<vbuf_prec>(zr * dldx);
-                  dvvirdltlyy += floatTo<vbuf_prec>(yr * dldy);
-                  dvvirdltlzy += floatTo<vbuf_prec>(zr * dldy);
-                  dvvirdltlzz += floatTo<vbuf_prec>(zr * dldz);
-               }
+               dgxi = __shfl_sync(ALL_LANES, dgxi, ilane + 1);
+               dgyi = __shfl_sync(ALL_LANES, dgyi, ilane + 1);
+               dgzi = __shfl_sync(ALL_LANES, dgzi, ilane + 1);
             }
-         } // end if (include)
-
-         xi = __shfl_sync(ALL_LANES, xi, ilane + 1);
-         yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
-         zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
-         ci = __shfl_sync(ALL_LANES, ci, ilane + 1);
-         ai = __shfl_sync(ALL_LANES, ai, ilane + 1);
-         imut = __shfl_sync(ALL_LANES, imut, ilane + 1);
-         if CONSTEXPR (do_g) {
-            gxi = __shfl_sync(ALL_LANES, gxi, ilane + 1);
-            gyi = __shfl_sync(ALL_LANES, gyi, ilane + 1);
-            gzi = __shfl_sync(ALL_LANES, gzi, ilane + 1);
          }
-         if CONSTEXPR (do_gdl) {
-            dgxi = __shfl_sync(ALL_LANES, dgxi, ilane + 1);
-            dgyi = __shfl_sync(ALL_LANES, dgyi, ilane + 1);
-            dgzi = __shfl_sync(ALL_LANES, dgzi, ilane + 1);
+
+         if CONSTEXPR (do_v) {
+            vdtlxx += floatTo<vbuf_prec>(xi * gxi + xk * gxk);
+            vdtlyx += floatTo<vbuf_prec>(yi * gxi + yk * gxk);
+            vdtlzx += floatTo<vbuf_prec>(zi * gxi + zk * gxk);
+            vdtlyy += floatTo<vbuf_prec>(yi * gyi + yk * gyk);
+            vdtlzy += floatTo<vbuf_prec>(zi * gyi + zk * gyk);
+            vdtlzz += floatTo<vbuf_prec>(zi * gzi + zk * gzk);
+         }
+         if CONSTEXPR (do_vdl) {
+            dvvirdltlxx += floatTo<vbuf_prec>(xi * dgxi + xk * dgxk);
+            dvvirdltlyx += floatTo<vbuf_prec>(yi * dgxi + yk * dgxk);
+            dvvirdltlzx += floatTo<vbuf_prec>(zi * dgxi + zk * dgxk);
+            dvvirdltlyy += floatTo<vbuf_prec>(yi * dgyi + yk * dgyk);
+            dvvirdltlzy += floatTo<vbuf_prec>(zi * dgyi + zk * dgyk);
+            dvvirdltlzz += floatTo<vbuf_prec>(zi * dgzi + zk * dgzk);
+         }
+      } else {
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            bool incl = atomk > 0;
+            constexpr bool tile_local = false;
+            real xr = xi - xk;
+            real yr = yi - yk;
+            real zr = zi - zk;
+            real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+            // REL: the class of a pair of ligand groups, the two ligands never
+            // interacting; otherwise whether the pair is mutated, as plain runs need
+            int mc = REL ? pair_mutcls(mutcls, imutg, kmutg) : int(pair_mutik(vcouple, imutg, kmutg));
+            if (r2 <= off * off and incl and mc >= 0) {
+               real r = REAL_SQRT(r2);
+               // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
+               real rr1 = REAL_RSQRT_V2(r2);
+               real e, de, dle, dle2, dlde;
+               pair_disp<do_g, DTYP, 1, do_dl1, do_dl2, do_gdl, DHAL>(r, r2, rr1, 1, aewald, ci, ai, ck, ak, mc, ds1,
+                  (REL ? ds2 : ds1), cut, off, dh, e, de, dle, dle2, dlde);
+               if CONSTEXPR (do_e) {
+                  edtl += floatTo<ebuf_prec>(e);
+                  if CONSTEXPR (do_a) {
+                     if (e != 0 and (not DHAL or r > dh.cut))
+                        ndtl += 1;
+                  }
+               }
+               if CONSTEXPR (do_g) {
+                  real dedx, dedy, dedz;
+                  de *= rr1;
+                  dedx = de * xr;
+                  dedy = de * yr;
+                  dedz = de * zr;
+                  gxi += dedx;
+                  gyi += dedy;
+                  gzi += dedz;
+                  gxk -= dedx;
+                  gyk -= dedy;
+                  gzk -= dedz;
+                  if CONSTEXPR (do_v and not tile_local) {
+                     vdtlxx += floatTo<vbuf_prec>(xr * dedx);
+                     vdtlyx += floatTo<vbuf_prec>(yr * dedx);
+                     vdtlzx += floatTo<vbuf_prec>(zr * dedx);
+                     vdtlyy += floatTo<vbuf_prec>(yr * dedy);
+                     vdtlzy += floatTo<vbuf_prec>(zr * dedy);
+                     vdtlzz += floatTo<vbuf_prec>(zr * dedz);
+                  }
+               }
+               // lambda derivatives of a mutated pair (edisp1.f)
+               if CONSTEXPR (do_dl1)
+                  dvdltl += floatTo<ebuf_prec>(dle);
+               if CONSTEXPR (do_dl2)
+                  d2vdl2tl += floatTo<ebuf_prec>(dle2);
+               if CONSTEXPR (do_gdl) {
+                  pair_dlforce<true, (do_vdl and not tile_local)>(dlde * rr1, xr, yr, zr, dgxi, dgyi, dgzi, dgxk, dgyk,
+                     dgzk, dvvirdltlxx, dvvirdltlyx, dvvirdltlzx, dvvirdltlyy, dvvirdltlzy, dvvirdltlzz);
+               }
+            } // end if (include)
+
+            xi = __shfl_sync(ALL_LANES, xi, ilane + 1);
+            yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
+            zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
+            ci = __shfl_sync(ALL_LANES, ci, ilane + 1);
+            ai = __shfl_sync(ALL_LANES, ai, ilane + 1);
+            imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
+            if CONSTEXPR (do_g) {
+               gxi = __shfl_sync(ALL_LANES, gxi, ilane + 1);
+               gyi = __shfl_sync(ALL_LANES, gyi, ilane + 1);
+               gzi = __shfl_sync(ALL_LANES, gzi, ilane + 1);
+            }
+            if CONSTEXPR (do_gdl) {
+               dgxi = __shfl_sync(ALL_LANES, dgxi, ilane + 1);
+               dgyi = __shfl_sync(ALL_LANES, dgyi, ilane + 1);
+               dgzi = __shfl_sync(ALL_LANES, dgzi, ilane + 1);
+            }
          }
       }
-
       if CONSTEXPR (do_g) {
          atomic_add(gxi, gx, i);
          atomic_add(gyi, gy, i);

@@ -11,10 +11,18 @@
 #include "seq/bsplgen.h"
 #include "seq/pair_charge.h"
 #include "tool/darray.h"
+#include "tool/error.h"
 #include "tool/gpucard.h"
 #include <tinker/detail/extfld.hh>
 
 namespace tinker {
+// The lambda derivative versions are CUDA only, which dlmdaData2 refuses
+// first; a caller that gets past it would otherwise take no charge term.
+static void echargeVersRefused(int vers)
+{
+   TINKER_THROW(format("The OpenACC charge kernels do not take version %d.", vers));
+}
+
 #define DEVICE_PTRS x, y, z, decx, decy, decz, pchg, nec, ec, vir_ec
 template <class Ver, class ETYP>
 static void echarge_acc1()
@@ -208,6 +216,8 @@ void echargeNonEwald_acc(int vers)
       echarge_acc1<calc::V5, NON_EWALD_TAPER>();
    else if (vers == calc::v6)
       echarge_acc1<calc::V6, NON_EWALD_TAPER>();
+   else
+      echargeVersRefused(vers);
 }
 
 void echargeEwaldReal_acc(int vers)
@@ -224,6 +234,8 @@ void echargeEwaldReal_acc(int vers)
       echarge_acc1<calc::V5, EWALD>();
    else if (vers == calc::v6)
       echarge_acc1<calc::V6, EWALD>();
+   else
+      echargeVersRefused(vers);
 }
 
 template <class Ver, int bsorder>
@@ -242,23 +254,26 @@ static void echarge_acc3()
    int nfft3 = st.nfft3;
    auto bufsize = bufferSize();
 
-   #pragma acc parallel async deviceptr(pchg,qgrid,nec,ec,x,y,z,decx,decy,decz)\
+   const real* chg0 = pchgorig ? pchgorig : pchg;
+   #pragma acc parallel async deviceptr(pchg,chg0,qgrid,nec,ec,x,y,z,decx,decy,decz)\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)
    #pragma acc loop independent
    for (int ii = 0; ii < n; ++ii) {
+      // Tinker counts the self term of every charged atom, one whose charge
+      // lambda takes to zero included (echarge3.f).
+      int offset = ii & (bufsize - 1);
+      if CONSTEXPR (do_a)
+         if (chg0[ii] != 0)
+            atomic_add(1, nec, offset);
       real chgi = pchg[ii];
       if (chgi == 0)
          continue;
 
       // self energy, tinfoil
       if CONSTEXPR (do_e) {
-         int offset = ii & (bufsize - 1);
          real fs = -f * aewald * REAL_RECIP(sqrtpi);
          real e = fs * chgi * chgi;
          atomic_add(e, ec, offset);
-         if (do_a) {
-            atomic_add(1, nec, offset);
-         }
       }
 
       // recip gradient
@@ -340,7 +355,7 @@ static void echarge_acc3()
    }
 }
 
-void echargeEwaldFphiSelf_acc(int vers)
+void echargeEwaldFphiSelf_acc(int vers, const real*)
 {
    int bso = epme_unit->bsorder;
    if (bso == 4) {
@@ -356,6 +371,8 @@ void echargeEwaldFphiSelf_acc(int vers)
          echarge_acc3<calc::V5, 4>();
       else if (vers == calc::v6)
          echarge_acc3<calc::V6, 4>();
+      else
+         echargeVersRefused(vers);
       return;
    }
    assert(bso == 5);
@@ -371,6 +388,8 @@ void echargeEwaldFphiSelf_acc(int vers)
       echarge_acc3<calc::V5, 5>();
    else if (vers == calc::v6)
       echarge_acc3<calc::V6, 5>();
+   else
+      echargeVersRefused(vers);
 }
 
 template <class Ver>
@@ -434,6 +453,25 @@ void exfieldCharge_acc(int vers)
       exfieldCharge_acc1<calc::V5>();
    else if (vers == calc::v6)
       exfieldCharge_acc1<calc::V6>();
+   else
+      echargeVersRefused(vers);
+}
+
+// Scales the partial charges of each group from their unscaled values, with
+// their derivatives with respect to elambda.
+void pchgScale_acc(real* pchg, real* dq, const real* pchgorig, const int* grp, GrpScale sc)
+{
+   // Scalars rather than the struct, so the loop takes them firstprivate.
+   real s0 = sc.s[0], s1 = sc.s[1], s2 = sc.s[2];
+   real ds0 = sc.ds[0], ds1 = sc.ds[1], ds2 = sc.ds[2];
+   #pragma acc parallel loop independent async deviceptr(pchg,dq,pchgorig,grp)
+   for (int i = 0; i < n; ++i) {
+      int g = grp[i];
+      real c = pchgorig[i];
+      pchg[i] = c * (g == 0 ? s0 : (g == 1 ? s1 : s2));
+      if (dq)
+         dq[i] = c * (g == 0 ? ds0 : (g == 1 ? ds1 : ds2));
+   }
 }
 
 // Adds the Ewald uniform background charge correction, already evaluated on

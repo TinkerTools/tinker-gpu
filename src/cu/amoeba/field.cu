@@ -35,36 +35,40 @@ void dfieldEwaldRecipSelfP2_cu(real (*field)[3])
 
 #include "dfield_cu1.cc"
 
-void dfieldEwaldReal_cu(real (*field)[3], real (*fieldp)[3])
+template <class ETYP>
+static void dfield_cu(real (*field)[3], real (*fieldp)[3])
 {
    const auto& st = *mspatial_v2_unit;
-   const real off = switchOff(Switch::EWALD);
-
-   const PMEUnit pu = ppme_unit;
-   const real aewald = pu->aewald;
+   real off, aewald = 0;
+   if CONSTEXPR (eq<ETYP, EWALD>()) {
+      off = switchOff(Switch::EWALD);
+      const PMEUnit pu = ppme_unit;
+      aewald = pu->aewald;
+   } else {
+      off = switchOff(Switch::MPOLE);
+   }
 
    int ngrid = gpuGridSize(BLOCK_DIM);
    ngrid *= BLOCK_DIM;
    int nparallel = std::max(st.niak, st.nakpl) * WARP_SIZE;
    nparallel = std::max(nparallel, ngrid);
-   launch_k1s(g::s0, nparallel, dfield_cu1<EWALD>, //
-      st.n, TINKER_IMAGE_ARGS, off, st.si3.bit0, ndpexclude, dpexclude, dpexclude_scale, st.x, st.y, st.z, st.sorted,
-      st.nakpl, st.iakpl, st.niak, st.iak, st.lst, field, fieldp, aewald, elecDeadGroups(), elecLiveMask());
+   boxShapeDispatch(box_shape, [&](auto img) {
+      using IMG = decltype(img);
+      launch_k1s(g::s0, nparallel, dfield_cu1<IMG, ETYP>, //
+         st.n, TINKER_IMAGE_ARGS, off, st.si3.bit0, ndpexclude, dpexclude, dpexclude_scale, st.x, st.y, st.z, st.sorted,
+         st.nakpl, st.iakpl, st.niak, st.iak, st.lst, st.akc, field, fieldp, aewald, elecDeadGroups(), elecLiveMask());
+   });
+}
+
+void dfieldEwaldReal_cu(real (*field)[3], real (*fieldp)[3])
+{
+   dfield_cu<EWALD>(field, fieldp);
 }
 
 void dfieldNonEwald_cu(real (*field)[3], real (*fieldp)[3])
 {
-   const auto& st = *mspatial_v2_unit;
-   const real off = switchOff(Switch::MPOLE);
-
    darray::zero(g::q0, n, field, fieldp);
-   int ngrid = gpuGridSize(BLOCK_DIM);
-   ngrid *= BLOCK_DIM;
-   int nparallel = std::max(st.niak, st.nakpl) * WARP_SIZE;
-   nparallel = std::max(nparallel, ngrid);
-   launch_k1s(g::s0, nparallel, dfield_cu1<NON_EWALD>, //
-      st.n, TINKER_IMAGE_ARGS, off, st.si3.bit0, ndpexclude, dpexclude, dpexclude_scale, st.x, st.y, st.z, st.sorted,
-      st.nakpl, st.iakpl, st.niak, st.iak, st.lst, field, fieldp, 0, elecDeadGroups(), elecLiveMask());
+   dfield_cu<NON_EWALD>(field, fieldp);
 }
 }
 
@@ -120,35 +124,40 @@ void ufieldEwaldRecipSelfP1_cu(const real (*uind)[3], const real (*uinp)[3], //
 
 #include "ufield_cu1.cc"
 
-void ufieldEwaldReal_cu(const real (*uind)[3], const real (*uinp)[3], real (*field)[3], real (*fieldp)[3])
+template <class ETYP>
+static void ufield_cu(const real (*uind)[3], const real (*uinp)[3], real (*field)[3], real (*fieldp)[3])
 {
    const auto& st = *mspatial_v2_unit;
-   const real off = switchOff(Switch::EWALD);
-
-   const PMEUnit pu = ppme_unit;
-   const real aewald = pu->aewald;
+   real off, aewald = 0;
+   if CONSTEXPR (eq<ETYP, EWALD>()) {
+      off = switchOff(Switch::EWALD);
+      const PMEUnit pu = ppme_unit;
+      aewald = pu->aewald;
+   } else {
+      off = switchOff(Switch::MPOLE);
+   }
 
    int ngrid = gpuGridSize(BLOCK_DIM);
    ngrid *= BLOCK_DIM;
    int nparallel = std::max(st.niak, st.nakpl) * WARP_SIZE;
    nparallel = std::max(nparallel, ngrid);
-   launch_k1s(g::s0, nparallel, ufield_cu1<EWALD>, //
-      st.n, TINKER_IMAGE_ARGS, off, st.si4.bit0, nuexclude, uexclude, uexclude_scale, st.x, st.y, st.z, st.sorted,
-      st.nakpl, st.iakpl, st.niak, st.iak, st.lst, uind, uinp, field, fieldp, aewald, elecDeadGroups(), elecLiveMask());
+   boxShapeDispatch(box_shape, [&](auto img) {
+      using IMG = decltype(img);
+      launch_k1s(g::s0, nparallel, ufield_cu1<IMG, ETYP>, //
+         st.n, TINKER_IMAGE_ARGS, off, st.si4.bit0, nuexclude, uexclude, uexclude_scale, st.x, st.y, st.z, st.sorted,
+         st.nakpl, st.iakpl, st.niak, st.iak, st.lst, st.akc, uind, uinp, field, fieldp, aewald, elecDeadGroups(),
+         elecLiveMask());
+   });
+}
+
+void ufieldEwaldReal_cu(const real (*uind)[3], const real (*uinp)[3], real (*field)[3], real (*fieldp)[3])
+{
+   ufield_cu<EWALD>(uind, uinp, field, fieldp);
 }
 
 void ufieldNonEwald_cu(const real (*uind)[3], const real (*uinp)[3], real (*field)[3], real (*fieldp)[3])
 {
-   const auto& st = *mspatial_v2_unit;
-   const real off = switchOff(Switch::MPOLE);
-
    darray::zero(g::q0, n, field, fieldp);
-   int ngrid = gpuGridSize(BLOCK_DIM);
-   ngrid *= BLOCK_DIM;
-   int nparallel = std::max(st.niak, st.nakpl) * WARP_SIZE;
-   nparallel = std::max(nparallel, ngrid);
-   launch_k1s(g::s0, nparallel, ufield_cu1<NON_EWALD>, //
-      st.n, TINKER_IMAGE_ARGS, off, st.si4.bit0, nuexclude, uexclude, uexclude_scale, st.x, st.y, st.z, st.sorted,
-      st.nakpl, st.iakpl, st.niak, st.iak, st.lst, uind, uinp, field, fieldp, 0, elecDeadGroups(), elecLiveMask());
+   ufield_cu<NON_EWALD>(uind, uinp, field, fieldp);
 }
 }

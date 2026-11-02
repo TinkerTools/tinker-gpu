@@ -136,9 +136,8 @@ void cfluxData(RcOp op)
 
       // grouped the way emGroup() groups them
       std::vector<int> grp(n, 0);
-      if (mutant::nmut != 0)
-         for (int i = 0; i < n; ++i)
-            grp[i] = use_rel ? mutant::mutg[i] : (mutant::mutg[i] != 0 ? 1 : 0);
+      for (int i = 0; i < n; ++i)
+         grp[i] = hostGroup(i);
       cflux_group_pairs = cfluxGroupPairs(grp.data());
 
       if (rc_flag & calc::grad)

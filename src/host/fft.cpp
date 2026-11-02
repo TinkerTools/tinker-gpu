@@ -153,31 +153,43 @@ static FFTPlanFFTW& fftRealPlans(PMEUnit pme_u)
    return iplan;
 }
 
-void fftfrontOneSet(PMEUnit pme_u)
+void fftfrontOneSet(PMEUnit pme_u, real* grid)
 {
    auto& iplan = fftRealPlans(pme_u);
-   auto& st = *pme_u;
+   real* q = grid ? grid : pme_u->qgrid;
 
 #if TINKER_REAL_SIZE == 4
-   fftwf_execute_dft_r2c(iplan.planr2c, st.qgrid, reinterpret_cast<fftwf_complex*>(st.qgrid));
+   fftwf_execute_dft_r2c(iplan.planr2c, q, reinterpret_cast<fftwf_complex*>(q));
 #elif TINKER_REAL_SIZE == 8
-   fftw_execute_dft_r2c(iplan.planr2c, st.qgrid, reinterpret_cast<fftw_complex*>(st.qgrid));
+   fftw_execute_dft_r2c(iplan.planr2c, q, reinterpret_cast<fftw_complex*>(q));
 #else
    static_assert(false, "");
 #endif
 }
 
-void fftbackOneSet(PMEUnit pme_u)
+void fftbackOneSet(PMEUnit pme_u, real* grid)
 {
    auto& iplan = fftRealPlans(pme_u);
-   auto& st = *pme_u;
+   real* q = grid ? grid : pme_u->qgrid;
 
 #if TINKER_REAL_SIZE == 4
-   fftwf_execute_dft_c2r(iplan.planc2r, reinterpret_cast<fftwf_complex*>(st.qgrid), st.qgrid);
+   fftwf_execute_dft_c2r(iplan.planc2r, reinterpret_cast<fftwf_complex*>(q), q);
 #elif TINKER_REAL_SIZE == 8
-   fftw_execute_dft_c2r(iplan.planc2r, reinterpret_cast<fftw_complex*>(st.qgrid), st.qgrid);
+   fftw_execute_dft_c2r(iplan.planc2r, reinterpret_cast<fftw_complex*>(q), q);
 #else
    static_assert(false, "");
 #endif
+}
+
+void fftfrontOneSet(PMEUnit pme_u, real* grids, int nset, int stride)
+{
+   for (int k = 0; k < nset; ++k)
+      fftfrontOneSet(pme_u, grids + k * stride);
+}
+
+void fftbackOneSet(PMEUnit pme_u, real* grids, int nset, int stride)
+{
+   for (int k = 0; k < nset; ++k)
+      fftbackOneSet(pme_u, grids + k * stride);
 }
 }

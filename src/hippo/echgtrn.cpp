@@ -92,7 +92,7 @@ void echgtrn(int vers)
          darray::zero(g::q0, n, dectx, decty, dectz);
    }
 
-   polarLmdaZero(vers);
+   lmdaChannel(LmdaTerm::POLAR).zero(vers);
 
    // Charge transfer follows the polarization lambda (echgtrn1.f).
    const int dlvers = lmdaDerivVers(vers, pdlmdaActive());
@@ -121,6 +121,6 @@ void echgtrn(int vers)
       if (do_g)
          sumGradient(gx_elec, gy_elec, gz_elec, dectx, decty, dectz);
    }
-   polarLmdaFlush(vers);
+   lmdaChannel(LmdaTerm::POLAR).flush(vers);
 }
 }

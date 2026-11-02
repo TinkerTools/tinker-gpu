@@ -42,8 +42,8 @@ void rattleWater4PosHost();
 void rattleWater4Vel(vel_prec* vxnew, vel_prec* vynew, vel_prec* vznew);
 
 /// \brief Moves the gradient on the extra sites of rigid four-site waters to
-/// their O-H-H atoms (watfour2 in settle.f).
-void rattleWater4Grad();
+/// their O-H-H atoms in the given arrays (watfour2 in settle.f).
+void rattleWater4Grad(grad_prec* g0x, grad_prec* g0y, grad_prec* g0z);
 
 void hcKinetic();
 

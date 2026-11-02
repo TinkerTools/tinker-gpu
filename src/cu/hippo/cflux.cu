@@ -295,7 +295,7 @@ void dcfluxDlmda_cu(int vers, int dlvers)
    // the force lambda derivative, and with it the virial's
    if (dlvers & calc::grad_dlmda) {
       p.dlpot = dlpot;
-      p.deldl = deldlmda;
+      p.deldl = elecChain().d1;
       dcflux_cu1(p, dfdlx, dfdly, dfdlz, (dlvers & calc::virial_dlmda) ? dvirdl_buf : nullptr);
    }
 }

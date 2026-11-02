@@ -13,6 +13,7 @@
 #include "seq/pair_polar_chgpen.h"
 #include "seq/pairpolaraplus.h"
 #include "seq/triangle.h"
+#include "tool/error.h"
 #include <cassert>
 #include <tinker/detail/polpot.hh>
 
@@ -24,7 +25,7 @@ namespace tinker {
 // set of induced dipoles: the pass adds wa times its result into the term and
 // wb times it into the lambda derivative sinks, as epolardt_cu does for AMOEBA.
 // The flux potential stays unweighted, for the caller's chain rule of the pass.
-template <class Ver, class ETYP, int CFLX>
+template <class Ver, class ETYP, bool CFLX>
 static void epolar1Dt_cu(const real (*uind)[3], real wa, real wb)
 {
    constexpr bool do_g = Ver::g;
@@ -52,13 +53,13 @@ static void epolar1Dt_cu(const real (*uind)[3], real wa, real wb)
    if (polpot::use_tholed) {
       epolarAplusDt_cu1<Ver, ETYP, CFLX><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nep, ep, vir_ep,
          dvirdl_buf, depx, depy, depz, dfdlx, dfdly, dfdlz, off, st.si2.bit0, nmdpuexclude, mdpuexclude,
-         mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, ufld, dufld,
-         uind, pot, rpole, pdamp, aewald, f, wa, wb, elecDeadGroups(), elecLiveMask());
+         mdpuexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, st.akc, ufld,
+         dufld, uind, pot, rpole, pdamp, aewald, f, wa, wb, elecDeadGroups(), elecLiveMask());
    } else {
       epolarChgpenDt_cu1<Ver, ETYP, CFLX><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nep, ep, vir_ep,
-         dvirdl_buf, depx, depy, depz, dfdlx, dfdly, dfdlz, off, st.si1.bit0, nmdwexclude, mdwexclude,
-         mdwexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, ufld, dufld,
-         uind, pot, rpole, mpoleCore(), mpoleVal(), palpha, aewald, f, wa, wb, elecDeadGroups(), elecLiveMask());
+         dvirdl_buf, depx, depy, depz, dfdlx, dfdly, dfdlz, off, st.si1.bit0, nmdwexclude, mdwexclude, mdwexclude_scale,
+         st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, st.akc, ufld, dufld, uind, pot,
+         rpole, mpoleCore(), mpoleVal(), palpha, aewald, f, wa, wb, elecDeadGroups(), elecLiveMask());
    }
 
    if CONSTEXPR (do_g) {
@@ -69,16 +70,16 @@ static void epolar1Dt_cu(const real (*uind)[3], real wa, real wb)
 
 // The flux potentials are gathered with the gradient only, so CFLX leaves out
 // the versions without one.
-template <class ETYP, int CFLX>
+template <class ETYP, bool CFLX>
 static void epolar1DtVers_cu(int vers, const real (*uind)[3], real wa, real wb)
 {
    if (vers == calc::v0 or vers == calc::v3) {
       if CONSTEXPR (CFLX)
-         assert(false && "CFLX must compute gradient.");
+         TINKER_THROW("CFLX must compute gradient.");
       else if (vers == calc::v0)
-         epolar1Dt_cu<calc::V0, ETYP, 0>(uind, wa, wb);
+         epolar1Dt_cu<calc::V0, ETYP, false>(uind, wa, wb);
       else
-         epolar1Dt_cu<calc::V3, ETYP, 0>(uind, wa, wb);
+         epolar1Dt_cu<calc::V3, ETYP, false>(uind, wa, wb);
    } else if (vers == calc::v1)
       epolar1Dt_cu<calc::V1, ETYP, CFLX>(uind, wa, wb);
    else if (vers == calc::v4)
@@ -100,16 +101,16 @@ static void epolar1DtVers_cu(int vers, const real (*uind)[3], real wa, real wb)
 void epolar1NonEwaldDt_cu(int vers, int use_cf, const real (*uind)[3], real wa, real wb)
 {
    if (use_cf)
-      epolar1DtVers_cu<NON_EWALD, 1>(vers, uind, wa, wb);
+      epolar1DtVers_cu<NON_EWALD, true>(vers, uind, wa, wb);
    else
-      epolar1DtVers_cu<NON_EWALD, 0>(vers, uind, wa, wb);
+      epolar1DtVers_cu<NON_EWALD, false>(vers, uind, wa, wb);
 }
 
 void epolar1EwaldRealDt_cu(int vers, int use_cf, const real (*uind)[3], real wa, real wb)
 {
    if (use_cf)
-      epolar1DtVers_cu<EWALD, 1>(vers, uind, wa, wb);
+      epolar1DtVers_cu<EWALD, true>(vers, uind, wa, wb);
    else
-      epolar1DtVers_cu<EWALD, 0>(vers, uind, wa, wb);
+      epolar1DtVers_cu<EWALD, false>(vers, uind, wa, wb);
 }
 }

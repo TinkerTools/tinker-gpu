@@ -8,11 +8,13 @@
 #include "ff/potent.h"
 #include "ff/spatial.h"
 #include "ff/switch.h"
-#include "seq/emselfhippo.h"
+#include "seq/emselfamoeba.h"
 #include "seq/launch.h"
 #include "seq/pair_mpole_chgpen.h"
+#include "seq/pair_vlambda.h"
 #include "seq/pairmpoleaplus.h"
 #include "seq/triangle.h"
+#include "tool/error.h"
 #include <cassert>
 
 namespace tinker {
@@ -22,7 +24,7 @@ namespace tinker {
 // with their lambda derivatives (empole4.f). Under charge flux the valence
 // charges carry the unscaled flux change, and with CFLX the kernels gather the
 // flux potentials of the scaled multipoles and of their lambda derivative.
-template <class Ver, class ETYP, Chgpen CP, int CFLX>
+template <class Ver, class ETYP, Chgpen CP, bool CFLX>
 static void empoleChgpenDlmda_cu()
 {
    const auto& st = *mspatial_v2_unit;
@@ -43,29 +45,32 @@ static void empoleChgpenDlmda_cu()
    if CONSTEXPR (eq<ETYP, EWALD>()) {
       PMEUnit pu = epme_unit;
       aewald = pu->aewald;
-      launch_k1b(g::s0, n, empoleChgpenSelfDlmda_cu<Ver, CFLX>, //
-         nem, em, demdl_buf, d2emdl2_buf, rpole, grp, esc, grpSelfScale(ps), pot, dlp, n, f, aewald);
+      // the self term has only an energy and, with CFLX, a flux potential
+      if CONSTEXPR (Ver::e or CFLX)
+         launch_k1b(g::s0, n, empoleSelfDlmda_cu<Ver, CFLX>, //
+            nem, em, demdl_buf, d2emdl2_buf, rpole, grp, esc, grpSelfScale(ps), pot, dlp, n, f, aewald);
    }
 
    int ngrid = gpuGridSize(BLOCK_DIM);
    empoleChgpenDlmda_cu1<Ver, ETYP, CP, CFLX><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nem, em,
       demdl_buf, d2emdl2_buf, vir_em, dvirdl_buf, demx, demy, demz, dfdlx, dfdly, dfdlz, off, st.si1.bit0, nmdwexclude,
-      mdwexclude, mdwexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, trqx,
-      trqy, trqz, dltrqx, dltrqy, dltrqz, pot, dlp, rpole, pcoreorig, pvalorig, dq, palpha, grp, aewald, f, esc, ps);
+      mdwexclude, mdwexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, st.akc,
+      trqx, trqy, trqz, dltrqx, dltrqy, dltrqz, pot, dlp, rpole, pcoreorig, pvalorig, dq, palpha, grp, aewald, f, esc,
+      ps);
 }
 
 // The flux potentials are gathered with the gradient only, so CFLX leaves out
 // the energy-only versions v0 and v3.
-template <class ETYP, Chgpen CP, int CFLX>
+template <class ETYP, Chgpen CP, bool CFLX>
 static void empoleChgpenDlmda_cu2(int vers)
 {
    if (vers == calc::v0 or vers == calc::v3) {
       if CONSTEXPR (CFLX)
-         assert(false && "CFLX must compute gradient.");
+         TINKER_THROW("CFLX must compute gradient.");
       else if (vers == calc::v0)
-         empoleChgpenDlmda_cu<calc::V0, ETYP, CP, 0>();
+         empoleChgpenDlmda_cu<calc::V0, ETYP, CP, false>();
       else
-         empoleChgpenDlmda_cu<calc::V3, ETYP, CP, 0>();
+         empoleChgpenDlmda_cu<calc::V3, ETYP, CP, false>();
    } else if (vers == calc::v1)
       empoleChgpenDlmda_cu<calc::V1, ETYP, CP, CFLX>();
    else if (vers == calc::v4)
@@ -89,14 +94,14 @@ static void empoleChgpenDlmda_cu3(int vers, int use_cf)
 {
    if (pentyp == Chgpen::GORDON1) {
       if (use_cf)
-         empoleChgpenDlmda_cu2<ETYP, Chgpen::GORDON1, 1>(vers);
+         empoleChgpenDlmda_cu2<ETYP, Chgpen::GORDON1, true>(vers);
       else
-         empoleChgpenDlmda_cu2<ETYP, Chgpen::GORDON1, 0>(vers);
+         empoleChgpenDlmda_cu2<ETYP, Chgpen::GORDON1, false>(vers);
    } else if (pentyp == Chgpen::GORDON2) {
       if (use_cf)
-         empoleChgpenDlmda_cu2<ETYP, Chgpen::GORDON2, 1>(vers);
+         empoleChgpenDlmda_cu2<ETYP, Chgpen::GORDON2, true>(vers);
       else
-         empoleChgpenDlmda_cu2<ETYP, Chgpen::GORDON2, 0>(vers);
+         empoleChgpenDlmda_cu2<ETYP, Chgpen::GORDON2, false>(vers);
    }
 }
 

@@ -219,12 +219,12 @@ void rattleWater4Vel_acc(vel_prec* vxnew, vel_prec* vynew, vel_prec* vznew)
    }
 }
 
-void rattleWater4Grad_acc()
+void rattleWater4Grad_acc(grad_prec* g0x, grad_prec* g0y, grad_prec* g0z)
 {
    #pragma acc parallel loop independent async\
-           deviceptr(gx,gy,gz,iratw4,kratw4)
+           deviceptr(g0x,g0y,g0z,iratw4,kratw4)
    for (int iw = 0; iw < nratw4; ++iw) {
-      dk_water4Grad(iw, gx, gy, gz, iratw4, kratw4);
+      dk_water4Grad(iw, g0x, g0y, g0z, iratw4, kratw4);
    }
 }
 

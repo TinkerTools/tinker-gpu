@@ -1,12 +1,13 @@
 // ck.py Version 3.1.0
-template <int MUTPSC>
+template <class IMG, int MUTPSC>
 __global__
 void alterpol_cu1(int n, TINKER_IMAGE_PARAMS, real cut, real off, const unsigned* restrict dinfo, int nexclude,
    const int (*restrict exclude)[2], const real (*restrict exclude_scale)[3], const real* restrict x,
    const real* restrict y, const real* restrict z, const Spatial::SortedAtom* restrict sorted, int nakpl,
-   const int* restrict iakpl, int niak, const int* restrict iak, const int* restrict lst, real (*restrict polscale)[9],
-   const real* restrict kpep, const real* restrict prepep, const real* restrict dmppep, const int* restrict lpep,
-   ExpolScr scrtyp, real (*restrict dpscdl)[9], const real* restrict prepeporig, const int* restrict grp, GrpScale sc)
+   const int* restrict iakpl, int niak, const int* restrict iak, const int* restrict lst,
+   const Spatial::Center* restrict akc, real (*restrict polscale)[9], const real* restrict kpep,
+   const real* restrict prepep, const real* restrict dmppep, const int* restrict lpep, ExpolScr scrtyp,
+   real (*restrict dpscdl)[9], const real* restrict prepeporig, const int* restrict grp, GrpScale sc)
 {
    const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
    const int iwarp = ithread / WARP_SIZE;
@@ -101,7 +102,7 @@ void alterpol_cu1(int n, TINKER_IMAGE_PARAMS, real cut, real off, const unsigned
       real xr = xk[threadIdx.x] - xi[klane];
       real yr = yk[threadIdx.x] - yi[klane];
       real zr = zk[threadIdx.x] - zi[klane];
-      real r2 = image2(xr, yr, zr);
+      real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
       if ((eplk[threadIdx.x] or epli[klane]) and r2 <= off * off and incl) {
          real r = REAL_SQRT(r2);
          real ks2i[3][3], ks2k[3][3];
@@ -279,101 +280,218 @@ void alterpol_cu1(int n, TINKER_IMAGE_PARAMS, real cut, real off, const unsigned
       __syncwarp();
 
       unsigned int dinfo0 = dinfo[iw * WARP_SIZE + ilane];
-      for (int j = 0; j < WARP_SIZE; ++j) {
-         int srclane = (ilane + j) & (WARP_SIZE - 1);
-         int klane = srclane + threadIdx.x - ilane;
-         bool incl = iid < kid and kid < n;
-         int srcmask = 1 << srclane;
-         incl = incl and (dinfo0 & srcmask) == 0;
-         real scaleb = 1;
-         real xr = xk[threadIdx.x] - xi[klane];
-         real yr = yk[threadIdx.x] - yi[klane];
-         real zr = zk[threadIdx.x] - zi[klane];
-         real r2 = image2(xr, yr, zr);
-         if ((eplk[threadIdx.x] or epli[klane]) and r2 <= off * off and incl) {
-            real r = REAL_SQRT(r2);
-            real ks2i[3][3], ks2k[3][3];
-            pair_alterpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, springi[klane], sizi[klane], alphai[klane],
-               springk[threadIdx.x], sizk[threadIdx.x], alphak[threadIdx.x], ks2i, ks2k);
-            psci00 += ks2i[0][0];
-            psci01 += ks2i[0][1];
-            psci02 += ks2i[0][2];
-            psci10 += ks2i[1][0];
-            psci11 += ks2i[1][1];
-            psci12 += ks2i[1][2];
-            psci20 += ks2i[2][0];
-            psci21 += ks2i[2][1];
-            psci22 += ks2i[2][2];
-            psck00 += ks2k[0][0];
-            psck01 += ks2k[0][1];
-            psck02 += ks2k[0][2];
-            psck10 += ks2k[1][0];
-            psck11 += ks2k[1][1];
-            psck12 += ks2k[1][2];
-            psck20 += ks2k[2][0];
-            psck21 += ks2k[2][1];
-            psck22 += ks2k[2][2];
-            // the overlap with the charging ligand at the unscaled sizes, gathered
-            // crosswise: a site takes it from a mutated partner (alterpol.f)
-            if CONSTEXPR (MUTPSC) {
-               bool muti = sc.ds[gi] != 0;
-               bool mutk = sc.ds[gk] != 0;
-               if (muti or mutk) {
-                  pair_alterpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, springi[klane], origi, alphai[klane],
-                     springk[threadIdx.x], origk, alphak[threadIdx.x], ks2i, ks2k);
-                  if (mutk) {
-                     dpsci00 += ks2i[0][0];
-                     dpsci01 += ks2i[0][1];
-                     dpsci02 += ks2i[0][2];
-                     dpsci10 += ks2i[1][0];
-                     dpsci11 += ks2i[1][1];
-                     dpsci12 += ks2i[1][2];
-                     dpsci20 += ks2i[2][0];
-                     dpsci21 += ks2i[2][1];
-                     dpsci22 += ks2i[2][2];
-                  }
-                  if (muti) {
-                     dpsck00 += ks2k[0][0];
-                     dpsck01 += ks2k[0][1];
-                     dpsck02 += ks2k[0][2];
-                     dpsck10 += ks2k[1][0];
-                     dpsck11 += ks2k[1][1];
-                     dpsck12 += ks2k[1][2];
-                     dpsck20 += ks2k[2][0];
-                     dpsck21 += ks2k[2][1];
-                     dpsck22 += ks2k[2][2];
+      real xc = akc[ty].x;
+      real yc = akc[ty].y;
+      real zc = akc[ty].z;
+      const bool ilocal = akc[ty].w != 0;
+      if (ilocal) {
+         real xr, yr, zr;
+         xr = xi[threadIdx.x] - xc;
+         yr = yi[threadIdx.x] - yc;
+         zr = zi[threadIdx.x] - zc;
+         IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+         xi[threadIdx.x] = xr;
+         yi[threadIdx.x] = yr;
+         zi[threadIdx.x] = zr;
+         xr = xk[threadIdx.x] - xc;
+         yr = yk[threadIdx.x] - yc;
+         zr = zk[threadIdx.x] - zc;
+         IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+         xk[threadIdx.x] = xr;
+         yk[threadIdx.x] = yr;
+         zk[threadIdx.x] = zr;
+         __syncwarp();
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            int klane = srclane + threadIdx.x - ilane;
+            bool incl = iid < kid and kid < n;
+            int srcmask = 1 << srclane;
+            incl = incl and (dinfo0 & srcmask) == 0;
+            real scaleb = 1;
+            real xr = xk[threadIdx.x] - xi[klane];
+            real yr = yk[threadIdx.x] - yi[klane];
+            real zr = zk[threadIdx.x] - zi[klane];
+            real r2 = (xr * xr + yr * yr + zr * zr);
+            if ((eplk[threadIdx.x] or epli[klane]) and r2 <= off * off and incl) {
+               real r = REAL_SQRT(r2);
+               real ks2i[3][3], ks2k[3][3];
+               pair_alterpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, springi[klane], sizi[klane], alphai[klane],
+                  springk[threadIdx.x], sizk[threadIdx.x], alphak[threadIdx.x], ks2i, ks2k);
+               psci00 += ks2i[0][0];
+               psci01 += ks2i[0][1];
+               psci02 += ks2i[0][2];
+               psci10 += ks2i[1][0];
+               psci11 += ks2i[1][1];
+               psci12 += ks2i[1][2];
+               psci20 += ks2i[2][0];
+               psci21 += ks2i[2][1];
+               psci22 += ks2i[2][2];
+               psck00 += ks2k[0][0];
+               psck01 += ks2k[0][1];
+               psck02 += ks2k[0][2];
+               psck10 += ks2k[1][0];
+               psck11 += ks2k[1][1];
+               psck12 += ks2k[1][2];
+               psck20 += ks2k[2][0];
+               psck21 += ks2k[2][1];
+               psck22 += ks2k[2][2];
+               // the overlap with the charging ligand at the unscaled sizes, gathered
+               // crosswise: a site takes it from a mutated partner (alterpol.f)
+               if CONSTEXPR (MUTPSC) {
+                  bool muti = sc.ds[gi] != 0;
+                  bool mutk = sc.ds[gk] != 0;
+                  if (muti or mutk) {
+                     pair_alterpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, springi[klane], origi, alphai[klane],
+                        springk[threadIdx.x], origk, alphak[threadIdx.x], ks2i, ks2k);
+                     if (mutk) {
+                        dpsci00 += ks2i[0][0];
+                        dpsci01 += ks2i[0][1];
+                        dpsci02 += ks2i[0][2];
+                        dpsci10 += ks2i[1][0];
+                        dpsci11 += ks2i[1][1];
+                        dpsci12 += ks2i[1][2];
+                        dpsci20 += ks2i[2][0];
+                        dpsci21 += ks2i[2][1];
+                        dpsci22 += ks2i[2][2];
+                     }
+                     if (muti) {
+                        dpsck00 += ks2k[0][0];
+                        dpsck01 += ks2k[0][1];
+                        dpsck02 += ks2k[0][2];
+                        dpsck10 += ks2k[1][0];
+                        dpsck11 += ks2k[1][1];
+                        dpsck12 += ks2k[1][2];
+                        dpsck20 += ks2k[2][0];
+                        dpsck21 += ks2k[2][1];
+                        dpsck22 += ks2k[2][2];
+                     }
                   }
                }
             }
+
+            iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
+            if CONSTEXPR (MUTPSC) {
+               origi = __shfl_sync(ALL_LANES, origi, ilane + 1);
+               gi = __shfl_sync(ALL_LANES, gi, ilane + 1);
+            }
+            psci00 = __shfl_sync(ALL_LANES, psci00, ilane + 1);
+            psci01 = __shfl_sync(ALL_LANES, psci01, ilane + 1);
+            psci02 = __shfl_sync(ALL_LANES, psci02, ilane + 1);
+            psci10 = __shfl_sync(ALL_LANES, psci10, ilane + 1);
+            psci11 = __shfl_sync(ALL_LANES, psci11, ilane + 1);
+            psci12 = __shfl_sync(ALL_LANES, psci12, ilane + 1);
+            psci20 = __shfl_sync(ALL_LANES, psci20, ilane + 1);
+            psci21 = __shfl_sync(ALL_LANES, psci21, ilane + 1);
+            psci22 = __shfl_sync(ALL_LANES, psci22, ilane + 1);
+            if CONSTEXPR (MUTPSC) {
+               dpsci00 = __shfl_sync(ALL_LANES, dpsci00, ilane + 1);
+               dpsci01 = __shfl_sync(ALL_LANES, dpsci01, ilane + 1);
+               dpsci02 = __shfl_sync(ALL_LANES, dpsci02, ilane + 1);
+               dpsci10 = __shfl_sync(ALL_LANES, dpsci10, ilane + 1);
+               dpsci11 = __shfl_sync(ALL_LANES, dpsci11, ilane + 1);
+               dpsci12 = __shfl_sync(ALL_LANES, dpsci12, ilane + 1);
+               dpsci20 = __shfl_sync(ALL_LANES, dpsci20, ilane + 1);
+               dpsci21 = __shfl_sync(ALL_LANES, dpsci21, ilane + 1);
+               dpsci22 = __shfl_sync(ALL_LANES, dpsci22, ilane + 1);
+            }
          }
 
-         iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
-         if CONSTEXPR (MUTPSC) {
-            origi = __shfl_sync(ALL_LANES, origi, ilane + 1);
-            gi = __shfl_sync(ALL_LANES, gi, ilane + 1);
-         }
-         psci00 = __shfl_sync(ALL_LANES, psci00, ilane + 1);
-         psci01 = __shfl_sync(ALL_LANES, psci01, ilane + 1);
-         psci02 = __shfl_sync(ALL_LANES, psci02, ilane + 1);
-         psci10 = __shfl_sync(ALL_LANES, psci10, ilane + 1);
-         psci11 = __shfl_sync(ALL_LANES, psci11, ilane + 1);
-         psci12 = __shfl_sync(ALL_LANES, psci12, ilane + 1);
-         psci20 = __shfl_sync(ALL_LANES, psci20, ilane + 1);
-         psci21 = __shfl_sync(ALL_LANES, psci21, ilane + 1);
-         psci22 = __shfl_sync(ALL_LANES, psci22, ilane + 1);
-         if CONSTEXPR (MUTPSC) {
-            dpsci00 = __shfl_sync(ALL_LANES, dpsci00, ilane + 1);
-            dpsci01 = __shfl_sync(ALL_LANES, dpsci01, ilane + 1);
-            dpsci02 = __shfl_sync(ALL_LANES, dpsci02, ilane + 1);
-            dpsci10 = __shfl_sync(ALL_LANES, dpsci10, ilane + 1);
-            dpsci11 = __shfl_sync(ALL_LANES, dpsci11, ilane + 1);
-            dpsci12 = __shfl_sync(ALL_LANES, dpsci12, ilane + 1);
-            dpsci20 = __shfl_sync(ALL_LANES, dpsci20, ilane + 1);
-            dpsci21 = __shfl_sync(ALL_LANES, dpsci21, ilane + 1);
-            dpsci22 = __shfl_sync(ALL_LANES, dpsci22, ilane + 1);
+      } else {
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            int klane = srclane + threadIdx.x - ilane;
+            bool incl = iid < kid and kid < n;
+            int srcmask = 1 << srclane;
+            incl = incl and (dinfo0 & srcmask) == 0;
+            real scaleb = 1;
+            real xr = xk[threadIdx.x] - xi[klane];
+            real yr = yk[threadIdx.x] - yi[klane];
+            real zr = zk[threadIdx.x] - zi[klane];
+            real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+            if ((eplk[threadIdx.x] or epli[klane]) and r2 <= off * off and incl) {
+               real r = REAL_SQRT(r2);
+               real ks2i[3][3], ks2k[3][3];
+               pair_alterpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, springi[klane], sizi[klane], alphai[klane],
+                  springk[threadIdx.x], sizk[threadIdx.x], alphak[threadIdx.x], ks2i, ks2k);
+               psci00 += ks2i[0][0];
+               psci01 += ks2i[0][1];
+               psci02 += ks2i[0][2];
+               psci10 += ks2i[1][0];
+               psci11 += ks2i[1][1];
+               psci12 += ks2i[1][2];
+               psci20 += ks2i[2][0];
+               psci21 += ks2i[2][1];
+               psci22 += ks2i[2][2];
+               psck00 += ks2k[0][0];
+               psck01 += ks2k[0][1];
+               psck02 += ks2k[0][2];
+               psck10 += ks2k[1][0];
+               psck11 += ks2k[1][1];
+               psck12 += ks2k[1][2];
+               psck20 += ks2k[2][0];
+               psck21 += ks2k[2][1];
+               psck22 += ks2k[2][2];
+               // the overlap with the charging ligand at the unscaled sizes, gathered
+               // crosswise: a site takes it from a mutated partner (alterpol.f)
+               if CONSTEXPR (MUTPSC) {
+                  bool muti = sc.ds[gi] != 0;
+                  bool mutk = sc.ds[gk] != 0;
+                  if (muti or mutk) {
+                     pair_alterpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, springi[klane], origi, alphai[klane],
+                        springk[threadIdx.x], origk, alphak[threadIdx.x], ks2i, ks2k);
+                     if (mutk) {
+                        dpsci00 += ks2i[0][0];
+                        dpsci01 += ks2i[0][1];
+                        dpsci02 += ks2i[0][2];
+                        dpsci10 += ks2i[1][0];
+                        dpsci11 += ks2i[1][1];
+                        dpsci12 += ks2i[1][2];
+                        dpsci20 += ks2i[2][0];
+                        dpsci21 += ks2i[2][1];
+                        dpsci22 += ks2i[2][2];
+                     }
+                     if (muti) {
+                        dpsck00 += ks2k[0][0];
+                        dpsck01 += ks2k[0][1];
+                        dpsck02 += ks2k[0][2];
+                        dpsck10 += ks2k[1][0];
+                        dpsck11 += ks2k[1][1];
+                        dpsck12 += ks2k[1][2];
+                        dpsck20 += ks2k[2][0];
+                        dpsck21 += ks2k[2][1];
+                        dpsck22 += ks2k[2][2];
+                     }
+                  }
+               }
+            }
+
+            iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
+            if CONSTEXPR (MUTPSC) {
+               origi = __shfl_sync(ALL_LANES, origi, ilane + 1);
+               gi = __shfl_sync(ALL_LANES, gi, ilane + 1);
+            }
+            psci00 = __shfl_sync(ALL_LANES, psci00, ilane + 1);
+            psci01 = __shfl_sync(ALL_LANES, psci01, ilane + 1);
+            psci02 = __shfl_sync(ALL_LANES, psci02, ilane + 1);
+            psci10 = __shfl_sync(ALL_LANES, psci10, ilane + 1);
+            psci11 = __shfl_sync(ALL_LANES, psci11, ilane + 1);
+            psci12 = __shfl_sync(ALL_LANES, psci12, ilane + 1);
+            psci20 = __shfl_sync(ALL_LANES, psci20, ilane + 1);
+            psci21 = __shfl_sync(ALL_LANES, psci21, ilane + 1);
+            psci22 = __shfl_sync(ALL_LANES, psci22, ilane + 1);
+            if CONSTEXPR (MUTPSC) {
+               dpsci00 = __shfl_sync(ALL_LANES, dpsci00, ilane + 1);
+               dpsci01 = __shfl_sync(ALL_LANES, dpsci01, ilane + 1);
+               dpsci02 = __shfl_sync(ALL_LANES, dpsci02, ilane + 1);
+               dpsci10 = __shfl_sync(ALL_LANES, dpsci10, ilane + 1);
+               dpsci11 = __shfl_sync(ALL_LANES, dpsci11, ilane + 1);
+               dpsci12 = __shfl_sync(ALL_LANES, dpsci12, ilane + 1);
+               dpsci20 = __shfl_sync(ALL_LANES, dpsci20, ilane + 1);
+               dpsci21 = __shfl_sync(ALL_LANES, dpsci21, ilane + 1);
+               dpsci22 = __shfl_sync(ALL_LANES, dpsci22, ilane + 1);
+            }
          }
       }
-
       atomic_add(psci00, &polscale[i][0]);
       atomic_add(psci01, &polscale[i][1]);
       atomic_add(psci02, &polscale[i][2]);
@@ -488,98 +606,212 @@ void alterpol_cu1(int n, TINKER_IMAGE_PARAMS, real cut, real off, const unsigned
       }
       __syncwarp();
 
-      for (int j = 0; j < WARP_SIZE; ++j) {
-         int srclane = (ilane + j) & (WARP_SIZE - 1);
-         int klane = srclane + threadIdx.x - ilane;
-         bool incl = atomk > 0;
-         real scaleb = 1;
-         real xr = xk[threadIdx.x] - xi[klane];
-         real yr = yk[threadIdx.x] - yi[klane];
-         real zr = zk[threadIdx.x] - zi[klane];
-         real r2 = image2(xr, yr, zr);
-         if ((eplk[threadIdx.x] or epli[klane]) and r2 <= off * off and incl) {
-            real r = REAL_SQRT(r2);
-            real ks2i[3][3], ks2k[3][3];
-            pair_alterpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, springi[klane], sizi[klane], alphai[klane],
-               springk[threadIdx.x], sizk[threadIdx.x], alphak[threadIdx.x], ks2i, ks2k);
-            psci00 += ks2i[0][0];
-            psci01 += ks2i[0][1];
-            psci02 += ks2i[0][2];
-            psci10 += ks2i[1][0];
-            psci11 += ks2i[1][1];
-            psci12 += ks2i[1][2];
-            psci20 += ks2i[2][0];
-            psci21 += ks2i[2][1];
-            psci22 += ks2i[2][2];
-            psck00 += ks2k[0][0];
-            psck01 += ks2k[0][1];
-            psck02 += ks2k[0][2];
-            psck10 += ks2k[1][0];
-            psck11 += ks2k[1][1];
-            psck12 += ks2k[1][2];
-            psck20 += ks2k[2][0];
-            psck21 += ks2k[2][1];
-            psck22 += ks2k[2][2];
-            // the overlap with the charging ligand at the unscaled sizes, gathered
-            // crosswise: a site takes it from a mutated partner (alterpol.f)
-            if CONSTEXPR (MUTPSC) {
-               bool muti = sc.ds[gi] != 0;
-               bool mutk = sc.ds[gk] != 0;
-               if (muti or mutk) {
-                  pair_alterpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, springi[klane], origi, alphai[klane],
-                     springk[threadIdx.x], origk, alphak[threadIdx.x], ks2i, ks2k);
-                  if (mutk) {
-                     dpsci00 += ks2i[0][0];
-                     dpsci01 += ks2i[0][1];
-                     dpsci02 += ks2i[0][2];
-                     dpsci10 += ks2i[1][0];
-                     dpsci11 += ks2i[1][1];
-                     dpsci12 += ks2i[1][2];
-                     dpsci20 += ks2i[2][0];
-                     dpsci21 += ks2i[2][1];
-                     dpsci22 += ks2i[2][2];
-                  }
-                  if (muti) {
-                     dpsck00 += ks2k[0][0];
-                     dpsck01 += ks2k[0][1];
-                     dpsck02 += ks2k[0][2];
-                     dpsck10 += ks2k[1][0];
-                     dpsck11 += ks2k[1][1];
-                     dpsck12 += ks2k[1][2];
-                     dpsck20 += ks2k[2][0];
-                     dpsck21 += ks2k[2][1];
-                     dpsck22 += ks2k[2][2];
+      real xc = akc[ty].x;
+      real yc = akc[ty].y;
+      real zc = akc[ty].z;
+      const bool ilocal = akc[ty].w != 0;
+      if (ilocal) {
+         real xr, yr, zr;
+         xr = xi[threadIdx.x] - xc;
+         yr = yi[threadIdx.x] - yc;
+         zr = zi[threadIdx.x] - zc;
+         IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+         xi[threadIdx.x] = xr;
+         yi[threadIdx.x] = yr;
+         zi[threadIdx.x] = zr;
+         xr = xk[threadIdx.x] - xc;
+         yr = yk[threadIdx.x] - yc;
+         zr = zk[threadIdx.x] - zc;
+         IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+         xk[threadIdx.x] = xr;
+         yk[threadIdx.x] = yr;
+         zk[threadIdx.x] = zr;
+         __syncwarp();
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            int klane = srclane + threadIdx.x - ilane;
+            bool incl = atomk > 0;
+            real scaleb = 1;
+            real xr = xk[threadIdx.x] - xi[klane];
+            real yr = yk[threadIdx.x] - yi[klane];
+            real zr = zk[threadIdx.x] - zi[klane];
+            real r2 = (xr * xr + yr * yr + zr * zr);
+            if ((eplk[threadIdx.x] or epli[klane]) and r2 <= off * off and incl) {
+               real r = REAL_SQRT(r2);
+               real ks2i[3][3], ks2k[3][3];
+               pair_alterpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, springi[klane], sizi[klane], alphai[klane],
+                  springk[threadIdx.x], sizk[threadIdx.x], alphak[threadIdx.x], ks2i, ks2k);
+               psci00 += ks2i[0][0];
+               psci01 += ks2i[0][1];
+               psci02 += ks2i[0][2];
+               psci10 += ks2i[1][0];
+               psci11 += ks2i[1][1];
+               psci12 += ks2i[1][2];
+               psci20 += ks2i[2][0];
+               psci21 += ks2i[2][1];
+               psci22 += ks2i[2][2];
+               psck00 += ks2k[0][0];
+               psck01 += ks2k[0][1];
+               psck02 += ks2k[0][2];
+               psck10 += ks2k[1][0];
+               psck11 += ks2k[1][1];
+               psck12 += ks2k[1][2];
+               psck20 += ks2k[2][0];
+               psck21 += ks2k[2][1];
+               psck22 += ks2k[2][2];
+               // the overlap with the charging ligand at the unscaled sizes, gathered
+               // crosswise: a site takes it from a mutated partner (alterpol.f)
+               if CONSTEXPR (MUTPSC) {
+                  bool muti = sc.ds[gi] != 0;
+                  bool mutk = sc.ds[gk] != 0;
+                  if (muti or mutk) {
+                     pair_alterpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, springi[klane], origi, alphai[klane],
+                        springk[threadIdx.x], origk, alphak[threadIdx.x], ks2i, ks2k);
+                     if (mutk) {
+                        dpsci00 += ks2i[0][0];
+                        dpsci01 += ks2i[0][1];
+                        dpsci02 += ks2i[0][2];
+                        dpsci10 += ks2i[1][0];
+                        dpsci11 += ks2i[1][1];
+                        dpsci12 += ks2i[1][2];
+                        dpsci20 += ks2i[2][0];
+                        dpsci21 += ks2i[2][1];
+                        dpsci22 += ks2i[2][2];
+                     }
+                     if (muti) {
+                        dpsck00 += ks2k[0][0];
+                        dpsck01 += ks2k[0][1];
+                        dpsck02 += ks2k[0][2];
+                        dpsck10 += ks2k[1][0];
+                        dpsck11 += ks2k[1][1];
+                        dpsck12 += ks2k[1][2];
+                        dpsck20 += ks2k[2][0];
+                        dpsck21 += ks2k[2][1];
+                        dpsck22 += ks2k[2][2];
+                     }
                   }
                }
             }
+
+            if CONSTEXPR (MUTPSC) {
+               origi = __shfl_sync(ALL_LANES, origi, ilane + 1);
+               gi = __shfl_sync(ALL_LANES, gi, ilane + 1);
+            }
+            psci00 = __shfl_sync(ALL_LANES, psci00, ilane + 1);
+            psci01 = __shfl_sync(ALL_LANES, psci01, ilane + 1);
+            psci02 = __shfl_sync(ALL_LANES, psci02, ilane + 1);
+            psci10 = __shfl_sync(ALL_LANES, psci10, ilane + 1);
+            psci11 = __shfl_sync(ALL_LANES, psci11, ilane + 1);
+            psci12 = __shfl_sync(ALL_LANES, psci12, ilane + 1);
+            psci20 = __shfl_sync(ALL_LANES, psci20, ilane + 1);
+            psci21 = __shfl_sync(ALL_LANES, psci21, ilane + 1);
+            psci22 = __shfl_sync(ALL_LANES, psci22, ilane + 1);
+            if CONSTEXPR (MUTPSC) {
+               dpsci00 = __shfl_sync(ALL_LANES, dpsci00, ilane + 1);
+               dpsci01 = __shfl_sync(ALL_LANES, dpsci01, ilane + 1);
+               dpsci02 = __shfl_sync(ALL_LANES, dpsci02, ilane + 1);
+               dpsci10 = __shfl_sync(ALL_LANES, dpsci10, ilane + 1);
+               dpsci11 = __shfl_sync(ALL_LANES, dpsci11, ilane + 1);
+               dpsci12 = __shfl_sync(ALL_LANES, dpsci12, ilane + 1);
+               dpsci20 = __shfl_sync(ALL_LANES, dpsci20, ilane + 1);
+               dpsci21 = __shfl_sync(ALL_LANES, dpsci21, ilane + 1);
+               dpsci22 = __shfl_sync(ALL_LANES, dpsci22, ilane + 1);
+            }
          }
 
-         if CONSTEXPR (MUTPSC) {
-            origi = __shfl_sync(ALL_LANES, origi, ilane + 1);
-            gi = __shfl_sync(ALL_LANES, gi, ilane + 1);
-         }
-         psci00 = __shfl_sync(ALL_LANES, psci00, ilane + 1);
-         psci01 = __shfl_sync(ALL_LANES, psci01, ilane + 1);
-         psci02 = __shfl_sync(ALL_LANES, psci02, ilane + 1);
-         psci10 = __shfl_sync(ALL_LANES, psci10, ilane + 1);
-         psci11 = __shfl_sync(ALL_LANES, psci11, ilane + 1);
-         psci12 = __shfl_sync(ALL_LANES, psci12, ilane + 1);
-         psci20 = __shfl_sync(ALL_LANES, psci20, ilane + 1);
-         psci21 = __shfl_sync(ALL_LANES, psci21, ilane + 1);
-         psci22 = __shfl_sync(ALL_LANES, psci22, ilane + 1);
-         if CONSTEXPR (MUTPSC) {
-            dpsci00 = __shfl_sync(ALL_LANES, dpsci00, ilane + 1);
-            dpsci01 = __shfl_sync(ALL_LANES, dpsci01, ilane + 1);
-            dpsci02 = __shfl_sync(ALL_LANES, dpsci02, ilane + 1);
-            dpsci10 = __shfl_sync(ALL_LANES, dpsci10, ilane + 1);
-            dpsci11 = __shfl_sync(ALL_LANES, dpsci11, ilane + 1);
-            dpsci12 = __shfl_sync(ALL_LANES, dpsci12, ilane + 1);
-            dpsci20 = __shfl_sync(ALL_LANES, dpsci20, ilane + 1);
-            dpsci21 = __shfl_sync(ALL_LANES, dpsci21, ilane + 1);
-            dpsci22 = __shfl_sync(ALL_LANES, dpsci22, ilane + 1);
+      } else {
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            int klane = srclane + threadIdx.x - ilane;
+            bool incl = atomk > 0;
+            real scaleb = 1;
+            real xr = xk[threadIdx.x] - xi[klane];
+            real yr = yk[threadIdx.x] - yi[klane];
+            real zr = zk[threadIdx.x] - zi[klane];
+            real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
+            if ((eplk[threadIdx.x] or epli[klane]) and r2 <= off * off and incl) {
+               real r = REAL_SQRT(r2);
+               real ks2i[3][3], ks2k[3][3];
+               pair_alterpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, springi[klane], sizi[klane], alphai[klane],
+                  springk[threadIdx.x], sizk[threadIdx.x], alphak[threadIdx.x], ks2i, ks2k);
+               psci00 += ks2i[0][0];
+               psci01 += ks2i[0][1];
+               psci02 += ks2i[0][2];
+               psci10 += ks2i[1][0];
+               psci11 += ks2i[1][1];
+               psci12 += ks2i[1][2];
+               psci20 += ks2i[2][0];
+               psci21 += ks2i[2][1];
+               psci22 += ks2i[2][2];
+               psck00 += ks2k[0][0];
+               psck01 += ks2k[0][1];
+               psck02 += ks2k[0][2];
+               psck10 += ks2k[1][0];
+               psck11 += ks2k[1][1];
+               psck12 += ks2k[1][2];
+               psck20 += ks2k[2][0];
+               psck21 += ks2k[2][1];
+               psck22 += ks2k[2][2];
+               // the overlap with the charging ligand at the unscaled sizes, gathered
+               // crosswise: a site takes it from a mutated partner (alterpol.f)
+               if CONSTEXPR (MUTPSC) {
+                  bool muti = sc.ds[gi] != 0;
+                  bool mutk = sc.ds[gk] != 0;
+                  if (muti or mutk) {
+                     pair_alterpol(scrtyp, r, scaleb, cut, off, xr, yr, zr, springi[klane], origi, alphai[klane],
+                        springk[threadIdx.x], origk, alphak[threadIdx.x], ks2i, ks2k);
+                     if (mutk) {
+                        dpsci00 += ks2i[0][0];
+                        dpsci01 += ks2i[0][1];
+                        dpsci02 += ks2i[0][2];
+                        dpsci10 += ks2i[1][0];
+                        dpsci11 += ks2i[1][1];
+                        dpsci12 += ks2i[1][2];
+                        dpsci20 += ks2i[2][0];
+                        dpsci21 += ks2i[2][1];
+                        dpsci22 += ks2i[2][2];
+                     }
+                     if (muti) {
+                        dpsck00 += ks2k[0][0];
+                        dpsck01 += ks2k[0][1];
+                        dpsck02 += ks2k[0][2];
+                        dpsck10 += ks2k[1][0];
+                        dpsck11 += ks2k[1][1];
+                        dpsck12 += ks2k[1][2];
+                        dpsck20 += ks2k[2][0];
+                        dpsck21 += ks2k[2][1];
+                        dpsck22 += ks2k[2][2];
+                     }
+                  }
+               }
+            }
+
+            if CONSTEXPR (MUTPSC) {
+               origi = __shfl_sync(ALL_LANES, origi, ilane + 1);
+               gi = __shfl_sync(ALL_LANES, gi, ilane + 1);
+            }
+            psci00 = __shfl_sync(ALL_LANES, psci00, ilane + 1);
+            psci01 = __shfl_sync(ALL_LANES, psci01, ilane + 1);
+            psci02 = __shfl_sync(ALL_LANES, psci02, ilane + 1);
+            psci10 = __shfl_sync(ALL_LANES, psci10, ilane + 1);
+            psci11 = __shfl_sync(ALL_LANES, psci11, ilane + 1);
+            psci12 = __shfl_sync(ALL_LANES, psci12, ilane + 1);
+            psci20 = __shfl_sync(ALL_LANES, psci20, ilane + 1);
+            psci21 = __shfl_sync(ALL_LANES, psci21, ilane + 1);
+            psci22 = __shfl_sync(ALL_LANES, psci22, ilane + 1);
+            if CONSTEXPR (MUTPSC) {
+               dpsci00 = __shfl_sync(ALL_LANES, dpsci00, ilane + 1);
+               dpsci01 = __shfl_sync(ALL_LANES, dpsci01, ilane + 1);
+               dpsci02 = __shfl_sync(ALL_LANES, dpsci02, ilane + 1);
+               dpsci10 = __shfl_sync(ALL_LANES, dpsci10, ilane + 1);
+               dpsci11 = __shfl_sync(ALL_LANES, dpsci11, ilane + 1);
+               dpsci12 = __shfl_sync(ALL_LANES, dpsci12, ilane + 1);
+               dpsci20 = __shfl_sync(ALL_LANES, dpsci20, ilane + 1);
+               dpsci21 = __shfl_sync(ALL_LANES, dpsci21, ilane + 1);
+               dpsci22 = __shfl_sync(ALL_LANES, dpsci22, ilane + 1);
+            }
          }
       }
-
       atomic_add(psci00, &polscale[i][0]);
       atomic_add(psci01, &polscale[i][1]);
       atomic_add(psci02, &polscale[i][2]);

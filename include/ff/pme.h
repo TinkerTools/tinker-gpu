@@ -62,11 +62,24 @@ void fftfront(PMEUnit);
 /// \ingroup pme
 void fftback(PMEUnit);
 /// \ingroup pme
-/// In-place real-to-complex FFT of the grid of gridUindOneSet or gridPchgOneSet.
-void fftfrontOneSet(PMEUnit);
+/// In-place real-to-complex FFT of the grid of gridUindOneSet or gridPchgOneSet,
+/// or of \c grid, another real grid of the unit's padded layout. The plan is
+/// made on the unit's own grid, so \c grid must share its alignment: FFTW runs
+/// a plan on a new array only at the planned alignment, which a start on a
+/// whole 128-byte line keeps.
+void fftfrontOneSet(PMEUnit, real* grid = nullptr);
 /// \ingroup pme
 /// In-place complex-to-real FFT of the half spectrum of fftfrontOneSet.
-void fftbackOneSet(PMEUnit);
+void fftbackOneSet(PMEUnit, real* grid = nullptr);
+/// \ingroup pme
+/// fftfrontOneSet of the \c nset real grids from \c grids, \c stride reals
+/// apart, a whole number of 128-byte lines, in one batch where the backend
+/// can.
+void fftfrontOneSet(PMEUnit, real* grids, int nset, int stride);
+/// \ingroup pme
+/// fftbackOneSet of the \c nset half spectra of fftfrontOneSet(PMEUnit, real*,
+/// int, int).
+void fftbackOneSet(PMEUnit, real* grids, int nset, int stride);
 }
 
 namespace tinker {
@@ -77,11 +90,17 @@ void bsplineFill(PMEUnit, int level);
 /// (OpenACC and host only; CUDA spreads the charges with gridPchgOneSet.)
 void gridPchg(PMEUnit, real* pchg);
 /// Spreads the partial charges into the grid as a real grid for
-/// fftfrontOneSet (CUDA only).
-void gridPchgOneSet(PMEUnit, real* pchg);
-/// \c part, when not null, flags the sites whose C6 goes to the imaginary part
-/// of the grid, the mutated ligand of Ewald dispersion (pmestuf.f:grid_disp).
-void gridDisp(PMEUnit, real* csix, const int* part);
+/// fftfrontOneSet (CUDA only), or into \c grid, another real grid of the
+/// unit's padded layout.
+void gridPchgOneSet(PMEUnit, real* pchg, real* grid = nullptr);
+/// Spreads the C6 of each site into the complex grid of the plain dispersion
+/// sum (pmestuf.f:grid_disp).
+void gridDisp(PMEUnit, real* csix);
+/// Spreads the C6 of each site into the real grid of its slot (edisp.f:dspslot),
+/// in the padded layout of fftfrontOneSet, which starts \c offset[i] reals
+/// into \c grids, and leaves out a site whose offset is -1; first zeroes
+/// \c size reals of \c grids.
+void gridDispSlots(PMEUnit, real* csix, const int* offset, int size, real* grids);
 void gridMpole(PMEUnit, real (*fmp)[10]);
 void gridUind(PMEUnit, real (*find)[3], real (*finp)[3]);
 /// Spreads the one induced-dipole set of HIPPO and AMOEBA+ into the grid as a
@@ -101,6 +120,11 @@ void pmeConvOneSet(PMEUnit);
 /// pmeConv(PMEUnit, EnergyBuffer, VirialBuffer) on the half spectrum of
 /// fftfrontOneSet; either buffer may be null (CUDA only).
 void pmeConvOneSet(PMEUnit, EnergyBuffer e, VirialBuffer v);
+/// pmeConvOneSet that also convolves \c dlgrid, the half spectrum of the
+/// lambda derivatives of the charges, and adds \c wdv times the lambda
+/// derivative of the virial, from the cross structure factor of the two
+/// grids, to \c dlv; any buffer may be null (echarge1.f:ecrecip1).
+void pmeConvOneSetDlmda(PMEUnit, real* dlgrid, EnergyBuffer e, VirialBuffer v, VirialBuffer dlv, real wdv);
 
 void fphiMpole(PMEUnit, real (*out_fphi)[20]);
 void fphiUind(PMEUnit, real (*fdip_phi1)[10], real (*fdip_phi2)[10], real (*fdip_sum_phi)[20]);

@@ -71,6 +71,7 @@ static bool fts(std::string eng, bool& use_flag, unsigned tsflag, const TimeScal
 #include "ff/dlmda.h"
 #include "ff/echarge.h"
 #include "ff/echglj.h"
+#include "ff/elec.h"
 #include "ff/ennintermol.h"
 #include "ff/evalence.h"
 #include "ff/evdw.h"
@@ -335,6 +336,9 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
    // Whichever method owns the main lambda drives the sub-lambda maps.
    if (use_mainlmda)
       mapSubLambda();
+   // The charges follow lambda on the main stream, before the PME stream of
+   // energy_core() sets off with them, once for the retries too.
+   pchgEnsureElec();
 
    zeroEGV(vers);
    energy_core(vers, tsflag, tsconfig);
@@ -513,9 +517,12 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
 
    // as gradient.f does after the bias, move the gradient on the extra sites
    // of rigid four-site waters to their O-H-H atoms, since the extra sites
-   // are not degrees of freedom
-   if (do_g)
-      rattleWater4Grad();
+   // are not degrees of freedom, along with its lambda derivative
+   if (do_g) {
+      rattleWater4Grad(gx, gy, gz);
+      if (dvers & calc::grad_dlmda)
+         rattleWater4Grad(dfdlx, dfdly, dfdlz);
+   }
 }
 
 void energy(int vers)
@@ -563,8 +570,8 @@ void energyData(RcOp op)
    RcMan ti42{thermintData, op};
    RcMan fep42{efepData, op};
    RcMan vdwsSoftcore42{vdwSoftcoreData, op};
-   // Shared by van der Waals and Pauli repulsion.
-   RcMan vdwLmda42{vdwLmdaData, op};
+   // The lambda-derivative channels each sub-lambda's terms share.
+   RcMan lmdaChannels42{lmdaChannelsData, op};
    RcMan evdw42{evdwData, op};
 
    // Must call elecData() before any electrostatics routine.
@@ -575,9 +582,6 @@ void energyData(RcOp op)
    RcMan echarge42{echargeData, op};
    // Must follow evdw_data() and echarge_data().
    RcMan echglj42{echgljData, op};
-
-   // Shared by polarization and charge transfer.
-   RcMan polarLmda42{polarLmdaData, op};
 
    // Must precede empoleData() and epolarData(), which decide whether their
    // terms run at all from useEmplar().

@@ -1,6 +1,12 @@
 OUTPUT_DIR: src/cu/hippo
 KERNEL_NAME: epolarChgpenDt_cu1
 TEMPLATE_PARAMS: template <class Ver, class ETYP, bool CFLX>
+# one copy for every box shape, imaged at run time (lambda runs only), and
+# the tiles near their centers imaged once, their virial from the summed forces
+# (scaled by wa, and by wb for its lambda derivative)
+LOCAL_TILES: true
+# the multipole pair forces are off the line of centers
+LOCAL_VIRIAL: symmetric
 CONSTEXPR_FLAGS: |
   constexpr bool do_a = Ver::a;
   constexpr bool do_e = Ver::e and Ver::a;
@@ -173,7 +179,7 @@ SCALED_PAIRWISE_INTERACTION: |
       @duk4@ += pgrad.dufldk[4];
       @duk5@ += pgrad.dufldk[5];
     }
-    if CONSTEXPR (do_v) {
+    if CONSTEXPR (do_v and not tile_local) {
         vptlxx += floatTo<vbuf_prec>(wa * (-xr * pgrad.frcx));
         if CONSTEXPR (do_vdl)
           dvptlxx += floatTo<vbuf_prec>(wb * (-xr * pgrad.frcx));
@@ -254,7 +260,7 @@ FULL_PAIRWISE_INTERACTION: |
       @duk4@ += pgrad.dufldk[4];
       @duk5@ += pgrad.dufldk[5];
     }
-    if CONSTEXPR (do_v) {
+    if CONSTEXPR (do_v and not tile_local) {
         vptlxx += floatTo<vbuf_prec>(wa * (-xr * pgrad.frcx));
         if CONSTEXPR (do_vdl)
           dvptlxx += floatTo<vbuf_prec>(wb * (-xr * pgrad.frcx));

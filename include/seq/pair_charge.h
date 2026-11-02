@@ -162,77 +162,19 @@ void pair_charge(real r,
    }
 }
 
+/**
+ * \ingroup charge
+ * \brief A partial charge pair, its energy \c ec and the distance derivative
+ * \c dec of its energy, at the distance \c r, whose inverse \c invrb a
+ * buffer may lengthen.
+ */
 #pragma acc routine seq
 template <bool DO_G, class ETYP, int SCALE>
 SEQ_CUDA
-void pair_chg_v2(real r,
-                 real invr, //
-                 real cscale,
-                 real chgi,
-                 real chgk,
-                 real f,
-                 real aewald,
-                 real eccut,
-                 real ecoff,
-                 real& restrict ec,
-                 real& restrict dec)
-{
-   if (r > ecoff) {
-      ec = 0;
-      if CONSTEXPR (DO_G)
-         dec = 0;
-      return;
-   }
-   real fik = f * chgi * chgk;
-   if CONSTEXPR (eq<ETYP, EWALD>()) {
-      const real rew = aewald * r;
-      const real expterm = REAL_EXP(-rew * rew);
-      real erfterm = REAL_ERFC_V2(rew, expterm);
-      if CONSTEXPR (SCALE != 1)
-         erfterm += cscale - 1;
-      ec = fik * invr * erfterm;
-      if CONSTEXPR (DO_G) {
-         constexpr real two = 2.0f / sqrtpi;
-         dec = erfterm * invr + two * aewald * expterm;
-         dec *= -fik * invr;
-      }
-   } else if CONSTEXPR (eq<ETYP, NON_EWALD_TAPER>()) {
-      if CONSTEXPR (SCALE != 1)
-         fik *= cscale;
-      ec = fik * invr;
-      if CONSTEXPR (DO_G)
-         dec = -ec * invr;
-
-      // shift energy
-      real shift = fik * 2 * REAL_RECIP(eccut + ecoff);
-      ec -= shift;
-      if (r > eccut) {
-         real taper, dtaper;
-         switchTaper5<DO_G>(r, eccut, ecoff, taper, dtaper);
-         real trans, dtrans;
-         real coef = fik * (REAL_RECIP(eccut) - REAL_RECIP(ecoff)) * REAL_RECIP((real)9.3);
-         real invs = REAL_RECIP(ecoff - eccut);
-         real x = (r - eccut) * invs;
-         real y = (1 - x) * x;
-         trans = coef * y * y * y * (64 - 25 * x);
-         if CONSTEXPR (DO_G) {
-            dtrans = y * y * (25 * x - 12) * (7 * x - 16);
-            dtrans *= coef * invs;
-            dec = ec * dtaper + dec * taper + dtrans;
-         }
-         ec = ec * taper + trans;
-      }
-   }
-}
-
-#pragma acc routine seq
-template <bool DO_G, class ETYP, int SCALE>
-SEQ_CUDA
-void pair_chg_v3(real r, real cscale, real chgi, real chgk, real ebuffer, real f, real aewald, real eccut, real ecoff, real& restrict ec, real& restrict dec)
+void pair_chg_v1(real r, real invrb, real cscale, real chgi, real chgk, real f, real aewald, real eccut, real ecoff,
+   real& restrict ec, real& restrict dec)
 {
    real fik = f * chgi * chgk;
-   real rb = r + ebuffer;
-   real invrb = REAL_RECIP(rb);
    if CONSTEXPR (eq<ETYP, EWALD>()) {
       const real rew = aewald * r;
       const real expterm = REAL_EXP(-rew * rew);
@@ -272,5 +214,96 @@ void pair_chg_v3(real r, real cscale, real chgi, real chgk, real ebuffer, real f
          ec = ec * taper + trans;
       }
    }
+}
+
+/**
+ * \ingroup charge
+ * \brief A partial charge pair without a buffer, as pair_chg_v1() gives it,
+ * which is zero past \c ecoff for a kernel whose own cutoff is longer.
+ */
+#pragma acc routine seq
+template <bool DO_G, class ETYP, int SCALE>
+SEQ_CUDA
+void pair_chg_v2(real r, real invr, real cscale, real chgi, real chgk, real f, real aewald, real eccut, real ecoff,
+   real& restrict ec, real& restrict dec)
+{
+   if (r > ecoff) {
+      ec = 0;
+      if CONSTEXPR (DO_G)
+         dec = 0;
+      return;
+   }
+   pair_chg_v1<DO_G, ETYP, SCALE>(r, invr, cscale, chgi, chgk, f, aewald, eccut, ecoff, ec, dec);
+}
+
+/**
+ * \ingroup charge
+ * \brief A partial charge pair, as pair_chg_v1() gives it, at the distance
+ * buffered by \c ebuffer.
+ */
+#pragma acc routine seq
+template <bool DO_G, class ETYP, int SCALE>
+SEQ_CUDA
+void pair_chg_v3(real r, real cscale, real chgi, real chgk, real ebuffer, real f, real aewald, real eccut, real ecoff,
+   real& restrict ec, real& restrict dec)
+{
+   pair_chg_v1<DO_G, ETYP, SCALE>(r, REAL_RECIP(r + ebuffer), cscale, chgi, chgk, f, aewald, eccut, ecoff, ec, dec);
+}
+
+/// \ingroup charge
+/// The lambda derivatives of a product of two factors \c si and \c sk, such
+/// as two charges or two group scales, each linear in lambda with derivatives
+/// \c dsi and \c dsk (dlambda.f:dlprod).
+SEQ_ROUTINE
+inline void pair_dlprod(real si, real sk, real dsi, real dsk, real& restrict d1, real& restrict d2)
+{
+   d1 = dsi * sk + si * dsk;
+   d2 = 2 * dsi * dsk;
+}
+
+/// \ingroup charge
+/// The main lambda derivatives of a partial charge pair from its energy \c e1
+/// and distance derivative \c de1 at a unit charge product: the pair is linear
+/// in each charge, so they are those times the lambda derivatives \c dqik and
+/// \c d2qik of the charge product (pair_dlprod), carried to the main lambda by
+/// \c del and \c d2el (dlambda.f:dlcscale).
+#pragma acc routine seq
+template <bool DL2, bool DLDE>
+SEQ_CUDA
+void pair_chg_dlmda(real dqik, real d2qik, real del, real d2el, real e1, real de1, real& restrict dl1,
+   real& restrict dl2, real& restrict dlde)
+{
+   dl1 = dqik * del * e1;
+   if CONSTEXPR (DL2)
+      dl2 = (d2qik * del * del + dqik * d2el) * e1;
+   if CONSTEXPR (DLDE)
+      dlde = dqik * del * de1;
+}
+
+/**
+ * \ingroup charge
+ * \brief A partial charge pair, as pair_chg_v1() gives it, with its main
+ * lambda derivatives (pair_chg_dlmda) from the charge derivatives \c dqi and
+ * \c dqk. The pair is linear in each charge, so one pair at a unit charge
+ * product serves both; past \c ecoff all are zero, for a kernel whose own
+ * cutoff is longer.
+ */
+#pragma acc routine seq
+template <bool DO_G, bool DL2, bool DLDE, class ETYP, int SCALE>
+SEQ_CUDA
+void pair_chg_lmda(real r, real invrb, real cscale, real chgi, real chgk, real dqi, real dqk, real f, real aewald,
+   real eccut, real ecoff, real del, real d2el, real& restrict ec, real& restrict dec, real& restrict dl1,
+   real& restrict dl2, real& restrict dlde)
+{
+   real e1 = 0, de1 = 0;
+   if (r <= ecoff)
+      pair_chg_v1<DO_G or DLDE, ETYP, SCALE>(r, invrb, cscale, 1, 1, f, aewald, eccut, ecoff, e1, de1);
+   real qik = chgi * chgk;
+   ec = qik * e1;
+   if CONSTEXPR (DO_G)
+      dec = qik * de1;
+   real dqik, d2qik;
+   pair_dlprod(chgi, chgk, dqi, dqk, dqik, d2qik);
+   pair_chg_dlmda<DL2, DLDE>(dqik, d2qik, del, d2el, e1, de1, dl1, dl2, dlde);
 }
 }

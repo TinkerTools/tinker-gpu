@@ -277,14 +277,14 @@ void gridPchg(PMEUnit pme_u, real* pchg)
    TINKER_FCALL2(acc1, cu0, gridPchg, pme_u, pchg);
 }
 
-TINKER_FVOID2(acc0, cu1, gridPchgOneSet, PMEUnit, real*);
-void gridPchgOneSet(PMEUnit pme_u, real* pchg)
+TINKER_FVOID2(acc0, cu1, gridPchgOneSet, PMEUnit, real*, real*);
+void gridPchgOneSet(PMEUnit pme_u, real* pchg, real* grid)
 {
    int bso = pme_u->bsorder;
    if (bso != 5 and bso != 4)
       TINKER_THROW(format("gridPchgOneSet(): bsorder is %d; must be 4 or 5.\n", bso));
 
-   TINKER_FCALL2(acc0, cu1, gridPchgOneSet, pme_u, pchg);
+   TINKER_FCALL2(acc0, cu1, gridPchgOneSet, pme_u, pchg, grid);
 }
 
 TINKER_FVOID2(acc1, cu1, gridMpole, PMEUnit, real (*)[10]);
@@ -327,14 +327,24 @@ void gridCuindOneSet(PMEUnit pme_u, const real (*cind)[3])
    TINKER_FCALL2(acc1, cu1, gridCuindOneSet, pme_u, cind);
 }
 
-TINKER_FVOID2(acc1, cu1, gridDisp, PMEUnit, real*, const int*);
-void gridDisp(PMEUnit pme_u, real* csix, const int* part)
+TINKER_FVOID2(acc1, cu1, gridDisp, PMEUnit, real*);
+void gridDisp(PMEUnit pme_u, real* csix)
 {
    int bso = pme_u->bsorder;
    if (bso != 4)
       TINKER_THROW(format("gridDisp(): bsorder is %d; must be 4.\n", bso));
 
-   TINKER_FCALL2(acc1, cu1, gridDisp, pme_u, csix, part);
+   TINKER_FCALL2(acc1, cu1, gridDisp, pme_u, csix);
+}
+
+TINKER_FVOID2(acc1, cu1, gridDispSlots, PMEUnit, real*, const int*, int, real*);
+void gridDispSlots(PMEUnit pme_u, real* csix, const int* offset, int size, real* grids)
+{
+   int bso = pme_u->bsorder;
+   if (bso != 4)
+      TINKER_THROW(format("gridDispSlots(): bsorder is %d; must be 4.\n", bso));
+
+   TINKER_FCALL2(acc1, cu1, gridDispSlots, pme_u, csix, offset, size, grids);
 }
 }
 
@@ -371,6 +381,13 @@ TINKER_FVOID2(acc0, cu1, pmeConvOneSet, PMEUnit, EnergyBuffer, VirialBuffer);
 void pmeConvOneSet(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
 {
    TINKER_FCALL2(acc0, cu1, pmeConvOneSet, pme_u, gpu_e, gpu_vir);
+}
+
+TINKER_FVOID2(acc0, cu1, pmeConvOneSetDlmda, PMEUnit, real*, EnergyBuffer, VirialBuffer, VirialBuffer, real);
+void pmeConvOneSetDlmda(PMEUnit pme_u, real* dlgrid, EnergyBuffer gpu_e, VirialBuffer gpu_vir, VirialBuffer dl_vir,
+   real wdv)
+{
+   TINKER_FCALL2(acc0, cu1, pmeConvOneSetDlmda, pme_u, dlgrid, gpu_e, gpu_vir, dl_vir, wdv);
 }
 
 TINKER_FVOID2(acc0, cu1, pmeConvDlmda, PMEUnit, PMEUnit, VirialBuffer, VirialBuffer, real);

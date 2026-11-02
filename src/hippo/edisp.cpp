@@ -14,20 +14,39 @@
 #include <tinker/detail/mutant.hh>
 #include <tinker/routines.h>
 
+#include <algorithm>
+#include <vector>
+
 namespace tinker {
-// The C6 sums of the environment and of the mutated ligand, the sum of the
-// squared C6 of the ligand for its self term, and the copy of the forward
-// transform that separates their two transforms (edisp1.f:edrecip1).
-static double dsp_sume, dsp_suml, dsp_sqll;
-static real* dsp_qfwd;
-// The lambda derivative of the potential, which gives the force one.
-static real* dsp_qdl;
+// The C6 sums of the environment and of the ligand groups, their sums of
+// squared C6 for the self term, and whether each group has a site
+// (edisp.f:dspslot).
+static double dsp_csum[3], dsp_csq[3];
+static bool dsp_have[3];
+// With mutated ligands, the real grids of the slots, dsp_stride reals apart,
+// and where the grid of each site starts, for the slots of dsp_offset_slot.
+static real* dsp_slots;
+static int dsp_stride;
+static int* dsp_offset;
+static int dsp_offset_slot[3];
 // The class sums of the long-range dispersion correction.
 static LrcSums dsp_lrc;
 
 bool useDEwald()
 {
    return use(Potent::DISP) and static_cast<bool>(limits::use_dewald);
+}
+
+bool useDHal()
+{
+   return useDEwald() and static_cast<bool>(dsppot::use_dhal);
+}
+
+DispHal dispHal()
+{
+   if (not useDHal())
+      return {0, 0, true};
+   return {(real)dsppot::dhcut, (real)dsppot::dhoff, static_cast<bool>(dsppot::dhdamp)};
 }
 
 void edispData(RcOp op)
@@ -40,9 +59,9 @@ void edispData(RcOp op)
    if (op & RcOp::DEALLOC) {
       darray::deallocate(csix, adisp);
       darray::deallocate(dspexclude, dspexclude_scale);
-      darray::deallocate(dsp_qfwd, dsp_qdl);
-      dsp_qfwd = nullptr;
-      dsp_qdl = nullptr;
+      darray::deallocate(dsp_slots, dsp_offset);
+      dsp_slots = nullptr;
+      dsp_offset = nullptr;
 
       if (rc_a) {
          bufferDeallocate(rc_flag, ndisp);
@@ -60,15 +79,21 @@ void edispData(RcOp op)
 
    if (op & RcOp::ALLOC) {
       darray::allocate(n, &csix, &adisp);
-      // a mutated ligand may be weighted apart from the environment (dispSplit)
-      dsp_qfwd = nullptr;
-      dsp_qdl = nullptr;
+      // the environment and each ligand may need a grid of their own
+      // (dispSlots); a stride of whole 128-byte lines keeps every grid aligned
+      // as the FFT plan of the unit expects
+      dsp_slots = nullptr;
+      dsp_offset = nullptr;
+      dsp_stride = 0;
       if (useDEwald() and mutant::nmut > 0) {
          const auto& st = *dpme_unit;
-         darray::allocate(2 * st.nfft1 * st.nfft2 * st.nfft3, &dsp_qfwd);
-         if (use_vdlmda and use_d2lmda)
-            darray::allocate(2 * st.nfft1 * st.nfft2 * st.nfft3, &dsp_qdl);
+         const int nslot = use_rel ? 3 : 2;
+         const int line = 128 / sizeof(real);
+         dsp_stride = (2 * (st.nfft1 / 2 + 1) * st.nfft2 * st.nfft3 + line - 1) / line * line;
+         darray::allocate(nslot * dsp_stride, &dsp_slots);
+         darray::allocate(n, &dsp_offset);
       }
+      dsp_offset_slot[0] = dsp_offset_slot[1] = dsp_offset_slot[2] = -2;
 
       ndisp = nullptr;
       edsp = eng_buf_vdw;
@@ -166,19 +191,19 @@ void edispData(RcOp op)
       darray::copyin(g::q0, n, adisp, disp::adisp);
       waitFor(g::q0);
 
-      dsp_sume = 0;
-      dsp_suml = 0;
-      dsp_sqll = 0;
-      if (mutant::nmut > 0) {
-         for (int i = 0; i < n; ++i) {
-            double c = disp::csix[i];
-            if (mutant::mutg[i] == 0) {
-               dsp_sume += c;
-            } else {
-               dsp_suml += c;
-               dsp_sqll += c * c;
-            }
-         }
+      for (int g = 0; g < 3; ++g) {
+         dsp_csum[g] = 0;
+         dsp_csq[g] = 0;
+         dsp_have[g] = false;
+      }
+      for (int i = 0; i < n; ++i) {
+         double c = disp::csix[i];
+         if (c == 0)
+            continue;
+         int g = hostGroup(i);
+         dsp_csum[g] += c;
+         dsp_csq[g] += c * c;
+         dsp_have[g] = true;
       }
 
       dsp_lrc = {};
@@ -189,16 +214,10 @@ void edispData(RcOp op)
 }
 
 namespace tinker {
-// A lambda power vlam^e of the soft core and its lambda derivatives
-// (edspsc.f:dspsc4). The soft core is linear in its two powers, so the van der
-// Waals lambda chain rule goes on the powers themselves.
-static LmdaFn dispPower(double e, bool dodl)
-{
-   return lmdaPwrChain(vlam, e, dvldlmda, d2vldlmda2, dodl);
-}
-
 // The soft core of the real space pairs from its powers lambda^n and
-// lambda^(n+q) (edspsc.f:dspsc4).
+// lambda^(n+q) of each ligand group (vdwGroupPower, edspsc.f:dspsc4). The soft
+// core is linear in its two powers, so the van der Waals lambda chain rule goes
+// on the powers themselves.
 static DispSoft dispSoft(const LmdaFn& c, const LmdaFn& q)
 {
    DispSoft ds;
@@ -213,108 +232,169 @@ static DispSoft dispSoft(const LmdaFn& c, const LmdaFn& q)
    return ds;
 }
 
-TINKER_FVOID2(acc1, cu1, edispNonEwald, int, DispSoft);
-static void edispNonEwald(int vers, const DispSoft& sc)
+TINKER_FVOID2(acc1, cu1, edispNonEwald, int, DispSoft, DispSoft);
+static void edispNonEwald(int vers, const DispSoft& sc1, const DispSoft& sc2)
 {
-   TINKER_FCALL2(acc1, cu1, edispNonEwald, vers, sc);
+   TINKER_FCALL2(acc1, cu1, edispNonEwald, vers, sc1, sc2);
 }
 
-// The terms of the reciprocal and self parts summed on the host: the weighted
-// C6 pair sum of the zero wavevector with its lambda derivatives, and the
-// lambda derivatives of the ligand-ligand weight, which scales the self term
-// of each ligand site.
+// The terms of the reciprocal and self parts summed on the host: whether the
+// plain grid is used, the weighted C6 pair sum of the zero wavevector with its
+// lambda derivatives, and the lambda derivatives of the self terms weighted by
+// the squared C6 sums.
 struct DispHost
 {
+   bool plain;
    real cpr;
    double dcpr, d2cpr;
-   double dwll, d2wll;
+   double dself, d2self;
 };
 
-// The reciprocal and self terms weight the ligand by the lambda power v of the
-// soft core, which the real space pairs carry beyond its switch radius: v
-// between the ligand and the environment, and within the ligand v when it is
-// annihilated or 1 when it is decoupled. The weighted C6 sum product replaces
-// csixpr, and the split stays on at full coupling while the weights have
-// lambda derivatives (edisp.f:dspmutwt4).
-static DispSplit dispSplit(const LmdaFn& v, bool dodl, DispHost& h)
+// The reciprocal and self terms weight a pair of groups as the real space
+// pairs beyond the soft core switch radius are weighted, by the lambda power
+// of the class of the pair (dlambda.f:grpvwt), which no single real grid can
+// carry once a ligand is decoupled. Every group with sites and weight left
+// goes to a slot, shared by the groups whose weights match (edisp.f:dspslot);
+// a single slot of full weight and no lambda derivatives is the plain grid,
+// while with no slot at all, reciprocal space has nothing to carry.
+static DispSlots dispSlots(bool dodl, DispHost& h)
 {
-   DispSplit ds = {false, 1, 1, 0, 0, 0, 0, nullptr, nullptr, nullptr};
-   h = {csixpr, 0, 0, 0, 0};
+   DispSlots ds = {};
+   h = {true, csixpr, 0, 0, 0, 0};
    if (mutant::nmut == 0)
       return ds;
-   if (not dodl and v.f == 1)
-      return ds;
+   h.plain = false;
 
-   double wel = v.f, dwel = v.d1, d2wel = v.d2;
-   double wll = 1, dwll = 0, d2wll = 0;
-   if (vcouple == Vdw::ANNIHILATE) {
-      wll = v.f;
-      dwll = v.d1;
-      d2wll = v.d2;
+   LmdaFn w[3][3];
+   vdwClassWeights(scexpd, dodl, w);
+
+   // drop a group with no weight to any group on the grid, in order
+   bool have[3] = {dsp_have[0], dsp_have[1], dsp_have[2]};
+   bool full = true;
+   for (int g = 0; g < 3; ++g) {
+      if (not have[g])
+         continue;
+      bool live = false;
+      for (int k = 0; k < 3; ++k)
+         if (have[k] and (w[g][k].f != 0 or w[g][k].d1 != 0 or w[g][k].d2 != 0))
+            live = true;
+      have[g] = live;
+      full = full and live;
    }
-   assert(dsp_qfwd);
-   ds.split = true;
-   ds.wel = wel;
-   ds.wll = wll;
-   ds.dwel = dwel;
-   ds.dwll = dwll;
-   ds.d2wel = d2wel;
-   ds.d2wll = d2wll;
-   ds.part = mut;
-   ds.qfwd = reinterpret_cast<const real(*)[2]>(dsp_qfwd);
-   double se = dsp_sume, sl = dsp_suml;
-   h.cpr = se * se + 2 * wel * se * sl + wll * sl * sl;
-   h.dcpr = 2 * dwel * se * sl + dwll * sl * sl;
-   h.d2cpr = 2 * d2wel * se * sl + d2wll * sl * sl;
-   h.dwll = dwll;
-   h.d2wll = d2wll;
+
+   // merge a group into an earlier one with the same weights
+   int grp[3];
+   for (int g = 0; g < 3; ++g) {
+      ds.slot[g] = -1;
+      if (not have[g])
+         continue;
+      for (int k = 0; k < g and ds.slot[g] < 0; ++k) {
+         if (ds.slot[k] < 0)
+            continue;
+         bool same = true;
+         for (int f = 0; f < 3; ++f)
+            if (have[f] and (w[g][f].f != w[k][f].f or w[g][f].d1 != w[k][f].d1 or w[g][f].d2 != w[k][f].d2))
+               same = false;
+         if (same)
+            ds.slot[g] = ds.slot[k];
+      }
+      if (ds.slot[g] < 0) {
+         grp[ds.nslot] = g;
+         ds.slot[g] = ds.nslot++;
+      }
+   }
+   if (ds.nslot == 1 and full and not dodl and w[grp[0]][grp[0]].f == 1) {
+      ds.nslot = 0;
+      h.plain = true;
+      return ds;
+   }
+
+   for (int s = 0; s < ds.nslot; ++s) {
+      for (int t = 0; t < ds.nslot; ++t) {
+         const LmdaFn& f = w[grp[s]][grp[t]];
+         ds.w[s][t] = f.f;
+         ds.dw[s][t] = f.d1;
+         ds.d2w[s][t] = f.d2;
+      }
+   }
+   double cpr = 0;
+   for (int g = 0; g < 3; ++g) {
+      if (not have[g])
+         continue;
+      for (int k = 0; k < 3; ++k) {
+         if (not have[k])
+            continue;
+         double cc = dsp_csum[g] * dsp_csum[k];
+         cpr += w[g][k].f * cc;
+         h.dcpr += w[g][k].d1 * cc;
+         h.d2cpr += w[g][k].d2 * cc;
+      }
+      h.dself += w[g][g].d1 * dsp_csq[g];
+      h.d2self += w[g][g].d2 * dsp_csq[g];
+   }
+   h.cpr = cpr;
    return ds;
 }
 
-TINKER_FVOID2(acc1, cu1, edispEwaldReal, int, DispSoft);
-TINKER_FVOID2(acc1, cu1, edispEwaldRecipSelf, int, DispSplit);
-TINKER_FVOID2(acc1, cu1, pmeConvDisp, int, DispSplit);
-TINKER_FVOID2(acc0, cu1, edispEwaldRecipDlmda, DispSplit);
-static void edispEwald(int vers, const DispSoft& sc, const LmdaFn& v)
+// Where the grid of each site starts, or -1 for a site of a group left out,
+// set again only when the slots of the groups change.
+static void dispSlotOffsets(const DispSlots& ds)
 {
-   TINKER_FCALL2(acc1, cu1, edispEwaldReal, vers, sc);
+   if (std::equal(ds.slot, ds.slot + 3, dsp_offset_slot))
+      return;
+   std::vector<int> off(n);
+   for (int i = 0; i < n; ++i) {
+      int s = ds.slot[hostGroup(i)];
+      off[i] = (s < 0 ? -1 : s * dsp_stride);
+   }
+   darray::copyin(g::q0, n, dsp_offset, off.data());
+   waitFor(g::q0);
+   std::copy(ds.slot, ds.slot + 3, dsp_offset_slot);
+}
 
-   // recip and self, whose lambda derivatives vanish without a mutated ligand
+TINKER_FVOID2(acc1, cu1, edispEwaldReal, int, DispSoft, DispSoft);
+TINKER_FVOID2(acc1, cu1, pmeConvDisp, int);
+TINKER_FVOID2(acc1, cu1, edispEwaldRecipSelf, int);
+TINKER_FVOID2(acc1, cu1, pmeConvDispSlots, int, DispSlots, real*, int);
+TINKER_FVOID2(acc1, cu1, edispEwaldRecipSelfSlots, int, DispSlots, const real*, int, const int*);
+static void edispEwald(int vers, const DispSoft& sc1, const DispSoft& sc2)
+{
+   TINKER_FCALL2(acc1, cu1, edispEwaldReal, vers, sc1, sc2);
+
+   // recip and self, whose lambda derivatives vanish on the plain grid
    DispHost h;
-   DispSplit ds = dispSplit(v, vers & calc::energy_dlmda1, h);
-   if (not ds.split)
+   const DispSlots ds = dispSlots(vers & calc::energy_dlmda1, h);
+   if (h.plain)
       vers &= ~calc::dlmda;
    auto do_e = vers & calc::energy;
    auto do_v = vers & calc::virial;
    auto do_g = vers & calc::grad;
    auto do_dl1 = vers & calc::energy_dlmda1;
    auto do_dl2 = vers & calc::energy_dlmda2;
-   auto do_gdl = vers & calc::grad_dlmda;
    auto do_vdl = vers & calc::virial_dlmda;
    PMEUnit u = dpme_unit;
-   const int ntot = u->nfft1 * u->nfft2 * u->nfft3;
 
-   if (do_gdl) {
-      assert(dsp_qdl);
-      ds.qdl = reinterpret_cast<real(*)[2]>(dsp_qdl);
-   }
-   gridDisp(u, csix, ds.part);
-   fftfront(u);
-   // each point of the convolution reads the opposite wavevector as well
-   if (ds.split)
-      darray::copy(g::q0, 2 * ntot, dsp_qfwd, u->qgrid);
-   TINKER_FCALL2(acc1, cu1, pmeConvDisp, vers, ds);
-   if (do_g) {
-      fftback(u);
-   }
-   // the lambda derivatives of the self term are added below
-   TINKER_FCALL2(acc1, cu1, edispEwaldRecipSelf, vers & ~calc::dlmda, ds);
-
-   // the lambda derivative of the potential goes through the same grid
-   if (do_gdl) {
-      darray::copy(g::q0, 2 * ntot, u->qgrid, dsp_qdl);
-      fftback(u);
-      TINKER_FCALL2(acc0, cu1, edispEwaldRecipDlmda, ds);
+   if (h.plain) {
+      gridDisp(u, csix);
+      fftfront(u);
+      TINKER_FCALL2(acc1, cu1, pmeConvDisp, vers);
+      if (do_g)
+         fftback(u);
+      TINKER_FCALL2(acc1, cu1, edispEwaldRecipSelf, vers);
+   } else if (ds.nslot > 0) {
+      // the lambda derivatives of the force come with the force itself
+      dispSlotOffsets(ds);
+      gridDispSlots(u, csix, dsp_offset, ds.nslot * dsp_stride, dsp_slots);
+      fftfrontOneSet(u, dsp_slots, ds.nslot, dsp_stride);
+      TINKER_FCALL2(acc1, cu1, pmeConvDispSlots, vers, ds, dsp_slots, dsp_stride);
+      if (do_g)
+         fftbackOneSet(u, dsp_slots, ds.nslot, dsp_stride);
+      TINKER_FCALL2(acc1, cu1, edispEwaldRecipSelfSlots, vers, ds, dsp_slots, dsp_stride, dsp_offset);
+   } else if (vers & calc::analyz) {
+      // every group is left out, but each site's self term is still counted
+      // (edisp.f:dspself), which the self kernel does for a site without a slot
+      dispSlotOffsets(ds);
+      TINKER_FCALL2(acc1, cu1, edispEwaldRecipSelfSlots, vers, ds, dsp_slots, dsp_stride, dsp_offset);
    }
 
    // account for the total energy and virial correction term
@@ -336,19 +416,19 @@ static void edispEwald(int vers, const DispSoft& sc, const LmdaFn& v)
       }
    }
 
-   // the lambda derivatives of the correction term and of the self term of
-   // the ligand sites (edisp.f:dspself)
+   // the lambda derivatives of the correction term and of the self terms
+   // (edisp.f:dspself)
    if (do_dl1) {
       const double aewald = u->aewald;
       const double a3 = aewald * aewald * aewald;
       const double fcpr = a3 * std::pow(M_PI, 1.5) / (6 * boxVolume());
-      const double fself = a3 * a3 / 12 * dsp_sqll;
+      const double fself = a3 * a3 / 12;
       energy_prec term = h.dcpr * fcpr;
-      energy_prec dl1 = h.dwll * fself - term;
+      energy_prec dl1 = h.dself * fself - term;
       devdl += dl1;
       dedl += dl1;
       if (do_dl2) {
-         energy_prec dl2 = h.d2wll * fself - h.d2cpr * fcpr;
+         energy_prec dl2 = h.d2self * fself - h.d2cpr * fcpr;
          d2evdl2 += dl2;
          d2edl2 += dl2;
       }
@@ -383,17 +463,19 @@ void edisp(int vers)
 
    // The lambda derivatives follow vlambda and go to the van der Waals
    // channels, while its map has slope or curvature (edisp1.f).
-   // The soft core powers are taken once for the real and reciprocal parts.
+   // The soft core powers of the real part are taken once here; the slot
+   // weights of the reciprocal part take their own (dispSlots).
    const int dlvers = lmdaDerivVers(vers, vdlmdaActive());
-   const bool dodl = dlvers & calc::energy_dlmda1;
-   const LmdaFn vn = dispPower(scexpd, dodl);
-   const DispSoft sc = dispSoft(vn, dispPower(scexpd + scexpdq, dodl));
-   vdwLmdaZero(vers);
+   const bool dodl = lmdaDodl(dlvers);
+   // Ligand 2 of a relative calculation takes its own soft core.
+   const DispSoft sc1 = dispSoft(vdwGroupPower(scexpd, 1, dodl), vdwGroupPower(scexpd + scexpdq, 1, dodl));
+   const DispSoft sc2 = dispSoft(vdwGroupPower(scexpd, 2, dodl), vdwGroupPower(scexpd + scexpdq, 2, dodl));
+   lmdaChannel(LmdaTerm::VDW).zero(vers);
    if (useDEwald())
-      edispEwald(dlvers, sc, vn);
+      edispEwald(dlvers, sc1, sc2);
    else
-      edispNonEwald(dlvers, sc);
-   vdwLmdaFlush(vers);
+      edispNonEwald(dlvers, sc1, sc2);
+   lmdaChannel(LmdaTerm::VDW).flush(vers);
    lrcApply(vers, dlvers, dsp_lrc, energy_edsp, virial_edsp);
    if (rc_a) {
       if (do_e) {

@@ -122,10 +122,10 @@ static void water4Grad_cu1(int nratw4, grad_prec* restrict gx, grad_prec* restri
    }
 }
 
-void rattleWater4Grad_cu()
+void rattleWater4Grad_cu(grad_prec* g0x, grad_prec* g0y, grad_prec* g0z)
 {
    launch_k1s(g::s0, nratw4, water4Grad_cu1, //
-      nratw4, gx, gy, gz, iratw4, kratw4);
+      nratw4, g0x, g0y, g0z, iratw4, kratw4);
 }
 }
 

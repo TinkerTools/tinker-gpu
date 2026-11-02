@@ -136,7 +136,8 @@ static void empoleEwaldRecipDlmdaGeneric_cu(bool reuse_pot, real* p, real* dlp)
    constexpr bool do_v = Ver::v;
    // dE/dL = dlfmp . fphi needs only the ordinary grid; the lambda derivative
    // grid is built for the second, force and virial lambda derivatives alone
-   // (empole4.f builds lqgrid only under use_d2lmda).
+   // (empole4.f spreads the lambda derivative multipoles, into the imaginary
+   // part of its grid, only under use_d2lmda).
    constexpr bool need_dl = Ver::e_dlmda2 or Ver::g_dlmda or Ver::v_dlmda;
    // dlfmp is read by dE/dL and by everything the second grid serves
    constexpr bool need_dlfmp = Ver::e_dlmda1 or need_dl;
@@ -174,7 +175,7 @@ static void empoleEwaldRecipDlmdaGeneric_cu(bool reuse_pot, real* p, real* dlp)
       if (conv_vir_m)
          darray::zero(g::q0, bufferSize(), vir_m);
       if CONSTEXPR (need_dl) {
-         pmeConvDlmda(pu, dlpu, conv_vir, conv_vir ? dvirdl_buf : nullptr, deldlmda);
+         pmeConvDlmda(pu, dlpu, conv_vir, conv_vir ? dvirdl_buf : nullptr, elecChain().d1);
       } else {
          if (conv_vir)
             pmeConv(pu, conv_vir);
@@ -204,13 +205,14 @@ static void empoleEwaldRecipDlmdaGeneric_cu(bool reuse_pot, real* p, real* dlp)
    const int nfft2 = st.nfft2;
    const int nfft3 = st.nfft3;
    const real f = electric / dielec;
+   const LmdaFn el = elecChain();
 
    launch_k1b(g::s0, n, empoleEwaldRecipDlmdaGeneric_cu1<Ver>,         //
       n, f, em, demdl_buf, d2emdl2_buf, vir_em, dvirdl_buf,           //
       demx, demy, demz, dfdlx, dfdly, dfdlz,                 //
       trqx, trqy, trqz, dltrqx, dltrqy, dltrqz,                       //
       cmp, fmp, cphi, fphi, dlcmp, dlfmp, dlcphi, dlfphi, p, dlp,     //
-      nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS, deldlmda, d2eldlmda2);
+      nfft1, nfft2, nfft3, TINKER_IMAGE_ARGS, el.d1, el.d2);
 }
 
 static void empoleEwaldRecipDlmda_cu2(int vers, bool reuse_pot, real* p, real* dlp)

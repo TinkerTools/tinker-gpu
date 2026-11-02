@@ -68,6 +68,7 @@ extern "C"
 #define REAL_COSH     cosh
 #define REAL_ERF      erf
 #define REAL_ERFC(x)  (1 - erf(x))
+#define REAL_ERFC_ACCURATE erfc
 #define REAL_MIN      fmin
 #define REAL_MAX      fmax
 #define REAL_SIGN     copysign
@@ -92,6 +93,9 @@ extern "C"
 #define REAL_COSH     coshf
 #define REAL_ERF      erff
 #define REAL_ERFC     tinkerErfcfHastings
+/// The accurate erfc, where the cancellation of erfc against other terms
+/// leaves the error of REAL_ERFC, relative to a small erfc, in the result.
+#define REAL_ERFC_ACCURATE erfcf
 #define REAL_MIN      fminf
 #define REAL_MAX      fmaxf
 #define REAL_SIGN     copysignf

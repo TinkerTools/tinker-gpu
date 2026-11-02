@@ -14,7 +14,9 @@
 namespace tinker {
 // compute theta values on the fly
 // ONE_SET: UIND spreads fuind alone, into qgrid as the real input of an
-// in-place real-to-complex FFT (fftfrontOneSet)
+// in-place real-to-complex FFT (fftfrontOneSet), and DISP spreads each site
+// into the real grid of its slot, ptr2 holding where the grid starts
+// (gridDispSlots)
 template <class T, int bsorder, bool ONE_SET = false>
 __global__
 void gridPut_cu1(const real* restrict x, const real* restrict y, const real* restrict z, int n, int nfft1, int nfft2,
@@ -31,7 +33,9 @@ void gridPut_cu1(const real* restrict x, const real* restrict y, const real* res
    MAYBE_UNUSED const real(*fmp)[10] = (real(*)[10])ptr1;
    MAYBE_UNUSED const real(*fuind)[3] = (real(*)[3])ptr1;
    MAYBE_UNUSED const real(*fuinp)[3] = (real(*)[3])ptr2;
-   MAYBE_UNUSED const int* dpart = (const int*)ptr2;
+   MAYBE_UNUSED const int* doffset = (const int*)ptr2;
+   // ONE_SET: the padded rows of an in-place real FFT
+   MAYBE_UNUSED const int ldx = ONE_SET ? 2 * (nfft1 / 2 + 1) : nfft1;
 
    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < n; i += blockDim.x * gridDim.x) {
       real xi = x[i];
@@ -67,8 +71,16 @@ void gridPut_cu1(const real* restrict x, const real* restrict y, const real* res
          real chgi = pchg[i];
          if (chgi == 0)
             continue;
-         // the mutated ligand of Ewald dispersion fills the imaginary part
-         int ip = (eq<T, DISP>() and dpart and dpart[i]) ? 1 : 0;
+         // a complex grid holds one real grid in its real parts
+         real* q = qgrid;
+         int stride = 2;
+         if CONSTEXPR (ONE_SET) {
+            int off = doffset[i];
+            if (off < 0)
+               continue;
+            q += off;
+            stride = 1;
+         }
 
          bsplgen<1, bsorder>(w1, thetai1, array);
          bsplgen<1, bsorder>(w2, thetai2, array);
@@ -77,19 +89,19 @@ void gridPut_cu1(const real* restrict x, const real* restrict y, const real* res
          for (int iz = 0; iz < bsorder; ++iz) {
             int zbase = igrid3 + iz;
             zbase -= (zbase >= nfft3 ? nfft3 : 0);
-            zbase *= (nfft1 * nfft2);
+            zbase *= (ldx * nfft2);
             real v0 = thetai3[4 * iz] * chgi;
             for (int iy = 0; iy < bsorder; ++iy) {
                int ybase = igrid2 + iy;
                ybase -= (ybase >= nfft2 ? nfft2 : 0);
-               ybase *= nfft1;
+               ybase *= ldx;
                real u0 = thetai2[4 * iy] * v0;
                for (int ix = 0; ix < bsorder; ++ix) {
                   int xbase = igrid1 + ix;
                   xbase -= (xbase >= nfft1 ? nfft1 : 0);
                   int index = xbase + ybase + zbase;
                   real term = thetai1[4 * ix] * u0;
-                  atomic_add(term, qgrid, 2 * index + ip);
+                  atomic_add(term, q, stride * index);
                }
             }
          }
@@ -148,8 +160,6 @@ void gridPut_cu1(const real* restrict x, const real* restrict y, const real* res
       } // end if (MPOLE)
 
       if CONSTEXPR (eq<T, UIND>()) {
-         // ONE_SET: the padded rows of an in-place real FFT
-         const int ldx = 2 * (nfft1 / 2 + 1);
          bsplgen<2, bsorder>(w1, thetai1, array);
          bsplgen<2, bsorder>(w2, thetai2, array);
          bsplgen<2, bsorder>(w3, thetai3, array);
@@ -565,26 +575,27 @@ void gridPut_cu3(const real* restrict x, const real* restrict y, const real* res
    }
 }
 
-void gridPchgOneSet_cu(PMEUnit pme_u, real* pchg)
+void gridPchgOneSet_cu(PMEUnit pme_u, real* pchg, real* grid)
 {
    auto& st = *pme_u;
    int n1 = st.nfft1;
    int n2 = st.nfft2;
    int n3 = st.nfft3;
+   real* q = grid ? grid : st.qgrid;
 
    auto stream = g::s0;
    if (use_pme_stream)
       stream = g::spme;
    using type = std::remove_pointer<decltype(st.qgrid)>::type;
    // the real grid of the in-place R2C FFT, with its padded rows
-   check_rt(cudaMemsetAsync(st.qgrid, 0, 2 * (n1 / 2 + 1) * n2 * n3 * sizeof(type), stream));
+   check_rt(cudaMemsetAsync(q, 0, 2 * (n1 / 2 + 1) * n2 * n3 * sizeof(type), stream));
    int nwp = (n + gridPutAtoms<PCHG>() - 1) / gridPutAtoms<PCHG>();
    auto ker = st.bsorder == 5 ? gridPut_cu3<PCHG, 5, true> : gridPut_cu3<PCHG, 4, true>;
-   launch_k1s(stream, nwp * WARP_SIZE, ker, x, y, z, cspatial_v2_unit->sorted, n, n1, n2, n3, pchg, nullptr, st.qgrid,
-      recipa, recipb, recipc);
+   launch_k1s(stream, nwp * WARP_SIZE, ker, x, y, z, cspatial_v2_unit->sorted, n, n1, n2, n3, pchg, nullptr, q, recipa,
+      recipb, recipc);
 }
 
-void gridDisp_cu(PMEUnit pme_u, real* csix, const int* part)
+void gridDisp_cu(PMEUnit pme_u, real* csix)
 {
    auto& st = *pme_u;
    int n1 = st.nfft1;
@@ -594,8 +605,16 @@ void gridDisp_cu(PMEUnit pme_u, real* csix, const int* part)
 
    darray::zero(g::q0, 2 * nt, st.qgrid);
    auto ker = gridPut_cu1<DISP, 4>;
-   launch_k2s(g::s0, PME_BLOCKDIM, n, ker, x, y, z, n, n1, n2, n3, csix, (const real*)part, st.qgrid, recipa, recipb,
-      recipc);
+   launch_k2s(g::s0, PME_BLOCKDIM, n, ker, x, y, z, n, n1, n2, n3, csix, nullptr, st.qgrid, recipa, recipb, recipc);
+}
+
+void gridDispSlots_cu(PMEUnit pme_u, real* csix, const int* offset, int size, real* grids)
+{
+   auto& st = *pme_u;
+   darray::zero(g::q0, size, grids);
+   auto ker = gridPut_cu1<DISP, 4, true>;
+   launch_k2s(g::s0, PME_BLOCKDIM, n, ker, x, y, z, n, st.nfft1, st.nfft2, st.nfft3, csix, (const real*)offset,
+      grids, recipa, recipb, recipc);
 }
 
 void gridMpole_cu(PMEUnit pme_u, real (*fmp)[10])
@@ -1296,15 +1315,16 @@ void fphiUindOneSet_cu(PMEUnit pme_u, real (*fdip_phi1)[10], real (*fdip_sum_phi
    }
 }
 
-// ONE_SET: the half spectrum, k1 <= nfft1/2, of a real grid, fftfrontOneSet
-template <bool DO_E, bool DO_V, bool DO_DL, bool ONE_SET = false>
+// ONE_SET: the half spectrum, k1 <= nfft1/2, of a real grid, fftfrontOneSet,
+// and of dlqgrid with DO_DL; SKEW for a monoclinic or triclinic box, the only
+// shapes whose Nyquist planes need the influence function of a second point
+template <bool DO_E, bool DO_V, bool DO_DL, bool ONE_SET = false, bool SKEW = false>
 __global__
 static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[2], real (*restrict dlqgrid)[2],
    const real* restrict bsmod1, const real* restrict bsmod2, const real* restrict bsmod3, real f, real aewald,
    TINKER_IMAGE_PARAMS, real box_volume, EnergyBuffer restrict gpu_e, VirialBuffer restrict gpu_vir,
    VirialBuffer restrict dl_vir, real wdv)
 {
-   static_assert(not(ONE_SET and DO_DL), "");
    int ithread = threadIdx.x + blockIdx.x * blockDim.x;
    int stride = blockDim.x * gridDim.x;
 
@@ -1359,11 +1379,6 @@ static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[
       int r2 = (k2 < (nfft2 + 1) / 2) ? k2 : (k2 - nfft2);
       int r3 = (k3 < (nfft3 + 1) / 2) ? k3 : (k3 - nfft3);
 
-      real h1 = recipa.x * r1 + recipb.x * r2 + recipc.x * r3;
-      real h2 = recipa.y * r1 + recipb.y * r2 + recipc.y * r3;
-      real h3 = recipa.z * r1 + recipb.z * r2 + recipc.z * r3;
-      real hsq = h1 * h1 + h2 * h2 + h3 * h3;
-
       real gridx = qgrid[i][0];
       real gridy = qgrid[i][1];
       real dlgridx, dlgridy;
@@ -1371,25 +1386,37 @@ static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[
          dlgridx = dlqgrid[i][0];
          dlgridy = dlqgrid[i][1];
       }
-      real term = -pterm * hsq;
-      real expterm = 0;
-      if (term > -50) {
-         real denom = hsq * pi * box_volume * bsmod1[k1] * bsmod2[k2] * bsmod3[k3];
-         expterm = REAL_EXP(term) / denom;
-         if (box_shape == BoxShape::UNBOUND)
-            expterm *= (1 - REAL_COS(pi * lvec1.x * REAL_SQRT(hsq)));
-         else if (box_shape == BoxShape::OCT)
-            if ((k1 + k2 + k3) & 1)
-               expterm = 0; // end if ((k1 + k2 + k3) % 2 != 0)
 
+      // the influence function at the wavevector of the indices k taken as r,
+      // with its h vector and exponent, zero past the cutoff of the exponential
+      auto influence = [&](int s1, int s2, int s3, int p1, int p2, int p3, real& h1, real& h2, real& h3, real& hsq,
+                          real& term) {
+         h1 = recipa.x * s1 + recipb.x * s2 + recipc.x * s3;
+         h2 = recipa.y * s1 + recipb.y * s2 + recipc.y * s3;
+         h3 = recipa.z * s1 + recipb.z * s2 + recipc.z * s3;
+         hsq = h1 * h1 + h2 * h2 + h3 * h3;
+         term = -pterm * hsq;
+         real ex = 0;
+         if (term > -50) {
+            real denom = hsq * pi * box_volume * bsmod1[p1] * bsmod2[p2] * bsmod3[p3];
+            ex = REAL_EXP(term) / denom;
+            if (box_shape == BoxShape::UNBOUND)
+               ex *= (1 - REAL_COS(pi * lvec1.x * REAL_SQRT(hsq)));
+            else if (box_shape == BoxShape::OCT)
+               if ((p1 + p2 + p3) & 1)
+                  ex = 0; // end if ((k1 + k2 + k3) % 2 != 0)
+         }
+         return ex;
+      };
+
+      // The energy, virial and lambda derivative virial of one wavevector,
+      // counted n times.
+      auto accumulate = [&](real ex, real h1, real h2, real h3, real hsq, real term, real n) {
+         if (term <= -50)
+            return;
          if CONSTEXPR (DO_E or DO_V) {
             real struc2 = gridx * gridx + gridy * gridy;
-            real eterm = 0.5f * f * expterm * struc2;
-            // ONE_SET: a point with 0 < k1 < nfft1/2 also stands for its
-            // missing conjugate at -k, which has the same struc2, hsq, and h products
-            if CONSTEXPR (ONE_SET)
-               if (k1 != 0 and 2 * k1 != nfft1)
-                  eterm *= 2;
+            real eterm = 0.5f * f * ex * struc2 * n;
             if CONSTEXPR (DO_E) {
                ectl += floatTo<ebuf_prec>(eterm);
             }
@@ -1409,8 +1436,10 @@ static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[
                vctlzz += floatTo<vbuf_prec>(vzz);
 
                if CONSTEXPR (DO_DL) {
+                  // as eterm: the cross structure factor of two real grids is
+                  // the same at the partner
                   real dstruc2dl = 2 * (gridx * dlgridx + gridy * dlgridy);
-                  real dldeterm = 0.5f * f * expterm * dstruc2dl;
+                  real dldeterm = 0.5f * f * ex * dstruc2dl * n;
                   real dldvterm = (2 / hsq) * (1 - term) * dldeterm;
                   dvctlxx += floatTo<vbuf_prec>(wdv * (h1 * h1 * dldvterm - dldeterm));
                   dvctlyx += floatTo<vbuf_prec>(wdv * h1 * h2 * dldvterm);
@@ -1420,7 +1449,45 @@ static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[
                   dvctlzz += floatTo<vbuf_prec>(wdv * (h3 * h3 * dldvterm - dldeterm));
                }
             }
-         } // end if (e or v)
+         }
+      };
+
+      real h1, h2, h3, hsq, term;
+      real expterm = influence(r1, r2, r3, k1, k2, k3, h1, h2, h3, hsq, term);
+      // ONE_SET: a point with 0 < k1 < nfft1/2 also stands for its missing
+      // conjugate, at the same structure factors: at -k it counts twice, but
+      // on a plane of Nyquist indices it is not at -k and takes its own h, and
+      // the potential, which must stay Hermitian as a full transform's real
+      // part is, takes the mean influence function of the two; only a skewed
+      // box gives the partner another |h| (dspWaves)
+      if CONSTEXPR (ONE_SET) {
+         const bool doubled = k1 != 0 and 2 * k1 != nfft1;
+         const bool nyquist = 2 * k1 == nfft1 or 2 * k2 == nfft2 or 2 * k3 == nfft3;
+         if (nyquist and (DO_E or DO_V or SKEW)) {
+            int p1 = k1 ? nfft1 - k1 : 0;
+            int p2 = k2 ? nfft2 - k2 : 0;
+            int p3 = k3 ? nfft3 - k3 : 0;
+            int s1 = (p1 < (nfft1 + 1) / 2) ? p1 : (p1 - nfft1);
+            int s2 = (p2 < (nfft2 + 1) / 2) ? p2 : (p2 - nfft2);
+            int s3 = (p3 < (nfft3 + 1) / 2) ? p3 : (p3 - nfft3);
+            real g1, g2, g3, gsq, gterm, expp;
+            if CONSTEXPR (SKEW) {
+               expp = influence(s1, s2, s3, p1, p2, p3, g1, g2, g3, gsq, gterm);
+            } else {
+               g1 = recipa.x * s1 + recipb.x * s2 + recipc.x * s3;
+               g2 = recipa.y * s1 + recipb.y * s2 + recipc.y * s3;
+               g3 = recipa.z * s1 + recipb.z * s2 + recipc.z * s3;
+               gsq = hsq, gterm = term, expp = expterm;
+            }
+            if (doubled)
+               accumulate(expp, g1, g2, g3, gsq, gterm, 1);
+            accumulate(expterm, h1, h2, h3, hsq, term, 1);
+            expterm = (expterm + expp) / 2;
+         } else {
+            accumulate(expterm, h1, h2, h3, hsq, term, doubled ? 2 : 1);
+         }
+      } else {
+         accumulate(expterm, h1, h2, h3, hsq, term, 1);
       }
 
       // complete the transformation of the PME grid
@@ -1444,14 +1511,12 @@ static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[
 }
 
 template <bool DO_E, bool DO_V, bool DO_DL, bool ONE_SET = false>
-static void pmeConv_cu2(PMEUnit pme_u, PMEUnit dlpme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir,
-   VirialBuffer dl_vir, real wdv = 0)
+static void pmeConv_cu2(PMEUnit pme_u, real* dlgrid, EnergyBuffer gpu_e, VirialBuffer gpu_vir, VirialBuffer dl_vir,
+   real wdv = 0)
 {
    auto& st = *pme_u;
    real(*restrict qgrid)[2] = reinterpret_cast<real(*)[2]>(st.qgrid);
-   real(*restrict dlqgrid)[2] = nullptr;
-   if CONSTEXPR (DO_DL)
-      dlqgrid = reinterpret_cast<real(*)[2]>((*dlpme_u).qgrid);
+   real(*restrict dlqgrid)[2] = reinterpret_cast<real(*)[2]>(dlgrid);
    const real* bsmod1 = st.bsmod1;
    const real* bsmod2 = st.bsmod2;
    const real* bsmod3 = st.bsmod3;
@@ -1465,6 +1530,8 @@ static void pmeConv_cu2(PMEUnit pme_u, PMEUnit dlpme_u, EnergyBuffer gpu_e, Viri
    real box_volume = boxVolume();
 
    auto ker = pmeConv_cu1<DO_E, DO_V, DO_DL, ONE_SET>;
+   if (ONE_SET and (box_shape == BoxShape::MONO or box_shape == BoxShape::TRI))
+      ker = pmeConv_cu1<DO_E, DO_V, DO_DL, ONE_SET, ONE_SET>;
    auto stream = use_pme_stream ? g::spme : g::s0;
    int ngrid = gpuGridSize(BLOCK_DIM);
    ker<<<ngrid, BLOCK_DIM, 0, stream>>>(n1, n2, n3, qgrid, dlqgrid, bsmod1, bsmod2, bsmod3, f, aewald,
@@ -1476,15 +1543,15 @@ static void pmeConv_cu3(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
 {
    if (gpu_vir == nullptr) {
       if (gpu_e == nullptr) {
-         pmeConv_cu2<false, false, false, ONE_SET>(pme_u, PMEUnit(), nullptr, nullptr, nullptr);
+         pmeConv_cu2<false, false, false, ONE_SET>(pme_u, nullptr, nullptr, nullptr, nullptr);
       } else {
-         pmeConv_cu2<true, false, false, ONE_SET>(pme_u, PMEUnit(), gpu_e, nullptr, nullptr);
+         pmeConv_cu2<true, false, false, ONE_SET>(pme_u, nullptr, gpu_e, nullptr, nullptr);
       }
    } else {
       if (gpu_e == nullptr) {
-         pmeConv_cu2<false, true, false, ONE_SET>(pme_u, PMEUnit(), nullptr, gpu_vir, nullptr);
+         pmeConv_cu2<false, true, false, ONE_SET>(pme_u, nullptr, nullptr, gpu_vir, nullptr);
       } else {
-         pmeConv_cu2<true, true, false, ONE_SET>(pme_u, PMEUnit(), gpu_e, gpu_vir, nullptr);
+         pmeConv_cu2<true, true, false, ONE_SET>(pme_u, nullptr, gpu_e, gpu_vir, nullptr);
       }
    }
 }
@@ -1506,15 +1573,38 @@ void pmeConvOneSet_cu(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
 
 void pmeConvDlmda_cu(PMEUnit pme_u, PMEUnit dlpme_u, VirialBuffer gpu_vir, VirialBuffer dl_vir, real wdv)
 {
+   real* dlgrid = dlpme_u->qgrid;
    if (gpu_vir == nullptr) {
-      pmeConv_cu2<false, false, true>(pme_u, dlpme_u, nullptr, nullptr, nullptr);
+      pmeConv_cu2<false, false, true>(pme_u, dlgrid, nullptr, nullptr, nullptr);
       return;
    }
    if (dl_vir == nullptr) {
       dl_vir = gpu_vir;
       wdv = 0;
    }
-   pmeConv_cu2<false, true, true>(pme_u, dlpme_u, nullptr, gpu_vir, dl_vir, wdv);
+   pmeConv_cu2<false, true, true>(pme_u, dlgrid, nullptr, gpu_vir, dl_vir, wdv);
+}
+
+void pmeConvOneSetDlmda_cu(PMEUnit pme_u, real* dlgrid, EnergyBuffer gpu_e, VirialBuffer gpu_vir,
+   VirialBuffer dl_vir, real wdv)
+{
+   // a version with the lambda derivative of the virial has the virial
+   assert(gpu_vir or not dl_vir);
+   if (dl_vir == nullptr) {
+      dl_vir = gpu_vir;
+      wdv = 0;
+   }
+   if (gpu_vir == nullptr) {
+      if (gpu_e == nullptr)
+         pmeConv_cu2<false, false, true, true>(pme_u, dlgrid, nullptr, nullptr, nullptr);
+      else
+         pmeConv_cu2<true, false, true, true>(pme_u, dlgrid, gpu_e, nullptr, nullptr);
+   } else {
+      if (gpu_e == nullptr)
+         pmeConv_cu2<false, true, true, true>(pme_u, dlgrid, nullptr, gpu_vir, dl_vir, wdv);
+      else
+         pmeConv_cu2<true, true, true, true>(pme_u, dlgrid, gpu_e, gpu_vir, dl_vir, wdv);
+   }
 }
 }
 

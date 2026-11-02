@@ -4,6 +4,8 @@
 #include "ff/amoeba/mpole.h"
 #include "ff/atom.h"
 #include "ff/dlmda.h"
+#include "ff/echarge.h"
+#include "ff/echglj.h"
 #include "ff/efep.h"
 #include "ff/egvop.h"
 #include "ff/elec.h"
@@ -92,6 +94,14 @@ struct Fixture
    /// the one its coordinates usually load; see copyParams.
    const char* prm = nullptr;
 };
+
+// The fixed charge boxes in mixed precision, which a double precision build
+// takes to the references: the box of rigid TIP4P water leaves its gradient up
+// to 4e-3 and its virial 9e-3 off them, and the TIP3P box with its two ligand
+// waters at one site 7e-3 and 1.6e-2, whatever the lambda; where the staged map
+// squares its slope into d2E/dL2, that is 3e-3 off.
+const Tols kTip4Tol = Tols().grad(5.0e-3, 1.0e-4).virial(1.5e-2, 1.0e-3).lmda2(5.0e-3, 1.0e-4);
+const Tols kTip3ovlTol = Tols().grad(1.0e-2, 1.0e-4).virial(2.5e-2, 1.0e-3).lmda2(5.0e-3, 1.0e-4);
 
 const Fixture kFixtures[] = {
    {"001_water_ye_m10", "water", true, true, false, false},
@@ -288,6 +298,55 @@ const Fixture kFixtures[] = {
       "commit_152ecec0/AMOEBAplus_Org.prm"},
    {"239_water2ovl_hip_rels_lig1_ex3_l085", "water2ovl", true, true, false, true, nullptr, {}, 1,
       "commit_aad9340c/water21.prm"},
+   {"240_water2_hip_rep_rels_vdwm_l040", "water2", false, false, false, true, nullptr, {}, 1, "commit_aad9340c/water21.prm"},
+   {"241_water2_hip_rep_rels_vdwm_annih_l030", "water2", false, false, false, true, nullptr, {}, 1, "commit_aad9340c/water21.prm"},
+   {"242_water2ovl_hip_rep_rels_lig1_ex3_l085", "water2ovl", true, true, false, true, nullptr, {}, 1, "commit_aad9340c/water21.prm"},
+   {"243_water2_hip_rep_rels3_l050", "water2", true, true, false, true, nullptr, {}, 1, "commit_aad9340c/water21.prm"},
+   {"244_water2_hip_rep_rels_vdwm_l000", "water2", false, false, false, true, nullptr, {}, 1, "commit_aad9340c/water21.prm"},
+   {"245_water2_hip_rep_rels_vdwm_l100", "water2", false, false, false, true, nullptr, {}, 1, "commit_aad9340c/water21.prm"},
+   {"246_water2ovl_hip_rep_rels_vdwm_l030", "water2ovl", false, false, false, true, nullptr, {}, 1, "commit_aad9340c/water21.prm"},
+   {"278_water2ovl_hip_dsp_rels_vdwm_l030", "water2ovl", false, false, false, true, nullptr, {}, 1, "commit_aad9340c/water21.prm"},
+   {"281_water2_hip_dsp_ewald_annih_all_l00", "water2", false, false, false, true, nullptr, {}, 1, "commit_aad9340c/water21.prm"},
+   {"247_water2_hip_dsp_ewald_rels_vdwm_l040", "water2", false, false, false, true, nullptr, {}, 1, "commit_aad9340c/water21.prm"},
+   {"248_water2_hip_dsp_ewald_rels_vdwm_annih_l040", "water2", false, false, false, true, nullptr, {}, 1,
+      "commit_aad9340c/water21.prm"},
+   {"249_water2_hip_dsp_ewald_rels_vdwm_l000", "water2", false, false, false, true, nullptr, {}, 1, "commit_aad9340c/water21.prm"},
+   {"250_water2_hip_dsp_ewald_rels_vdwm_l100", "water2", false, false, false, true, nullptr, {}, 1, "commit_aad9340c/water21.prm"},
+   {"251_water2_hip_full_rels3_l050", "water2", true, true, false, true, nullptr, {}, 1, "commit_aad9340c/water21.prm"},
+   {"252_tip3ovl_amber_rels_lig1_l050", "tip3ovl", false, false, true, true, nullptr, kTip3ovlTol, 1,
+      "commit_350df099/amber99sb.prm"},
+   {"253_tip3ovl_amber_rels_vdwm_l040", "tip3ovl", false, false, true, true, nullptr, kTip3ovlTol, 1,
+      "commit_350df099/amber99sb.prm"},
+   {"254_tip3ovl_amber_rels_lig1_l000", "tip3ovl", false, false, true, true, nullptr, kTip3ovlTol, 1,
+      "commit_350df099/amber99sb.prm"},
+   {"255_tip3ovl_amber_rels_vdwm_l100", "tip3ovl", false, false, true, true, nullptr, kTip3ovlTol, 1,
+      "commit_350df099/amber99sb.prm"},
+   {"256_trp_charmm_both_l000", "trp_charmm", false, false, true, true, nullptr, {}, 1, "commit_11e84c69/charmm19.prm"},
+   {"257_trp_charmm_both_l100", "trp_charmm", false, false, true, true, nullptr, {}, 1, "commit_11e84c69/charmm19.prm"},
+   {"258_tip4_ew_both_l050", "tip4box", false, false, true, true, nullptr, kTip4Tol, 1, "water4/tip4p.prm"},
+   {"259_tip4_ew_both_annih_l030", "tip4box", false, false, true, true, nullptr, kTip4Tol, 1, "water4/tip4p.prm"},
+   {"260_tip4_ew_chg_l040", "tip4box", false, false, false, true, nullptr, kTip4Tol, 1, "water4/tip4p.prm"},
+   {"261_tip4_ew_lj_l060", "tip4box", false, false, true, true, nullptr, kTip4Tol, 1, "water4/tip4p.prm"},
+   {"262_tip4_ew_both_l000", "tip4box", false, false, true, true, nullptr, kTip4Tol, 1, "water4/tip4p.prm"},
+   {"263_tip4_ew_both_l100", "tip4box", false, false, true, true, nullptr, kTip4Tol, 1, "water4/tip4p.prm"},
+   {"264_tip4_cut_both_l050", "tip4box", false, false, true, true, nullptr, kTip4Tol, 1, "water4/tip4p.prm"},
+   {"265_tip4_cut_both_annih_l030", "tip4box", false, false, true, true, nullptr, kTip4Tol, 1, "water4/tip4p.prm"},
+   {"266_tip4_cut_chg_l040", "tip4box", false, false, false, true, nullptr, kTip4Tol, 1, "water4/tip4p.prm"},
+   {"267_tip4_cut_lj_soft_l060", "tip4box", false, false, true, true, nullptr, kTip4Tol, 1, "water4/tip4p.prm"},
+   {"268_tip4_cut_both_l000", "tip4box", false, false, true, true, nullptr, kTip4Tol, 1, "water4/tip4p.prm"},
+   {"269_tip4_cut_both_l100", "tip4box", false, false, true, true, nullptr, kTip4Tol, 1, "water4/tip4p.prm"},
+   {"270_tip4_ew_rels_lig1_l050", "tip4box", false, false, true, true, nullptr, kTip4Tol, 1, "water4/tip4p.prm"},
+   {"271_tip4_ew_rels_lig2_l040", "tip4box", false, false, true, true, nullptr, kTip4Tol, 1, "water4/tip4p.prm"},
+   {"272_tip4_ew_rels_vdwm_l040", "tip4box", false, false, true, true, nullptr, kTip4Tol, 1, "water4/tip4p.prm"},
+   {"273_tip4_ew_rels3_l015", "tip4box", false, false, true, true, nullptr, kTip4Tol, 1, "water4/tip4p.prm"},
+   {"274_tip4_cut_rels3_l085", "tip4box", false, false, true, true, nullptr, kTip4Tol, 1, "water4/tip4p.prm"},
+   {"275_tip4_cut_rels_vdwm_l060", "tip4box", false, false, true, true, nullptr, kTip4Tol, 1, "water4/tip4p.prm"},
+   {"276_tip4ovl_ew_rels_lig1_l050", "tip4ovl", false, false, true, true, nullptr, kTip4Tol, 1, "water4/tip4p.prm"},
+   {"277_tip4ovl_cut_rels_vdwm_l100", "tip4ovl", false, false, true, true, nullptr, kTip4Tol, 1, "water4/tip4p.prm"},
+   {"279_tip3ovl_amber_m00v05", "tip3ovl", false, false, true, false, nullptr, kTip3ovlTol, 1,
+      "commit_350df099/amber99sb.prm"},
+   {"280_tip3ovl_amber_m00p05_d1_l050", "tip3ovl", false, false, true, true, nullptr, kTip3ovlTol, 1,
+      "commit_350df099/amber99sb.prm"},
    {"189_water_rels3_l100", "water2", true, true, true, true, "082_water_rels_ye_l100"},
    {"190_water_rels3_l085", "water2", true, true, true, true, "083_water_rels_ye_l085"},
    {"191_water_rels3_l070", "water2", true, true, true, true, "084_water_rels_ye_l070"},
@@ -358,7 +417,7 @@ std::string systemDir(const std::string& base)
 {
    if (base == "g3")
       return TINKER9_DIRSTR "/test/file/g3/";
-   if (base == "trpcage")
+   if (base == "trpcage" or base == "trp_charmm")
       return TINKER9_DIRSTR "/test/file/trpcage/";
    return TINKER9_DIRSTR "/test/file/mutate/";
 }
@@ -643,6 +702,27 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
          ref.getEnergyCountByName("Van der Waals", eng, cnt);
          COMPARE_COUNT(nev, cnt);
          COMPARE_ENERGY(ev, eng, eps_e);
+      }
+      if (use(Potent::CHARGE)) {
+         ref.getEnergyCountByName("Charge-Charge", eng, cnt);
+         COMPARE_COUNT(nec, cnt);
+         COMPARE_ENERGY(ec, eng, eps_e);
+      }
+      // the HIPPO terms, which count the pairs of the relative legs apart
+      if (use(Potent::REPULS)) {
+         ref.getEnergyCountOrZero("Repulsion", eng, cnt);
+         COMPARE_COUNT(nrep, cnt);
+         COMPARE_ENERGY(er, eng, eps_e);
+      }
+      if (use(Potent::DISP)) {
+         ref.getEnergyCountOrZero("Dispersion", eng, cnt);
+         COMPARE_COUNT(ndisp, cnt);
+         COMPARE_ENERGY(edsp, eng, eps_e);
+      }
+      if (use(Potent::CHGTRN)) {
+         ref.getEnergyCountOrZero("Charge Transfer", eng, cnt);
+         COMPARE_COUNT(nct, cnt);
+         COMPARE_ENERGY(ect, eng, eps_e);
       }
    }
 
@@ -962,6 +1042,30 @@ void runVsoftCase(const VsoftCase& c)
    const double e = vsoftEnergy(c.key, c);
    const double eref = vsoftEnergy(c.refkey, c);
    COMPARE_REALS(e, eref, testGetEps(1.0e-5, 1.0e-8));
+}
+
+// The Lennard-Jones and partial charge terms of the Trp-cage with lambda
+// derivatives must leave the energy of the key without them, a soft core
+// Lennard-Jones parameter outside its range is reset to its default, and lambda
+// derivatives without a ligand change nothing (test_mutate_unsup). Without
+// analysis and by neighbor list, the fused charge and Lennard-Jones kernel
+// takes the energy.
+static double ljchgEnergy(const char* key, bool analyz)
+{
+   INFO(key << (analyz ? "" : ", fused"));
+   Fixture fx = {key, "trp_charmm", false, false, false, true, nullptr, {}, 1, "commit_11e84c69/charmm19.prm"};
+   int rc = calc::xyz | calc::mass | calc::vmask;
+   if (not analyz)
+      rc &= ~calc::analyz;
+   Setup s(fx, rc, analyz ? "" : "\nneighbor-list\n");
+   if (not analyz)
+      REQUIRE(echgljAvailable());
+
+   energy(calc::v1);
+   const double e = esum;
+   REQUIRE(std::isfinite(e));
+   s.session.end();
+   return e;
 }
 
 // One multipole or polarization result of runFlatFixture.
@@ -1520,6 +1624,65 @@ TEST_CASE("MUTATE-187_water2ovl_rels_ye_vdwm_exp_l050", "[ff][mutate][overlap][r
 TEST_CASE("MUTATE-188_water2near_rels_ye_vdwm_exp_l050", "[ff][mutate][overlap][rels]") { runFixture(fx("188_water2near_rels_ye_vdwm_exp_l050")); }
 TEST_CASE("MUTATE-237_wat2ovl_hip_m00_d2_l00", "[ff][mutate][overlap][hippo]") { runFixture(fx("237_wat2ovl_hip_m00_d2_l00")); }
 TEST_CASE("MUTATE-239_water2ovl_hip_rels_lig1_ex3_l085", "[ff][mutate][overlap][rels][hippo]") { runFixture(fx("239_water2ovl_hip_rels_lig1_ex3_l085")); }
+// HIPPO Pauli repulsion on the staged relative legs, where ligand 2 couples as
+// one minus the van der Waals lambda and the two ligands never interact, on two
+// ligands apart and at the same site (test_mutate.f:test_mutate_reprel).
+TEST_CASE("MUTATE-240_water2_hip_rep_rels_vdwm_l040", "[ff][mutate][rels][hippo][repel]") { runFixture(fx("240_water2_hip_rep_rels_vdwm_l040")); }
+TEST_CASE("MUTATE-241_water2_hip_rep_rels_vdwm_annih_l030", "[ff][mutate][rels][hippo][repel]") { runFixture(fx("241_water2_hip_rep_rels_vdwm_annih_l030")); }
+TEST_CASE("MUTATE-242_water2ovl_hip_rep_rels_lig1_ex3_l085", "[ff][mutate][rels][hippo][repel]") { runFixture(fx("242_water2ovl_hip_rep_rels_lig1_ex3_l085")); }
+TEST_CASE("MUTATE-243_water2_hip_rep_rels3_l050", "[ff][mutate][rels][hippo][repel]") { runFixture(fx("243_water2_hip_rep_rels3_l050")); }
+TEST_CASE("MUTATE-244_water2_hip_rep_rels_vdwm_l000", "[ff][mutate][rels][hippo][repel]") { runFixture(fx("244_water2_hip_rep_rels_vdwm_l000")); }
+TEST_CASE("MUTATE-245_water2_hip_rep_rels_vdwm_l100", "[ff][mutate][rels][hippo][repel]") { runFixture(fx("245_water2_hip_rep_rels_vdwm_l100")); }
+TEST_CASE("MUTATE-246_water2ovl_hip_rep_rels_vdwm_l030", "[ff][mutate][rels][hippo][repel]") { runFixture(fx("246_water2ovl_hip_rep_rels_vdwm_l030")); }
+// HIPPO Ewald dispersion on the staged relative legs, whose reciprocal space
+// carries the environment and the two ligands as separate densities: the van
+// der Waals leg, under annihilation, at both of its ends, and every HIPPO term
+// on the three leg schedule (test_mutate.f:test_mutate_dsprel).
+TEST_CASE("MUTATE-247_water2_hip_dsp_ewald_rels_vdwm_l040", "[ff][mutate][rels][hippo][disp]") { runFixture(fx("247_water2_hip_dsp_ewald_rels_vdwm_l040")); }
+TEST_CASE("MUTATE-248_water2_hip_dsp_ewald_rels_vdwm_annih_l040", "[ff][mutate][rels][hippo][disp]") { runFixture(fx("248_water2_hip_dsp_ewald_rels_vdwm_annih_l040")); }
+TEST_CASE("MUTATE-249_water2_hip_dsp_ewald_rels_vdwm_l000", "[ff][mutate][rels][hippo][disp]") { runFixture(fx("249_water2_hip_dsp_ewald_rels_vdwm_l000")); }
+TEST_CASE("MUTATE-250_water2_hip_dsp_ewald_rels_vdwm_l100", "[ff][mutate][rels][hippo][disp]") { runFixture(fx("250_water2_hip_dsp_ewald_rels_vdwm_l100")); }
+TEST_CASE("MUTATE-251_water2_hip_full_rels3_l050", "[ff][mutate][rels][hippo][disp]") { runFixture(fx("251_water2_hip_full_rels3_l050")); }
+// HIPPO damped dispersion without Ewald summation on the van der Waals leg with
+// the two ligands at the same site, whose pairs must never interact
+// (test_mutate.f:test_mutate_dsprelne).
+TEST_CASE("MUTATE-278_water2ovl_hip_dsp_rels_vdwm_l030", "[ff][mutate][rels][hippo][disp]") { runFixture(fx("278_water2ovl_hip_dsp_rels_vdwm_l030")); }
+TEST_CASE("MUTATE-281_water2_hip_dsp_ewald_annih_all_l00", "[ff][mutate][hippo][disp]") { runFixture(fx("281_water2_hip_dsp_ewald_annih_all_l00")); }
+// The soft core Lennard-Jones and partial charges of the fixed charge force
+// fields with their lambda derivatives: a TIP3P box under AMBER whose two
+// ligand waters sit at the same site, on the charge and van der Waals legs and
+// at their ends, where a dead ligand must be skipped and not give zero times an
+// infinite distance; the Trp-cage under CHARMM19 at both ends of an absolute
+// decoupling; and a box of rigid TIP4P water, under Ewald and with cutoffs,
+// absolute and relative (test_mutate.f:test_mutate_fixchg, test_mutate_tip4).
+TEST_CASE("MUTATE-252_tip3ovl_amber_rels_lig1_l050", "[ff][mutate][overlap][rels][charge][lj]") { runFixture(fx("252_tip3ovl_amber_rels_lig1_l050")); }
+TEST_CASE("MUTATE-253_tip3ovl_amber_rels_vdwm_l040", "[ff][mutate][overlap][rels][charge][lj]") { runFixture(fx("253_tip3ovl_amber_rels_vdwm_l040")); }
+TEST_CASE("MUTATE-254_tip3ovl_amber_rels_lig1_l000", "[ff][mutate][overlap][rels][charge][lj]") { runFixture(fx("254_tip3ovl_amber_rels_lig1_l000")); }
+TEST_CASE("MUTATE-255_tip3ovl_amber_rels_vdwm_l100", "[ff][mutate][overlap][rels][charge][lj]") { runFixture(fx("255_tip3ovl_amber_rels_vdwm_l100")); }
+TEST_CASE("MUTATE-256_trp_charmm_both_l000", "[ff][mutate][charge][lj]") { runFixture(fx("256_trp_charmm_both_l000")); }
+TEST_CASE("MUTATE-257_trp_charmm_both_l100", "[ff][mutate][charge][lj]") { runFixture(fx("257_trp_charmm_both_l100")); }
+TEST_CASE("MUTATE-258_tip4_ew_both_l050", "[ff][mutate][charge][lj]") { runFixture(fx("258_tip4_ew_both_l050")); }
+TEST_CASE("MUTATE-259_tip4_ew_both_annih_l030", "[ff][mutate][charge][lj]") { runFixture(fx("259_tip4_ew_both_annih_l030")); }
+TEST_CASE("MUTATE-260_tip4_ew_chg_l040", "[ff][mutate][charge]") { runFixture(fx("260_tip4_ew_chg_l040")); }
+TEST_CASE("MUTATE-261_tip4_ew_lj_l060", "[ff][mutate][lj]") { runFixture(fx("261_tip4_ew_lj_l060")); }
+TEST_CASE("MUTATE-262_tip4_ew_both_l000", "[ff][mutate][charge][lj]") { runFixture(fx("262_tip4_ew_both_l000")); }
+TEST_CASE("MUTATE-263_tip4_ew_both_l100", "[ff][mutate][charge][lj]") { runFixture(fx("263_tip4_ew_both_l100")); }
+TEST_CASE("MUTATE-264_tip4_cut_both_l050", "[ff][mutate][charge][lj]") { runFixture(fx("264_tip4_cut_both_l050")); }
+TEST_CASE("MUTATE-265_tip4_cut_both_annih_l030", "[ff][mutate][charge][lj]") { runFixture(fx("265_tip4_cut_both_annih_l030")); }
+TEST_CASE("MUTATE-266_tip4_cut_chg_l040", "[ff][mutate][charge]") { runFixture(fx("266_tip4_cut_chg_l040")); }
+TEST_CASE("MUTATE-267_tip4_cut_lj_soft_l060", "[ff][mutate][lj]") { runFixture(fx("267_tip4_cut_lj_soft_l060")); }
+TEST_CASE("MUTATE-268_tip4_cut_both_l000", "[ff][mutate][charge][lj]") { runFixture(fx("268_tip4_cut_both_l000")); }
+TEST_CASE("MUTATE-269_tip4_cut_both_l100", "[ff][mutate][charge][lj]") { runFixture(fx("269_tip4_cut_both_l100")); }
+TEST_CASE("MUTATE-270_tip4_ew_rels_lig1_l050", "[ff][mutate][rels][charge][lj]") { runFixture(fx("270_tip4_ew_rels_lig1_l050")); }
+TEST_CASE("MUTATE-271_tip4_ew_rels_lig2_l040", "[ff][mutate][rels][charge][lj]") { runFixture(fx("271_tip4_ew_rels_lig2_l040")); }
+TEST_CASE("MUTATE-272_tip4_ew_rels_vdwm_l040", "[ff][mutate][rels][charge][lj]") { runFixture(fx("272_tip4_ew_rels_vdwm_l040")); }
+TEST_CASE("MUTATE-273_tip4_ew_rels3_l015", "[ff][mutate][rels][charge][lj]") { runFixture(fx("273_tip4_ew_rels3_l015")); }
+TEST_CASE("MUTATE-274_tip4_cut_rels3_l085", "[ff][mutate][rels][charge][lj]") { runFixture(fx("274_tip4_cut_rels3_l085")); }
+TEST_CASE("MUTATE-275_tip4_cut_rels_vdwm_l060", "[ff][mutate][rels][charge][lj]") { runFixture(fx("275_tip4_cut_rels_vdwm_l060")); }
+TEST_CASE("MUTATE-276_tip4ovl_ew_rels_lig1_l050", "[ff][mutate][overlap][rels][charge][lj]") { runFixture(fx("276_tip4ovl_ew_rels_lig1_l050")); }
+TEST_CASE("MUTATE-277_tip4ovl_cut_rels_vdwm_l100", "[ff][mutate][overlap][rels][charge][lj]") { runFixture(fx("277_tip4ovl_cut_rels_vdwm_l100")); }
+TEST_CASE("MUTATE-279_tip3ovl_amber_m00v05", "[ff][mutate][overlap][charge][lj]") { runFixture(fx("279_tip3ovl_amber_m00v05")); }
+TEST_CASE("MUTATE-280_tip3ovl_amber_m00p05_d1_l050", "[ff][mutate][overlap][charge][lj]") { runFixture(fx("280_tip3ovl_amber_m00p05_d1_l050")); }
 TEST_CASE("MUTATE-189_water_rels3_l100", "[ff][mutate][rels][relstg]") { runFixture(fx("189_water_rels3_l100")); }
 TEST_CASE("MUTATE-190_water_rels3_l085", "[ff][mutate][rels][relstg]") { runFixture(fx("190_water_rels3_l085")); }
 TEST_CASE("MUTATE-191_water_rels3_l070", "[ff][mutate][rels][relstg]") { runFixture(fx("191_water_rels3_l070")); }
@@ -1778,6 +1941,48 @@ TEST_CASE("MUTATE-DYN-236_wat2ovl_hip_m00p00", "[ff][mutate][dyn][overlap]") { r
 TEST_CASE("MUTATE-DYN-237_wat2ovl_hip_m00_d2_l00", "[ff][mutate][dyn][overlap]") { runFixture(fx("237_wat2ovl_hip_m00_d2_l00"), Fuse::Auto); }
 TEST_CASE("MUTATE-DYN-238_water2ovl_ap_m00p00", "[ff][mutate][dyn][overlap]") { runFixture(fx("238_water2ovl_ap_m00p00"), Fuse::Auto); }
 TEST_CASE("MUTATE-DYN-239_water2ovl_hip_rels_lig1_ex3_l085", "[ff][mutate][dyn][overlap]") { runFixture(fx("239_water2ovl_hip_rels_lig1_ex3_l085"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-240_water2_hip_rep_rels_vdwm_l040", "[ff][mutate][dyn][rels]") { runFixture(fx("240_water2_hip_rep_rels_vdwm_l040"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-241_water2_hip_rep_rels_vdwm_annih_l030", "[ff][mutate][dyn][rels]") { runFixture(fx("241_water2_hip_rep_rels_vdwm_annih_l030"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-242_water2ovl_hip_rep_rels_lig1_ex3_l085", "[ff][mutate][dyn][rels]") { runFixture(fx("242_water2ovl_hip_rep_rels_lig1_ex3_l085"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-243_water2_hip_rep_rels3_l050", "[ff][mutate][dyn][rels]") { runFixture(fx("243_water2_hip_rep_rels3_l050"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-244_water2_hip_rep_rels_vdwm_l000", "[ff][mutate][dyn][rels]") { runFixture(fx("244_water2_hip_rep_rels_vdwm_l000"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-245_water2_hip_rep_rels_vdwm_l100", "[ff][mutate][dyn][rels]") { runFixture(fx("245_water2_hip_rep_rels_vdwm_l100"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-246_water2ovl_hip_rep_rels_vdwm_l030", "[ff][mutate][dyn][rels]") { runFixture(fx("246_water2ovl_hip_rep_rels_vdwm_l030"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-247_water2_hip_dsp_ewald_rels_vdwm_l040", "[ff][mutate][dyn][rels]") { runFixture(fx("247_water2_hip_dsp_ewald_rels_vdwm_l040"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-248_water2_hip_dsp_ewald_rels_vdwm_annih_l040", "[ff][mutate][dyn][rels]") { runFixture(fx("248_water2_hip_dsp_ewald_rels_vdwm_annih_l040"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-249_water2_hip_dsp_ewald_rels_vdwm_l000", "[ff][mutate][dyn][rels]") { runFixture(fx("249_water2_hip_dsp_ewald_rels_vdwm_l000"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-250_water2_hip_dsp_ewald_rels_vdwm_l100", "[ff][mutate][dyn][rels]") { runFixture(fx("250_water2_hip_dsp_ewald_rels_vdwm_l100"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-251_water2_hip_full_rels3_l050", "[ff][mutate][dyn][rels]") { runFixture(fx("251_water2_hip_full_rels3_l050"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-278_water2ovl_hip_dsp_rels_vdwm_l030", "[ff][mutate][dyn][rels]") { runFixture(fx("278_water2ovl_hip_dsp_rels_vdwm_l030"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-281_water2_hip_dsp_ewald_annih_all_l00", "[ff][mutate][dyn][hippo]") { runFixture(fx("281_water2_hip_dsp_ewald_annih_all_l00"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-252_tip3ovl_amber_rels_lig1_l050", "[ff][mutate][dyn][overlap][rels][charge][lj]") { runFixture(fx("252_tip3ovl_amber_rels_lig1_l050"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-253_tip3ovl_amber_rels_vdwm_l040", "[ff][mutate][dyn][overlap][rels][charge][lj]") { runFixture(fx("253_tip3ovl_amber_rels_vdwm_l040"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-254_tip3ovl_amber_rels_lig1_l000", "[ff][mutate][dyn][overlap][rels][charge][lj]") { runFixture(fx("254_tip3ovl_amber_rels_lig1_l000"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-255_tip3ovl_amber_rels_vdwm_l100", "[ff][mutate][dyn][overlap][rels][charge][lj]") { runFixture(fx("255_tip3ovl_amber_rels_vdwm_l100"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-256_trp_charmm_both_l000", "[ff][mutate][dyn][charge][lj]") { runFixture(fx("256_trp_charmm_both_l000"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-257_trp_charmm_both_l100", "[ff][mutate][dyn][charge][lj]") { runFixture(fx("257_trp_charmm_both_l100"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-258_tip4_ew_both_l050", "[ff][mutate][dyn][charge][lj]") { runFixture(fx("258_tip4_ew_both_l050"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-259_tip4_ew_both_annih_l030", "[ff][mutate][dyn][charge][lj]") { runFixture(fx("259_tip4_ew_both_annih_l030"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-260_tip4_ew_chg_l040", "[ff][mutate][dyn][charge]") { runFixture(fx("260_tip4_ew_chg_l040"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-261_tip4_ew_lj_l060", "[ff][mutate][dyn][lj]") { runFixture(fx("261_tip4_ew_lj_l060"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-262_tip4_ew_both_l000", "[ff][mutate][dyn][charge][lj]") { runFixture(fx("262_tip4_ew_both_l000"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-263_tip4_ew_both_l100", "[ff][mutate][dyn][charge][lj]") { runFixture(fx("263_tip4_ew_both_l100"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-264_tip4_cut_both_l050", "[ff][mutate][dyn][charge][lj]") { runFixture(fx("264_tip4_cut_both_l050"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-265_tip4_cut_both_annih_l030", "[ff][mutate][dyn][charge][lj]") { runFixture(fx("265_tip4_cut_both_annih_l030"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-266_tip4_cut_chg_l040", "[ff][mutate][dyn][charge]") { runFixture(fx("266_tip4_cut_chg_l040"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-267_tip4_cut_lj_soft_l060", "[ff][mutate][dyn][lj]") { runFixture(fx("267_tip4_cut_lj_soft_l060"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-268_tip4_cut_both_l000", "[ff][mutate][dyn][charge][lj]") { runFixture(fx("268_tip4_cut_both_l000"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-269_tip4_cut_both_l100", "[ff][mutate][dyn][charge][lj]") { runFixture(fx("269_tip4_cut_both_l100"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-270_tip4_ew_rels_lig1_l050", "[ff][mutate][dyn][rels][charge][lj]") { runFixture(fx("270_tip4_ew_rels_lig1_l050"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-271_tip4_ew_rels_lig2_l040", "[ff][mutate][dyn][rels][charge][lj]") { runFixture(fx("271_tip4_ew_rels_lig2_l040"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-272_tip4_ew_rels_vdwm_l040", "[ff][mutate][dyn][rels][charge][lj]") { runFixture(fx("272_tip4_ew_rels_vdwm_l040"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-273_tip4_ew_rels3_l015", "[ff][mutate][dyn][rels][charge][lj]") { runFixture(fx("273_tip4_ew_rels3_l015"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-274_tip4_cut_rels3_l085", "[ff][mutate][dyn][rels][charge][lj]") { runFixture(fx("274_tip4_cut_rels3_l085"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-275_tip4_cut_rels_vdwm_l060", "[ff][mutate][dyn][rels][charge][lj]") { runFixture(fx("275_tip4_cut_rels_vdwm_l060"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-276_tip4ovl_ew_rels_lig1_l050", "[ff][mutate][dyn][overlap][rels][charge][lj]") { runFixture(fx("276_tip4ovl_ew_rels_lig1_l050"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-277_tip4ovl_cut_rels_vdwm_l100", "[ff][mutate][dyn][overlap][rels][charge][lj]") { runFixture(fx("277_tip4ovl_cut_rels_vdwm_l100"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-279_tip3ovl_amber_m00v05", "[ff][mutate][dyn][overlap][charge][lj]") { runFixture(fx("279_tip3ovl_amber_m00v05"), Fuse::Auto); }
+TEST_CASE("MUTATE-DYN-280_tip3ovl_amber_m00p05_d1_l050", "[ff][mutate][dyn][overlap][charge][lj]") { runFixture(fx("280_tip3ovl_amber_m00p05_d1_l050"), Fuse::Auto); }
 TEST_CASE("MUTATE-DYN-189_water_rels3_l100", "[ff][mutate][dyn][relstg]") { runFixture(fx("189_water_rels3_l100"), Fuse::Auto); }
 TEST_CASE("MUTATE-DYN-190_water_rels3_l085", "[ff][mutate][dyn][relstg]") { runFixture(fx("190_water_rels3_l085"), Fuse::Auto); }
 TEST_CASE("MUTATE-DYN-191_water_rels3_l070", "[ff][mutate][dyn][relstg]") { runFixture(fx("191_water_rels3_l070"), Fuse::Auto); }
@@ -1822,6 +2027,29 @@ TEST_CASE("MUTATE-repsc", "[ff][mutate][repsc]")
    };
    for (const auto& c : cases)
       runRepscCase(c);
+}
+
+TEST_CASE("MUTATE-unsup-ljchg", "[ff][mutate][charge][lj]")
+{
+   const char* const pairs[][2] = {
+      {"mut_lj_deriv", "mut_lj_noderiv"},
+      {"mut_chg_deriv", "mut_chg_noderiv"},
+      {"mut_ljsoft_bad", "mut_lj_noderiv"},
+      {"mut_ljsoft_d2", "mut_lj_noderiv"},
+      {"mut_ljsoft_pw", "mut_lj_noderiv"},
+      {"mut_nolig_deriv", "mut_nolig_noderiv"},
+   };
+   // the lambda and plain kernel versions, up to 5e-5 apart in mixed
+   // precision on the Trp-cage energy of 700 kcal/mol, and equal in double
+   const double eps = testGetEps(2.0e-4, 1.0e-8);
+   for (bool analyz : {true, false}) {
+      for (const auto& p : pairs) {
+         const double e = ljchgEnergy(p[0], analyz);
+         const double eref = ljchgEnergy(p[1], analyz);
+         CAPTURE(e, eref);
+         REQUIRE(std::fabs(e - eref) < eps);
+      }
+   }
 }
 
 TEST_CASE("MUTATE-vsoft", "[ff][mutate][scexp]")

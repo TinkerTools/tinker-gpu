@@ -12,8 +12,6 @@
 #include <tinker/detail/mplpot.hh>
 
 namespace tinker {
-static LmdaBuffer em_dl;
-
 void empoleChgpenData(RcOp op)
 {
    if (not use(Potent::MPOLE) and not use(Potent::CHGTRN))
@@ -34,7 +32,6 @@ void empoleChgpenData(RcOp op)
       demx = nullptr;
       demy = nullptr;
       demz = nullptr;
-      em_dl.manage(op, rc_flag, use_edlmda, edlmdaActive, &demdl_buf, &d2emdl2_buf, &demdl, &d2emdl2);
    }
 
    if (op & RcOp::ALLOC) {
@@ -49,8 +46,6 @@ void empoleChgpenData(RcOp op)
          bufferAllocate(rc_flag, &nem);
          bufferAllocate(rc_flag, &em, &vir_em, &demx, &demy, &demz);
       }
-
-      em_dl.manage(op, rc_flag, use_edlmda, edlmdaActive, &demdl_buf, &d2emdl2_buf, &demdl, &d2emdl2);
    }
 
    if (op & RcOp::INIT) {}
@@ -125,7 +120,7 @@ void empoleChgpen(int vers)
       if (do_g)
          darray::zero(g::q0, n, demx, demy, demz);
    }
-   em_dl.zero(vers);
+   lmdaChannel(LmdaTerm::ELEC).zero(vers);
    const int dlvers = use_emast ? lmdaDerivVers(vers, edlmdaActive()) : vers;
 
    // The polarization state at plam and free energy perturbation both move
@@ -191,7 +186,7 @@ void empoleChgpen(int vers)
       if (do_g)
          sumGradient(gx_elec, gy_elec, gz_elec, demx, demy, demz);
    }
-   em_dl.flush(vers);
+   lmdaChannel(LmdaTerm::ELEC).flush(vers);
 }
 }
 

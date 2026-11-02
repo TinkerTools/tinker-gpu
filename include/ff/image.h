@@ -82,6 +82,13 @@ public:
       img(xr, yr, zr, l1, l2, l3, ra, rb, rc);
       return xr * xr + yr * yr + zr * zr;
    }
+
+   /// The same, called with the box shape as #PbcGeneral is.
+   SEQ_ROUTINE
+   static real img2(real& restrict xr, real& restrict yr, real& restrict zr, BoxShape, real3 l1, real3 l2, real3 l3, real3 ra, real3 rb, real3 rc)
+   {
+      return img2(xr, yr, zr, l1, l2, l3, ra, rb, rc);
+   }
 };
 
 class PbcMono
@@ -133,6 +140,13 @@ public:
       img(xr, yr, zr, l1, l2, l3, ra, rb, rc);
       return xr * xr + yr * yr + zr * zr;
    }
+
+   /// The same, called with the box shape as #PbcGeneral is.
+   SEQ_ROUTINE
+   static real img2(real& restrict xr, real& restrict yr, real& restrict zr, BoxShape, real3 l1, real3 l2, real3 l3, real3 ra, real3 rb, real3 rc)
+   {
+      return img2(xr, yr, zr, l1, l2, l3, ra, rb, rc);
+   }
 };
 
 class PbcUnbound
@@ -183,6 +197,34 @@ inline real imagen2General(real& xr, real& yr, real& zr, BoxShape sh, real3 l1, 
       // UNBOND_BOX
    }
    return xr * xr + yr * yr + zr * zr;
+}
+
+/// Images in the box shape passed at run time, for the shapes that keep no
+/// copy of their own of a kernel.
+class PbcGeneral
+{
+public:
+   SEQ_ROUTINE
+   static real img2(real& restrict xr, real& restrict yr, real& restrict zr, BoxShape sh, real3 l1, real3 l2, real3 l3, real3 ra, real3 rb, real3 rc)
+   {
+      return image2General(xr, yr, zr, sh, l1, l2, l3, ra, rb, rc);
+   }
+};
+
+/// Calls \c f with an object of the class that images in box shape \c sh,
+/// for a kernel that takes the class as a template parameter (IMAGE_TEMPLATE
+/// in ck3.py): `boxShapeDispatch(box_shape, [&](auto img) { using IMG =
+/// decltype(img); ... });`. Only the orthogonal box and the truncated
+/// octahedron keep a copy of their own; the other shapes share #PbcGeneral.
+template <class F>
+void boxShapeDispatch(BoxShape sh, F&& f)
+{
+   if (sh == BoxShape::ORTHO)
+      f(PbcOrtho());
+   else if (sh == BoxShape::OCT)
+      f(PbcOct());
+   else
+      f(PbcGeneral());
 }
 }
 }

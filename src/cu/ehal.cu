@@ -7,6 +7,7 @@
 #include "seq/add.h"
 #include "seq/launch.h"
 #include "seq/pair_hal.h"
+#include "seq/pair_vlambda.h"
 #include "seq/triangle.h"
 #include <cmath>
 
@@ -111,7 +112,7 @@ static void ehal_cu3()
 {
    constexpr bool do_g = Ver::g;
    constexpr bool do_gdl = Ver::g_dlmda;
-   constexpr bool dodl = Ver::value & calc::dlmda;
+   constexpr bool dodl = lmdaDodl(Ver::value);
 
    const auto& st = *vspatial_v2_unit;
    const real cut = switchCut(Switch::VDW);
@@ -121,8 +122,7 @@ static void ehal_cu3()
    // the complement of vlambda.
    const int* grp = emGroup();
    // The soft core terms, taken here once instead of per pair.
-   const auto lp1 = softCoreLmda(vlam, scexp, scalphav, scexpm, scexpp, dvldlmda, d2vldlmda2, dodl);
-   const auto lp2 = softCoreLmda(1 - vlam, scexp, scalphav, scexpm, scexpp, -dvldlmda, -d2vldlmda2, dodl);
+   const SoftCoreLmda lp1 = halSoft(1, dodl), lp2 = halSoft(2, dodl);
 
    if CONSTEXPR (do_g) {
       darray::zero(g::q0, n, gxred, gyred, gzred);
@@ -131,11 +131,14 @@ static void ehal_cu3()
    }
 
    int ngrid = gpuGridSize(BLOCK_DIM);
-   auto ker1 = ehal_cu1<Ver>;
-   ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, devdl_buf, d2evdl2_buf, vir_ev,
-      dvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0, nvexclude_scaled,
-      vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, njvdw,
-      vcouple, radmin, epsilon, vexclude14, radmin4, epsilon4, jvdw, grp, lp1, lp2);
+   boxShapeDispatch(box_shape, [&](auto img) {
+      using IMG = decltype(img);
+      auto ker1 = ehal_cu1<Ver, IMG>;
+      ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, devdl_buf, d2evdl2_buf, vir_ev,
+         dvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0,
+         nvexclude_scaled, vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak,
+         st.lst, st.akc, njvdw, vdwMutclsTable(), radmin, epsilon, vexclude14, radmin4, epsilon4, jvdw, grp, lp1, lp2);
+   });
 
    if CONSTEXPR (do_g) {
       ehalResolveGradient(gxred, gyred, gzred, devx, devy, devz);

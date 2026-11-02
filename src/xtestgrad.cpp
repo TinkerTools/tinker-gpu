@@ -47,21 +47,25 @@ static FdTestOptions readOptions()
       defaultFiniteDifferenceStep(), "Ang");
 }
 
+void testgradNumericalAtom(int i, double eps, double* g)
+{
+   std::array<double*, 3> coord = {{&atoms::x[i], &atoms::y[i], &atoms::z[i]}};
+   for (int j = 0; j < 3; ++j) {
+      double old = *coord[j];
+      *coord[j] = old - 0.5 * eps;
+      energy_prec e0 = numericalEnergy();
+      *coord[j] = old + 0.5 * eps;
+      energy_prec e1 = numericalEnergy();
+      *coord[j] = old;
+      g[j] = (e1 - e0) / eps;
+   }
+}
+
 static void numericalGradient(std::vector<double>& g, double eps)
 {
    g.assign(3 * n, 0);
-   for (int i = 0; i < n; ++i) {
-      std::array<double*, 3> coord = {{&atoms::x[i], &atoms::y[i], &atoms::z[i]}};
-      for (int j = 0; j < 3; ++j) {
-         double old = *coord[j];
-         *coord[j] = old - 0.5 * eps;
-         energy_prec e0 = numericalEnergy();
-         *coord[j] = old + 0.5 * eps;
-         energy_prec e1 = numericalEnergy();
-         *coord[j] = old;
-         g[3 * i + j] = (e1 - e0) / eps;
-      }
-   }
+   for (int i = 0; i < n; ++i)
+      testgradNumericalAtom(i, eps, &g[3 * i]);
 
    syncXyzFromHost();
 }

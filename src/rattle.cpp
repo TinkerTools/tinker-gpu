@@ -619,12 +619,12 @@ void rattleWater4Vel(vel_prec* vxnew, vel_prec* vynew, vel_prec* vznew)
    TINKER_FCALL2(acc1, cu1, rattleWater4Vel, vxnew, vynew, vznew);
 }
 
-TINKER_FVOID2(acc1, cu1, rattleWater4Grad);
-void rattleWater4Grad()
+TINKER_FVOID2(acc1, cu1, rattleWater4Grad, grad_prec*, grad_prec*, grad_prec*);
+void rattleWater4Grad(grad_prec* g0x, grad_prec* g0y, grad_prec* g0z)
 {
    if (nratw4 <= 0)
       return;
-   TINKER_FCALL2(acc1, cu1, rattleWater4Grad);
+   TINKER_FCALL2(acc1, cu1, rattleWater4Grad, g0x, g0y, g0z);
 }
 }
 

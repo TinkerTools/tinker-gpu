@@ -5,23 +5,29 @@
 #include "ff/spatial.h"
 #include "ff/switch.h"
 #include "seq/bsplgen.h"
-#include "seq/dspsplit.h"
+#include "seq/dspslot.h"
 #include "seq/launch.h"
 #include "seq/pair_disp.h"
 #include "seq/triangle.h"
+#include "tool/error.h"
 
 namespace tinker {
-// DL is 0 without lambda derivatives, 1 for the first one alone, and 2 for
-// the second one, the potential lambda derivative "qdl" for the force and,
-// with DO_V, the virial lambda derivative as well (edisp1.f:edrecip1).
-template <bool DO_E, bool DO_V, int DL>
+// SLOTS: the half spectrum, k1 <= nfft1/2, of the nslot real grids of
+// gridDispSlots, nslot * stride reals from qgrid, whose transforms are
+// weighted pair by pair; each grid then holds the potential its sites feel,
+// weighted by the pair weights of its slot, or, if raw, for the lambda
+// derivative of the force, its own transform scaled by eterm alone; otherwise
+// the full spectrum of the plain grid. DL is 0 without lambda derivatives, 1 for the
+// first one alone, and 2 for the second one and, with DO_V, the virial one
+// (edisp1.f:edrecip1). The potentials are written only if pot, for a gradient.
+template <bool DO_E, bool DO_V, int DL, bool SLOTS>
 __global__
-static void pmeConvDisp_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[2], const real* restrict bsmod1,
-   const real* restrict bsmod2, const real* restrict bsmod3, real aewald, TINKER_IMAGE_PARAMS, real vbox,
-   EnergyBuffer restrict gpu_e, VirialBuffer restrict gpu_vir, EnergyBuffer restrict gpu_dl1,
-   EnergyBuffer restrict gpu_dl2, VirialBuffer restrict gpu_vdl, real (*restrict qdl)[2],
-   const real (*restrict qfwd)[2], bool split, real wel, real wll, real dwel, real dwll, real d2wel, real d2wll)
+static void pmeConvDisp_cu1(int nfft1, int nfft2, int nfft3, real* restrict qgrid, int stride,
+   const real* restrict bsmod1, const real* restrict bsmod2, const real* restrict bsmod3, DspFac fac,
+   TINKER_IMAGE_PARAMS, EnergyBuffer restrict gpu_e, VirialBuffer restrict gpu_vir, EnergyBuffer restrict gpu_dl1,
+   EnergyBuffer restrict gpu_dl2, VirialBuffer restrict gpu_vdl, DispSlots ds, bool raw, bool pot)
 {
+   static_assert(SLOTS or DL == 0, "");
    constexpr bool DO_DL1 = DL >= 1;
    constexpr bool DO_DL2 = DL >= 2;
    constexpr bool DO_VDL = DO_DL2 and DO_V;
@@ -57,131 +63,129 @@ static void pmeConvDisp_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgr
       dvtlzz = 0;
    }
 
-   int nff = nfft1 * nfft2;
-   int ntot = nfft1 * nfft2 * nfft3;
-   const real bfac = pi / aewald;
-   const real fac1 = 109.91438900847863181; // 2 Pi**3.5
-   const real fac2 = aewald * aewald * aewald;
-   const real fac3 = -2 * aewald * 9.86960440108935861883449; // Pi**2
-   const real denom0 = vbox * 1.07752273275099937;            // 6/Pi**1.5
+   const int nslot = SLOTS ? ds.nslot : 1;
+   const int nx = SLOTS ? nfft1 / 2 + 1 : nfft1;
+   const int nff = nx * nfft2;
+   const int ntot = nff * nfft3;
+
+   // The energy, virial and lambda derivatives of one wavevector from the
+   // structure factors of the pair weights.
+   auto accumulate = [&](const DspWave& w, real struc2, real strucd, real strucd2) {
+      const real eterm = w.eterm, h1 = w.h1, h2 = w.h2, h3 = w.h3, vx = w.vx, vr = w.vr;
+      if (w.n != 1) {
+         struc2 *= w.n;
+         strucd *= w.n;
+         strucd2 *= w.n;
+      }
+      if CONSTEXPR (DO_E or DO_V) {
+         real e = eterm * struc2;
+         if CONSTEXPR (DO_E) {
+            ectl += floatTo<ebuf_prec>(e);
+         }
+         if CONSTEXPR (DO_V) {
+            real vterm = 3 * vx * struc2 * vr;
+            real vxx = (h1 * h1 * vterm - e);
+            real vxy = h1 * h2 * vterm;
+            real vxz = h1 * h3 * vterm;
+            real vyy = (h2 * h2 * vterm - e);
+            real vyz = h2 * h3 * vterm;
+            real vzz = (h3 * h3 * vterm - e);
+            vctlxx += floatTo<vbuf_prec>(vxx);
+            vctlyx += floatTo<vbuf_prec>(vxy);
+            vctlzx += floatTo<vbuf_prec>(vxz);
+            vctlyy += floatTo<vbuf_prec>(vyy);
+            vctlzy += floatTo<vbuf_prec>(vyz);
+            vctlzz += floatTo<vbuf_prec>(vzz);
+         }
+      }
+      if CONSTEXPR (DO_DL1) {
+         real edl = eterm * strucd;
+         dl1tl += floatTo<ebuf_prec>(edl);
+         if CONSTEXPR (DO_DL2) {
+            dl2tl += floatTo<ebuf_prec>(eterm * strucd2);
+         }
+         if CONSTEXPR (DO_VDL) {
+            real vtermd = 3 * vx * strucd * vr;
+            dvtlxx += floatTo<vbuf_prec>(h1 * h1 * vtermd - edl);
+            dvtlyx += floatTo<vbuf_prec>(h1 * h2 * vtermd);
+            dvtlzx += floatTo<vbuf_prec>(h1 * h3 * vtermd);
+            dvtlyy += floatTo<vbuf_prec>(h2 * h2 * vtermd - edl);
+            dvtlzy += floatTo<vbuf_prec>(h2 * h3 * vtermd);
+            dvtlzz += floatTo<vbuf_prec>(h3 * h3 * vtermd - edl);
+         }
+      }
+   };
 
    int ithread = ITHREAD;
    for (int i = ithread; i < ntot; i += STRIDE) {
       if (i == 0) {
-         qgrid[0][0] = 0;
-         qgrid[0][1] = 0;
-         if CONSTEXPR (DO_DL2) {
-            qdl[0][0] = 0;
-            qdl[0][1] = 0;
+         if (pot) {
+            #pragma unroll
+            for (int s = 0; s < 3; ++s) {
+               if (s < nslot) {
+                  qgrid[s * stride] = 0;
+                  qgrid[s * stride + 1] = 0;
+               }
+            }
          }
          continue;
       }
 
       int k3 = i / nff;
       int j = i - k3 * nff;
-      int k2 = j / nfft1;
-      int k1 = j - k2 * nfft1;
+      int k2 = j / nx;
+      int k1 = j - k2 * nx;
 
-      int r1 = (k1 < (nfft1 + 1) / 2) ? k1 : (k1 - nfft1);
-      int r2 = (k2 < (nfft2 + 1) / 2) ? k2 : (k2 - nfft2);
-      int r3 = (k3 < (nfft3 + 1) / 2) ? k3 : (k3 - nfft3);
-
-      real h1 = recipa.x * r1 + recipb.x * r2 + recipc.x * r3;
-      real h2 = recipa.y * r1 + recipb.y * r2 + recipc.y * r3;
-      real h3 = recipa.z * r1 + recipb.z * r2 + recipc.z * r3;
-      real hsq = h1 * h1 + h2 * h2 + h3 * h3;
-
-      // With the ligand in the imaginary part, the environment and ligand
-      // transforms at k come from the packed one at k and -k (edisp.f:dspsplit).
-      real gridx = 0, gridy = 0;
-      DspGridK sk = {};
-      if (split) {
-         sk = dspGridK(qfwd, i, k1, k2, k3, nfft1, nfft2, nfft3);
-      } else {
-         gridx = qgrid[i][0];
-         gridy = qgrid[i][1];
-      }
-      real h = REAL_SQRT(hsq);
-      real b = h * bfac;
-      real hhh = h * hsq;
-      real term = -hsq * bfac * bfac;
-      real eterm = 0;
-      if (term > -50) {
-         real expterm = REAL_EXP(term);
-         real erfcterm = REAL_ERFC(b);
-         if (box_shape == BoxShape::UNBOUND) {
-            real coef = (1 - REAL_COS(pi * lvec1.x * REAL_SQRT(hsq)));
-            expterm *= coef;
-            erfcterm *= coef;
-         } else if (box_shape == BoxShape::OCT) {
-            if ((k1 + k2 + k3) & 1) {
-               expterm = 0;
-               erfcterm = 0;
-            } // end if ((k1 + k2 + k3) % 2 != 0)
-         }
-         real denom = denom0 * bsmod1[k1] * bsmod2[k2] * bsmod3[k3];
-         eterm = (-fac1 * erfcterm * hhh - expterm * (fac2 + fac3 * hsq)) * REAL_RECIP(denom);
-
-         if CONSTEXPR (DO_E or DO_V) {
-            real struc2;
-            if (split)
-               struc2 = dspStruc(sk, 1, wel, wll);
-            else
-               struc2 = gridx * gridx + gridy * gridy;
-            real e = eterm * struc2;
-            if CONSTEXPR (DO_E) {
-               ectl += floatTo<ebuf_prec>(e);
-            }
-            if CONSTEXPR (DO_V) {
-               real vterm = 3 * (fac1 * erfcterm * h + fac3 * expterm) * struc2 * REAL_RECIP(denom);
-               real vxx = (h1 * h1 * vterm - e);
-               real vxy = h1 * h2 * vterm;
-               real vxz = h1 * h3 * vterm;
-               real vyy = (h2 * h2 * vterm - e);
-               real vyz = h2 * h3 * vterm;
-               real vzz = (h3 * h3 * vterm - e);
-               vctlxx += floatTo<vbuf_prec>(vxx);
-               vctlyx += floatTo<vbuf_prec>(vxy);
-               vctlzx += floatTo<vbuf_prec>(vxz);
-               vctlyy += floatTo<vbuf_prec>(vyy);
-               vctlzy += floatTo<vbuf_prec>(vyz);
-               vctlzz += floatTo<vbuf_prec>(vzz);
-            }
-         } // end if (e or v)
-
-         // the lambda derivatives of the energy and virial come from those of
-         // the pair weights, with the split always on
-         if CONSTEXPR (DO_DL1) {
-            real strucd = dspStruc(sk, 0, dwel, dwll);
-            real edl = eterm * strucd;
-            dl1tl += floatTo<ebuf_prec>(edl);
-            if CONSTEXPR (DO_DL2) {
-               real strucd2 = dspStruc(sk, 0, d2wel, d2wll);
-               dl2tl += floatTo<ebuf_prec>(eterm * strucd2);
-            }
-            if CONSTEXPR (DO_VDL) {
-               real vtermd = 3 * (fac1 * erfcterm * h + fac3 * expterm) * strucd * REAL_RECIP(denom);
-               dvtlxx += floatTo<vbuf_prec>(h1 * h1 * vtermd - edl);
-               dvtlyx += floatTo<vbuf_prec>(h1 * h2 * vtermd);
-               dvtlzx += floatTo<vbuf_prec>(h1 * h3 * vtermd);
-               dvtlyy += floatTo<vbuf_prec>(h2 * h2 * vtermd - edl);
-               dvtlzy += floatTo<vbuf_prec>(h2 * h3 * vtermd);
-               dvtlzz += floatTo<vbuf_prec>(h3 * h3 * vtermd - edl);
-            }
+      // the transform of each slot at this wavevector
+      real q[3][2];
+      #pragma unroll
+      for (int s = 0; s < 3; ++s) {
+         if (s < nslot) {
+            q[s][0] = qgrid[s * stride + 2 * i];
+            q[s][1] = qgrid[s * stride + 2 * i + 1];
          }
       }
 
-      // the potentials of the environment and of the ligand, packed the same way
-      if (split) {
-         dspPot(sk, eterm, 1, wel, wll, qgrid[i]);
+      DspWave w[2];
+      real eterm;
+      const int nw = dspWaves(SLOTS, k1, k2, k3, nfft1, nfft2, nfft3, recipa, recipb, recipc, box_shape, lvec1.x,
+         bsmod1, bsmod2, bsmod3, fac, w, eterm);
+      real struc2 = 0, strucd = 0, strucd2 = 0;
+      if CONSTEXPR (SLOTS) {
+         if CONSTEXPR (DO_E or DO_V)
+            struc2 = dspSlotStruc(nslot, q, ds.w);
+         if CONSTEXPR (DO_DL1)
+            strucd = dspSlotStruc(nslot, q, ds.dw);
+         if CONSTEXPR (DO_DL2)
+            strucd2 = dspSlotStruc(nslot, q, ds.d2w);
       } else {
-         qgrid[i][0] = eterm * gridx;
-         qgrid[i][1] = eterm * gridy;
+         struc2 = q[0][0] * q[0][0] + q[0][1] * q[0][1];
       }
+      // SLOTS: the half spectrum also stands for the partners of its points
+      // under conjugation (dspWaves)
+      accumulate(w[0], struc2, strucd, strucd2);
+      if (nw > 1)
+         accumulate(w[1], struc2, strucd, strucd2);
 
-      // and their lambda derivatives, packed with those of the pair weights
-      if CONSTEXPR (DO_DL2) {
-         dspPot(sk, eterm, 0, dwel, dwll, qdl[i]);
+      // the potential of each slot
+      #pragma unroll
+      for (int s = 0; s < 3; ++s) {
+         if (pot and s < nslot) {
+            real p0 = q[s][0], p1 = q[s][1];
+            if (SLOTS and not raw) {
+               p0 = 0;
+               p1 = 0;
+               #pragma unroll
+               for (int t = 0; t < 3; ++t) {
+                  if (t < nslot) {
+                     p0 += ds.w[s][t] * q[t][0];
+                     p1 += ds.w[s][t] * q[t][1];
+                  }
+               }
+            }
+            qgrid[s * stride + 2 * i] = eterm * p0;
+            qgrid[s * stride + 2 * i + 1] = eterm * p1;
+         }
       }
    }
 
@@ -202,47 +206,59 @@ static void pmeConvDisp_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgr
    }
 }
 
-template <bool DO_E, bool DO_V, int DL>
-static void pmeConvDisp_cu2(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_v, DispSplit ds)
+template <bool DO_E, bool DO_V, int DL, bool SLOTS>
+static void pmeConvDisp_cu2(EnergyBuffer gpu_e, VirialBuffer gpu_v, real* qgrid, int stride, const DispSlots& ds,
+   bool raw, bool pot)
 {
-   real(*qgrid)[2] = reinterpret_cast<real(*)[2]>(pme_u->qgrid);
-   real vbox = boxVolume();
-
-   auto ker = pmeConvDisp_cu1<DO_E, DO_V, DL>;
-   auto stream = g::s0;
+   PMEUnit u = dpme_unit;
+   auto ker = pmeConvDisp_cu1<DO_E, DO_V, DL, SLOTS>;
    int ngrid = gpuGridSize(BLOCK_DIM);
-   ker<<<ngrid, BLOCK_DIM, 0, stream>>>(pme_u->nfft1, pme_u->nfft2, pme_u->nfft3, qgrid, pme_u->bsmod1, pme_u->bsmod2,
-      pme_u->bsmod3, pme_u->aewald, TINKER_IMAGE_ARGS, vbox, gpu_e, gpu_v, devdl_buf, d2evdl2_buf, dvirdl_buf, ds.qdl,
-      ds.qfwd, ds.split, ds.wel, ds.wll, ds.dwel, ds.dwll, ds.d2wel, ds.d2wll);
+   ker<<<ngrid, BLOCK_DIM, 0, g::s0>>>(u->nfft1, u->nfft2, u->nfft3, qgrid, stride, u->bsmod1, u->bsmod2, u->bsmod3,
+      dspFac(u->aewald, boxVolume()), TINKER_IMAGE_ARGS, gpu_e, gpu_v, devdl_buf, d2evdl2_buf, dvirdl_buf, ds, raw,
+      pot);
 }
 
-void pmeConvDisp_cu(int vers, DispSplit ds)
+template <int DL, bool SLOTS>
+static void pmeConvDisp_cu3(int vers, real* qgrid, int stride, const DispSlots& ds)
 {
    bool do_e = vers & calc::energy;
    bool do_v = vers & calc::virial;
-   PMEUnit u = dpme_unit;
+   // the lambda derivative of the force reads the potential of every slot
+   bool raw = vers & calc::grad_dlmda;
+   // the potentials only feed the gradient
+   bool pot = vers & calc::grad;
+   if CONSTEXPR (DL > 0) {
+      // the lambda derivatives always come with the energy (lmdaDerivVers)
+      assert(do_e);
+      if (do_v)
+         pmeConvDisp_cu2<true, true, DL, SLOTS>(edsp, vir_edsp, qgrid, stride, ds, raw, pot);
+      else
+         pmeConvDisp_cu2<true, false, DL, SLOTS>(edsp, nullptr, qgrid, stride, ds, raw, pot);
+   } else if (do_e and do_v) {
+      pmeConvDisp_cu2<true, true, DL, SLOTS>(edsp, vir_edsp, qgrid, stride, ds, raw, pot);
+   } else if (do_e and not do_v) {
+      pmeConvDisp_cu2<true, false, DL, SLOTS>(edsp, nullptr, qgrid, stride, ds, raw, pot);
+   } else if (not do_e and do_v) {
+      pmeConvDisp_cu2<false, true, DL, SLOTS>(nullptr, vir_edsp, qgrid, stride, ds, raw, pot);
+   } else {
+      pmeConvDisp_cu2<false, false, DL, SLOTS>(nullptr, nullptr, qgrid, stride, ds, raw, pot);
+   }
+}
 
-   if (vers & calc::energy_dlmda2) {
-      // the second derivative always comes with the force one (lmdaDerivVers)
-      assert(ds.split and ds.qdl and (vers & calc::grad_dlmda));
-      if (do_v)
-         pmeConvDisp_cu2<true, true, 2>(u, edsp, vir_edsp, ds);
-      else
-         pmeConvDisp_cu2<true, false, 2>(u, edsp, nullptr, ds);
-   } else if (vers & calc::energy_dlmda1) {
-      assert(ds.split);
-      if (do_v)
-         pmeConvDisp_cu2<true, true, 1>(u, edsp, vir_edsp, ds);
-      else
-         pmeConvDisp_cu2<true, false, 1>(u, edsp, nullptr, ds);
-   } else if (do_e and do_v)
-      pmeConvDisp_cu2<true, true, 0>(u, edsp, vir_edsp, ds);
-   else if (do_e and not do_v)
-      pmeConvDisp_cu2<true, false, 0>(u, edsp, nullptr, ds);
-   else if (not do_e and do_v)
-      pmeConvDisp_cu2<false, true, 0>(u, nullptr, vir_edsp, ds);
-   else if (not do_e and not do_v)
-      pmeConvDisp_cu2<false, false, 0>(u, nullptr, nullptr, ds);
+void pmeConvDisp_cu(int vers)
+{
+   pmeConvDisp_cu3<0, false>(vers, dpme_unit->qgrid, 0, DispSlots{});
+}
+
+void pmeConvDispSlots_cu(int vers, DispSlots ds, real* grids, int stride)
+{
+   // the lambda derivatives always come with the energy (lmdaDerivVers)
+   if (vers & calc::energy_dlmda2)
+      pmeConvDisp_cu3<2, true>(vers, grids, stride, ds);
+   else if (vers & calc::energy_dlmda1)
+      pmeConvDisp_cu3<1, true>(vers, grids, stride, ds);
+   else
+      pmeConvDisp_cu3<0, true>(vers, grids, stride, ds);
 }
 }
 
@@ -250,7 +266,7 @@ namespace tinker {
 #include "edisp_cu1.cc"
 
 template <class Ver, class DTYP>
-static void edisp_cu(const DispSoft& ds)
+static void edisp_cu(const DispSoft& ds1, const DispSoft& ds2)
 {
    const auto& st = *dspspatial_v2_unit;
    real cut, off;
@@ -268,54 +284,75 @@ static void edisp_cu(const DispSoft& ds)
       aewald = pu->aewald;
    }
 
+   // only a relative calculation pays for the classes of the ligand groups,
+   // and only the tail of a hal vdW for its weight (Ewald alone)
+   constexpr bool can_hal = eq<DTYP, DEWALD>();
+   const bool hal = can_hal and useDHal();
+   const DispHal dh = dispHal();
    int ngrid = gpuGridSize(BLOCK_DIM);
-   edisp_cu1<Ver, DTYP><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, ndisp, edsp, devdl_buf, d2evdl2_buf,
-      vir_edsp, dvirdl_buf, dedspx, dedspy, dedspz, dfdlx, dfdly, dfdlz, cut, off, st.si1.bit0, ndspexclude,
-      dspexclude, dspexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, csix,
-      adisp, aewald, mut, vcouple, ds);
+   boxShapeDispatch(box_shape, [&](auto img) {
+      using IMG = decltype(img);
+      auto ker = use_rel ? edisp_cu1<Ver, IMG, DTYP, true, false> : edisp_cu1<Ver, IMG, DTYP, false, false>;
+      if (hal)
+         ker = use_rel ? edisp_cu1<Ver, IMG, DTYP, true, can_hal> : edisp_cu1<Ver, IMG, DTYP, false, can_hal>;
+      ker<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, ndisp, edsp, devdl_buf, d2evdl2_buf, vir_edsp,
+         dvirdl_buf, dedspx, dedspy, dedspz, dfdlx, dfdly, dfdlz, cut, off, st.si1.bit0, ndspexclude, dspexclude,
+         dspexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, st.akc, csix,
+         adisp, aewald, emGroup(), vdwMutclsTable(), vcouple, ds1, ds2, dh);
+   });
 }
 
 template <class DTYP>
-static void edisp_cu2(int vers, const DispSoft& ds)
+static void edisp_cu2(int vers, const DispSoft& ds1, const DispSoft& ds2)
 {
    if (vers == calc::v0)
-      edisp_cu<calc::V0, DTYP>(ds);
+      edisp_cu<calc::V0, DTYP>(ds1, ds2);
    else if (vers == calc::v1)
-      edisp_cu<calc::V1, DTYP>(ds);
+      edisp_cu<calc::V1, DTYP>(ds1, ds2);
    else if (vers == calc::v3)
-      edisp_cu<calc::V3, DTYP>(ds);
+      edisp_cu<calc::V3, DTYP>(ds1, ds2);
    else if (vers == calc::v4)
-      edisp_cu<calc::V4, DTYP>(ds);
+      edisp_cu<calc::V4, DTYP>(ds1, ds2);
    else if (vers == calc::v5)
-      edisp_cu<calc::V5, DTYP>(ds);
+      edisp_cu<calc::V5, DTYP>(ds1, ds2);
    else if (vers == calc::v6)
-      edisp_cu<calc::V6, DTYP>(ds);
+      edisp_cu<calc::V6, DTYP>(ds1, ds2);
    else if (vers == calc::v7)
-      edisp_cu<calc::V7, DTYP>(ds);
+      edisp_cu<calc::V7, DTYP>(ds1, ds2);
    else if (vers == calc::v8)
-      edisp_cu<calc::V8, DTYP>(ds);
+      edisp_cu<calc::V8, DTYP>(ds1, ds2);
    else if (vers == calc::v9)
-      edisp_cu<calc::V9, DTYP>(ds);
+      edisp_cu<calc::V9, DTYP>(ds1, ds2);
    else if (vers == calc::v10)
-      edisp_cu<calc::V10, DTYP>(ds);
+      edisp_cu<calc::V10, DTYP>(ds1, ds2);
 }
 
-void edispEwaldReal_cu(int vers, DispSoft ds)
+void edispEwaldReal_cu(int vers, DispSoft ds1, DispSoft ds2)
 {
-   edisp_cu2<DEWALD>(vers, ds);
+   edisp_cu2<DEWALD>(vers, ds1, ds2);
 }
 
-template <class Ver, int bsorder>
+// The self energy and the reciprocal space gradient of each site. SLOTS: a
+// site reads the potential of its own slot, whose grid starts offset[i] reals
+// into qgrid in the padded layout of gridDispSlots, or, for the lambda
+// derivative of the force, the potentials of all nslot slots, stride reals
+// apart, weighted by the row of its own slot and by its lambda derivatives
+// (edisp1.f:edrecip1).
+template <class Ver, int bsorder, bool SLOTS>
 __global__
 void edisp_cu3(CountBuffer restrict ndisp, EnergyBuffer restrict edsp, const real* restrict csix, real aewald, int n,
    int nfft1, int nfft2, int nfft3, const real* restrict x, const real* restrict y, const real* restrict z,
-   const real* restrict qgrid, real3 reca, real3 recb, real3 recc, grad_prec* restrict gx, grad_prec* restrict gy,
-   grad_prec* restrict gz, bool split, const int* restrict part, real wll)
+   const real* restrict qgrid, int stride, real3 reca, real3 recb, real3 recc, grad_prec* restrict gx,
+   grad_prec* restrict gy, grad_prec* restrict gz, grad_prec* restrict dlx, grad_prec* restrict dly,
+   grad_prec* restrict dlz, const int* restrict offset, DispSlots ds)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;
    constexpr bool do_g = Ver::g;
+   constexpr bool do_gdl = SLOTS and Ver::g_dlmda;
    const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
+   const int nslot = SLOTS ? ds.nslot : 1;
+   const int ldx = SLOTS ? 2 * (nfft1 / 2 + 1) : nfft1;
 
    real thetai1[4 * 5];
    real thetai2[4 * 5];
@@ -327,8 +364,29 @@ void edisp_cu3(CountBuffer restrict ndisp, EnergyBuffer restrict edsp, const rea
       real icsix = csix[ii];
       if (icsix == 0)
          continue;
-      // a site of the mutated ligand reads its own part of the grid
-      int ip = (split and part[ii]) ? 1 : 0;
+      // the slot of the site, where its potential starts, and its pair weights
+      int off = 0;
+      real wr[3] = {1, 0, 0}, dr[3] = {0, 0, 0};
+      real wself = 1;
+      if CONSTEXPR (SLOTS) {
+         off = offset[ii];
+         if (off < 0) {
+            // a site of a dead group has no slot, but its self term of weight
+            // zero is counted (edisp.f:dspself)
+            if CONSTEXPR (do_e and do_a)
+               atomic_add(1, ndisp, ithread);
+            continue;
+         }
+         int si = off / stride;
+         #pragma unroll
+         for (int t = 0; t < 3; ++t) {
+            wr[t] = dspSlotWeight(ds.w, si, t);
+            if CONSTEXPR (do_gdl)
+               dr[t] = dspSlotWeight(ds.dw, si, t);
+         }
+         // from the registers of the slot's row
+         wself = si == 0 ? wr[0] : (si == 1 ? wr[1] : wr[2]);
+      }
 
       // self energy
       if CONSTEXPR (do_e) {
@@ -336,8 +394,8 @@ void edisp_cu3(CountBuffer restrict ndisp, EnergyBuffer restrict edsp, const rea
          fs *= fs * fs;
          fs /= 12;
          real e = fs * icsix * icsix;
-         if (ip)
-            e *= wll;
+         if CONSTEXPR (SLOTS)
+            e *= wself;
          atomic_add(e, edsp, ithread);
          if CONSTEXPR (do_a) {
             atomic_add(1, ndisp, ithread);
@@ -381,16 +439,17 @@ void edisp_cu3(CountBuffer restrict ndisp, EnergyBuffer restrict edsp, const rea
 
          real fi = csix[ii];
          real de1 = 0, de2 = 0, de3 = 0;
+         real dl1 = 0, dl2 = 0, dl3 = 0;
          for (int iz = 0; iz < bsorder; ++iz) {
             int zbase = igrid3 + iz;
             zbase -= (zbase >= nfft3 ? nfft3 : 0);
-            zbase *= (nfft1 * nfft2);
+            zbase *= (ldx * nfft2);
             real t3 = thetai3[4 * iz];
             real dt3 = nfft3 * thetai3[1 + 4 * iz];
             for (int iy = 0; iy < bsorder; ++iy) {
                int ybase = igrid2 + iy;
                ybase -= (ybase >= nfft2 ? nfft2 : 0);
-               ybase *= nfft1;
+               ybase *= ldx;
                real t2 = thetai2[4 * iy];
                real dt2 = nfft2 * thetai2[1 + 4 * iy];
                for (int ix = 0; ix < bsorder; ++ix) {
@@ -399,10 +458,30 @@ void edisp_cu3(CountBuffer restrict ndisp, EnergyBuffer restrict edsp, const rea
                   int index = xbase + ybase + zbase;
                   real t1 = thetai1[4 * ix];
                   real dt1 = nfft1 * thetai1[1 + 4 * ix];
-                  real term = qgrid[2 * index + ip];
+                  real term, dlterm = 0;
+                  if CONSTEXPR (do_gdl) {
+                     term = 0;
+                     #pragma unroll
+                     for (int t = 0; t < 3; ++t) {
+                        if (t < nslot) {
+                           real phi = qgrid[t * stride + index];
+                           term += wr[t] * phi;
+                           dlterm += dr[t] * phi;
+                        }
+                     }
+                  } else if CONSTEXPR (SLOTS) {
+                     term = qgrid[off + index];
+                  } else {
+                     term = qgrid[2 * index];
+                  }
                   de1 += 2 * term * dt1 * t2 * t3;
                   de2 += 2 * term * dt2 * t1 * t3;
                   de3 += 2 * term * dt3 * t1 * t2;
+                  if CONSTEXPR (do_gdl) {
+                     dl1 += 2 * dlterm * dt1 * t2 * t3;
+                     dl2 += 2 * dlterm * dt2 * t1 * t3;
+                     dl3 += 2 * dlterm * dt3 * t1 * t2;
+                  }
                }
             }
          } // end for (iz)
@@ -413,51 +492,71 @@ void edisp_cu3(CountBuffer restrict ndisp, EnergyBuffer restrict edsp, const rea
          atomic_add(frcx, gx, ii);
          atomic_add(frcy, gy, ii);
          atomic_add(frcz, gz, ii);
+         if CONSTEXPR (do_gdl) {
+            atomic_add(fi * (reca.x * dl1 + recb.x * dl2 + recc.x * dl3), dlx, ii);
+            atomic_add(fi * (reca.y * dl1 + recb.y * dl2 + recc.y * dl3), dly, ii);
+            atomic_add(fi * (reca.z * dl1 + recb.z * dl2 + recc.z * dl3), dlz, ii);
+         }
       }
    }
 }
 
-template <class Ver>
-static void edisp_cu4(DispSplit ds, grad_prec* gx, grad_prec* gy, grad_prec* gz)
+template <class Ver, bool SLOTS>
+static void edisp_cu4(const real* qgrid, int stride, const int* offset, const DispSlots& ds)
 {
    const auto& st = *dpme_unit;
-   real aewald = st.aewald;
-   int nfft1 = st.nfft1;
-   int nfft2 = st.nfft2;
-   int nfft3 = st.nfft3;
-
    assert(st.bsorder == 4);
-   auto ker = edisp_cu3<Ver, 4>;
+   auto ker = edisp_cu3<Ver, 4, SLOTS>;
+   // The four points of a stencil row share a sector, which the default
+   // carveout, sized for the shared memory of every resident block, leaves
+   // about 28 KB of L1 to hold; on a 100k-atom HIPPO box the kernel ran 1.7
+   // times as long that way. Set at every launch, since a device reset clears it.
+   check_rt(cudaFuncSetAttribute(ker, cudaFuncAttributePreferredSharedMemoryCarveout, 50));
    launch_k2b(g::s0, PME_BLOCKDIM, n, ker, //
-      ndisp, edsp, csix, aewald, n, nfft1, nfft2, nfft3, x, y, z, st.qgrid, recipa, recipb, recipc, gx, gy, gz,
-      ds.split, ds.part, ds.wll);
+      ndisp, edsp, csix, st.aewald, n, st.nfft1, st.nfft2, st.nfft3, x, y, z, qgrid, stride, recipa, recipb, recipc,
+      dedspx, dedspy, dedspz, dfdlx, dfdly, dfdlz, offset, ds);
 }
 
-void edispEwaldRecipSelf_cu(int vers, DispSplit ds)
+template <bool SLOTS>
+static void edisp_cu5(int vers, const real* qgrid, int stride, const int* offset, const DispSlots& ds)
 {
+   // the lambda derivatives of the self energy are added on the host, and the
+   // gather reads no virial flag, so V9 takes the kernel of V10
+   if CONSTEXPR (SLOTS) {
+      if (vers & calc::grad_dlmda) {
+         edisp_cu4<calc::V10, SLOTS>(qgrid, stride, offset, ds);
+         return;
+      }
+   } else {
+      assert(not(vers & calc::grad_dlmda));
+   }
+   vers &= ~calc::dlmda;
    if (vers == calc::v0)
-      edisp_cu4<calc::V0>(ds, dedspx, dedspy, dedspz);
+      edisp_cu4<calc::V0, SLOTS>(qgrid, stride, offset, ds);
    else if (vers == calc::v1)
-      edisp_cu4<calc::V1>(ds, dedspx, dedspy, dedspz);
+      edisp_cu4<calc::V1, SLOTS>(qgrid, stride, offset, ds);
    else if (vers == calc::v3)
-      edisp_cu4<calc::V3>(ds, dedspx, dedspy, dedspz);
+      edisp_cu4<calc::V3, SLOTS>(qgrid, stride, offset, ds);
    else if (vers == calc::v4)
-      edisp_cu4<calc::V4>(ds, dedspx, dedspy, dedspz);
+      edisp_cu4<calc::V4, SLOTS>(qgrid, stride, offset, ds);
    else if (vers == calc::v5)
-      edisp_cu4<calc::V5>(ds, dedspx, dedspy, dedspz);
+      edisp_cu4<calc::V5, SLOTS>(qgrid, stride, offset, ds);
    else if (vers == calc::v6)
-      edisp_cu4<calc::V6>(ds, dedspx, dedspy, dedspz);
+      edisp_cu4<calc::V6, SLOTS>(qgrid, stride, offset, ds);
 }
 
-// The grid now holds the lambda derivative of the potential, whose gradient is
-// that of the force (edisp1.f:edrecip1).
-void edispEwaldRecipDlmda_cu(DispSplit ds)
+void edispEwaldRecipSelf_cu(int vers)
 {
-   edisp_cu4<calc::V5>(ds, dfdlx, dfdly, dfdlz);
+   edisp_cu5<false>(vers, dpme_unit->qgrid, 0, nullptr, DispSlots{});
 }
 
-void edispNonEwald_cu(int vers, DispSoft ds)
+void edispEwaldRecipSelfSlots_cu(int vers, DispSlots ds, const real* grids, int stride, const int* offset)
 {
-   edisp_cu2<NON_EWALD_TAPER>(vers, ds);
+   edisp_cu5<true>(vers, grids, stride, offset, ds);
+}
+
+void edispNonEwald_cu(int vers, DispSoft ds1, DispSoft ds2)
+{
+   edisp_cu2<NON_EWALD_TAPER>(vers, ds1, ds2);
 }
 }

@@ -17,8 +17,6 @@
 #include <tinker/detail/mplpot.hh>
 
 namespace tinker {
-static LmdaBuffer em_dl;
-
 void empoleData(RcOp op)
 {
    if (not use(Potent::MPOLE))
@@ -32,7 +30,6 @@ void empoleData(RcOp op)
       if (rc_a)
          bufferDeallocate(rc_flag, nem);
       em_buf.manage(op, rc_flag, {}, {}, false);
-      em_dl.manage(op, rc_flag, use_edlmda, edlmdaActive, &demdl_buf, &d2emdl2_buf, &demdl, &d2emdl2);
       nem = nullptr;
    }
 
@@ -41,8 +38,6 @@ void empoleData(RcOp op)
       em_buf.manage(op, rc_flag, {&em, &vir_em, &demx, &demy, &demz},
          {eng_buf_elec, vir_buf_elec, gx_elec, gy_elec, gz_elec}, rc_a, //
          {&energy_em, &virial_em}, {&energy_elec, &virial_elec});
-
-      em_dl.manage(op, rc_flag, use_edlmda, edlmdaActive, &demdl_buf, &d2emdl2_buf, &demdl, &d2emdl2);
 
       if (rc_a)
          bufferAllocate(rc_flag, &nem);
@@ -105,7 +100,7 @@ void empoleBegin(int vers)
 {
    zeroOnHost(energy_em, virial_em);
    empoleZeroWork(vers);
-   em_dl.zero(vers);
+   lmdaChannel(LmdaTerm::ELEC).zero(vers);
 }
 
 static void empoleKernel(int vers)
@@ -119,7 +114,7 @@ static void empoleKernel(int vers)
 void empoleFinish(int vers)
 {
    em_buf.flush(vers);
-   em_dl.flush(vers);
+   lmdaChannel(LmdaTerm::ELEC).flush(vers);
 }
 
 void empole(int vers)

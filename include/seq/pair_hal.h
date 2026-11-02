@@ -2,21 +2,22 @@
 #include "ff/dlmda.h"
 #include "math/libfunc.h"
 #include "math/switch.h"
+#include "seq/pair_vlambda.h"
 #include "seq/seq.h"
 
 namespace tinker {
 /**
  * \ingroup vdw
+ * \brief A tapered buffered 14-7 pair at the soft core \c lp (ehalsc.f),
+ * \f$ E = \epsilon L t_1 (t_2 - 2) \f$ with
+ * \f$ t_1 = (1+\delta)^7 / (h + (\rho+\delta)^7) \f$ and
+ * \f$ t_2 = (1+\gamma) / (h + \rho^7 + \gamma) \f$, the scale \f$ L \f$ being
+ * \c lp.p0 and the softening \f$ h \f$ \c lp.sc; with DL1, DL2 and DLDE, also
+ * its main lambda derivatives in \c dl for a pair that follows lambda
+ * (\c dlon), the caller having zeroed \c dl.
  */
-struct PairHalLambda
-{
-   real dedl;
-   real d2edl2;
-   real dlde;
-};
-
 #pragma acc routine seq
-template <bool DO_G, int SCALE, bool DO_DL1, bool DO_DL2, bool DO_DLDE>
+template <bool DO_G, int SCALE, bool DL1, bool DL2, bool DLDE>
 SEQ_CUDA
 void pair_hal(real r,
               real vscale,
@@ -29,7 +30,7 @@ void pair_hal(real r,
               real dhal,
               real& restrict e,
               real& restrict de,
-              PairHalLambda* dl,
+              PairVdwLambda* dl,
               bool dlon)
 {
    if CONSTEXPR (SCALE != 1)
@@ -61,40 +62,22 @@ void pair_hal(real r,
    // with the softening s as -t1 s1 and -t2 s2, so each main lambda derivative
    // combines T and its derivatives with respect to s through the coefficients
    // of the soft core (ehalsc.f:ehalsc4).
-   constexpr bool DO_DL = DO_DL1 or DO_DL2 or DO_DLDE;
-   if (DO_DL and dlon) {
+   constexpr bool DL = DL1 or DL2 or DLDE;
+   if (DL and dlon) {
       real tt = t1 * (t2 - 2);
       real ts = -t1 * s1 * (t2 - 2) - t1 * t2 * s2;
-      dl->dedl = eps0 * (lp.a1 * tt + lp.b1 * ts);
-
-      if CONSTEXPR (DO_DL2) {
-         real tss = 2 * t1 * s1 * s1 * (t2 - 2) + 2 * t1 * t2 * s1 * s2 + 2 * t1 * t2 * s2 * s2;
-         dl->d2edl2 = eps0 * (lp.a2 * tt + lp.b2 * ts + lp.c2 * tss);
-      }
-
-      if CONSTEXPR (DO_DLDE) {
+      real tss = 0, tr = 0, trs = 0;
+      if CONSTEXPR (DL2)
+         tss = 2 * t1 * s1 * s1 * (t2 - 2) + 2 * t1 * t2 * s1 * s2 + 2 * t1 * t2 * s2 * s2;
+      if CONSTEXPR (DLDE) {
          real dt1drho = -7 * rhod6 * t1 * s1;
          real dt2drho = -7 * rho6 * t2 * s2;
-         real tr = dt1drho * (t2 - 2) + t1 * dt2drho;
-         real trs = -dt1drho * (2 * s1 * (t2 - 2) + t2 * s2) - t1 * dt2drho * (s1 + 2 * s2);
-         dl->dlde = eps0 * (lp.a1 * tr + lp.b1 * trs) * invrv;
+         tr = dt1drho * (t2 - 2) + t1 * dt2drho;
+         trs = -dt1drho * (2 * s1 * (t2 - 2) + t2 * s2) - t1 * dt2drho * (s1 + 2 * s2);
       }
+      pair_softcore_dl<DL1, DL2, DLDE>(lp, eps0, tt, ts, tss, tr, trs, invrv, dl);
    }
-
-   if (r > evcut) {
-      real taper, dtaper;
-      switchTaper5<DO_G>(r, evcut, evoff, taper, dtaper);
-      if CONSTEXPR (DO_G) {
-         de = e * dtaper + de * taper;
-         if CONSTEXPR (DO_DLDE)
-            dl->dlde = dl->dedl * dtaper + dl->dlde * taper;
-      }
-      e *= taper;
-      if CONSTEXPR (DO_DL)
-         dl->dedl *= taper;
-      if CONSTEXPR (DO_DL2)
-         dl->d2edl2 *= taper;
-   }
+   pair_vdw_taper<DO_G, DL1, DL2, DLDE>(r, evcut, evoff, e, de, dl);
 }
 
 /**

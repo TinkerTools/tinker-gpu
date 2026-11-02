@@ -73,7 +73,8 @@ void dlmdaData2(RcOp op)
    }
 }
 
-Lmdamap lmdamapFrom(const char* s)
+// Parses a Fortran character*3 map selector into an Lmdamap value.
+static Lmdamap lmdamapFrom(const char* s)
 {
    // s is a Fortran character*3 buffer (no null terminator).
    if (std::strncmp(s, "EXP", 3) == 0)
@@ -85,7 +86,8 @@ Lmdamap lmdamapFrom(const char* s)
    return Lmdamap::QNT;
 }
 
-LmdaThMap lmdaThMapFrom(const char* s)
+// Parses a Fortran character*3 theta map selector into a LmdaThMap value.
+static LmdaThMap lmdaThMapFrom(const char* s)
 {
    // s is a Fortran character*3 buffer (no null terminator).
    if (std::strncmp(s, "SIN", 3) == 0)
@@ -93,7 +95,8 @@ LmdaThMap lmdaThMapFrom(const char* s)
    return LmdaThMap::TRI;
 }
 
-RelStage relStageFrom(const char* s)
+// Parses a Fortran character*4 leg selector into a RelStage value.
+static RelStage relStageFrom(const char* s)
 {
    // s is a Fortran character*4 buffer (no null terminator).
    if (std::strncmp(s, "LIG1", 4) == 0)
@@ -124,17 +127,26 @@ GrpScale grpScale(double lmda)
    return c;
 }
 
-// The derivatives of a sub-lambda while its lambda derivatives are active,
-// zero otherwise.
-static void activeChain(bool active, double dl, double d2l, double& outdl, double& outd2l)
+// A sub-lambda with its derivatives while its lambda derivatives are active,
+// zero derivatives otherwise.
+static LmdaFn activeChain(bool active, double lmda, double dl, double d2l)
 {
-   outdl = active ? dl : 0;
-   outd2l = active ? d2l : 0;
+   return {lmda, active ? dl : 0, active ? d2l : 0};
 }
 
-static void polarChain(double& dl, double& d2l)
+LmdaFn elecChain()
 {
-   activeChain(pdlmdaActive(), dpldlmda, d2pldlmda2, dl, d2l);
+   return activeChain(edlmdaActive(), elam, deldlmda, d2eldlmda2);
+}
+
+LmdaFn polarChain()
+{
+   return activeChain(pdlmdaActive(), plam, dpldlmda, d2pldlmda2);
+}
+
+LmdaFn vdwChain()
+{
+   return activeChain(vdlmdaActive(), vlam, dvldlmda, d2vldlmda2);
 }
 
 // one group pair of a scale table, live when it has a scale or a derivative
@@ -147,8 +159,13 @@ static void setPairScale(GrpPairScale& c, int i, int k, const LmdaFn& sc)
       c.live |= 1u << (3 * i + k);
 }
 
-GrpPairScale grpPairScale(const GrpScale& g, double dl, double d2l)
+// The single topology pair scale at sub-lambda v: the product of the two
+// group scales, carried to the main lambda, so a pair inside a charging ligand
+// goes as lambda squared.
+static GrpPairScale grpPairScale(const LmdaFn& v)
 {
+   const GrpScale g = grpScale(v.f);
+   const double dl = v.d1, d2l = v.d2;
    GrpPairScale c;
    c.live = 0;
    for (int i = 0; i < 3; ++i) {
@@ -174,19 +191,22 @@ GrpSelfScale grpSelfScale(const GrpPairScale& ps)
 
 GrpPairScale elecPairScale()
 {
-   double dl, d2l;
-   activeChain(edlmdaActive(), deldlmda, d2eldlmda2, dl, d2l);
-   return grpPairScale(grpScale(elam), dl, d2l);
+   return grpPairScale(elecChain());
+}
+
+// The dual topology weight of the polarization end states, w = plam^epdtexp
+// (epolar4.f:epolar4dt).
+static LmdaFn dtWeight()
+{
+   return lmdaPwrChain(polarChain(), epdtexp, true);
 }
 
 GrpPairScale ctScale()
 {
-   double dl, d2l;
-   polarChain(dl, d2l);
    if (not use_epdt)
-      return grpPairScale(grpScale(plam), dl, d2l);
+      return grpPairScale(polarChain());
 
-   const LmdaFn w = dtWeight(plam, epdtexp, dl, d2l);
+   const LmdaFn w = dtWeight();
    const GrpScale g0 = grpScale(0), g1 = grpScale(1);
    GrpPairScale c;
    c.live = 0;
@@ -205,6 +225,14 @@ const int* emGroup()
    return use_rel ? rdt_group : mut;
 }
 
+int hostGroup(int i)
+{
+   if (mutant::nmut == 0)
+      return 0;
+   const int g = mutant::mutg[i];
+   return use_rel ? g : (g != 0 ? 1 : 0);
+}
+
 RdtMask chargeMask()
 {
    return (use_rel and relstage == RelStage::LIG2) ? RdtMask::LIGB : RdtMask::LIGA;
@@ -219,7 +247,9 @@ RdtMask elecLiveMask()
 {
    // The charging ligand is dead as well when it is held uncharged with no
    // lambda derivative left to take: the VDWM leg, or an absolute vdw leg.
-   bool dead = elam == 0 and plam == 0 and not edlmdaActive() and not pdlmdaActive();
+   // Its polarizability counts only with polarization (dlambda.f:eleclive).
+   bool dead = elam == 0 and not edlmdaActive()
+      and (not use(Potent::POLAR) or (plam == 0 and not pdlmdaActive()));
    return dead ? RdtMask::ENV : coupledMask();
 }
 
@@ -250,30 +280,6 @@ void lmdaPwr(double x, double a, bool do2, double& f, double& df, double& d2f)
       d2f = a * (a - 1.0) * std::pow(x, a - 2.0);
 }
 
-void lmdaPow(double x, double c, double a, double b, bool do2, double& f, double& f1, double& f2)
-{
-   double omx = 1.0 - x;
-   double xa = c * std::pow(x, a);
-   double xa1 = xa * x;
-   double xa2 = xa1 * x;
-   f = xa * std::pow(omx, b);
-   f1 = 0.0;
-   if (a != 0.0)
-      f1 = a * xa * std::pow(omx, b);
-   if (b != 0.0)
-      f1 = f1 - b * xa1 * std::pow(omx, b - 1.0);
-   f2 = 0.0;
-   if (do2) {
-      if (a != 0.0) {
-         f2 = a * (a - 1.0) * xa * std::pow(omx, b);
-         if (b != 0.0)
-            f2 = f2 - 2.0 * a * b * xa1 * std::pow(omx, b - 1.0);
-      }
-      if (b != 0.0 and b != 1.0)
-         f2 = f2 + b * (b - 1.0) * xa2 * std::pow(omx, b - 2.0);
-   }
-}
-
 LmdaFn lmdaPwrChain(double x, double a, double dl, double d2l, bool dodl)
 {
    double f, df, d2f;
@@ -283,34 +289,87 @@ LmdaFn lmdaPwrChain(double x, double a, double dl, double d2l, bool dodl)
    return lmdaChain(f, df, d2f, dl, d2l);
 }
 
+LmdaFn lmdaPwrChain(const LmdaFn& v, double a, bool dodl)
+{
+   return lmdaPwrChain(v.f, a, v.d1, v.d2, dodl);
+}
+
 SoftCoreLmda softCoreLmda(double v, double n, double alpha, double m, double p, double dl, double d2l, bool dodl)
 {
-   const bool do2 = dodl and use_d2lmda;
-   double sc, sc1, sc2;
-   lmdaPow(v, alpha, m, p, do2, sc, sc1, sc2);
+   // c v^i (1-v)^j with c free of v, skipped when c vanishes, so that a power
+   // below zero only meets a zero c at v = 0 or 1
+   const double u = 1 - v;
+   auto t = [v, u](double c, double i, double j) { return c == 0 ? 0 : c * std::pow(v, i) * std::pow(u, j); };
 
    SoftCoreLmda s = {};
    s.p0 = std::pow(v, n);
-   s.sc = sc;
+   s.sc = t(alpha, m, p);
    if (not dodl)
       return s;
 
-   // c v^k, skipped when c vanishes, so that v = 0 never meets a negative k
-   auto term = [v](double c, double k) { return c == 0 ? 0 : c * std::pow(v, k); };
+   // The products of the scale L = v^n and the shift h = alpha v^m (1-v)^p
+   // expanded term by term, so that their limits stay right at v = 0 when n or
+   // m is below 2 (dlambda.f:grpsoftd).
    const double dl2 = dl * dl;
-   s.a1 = term(n * dl, n - 1);
-   s.b1 = term(sc1 * dl, n - 1);
-   if (do2) {
-      s.a2 = term(n * (n - 1) * dl2, n - 2) + term(n * d2l, n - 1);
-      s.b2 = term((2 * n * sc1 + sc2) * dl2, n - 2) + term(sc1 * d2l, n - 1);
-      s.c2 = term(sc1 * sc1 * dl2, n - 2);
+   const double a = alpha, a2 = alpha * alpha;
+   // L h'
+   const double lh1 = t(a * m, n + m - 1, p) - t(a * p, n + m, p - 1);
+   s.a1 = t(n * dl, n - 1, 0);
+   s.b1 = lh1 * dl;
+   if (use_d2lmda) {
+      // 2 L' h' + L h''
+      const double b2 = t(a * m * (2 * n + m - 1), n + m - 2, p) - t(2 * a * p * (n + m), n + m - 1, p - 1)
+         + t(a * p * (p - 1), n + m, p - 2);
+      // L h'^2
+      const double c2 = t(a2 * m * m, n + 2 * m - 2, 2 * p) - t(2 * a2 * m * p, n + 2 * m - 1, 2 * p - 1)
+         + t(a2 * p * p, n + 2 * m, 2 * p - 2);
+      s.a2 = t(n * (n - 1) * dl2, n - 2, 0) + t(n * d2l, n - 1, 0);
+      s.b2 = b2 * dl2 + lh1 * d2l;
+      s.c2 = c2 * dl2;
    }
    return s;
 }
 
-LmdaFn dtWeight(double x, int nexp, double dl, double d2l)
+int vdwMutclsTable()
 {
-   return lmdaPwrChain(x, nexp, dl, d2l, true);
+   int table = 0;
+   for (int i = 0; i < 3; ++i)
+      for (int k = 0; k < 3; ++k)
+         table |= (mutant::mutcls[k][i] + 1) << (2 * (3 * i + k));
+   return table;
+}
+
+LmdaFn lmdaComplement(const LmdaFn& v)
+{
+   return {1 - v.f, -v.d1, -v.d2};
+}
+
+LmdaFn vdwGroupLmda(int ig)
+{
+   const LmdaFn v = vdwChain();
+   return ig == 2 ? lmdaComplement(v) : v;
+}
+
+LmdaFn vdwGroupPower(double n, int ig, bool dodl)
+{
+   return lmdaPwrChain(vdwGroupLmda(ig), n, dodl);
+}
+
+void vdwClassWeights(double n, bool dodl, LmdaFn (&w)[3][3])
+{
+   const LmdaFn v[3] = {{1, 0, 0}, vdwGroupPower(n, 1, dodl), vdwGroupPower(n, 2, dodl)};
+   for (int g = 0; g < 3; ++g) {
+      for (int k = 0; k < 3; ++k) {
+         int c = mutant::mutcls[k][g];
+         w[g][k] = (c < 0 ? LmdaFn{0, 0, 0} : v[c]);
+      }
+   }
+}
+
+SoftCoreLmda grpSoftCore(int ig, const SoftCoreParams& sc, bool dodl)
+{
+   const LmdaFn v = vdwGroupLmda(ig);
+   return softCoreLmda(v.f, sc.n, sc.alpha, sc.m, sc.p, v.d1, v.d2, dodl);
 }
 
 void dtNeed(const LmdaFn& w, bool& need0, bool& need1)
@@ -401,42 +460,24 @@ void LmdaBuffer::flush(int vers) const
    }
 }
 
-static LmdaBuffer ep_dl;
+static LmdaBuffer lmda_channels[3];
 
-void polarLmdaData(RcOp op)
+LmdaBuffer& lmdaChannel(LmdaTerm t)
 {
-   if (not use(Potent::POLAR) and not use(Potent::CHGTRN))
-      return;
-   ep_dl.manage(op, rc_flag, use_pdlmda, pdlmdaActive, &depdl_buf, &d2epdl2_buf, &depdl, &d2epdl2);
+   return lmda_channels[static_cast<int>(t)];
 }
 
-void polarLmdaZero(int vers)
+void lmdaChannelsData(RcOp op)
 {
-   ep_dl.zero(vers);
-}
-
-void polarLmdaFlush(int vers)
-{
-   ep_dl.flush(vers);
-}
-
-static LmdaBuffer ev_dl;
-
-void vdwLmdaData(RcOp op)
-{
-   if (not use(Potent::VDW) and not use(Potent::REPULS) and not use(Potent::DISP))
-      return;
-   ev_dl.manage(op, rc_flag, use_vdlmda, vdlmdaActive, &devdl_buf, &d2evdl2_buf, &devdl, &d2evdl2);
-}
-
-void vdwLmdaZero(int vers)
-{
-   ev_dl.zero(vers);
-}
-
-void vdwLmdaFlush(int vers)
-{
-   ev_dl.flush(vers);
+   if (use(Potent::MPOLE) or use(Potent::CHARGE))
+      lmdaChannel(LmdaTerm::ELEC)
+         .manage(op, rc_flag, use_edlmda, edlmdaActive, &demdl_buf, &d2emdl2_buf, &demdl, &d2emdl2);
+   if (use(Potent::POLAR) or use(Potent::CHGTRN))
+      lmdaChannel(LmdaTerm::POLAR)
+         .manage(op, rc_flag, use_pdlmda, pdlmdaActive, &depdl_buf, &d2epdl2_buf, &depdl, &d2epdl2);
+   if (use(Potent::VDW) or use(Potent::REPULS) or use(Potent::DISP))
+      lmdaChannel(LmdaTerm::VDW)
+         .manage(op, rc_flag, use_vdlmda, vdlmdaActive, &devdl_buf, &d2evdl2_buf, &devdl, &d2evdl2);
 }
 
 // E = w*E1 + (1-w)*E0, so dE/dL = w'*(E1-E0) and d2E/dL2 = w''*(E1-E0), with
@@ -445,9 +486,7 @@ void vdwLmdaFlush(int vers)
 // scalar per endpoint (epolar4.f:epolar4dt).
 int dtPasses(DtPass out[2])
 {
-   double dl, d2l;
-   polarChain(dl, d2l);
-   const LmdaFn w = dtWeight(plam, epdtexp, dl, d2l);
+   const LmdaFn w = dtWeight();
    bool need0, need1;
    dtNeed(w, need0, need1);
 
@@ -1169,7 +1208,9 @@ static void setSub(const LmdaFn& v, double& lam, double& dl, double& d2l)
    d2l = v.d2;
 }
 
-// a map on the local coordinate of a leg, carried to the main lambda by ds
+// a map on the local coordinate of a leg, carried to the main lambda by ds;
+// unlike lmdaChain it keeps the curvature, which the sub-lambda stores whether
+// or not second derivatives are taken (dlambda.f:maprelstage)
 static LmdaFn legChain(const LmdaFn& v, double ds)
 {
    return {v.f, v.d1 * ds, v.d2 * (ds * ds)};
@@ -1250,8 +1291,7 @@ static void mapRelStage(double lmda)
    } else {
       // The ligand 2 leg discharges ligand 2 as the main lambda rises, so its
       // weight is the complement of the map, with van der Waals still on it.
-      const LmdaFn m = mapLeg(s, elmdamap);
-      e = {1.0 - m.f, -m.d1, -m.d2};
+      e = lmdaComplement(mapLeg(s, elmdamap));
       v = {0.0, 0.0, 0.0};
    }
 

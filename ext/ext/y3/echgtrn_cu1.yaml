@@ -1,6 +1,10 @@
 OUTPUT_DIR: src/cu/hippo
 KERNEL_NAME: echgtrn_cu1
-TEMPLATE_PARAMS: template <class Ver, Chgtrn CT>
+TEMPLATE_PARAMS: template <class Ver, class IMG, Chgtrn CT>
+# the box shape as a template parameter, and the tiles near their centers
+# imaged once
+IMAGE_TEMPLATE: IMG
+LOCAL_TILES: true
 CONSTEXPR_FLAGS: |
   constexpr bool do_a = Ver::a;
   constexpr bool do_e = Ver::e;
@@ -10,6 +14,7 @@ CONSTEXPR_FLAGS: |
   constexpr bool do_dl2 = Ver::e_dlmda2;
   constexpr bool do_gdl = Ver::g_dlmda;
   constexpr bool do_vdl = Ver::v_dlmda;
+  static_assert(not do_vdl or do_gdl, "");
 
 COUNT:
   - nc
@@ -92,33 +97,17 @@ SCALED_PAIRWISE_INTERACTION: |
       pair_chgtrn<do_g>      (r, cut, off, scalea, f, @alphai@, @chgi@, @alphak@, @chgk@, 1, e, de);
     else if CONSTEXPR (CT == Chgtrn::COMBINED)
       pair_chgtrn_aplus<do_g>(r, cut, off, scalea, f, @alphai@, @chgi@, @alphak@, @chgk@, 1, e, de);
-    if CONSTEXPR (do_dl1)
-      dcdltl += floatTo<ebuf_prec>(ctsc.dl[@igrp@][@kgrp@] * e);
-    if CONSTEXPR (do_dl2)
-      d2cdl2tl += floatTo<ebuf_prec>(ctsc.d2l[@igrp@][@kgrp@] * e);
-    if CONSTEXPR (do_gdl or do_vdl) {
-      real dlde = ctsc.dl[@igrp@][@kgrp@] * de * REAL_RECIP(r);
-      real dldedx = dlde * xr;
-      real dldedy = dlde * yr;
-      real dldedz = dlde * zr;
-      if CONSTEXPR (do_gdl) {
-        @dgxi@ -= dldedx;
-        @dgyi@ -= dldedy;
-        @dgzi@ -= dldedz;
-        @dgxk@ += dldedx;
-        @dgyk@ += dldedy;
-        @dgzk@ += dldedz;
-      }
-      if CONSTEXPR (do_vdl) {
-        dvcdltlxx += floatTo<vbuf_prec>(xr * dldedx);
-        dvcdltlyx += floatTo<vbuf_prec>(yr * dldedx);
-        dvcdltlzx += floatTo<vbuf_prec>(zr * dldedx);
-        dvcdltlyy += floatTo<vbuf_prec>(yr * dldedy);
-        dvcdltlzy += floatTo<vbuf_prec>(zr * dldedy);
-        dvcdltlzz += floatTo<vbuf_prec>(zr * dldedz);
-      }
+    // the force takes only the first derivative, so a first derivative
+    // version skips the pair on it alone and never loads the second
+    GrpPairLmda w = grpPairLmda(ctsc, @igrp@, @kgrp@);
+    if (grpPairLmdaActive<do_dl2>(w)) {
+      pair_grpscale_dl<do_dl1, do_dl2>(w, e, dcdltl, d2cdl2tl);
+      // the separation runs from i to k here
+      if CONSTEXPR (do_gdl or do_vdl)
+        pair_dlforce<do_gdl, (do_vdl and not tile_local)>(w.dl * de * REAL_RECIP(r), -xr, -yr, -zr, @dgxi@, @dgyi@,
+          @dgzi@, @dgxk@, @dgyk@, @dgzk@, dvcdltlxx, dvcdltlyx, dvcdltlzx, dvcdltlyy, dvcdltlzy, dvcdltlzz);
     }
-    real sc = ctsc.sc[@igrp@][@kgrp@];
+    real sc = w.sc;
     e *= sc;
     de *= sc;
     if CONSTEXPR (do_a)
@@ -139,7 +128,7 @@ SCALED_PAIRWISE_INTERACTION: |
       @gyk@ += dedy;
       @gzk@ += dedz;
 
-      if CONSTEXPR (do_v) {
+      if CONSTEXPR (do_v and not tile_local) {
         vctlxx += floatTo<vbuf_prec>(xr * dedx);
         vctlyx += floatTo<vbuf_prec>(yr * dedx);
         vctlzx += floatTo<vbuf_prec>(zr * dedx);
@@ -162,33 +151,17 @@ FULL_PAIRWISE_INTERACTION: |
       pair_chgtrn<do_g>      (r, cut, off, 1, f, @alphai@, @chgi@, @alphak@, @chgk@, 1, e, de);
     else if CONSTEXPR (CT == Chgtrn::COMBINED)
       pair_chgtrn_aplus<do_g>(r, cut, off, 1, f, @alphai@, @chgi@, @alphak@, @chgk@, 1, e, de);
-    if CONSTEXPR (do_dl1)
-      dcdltl += floatTo<ebuf_prec>(ctsc.dl[@igrp@][@kgrp@] * e);
-    if CONSTEXPR (do_dl2)
-      d2cdl2tl += floatTo<ebuf_prec>(ctsc.d2l[@igrp@][@kgrp@] * e);
-    if CONSTEXPR (do_gdl or do_vdl) {
-      real dlde = ctsc.dl[@igrp@][@kgrp@] * de * REAL_RECIP(r);
-      real dldedx = dlde * xr;
-      real dldedy = dlde * yr;
-      real dldedz = dlde * zr;
-      if CONSTEXPR (do_gdl) {
-        @dgxi@ -= dldedx;
-        @dgyi@ -= dldedy;
-        @dgzi@ -= dldedz;
-        @dgxk@ += dldedx;
-        @dgyk@ += dldedy;
-        @dgzk@ += dldedz;
-      }
-      if CONSTEXPR (do_vdl) {
-        dvcdltlxx += floatTo<vbuf_prec>(xr * dldedx);
-        dvcdltlyx += floatTo<vbuf_prec>(yr * dldedx);
-        dvcdltlzx += floatTo<vbuf_prec>(zr * dldedx);
-        dvcdltlyy += floatTo<vbuf_prec>(yr * dldedy);
-        dvcdltlzy += floatTo<vbuf_prec>(zr * dldedy);
-        dvcdltlzz += floatTo<vbuf_prec>(zr * dldedz);
-      }
+    // the force takes only the first derivative, so a first derivative
+    // version skips the pair on it alone and never loads the second
+    GrpPairLmda w = grpPairLmda(ctsc, @igrp@, @kgrp@);
+    if (grpPairLmdaActive<do_dl2>(w)) {
+      pair_grpscale_dl<do_dl1, do_dl2>(w, e, dcdltl, d2cdl2tl);
+      // the separation runs from i to k here
+      if CONSTEXPR (do_gdl or do_vdl)
+        pair_dlforce<do_gdl, (do_vdl and not tile_local)>(w.dl * de * REAL_RECIP(r), -xr, -yr, -zr, @dgxi@, @dgyi@,
+          @dgzi@, @dgxk@, @dgyk@, @dgzk@, dvcdltlxx, dvcdltlyx, dvcdltlzx, dvcdltlyy, dvcdltlzy, dvcdltlzz);
     }
-    real sc = ctsc.sc[@igrp@][@kgrp@];
+    real sc = w.sc;
     e *= sc;
     de *= sc;
     if CONSTEXPR (do_a)
@@ -209,7 +182,7 @@ FULL_PAIRWISE_INTERACTION: |
       @gyk@ += dedy;
       @gzk@ += dedz;
 
-      if CONSTEXPR (do_v) {
+      if CONSTEXPR (do_v and not tile_local) {
         vctlxx += floatTo<vbuf_prec>(xr * dedx);
         vctlyx += floatTo<vbuf_prec>(yr * dedx);
         vctlzx += floatTo<vbuf_prec>(zr * dedx);

@@ -92,7 +92,7 @@ void KERNEL_NAMEb(             \
     OFF_KERNEL_PARAMS          \
     EXTRA_KERNEL_PARAMS        \
     EXCLUDE_INFO_KERNEL_PARAMS \
-    , const Spatial::SortedAtom* restrict sorted, int n, int nakpl, const int* restrict iakpl)
+    , const Spatial::SortedAtom* restrict sorted, int n, int nakpl, const int* restrict iakpl LOCAL_KERNEL_PARAMS)
 {
     USING_DEVICE_VARIABLES    KERNEL_CONSTEXPR_FLAGS \
     const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
@@ -152,7 +152,7 @@ void KERNEL_NAMEa(         \
     CUT_KERNEL_PARAMS      \
     OFF_KERNEL_PARAMS      \
     EXTRA_KERNEL_PARAMS    \
-    , const Spatial::SortedAtom* restrict sorted, int niak, const int* restrict iak, const int* restrict lst)
+    , const Spatial::SortedAtom* restrict sorted, int niak, const int* restrict iak, const int* restrict lst LOCAL_KERNEL_PARAMS)
 {
     USING_DEVICE_VARIABLES    KERNEL_CONSTEXPR_FLAGS
     const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
@@ -206,7 +206,7 @@ void KERNEL_NAME(int n,         \
     EXCLUDE_SCALE_KERNEL_PARAMS \
     , const Spatial::SortedAtom* restrict sorted, int nakpl, const int* restrict iakpl
     , int niak, const int* restrict iak, const int* restrict lst
-    EXTRA_KERNEL_PARAMS)
+    SORTED_KERNEL_PARAMS LOCAL_KERNEL_PARAMS EXTRA_KERNEL_PARAMS)
 {
     USING_DEVICE_VARIABLES    KERNEL_CONSTEXPR_FLAGS \
     const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
@@ -296,6 +296,33 @@ void KERNEL_NAME(int n,         \
 '''
 
 
+# LOCAL_TILES: a tile whose atoms lie within half a box of its center images
+# them once around the center, keeping them relative to it, and takes plain
+# distances, its virial built from the forces summed over the tile; the other
+# tiles image every pair.
+# LOCAL_VIRIAL: symmetric takes the symmetric part of that virial, for pair
+# forces off the line of centers whose pair virials are symmetrized
+def _local_tiles(kernel:str, nloop:int) -> str:
+    heads = ['        KERNEL_LOAD_INFO_VARIABLES\n        for (int j = 0; j < WARP_SIZE; ++j) {',
+             '        for (int j = 0; j < WARP_SIZE; ++j) {\n            KERNEL_KLANE2']
+    found = [head for head in heads if head in kernel]
+    if len(found) != nloop:
+        raise ValueError('LOCAL_TILES found {} of the {} tile loops of a kernel template.'.format(len(found), nloop))
+    for head in found:
+        i0 = kernel.index(head)
+        i1 = kernel.index('        KERNEL_SAVE_LOCAL_FORCE', i0)
+        loop = kernel[i0:i1]
+        pre = ''
+        if loop.startswith('        KERNEL_LOAD_INFO_VARIABLES\n'):
+            pre = '        KERNEL_LOAD_INFO_VARIABLES\n'
+            loop = loop[len(pre):]
+        local = loop.replace('KERNEL_FULL_PAIRWISE_INTERACTION', 'KERNEL_LOCAL_PAIRWISE_INTERACTION')
+        block = pre + '        KERNEL_LOCAL_FLAG\n        if (ilocal) {\n            KERNEL_LOCAL_IMAGE\n' + local + \
+            '            KERNEL_LOCAL_VIRIAL\n        } else {\n' + loop + '        }\n'
+        kernel = kernel[:i0] + block + kernel[i1:]
+    return kernel
+
+
 ########################################################################
 #                                                                      #
 # variable                                                             #
@@ -313,9 +340,14 @@ class Variable:
         self.readfrom, self.addto, self.onlyif = None, None, None
         self.scale, self.dlsink = None, None
         self.ifset = None
+        # sorted: the source is in the order of the spatial list, read by the
+        # sorted index of the atom (and through bnum in the exclusion loop)
+        self.sorted = False
         for i in range(3, len(vs)):
             s2 = vs[i]
-            if s2.startswith('from:'):
+            if s2 == 'sorted':
+                self.sorted = True
+            elif s2.startswith('from:'):
                 s3 = s2.replace('from:', '')
                 self.readfrom = s3
             elif s2.startswith('addto:'):
@@ -342,8 +374,8 @@ class Variable:
         else:
             return '{}[{}]'.format(src, index)
 
-    def _load(self) -> str:
-        rhs = self._get_src(self.readfrom, self.iork)
+    def _load(self, index=None) -> str:
+        rhs = self._get_src(self.readfrom, self.iork if index is None else index)
         if self.ifset is not None:
             rhs = '({} ? {} : 0)'.format(self.ifset, rhs)
         return rhs
@@ -378,7 +410,7 @@ class Variable:
         return 1 if self.dlsink is None else 2
 
     def init_exclude(self) -> str:
-        rhs = self._load()
+        rhs = self._load('bnum[{}]'.format(self.iork) if self.sorted else None)
         if self.location == 'shared':
             if self.iork == 'i':
                 return ('{}[klane] = {};'.format(self.name, rhs))
@@ -394,10 +426,11 @@ class Variable:
             else:
                 return ('{} = sorted[atom{}].{};'.format(self.name, self.iork, self.readfrom))
         else:
+            rhs = self._load('atom' + self.iork if self.sorted else None)
             if self.location == 'shared':
-                return ('{}[threadIdx.x] = {};'.format(self.name, self._load()))
+                return ('{}[threadIdx.x] = {};'.format(self.name, rhs))
             else:
-                return ('{} = {};'.format(self.name, self._load()))
+                return ('{} = {};'.format(self.name, rhs))
 
     def shuffle(self) -> str:
         if self.location == 'register':
@@ -500,6 +533,18 @@ class VariableDefinitions:
     def shuffle(self) -> str:
         return self._gated([(v.onlyif, v.shuffle(), 1) for v in self._all(shared=False)])
 
+    def any_sorted(self) -> bool:
+        return any(v.sorted for v in self._all())
+
+    def coordinates(self):
+        # the variables read from x, y and z, in that order, as this thread
+        # holds them, and whether any is in shared memory
+        c = {v.readfrom: v for v in self._all() if v.readfrom in ['x', 'y', 'z']}
+        if len(c) != 3:
+            raise ValueError('LOCAL_TILES needs x, y and z.')
+        own = lambda v: v.name + ('[threadIdx.x]' if v.location == 'shared' else '')
+        return own(c['x']), own(c['y']), own(c['z']), any(v.location == 'shared' for v in c.values())
+
     def ikreplace(self, code:str) -> str:
         for t in self.shared.keys():
             for v in self.shared[t]:
@@ -536,6 +581,29 @@ class KernelWriter:
             return ', const real (*restrict {})[4]'.format(pname)
         else:
             raise ValueError('Do not know how to parse type: {}'.format(ptype))
+
+    def _image_call(self, args:str) -> str:
+        # IMAGE_TEMPLATE names the template class that images for the box shape;
+        # the shapes without a class of their own image by the box_shape argument
+        img = self._kv(self.yk_image_template)
+        if img:
+            return '{}::img2({}, TINKER_IMAGE_ARGS)'.format(img, args)
+        return 'image2({})'.format(args)
+
+    def _pair_body(self, code:str, local:bool) -> str:
+        # image2(x, y, z) of a pair body images for the box shape, or, in a
+        # local tile, is the plain distance squared
+        def sub(m):
+            args = m.group(1)
+            if local:
+                a = [t.strip() for t in args.split(',')]
+                return '({0} * {0} + {1} * {1} + {2} * {2})'.format(*a)
+            return self._image_call(args)
+        code = re.sub(r'\bimage2\(([^()]*)\)', sub, code)
+        # only bodies that read tile_local declare it
+        if self._kv(self.yk_local_tiles) and re.search(r'\btile_local\b', code):
+            code = 'constexpr bool tile_local = {};'.format('true' if local else 'false') + code
+        return code
 
     @staticmethod
     def _load_scale_param(ptype:str, stem:str, input:str, separate_scaled_pairwise:bool) -> str:
@@ -591,6 +659,10 @@ class KernelWriter:
 
         self.yk_scaled_pairwise = 'SCALED_PAIRWISE_INTERACTION'
         self.yk_full_pairwise = 'FULL_PAIRWISE_INTERACTION'
+
+        self.yk_image_template = 'IMAGE_TEMPLATE'
+        self.yk_local_tiles = 'LOCAL_TILES'
+        self.yk_local_virial = 'LOCAL_VIRIAL'
 
         self.yk_single_loop_limit = 'SINGLE_LOOP_LIMIT'
         self.yk_single_loop_iter = 'SINGLE_LOOP_ITER'
@@ -865,7 +937,94 @@ class KernelWriter:
             if ifdl is not None:
                 v2 = ifdl.ikreplace(v2)
                 v2 = kfdl.ikreplace(v2)
-        d[k1], d[k2] = v1, v2
+        k3, v3 = 'KERNEL_LOCAL_PAIRWISE_INTERACTION', ''
+        if self._kv(self.yk_local_virial) not in ['', 'symmetric']:
+            raise ValueError('LOCAL_VIRIAL takes symmetric or nothing.')
+        if self._kv(self.yk_local_virial) and not self._kv(self.yk_local_tiles):
+            raise ValueError('LOCAL_VIRIAL needs LOCAL_TILES.')
+        if self._kv(self.yk_image_template) or self._kv(self.yk_local_tiles):
+            if self._kv(self.yk_local_tiles):
+                # a local tile takes its virial from the summed forces, so the
+                # pair virials of the body must skip it
+                if (self.yk_virial in keys or 'VIRIAL_DLMDA' in keys) and not re.search(r'\btile_local\b', v1):
+                    raise ValueError('LOCAL_TILES with a virial needs the pair virials guarded by tile_local.')
+                v3 = self._pair_body(v1, True)
+            v1, v2 = self._pair_body(v1, False), self._pair_body(v2, False)
+        d[k1], d[k2], d[k3] = v1, v2, v3
+
+        # sorted sources and local tiles
+        k1, v1 = 'SORTED_KERNEL_PARAMS', ''
+        if use_ikvars and (ivars.any_sorted() or kvars.any_sorted()):
+            v1 = ', const int* restrict bnum'
+        k2, v2 = 'LOCAL_KERNEL_PARAMS', ''
+        k3, v3 = 'KERNEL_LOCAL_IMAGE', ''
+        k4, v4 = 'KERNEL_LOCAL_VIRIAL', ''
+        k5, v5 = 'KERNEL_LOCAL_FLAG', ''
+        if self._kv(self.yk_local_tiles):
+            v2 = ', const Spatial::Center* restrict akc'
+            v5 = 'real xc = akc[ty].x; real yc = akc[ty].y; real zc = akc[ty].z;'
+            v5 = v5 + 'const bool ilocal = akc[ty].w != 0;'
+            # the coordinates stay relative to the center: the pair bodies take
+            # only their differences, and the forces of a tile sum to zero, so
+            # its virial is the same and keeps the round-off of a small box
+            v3 = 'real xr, yr, zr;'
+            shared = False
+            for vs in [ivars, kvars]:
+                x, y, z, sh = vs.coordinates()
+                shared = shared or sh
+                v3 = v3 + 'xr = {} - xc; yr = {} - yc; zr = {} - zc;'.format(x, y, z)
+                v3 = v3 + self._image_call('xr, yr, zr') + ';'
+                v3 = v3 + '{} = xr; {} = yr; {} = zr;'.format(x, y, z)
+            if shared:
+                # the other lanes read the shared coordinates
+                v3 = v3 + '__syncwarp();'
+            xi, yi, zi, _ = ivars.coordinates()
+            xk, yk, zk, _ = kvars.coordinates()
+            for kv, kfi, kfk, gate in [(self.yk_virial, self.yk_i_force, self.yk_k_force, 'do_v'),
+                                       ('VIRIAL_DLMDA', 'I_FORCE_DLMDA', 'K_FORCE_DLMDA', 'do_vdl')]:
+                if kv not in keys:
+                    continue
+                if len(config[kv]) != 1:
+                    raise ValueError('LOCAL_TILES takes one virial buffer each.')
+                t = config[kv][0]
+                if kfi in keys:
+                    fiv = VariableDefinitions('i', config[kfi])._all()[0:3]
+                    fkv = VariableDefinitions('k', config[kfk])._all()[0:3]
+                    scales = [v.scale for v in fiv + fkv]
+                else:
+                    # the forces sink their lambda derivatives with a second
+                    # scale (dlsink)
+                    fiv = VariableDefinitions('i', config[self.yk_i_force])._all()[0:3]
+                    fkv = VariableDefinitions('k', config[self.yk_k_force])._all()[0:3]
+                    scales = [v.dlsink[1] if v.dlsink else None for v in fiv + fkv]
+                    if scales[0] is None:
+                        raise ValueError('LOCAL_TILES needs {} or dlsink on the forces.'.format(kfi))
+                if len(set(scales)) != 1:
+                    raise ValueError('LOCAL_TILES needs one scale on the forces.')
+                # the first three forces are the gradient along x, y and z: their
+                # arrays differ in one letter, x, y and z
+                for fv in [fiv, fkv]:
+                    dst = [v.dlsink[0] if kfi not in keys else v.addto for v in fv]
+                    diff = [i for i in range(len(dst[0])) if len(set(d[i:i + 1] for d in dst)) != 1]
+                    if any(d is None or len(d) != len(dst[0]) for d in dst) or len(diff) != 1 or \
+                       [d[diff[0]] for d in dst] != ['x', 'y', 'z']:
+                        raise ValueError('LOCAL_TILES needs the x, y and z gradient as the first three forces.')
+                fi = [v.name for v in fiv]
+                fk = [v.name for v in fkv]
+                pos_i, pos_k = [xi, yi, zi], [xk, yk, zk]
+                # the pair virial of a force off the line of centers, as of
+                # multipoles, is the symmetric part of r times f
+                symmetric = self._kv(self.yk_local_virial) == 'symmetric'
+                body = ''
+                for sufx, a, b in [('xx', 0, 0), ('yx', 1, 0), ('zx', 2, 0), ('yy', 1, 1), ('zy', 2, 1), ('zz', 2, 2)]:
+                    term = '{} * {} + {} * {}'.format(pos_i[a], fi[b], pos_k[a], fk[b])
+                    if symmetric and a != b:
+                        term = '0.5f * ({} + {} * {} + {} * {})'.format(term, pos_i[b], fi[a], pos_k[b], fk[a])
+                    if scales[0] is not None:
+                        term = '{} * ({})'.format(scales[0], term)
+                    body = body + '{}tl{} += floatTo<vbuf_prec>({});'.format(t, sufx, term)
+                v4 = v4 + 'if CONSTEXPR ({}) {{{}}}'.format(gate, body)
+        d[k1], d[k2], d[k3], d[k4], d[k5] = v1, v2, v3, v4, v5
 
         # single loop
         k0, v0 = 'SINGLE_LOOP_LIMIT_PARAM', ''
@@ -910,13 +1069,16 @@ class KernelWriter:
             kernel_num = self.config[self.yk_kernel_version_number]
         if kernel_num == 11:
             outstr = outstr + self._replace(rc_kernel11, d)
-        elif kernel_num == 23:
-            if self.yk_scale_1x_type in self.config.keys():
-                outstr = outstr + self._replace(rc_kernel23c, d)
-            outstr = outstr + self._replace(rc_kernel23b, d)
-            outstr = outstr + self._replace(rc_kernel23a, d)
         else:
-            outstr = outstr + self._replace(rc_kernel21, d)
+            # the number of tile loops of each template
+            local = _local_tiles if self._kv(self.yk_local_tiles) else (lambda k, nloop: k)
+            if kernel_num == 23:
+                if self.yk_scale_1x_type in self.config.keys():
+                    outstr = outstr + self._replace(rc_kernel23c, d)
+                outstr = outstr + self._replace(local(rc_kernel23b, 1), d)
+                outstr = outstr + self._replace(local(rc_kernel23a, 1), d)
+            else:
+                outstr = outstr + self._replace(local(rc_kernel21, 2), d)
         print(outstr, file=output)
 
 

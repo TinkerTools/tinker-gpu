@@ -364,7 +364,7 @@ constexpr double kOverlap = 1.0;
 // 2 of a dual topology couples as the complement of vlam
 double ligandCoupling(int g)
 {
-   return g == 2 ? 1 - vlam : vlam;
+   return vdwGroupLmda(g).f;
 }
 
 bool s_on;
@@ -705,9 +705,10 @@ void waterMcMech()
    for (int i = 0; i < atoms::n; ++i) {
       if (atomid::atomic[i] <= 1)
          continue;
-      if (mutant::nmut > 0 and mutant::mutg[i] != 0) {
+      const int g = hostGroup(i);
+      if (g != 0) {
          ligand.push_back(i);
-         ligandGroup.push_back(mutant::mutg[i]);
+         ligandGroup.push_back(g);
       } else {
          heavy.push_back(i);
          if (atomid::atomic[i] == 7 or atomid::atomic[i] == 8)
@@ -979,7 +980,7 @@ WaterShell& waterMcShell()
 double waterMcOverlapDistance(int i)
 {
    // a water can come as close to a ligand as its coupling lets it
-   const int g = mutant::nmut > 0 ? mutant::mutg[i] : 0;
+   const int g = hostGroup(i);
    return g == 0 ? kOverlap : kOverlap * ligandCoupling(g);
 }
 }

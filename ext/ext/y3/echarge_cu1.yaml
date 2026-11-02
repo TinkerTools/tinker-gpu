@@ -1,22 +1,44 @@
 OUTPUT_DIR: src/cu
 KERNEL_NAME: echarge_cu1
-TEMPLATE_PARAMS: template <class Ver, class ETYP>
+TEMPLATE_PARAMS: template <class Ver, class IMG, class ETYP, bool DEAD>
+# the box shape as a template parameter, and the tiles near their centers
+# imaged once, their virial from the summed forces
+IMAGE_TEMPLATE: IMG
+LOCAL_TILES: true
 CONSTEXPR_FLAGS: |
   constexpr bool do_e = Ver::e;
   constexpr bool do_a = Ver::a;
   constexpr bool do_g = Ver::g;
   constexpr bool do_v = Ver::v;
+  constexpr bool do_dl1 = Ver::e_dlmda1;
+  constexpr bool do_dl2 = Ver::e_dlmda2;
+  constexpr bool do_gdl = Ver::g_dlmda;
+  constexpr bool do_vdl = Ver::v_dlmda;
+  // a local tile takes the lambda derivative of its virial from those of the
+  // forces
+  constexpr bool do_fdl = do_gdl or do_vdl;
+  static_assert(not do_vdl or do_gdl, "");
 
 COUNT:
   - nec
 ENERGY:
   - ec
+ENERGY_DLMDA1:
+  - demdl
+ENERGY_DLMDA2:
+  - d2emdl2
 VIRIAL:
   - vec
+VIRIAL_DLMDA:
+  - demvirdl
 GRADIENT:
   - gx
   - gy
   - gz
+GRADIENT_DLMDA:
+  - dfdlx
+  - dfdly
+  - dfdlz
 
 CUT_DISTANCE: cut
 OFF_DISTANCE: 'off'
@@ -26,6 +48,8 @@ SCALE_1X_TYPE: real_const_array
 
 EXTRA_PARAMS: |
   , real ebuffer, real f, real aewald, const real* restrict chg
+  , const real* restrict dq, real del, real d2el
+  , const int* restrict grp, RdtMask liveMask
 # IMPLICIT_PARAMS:
 
 I_VARIABLES:
@@ -33,11 +57,15 @@ I_VARIABLES:
   - register real yi   from:y
   - register real zi   from:z
   - register real ichg from:chg
+  - register real idq  from:dq onlyif:do_dl1
+  - register int  gi   from:grp onlyif:DEAD
 K_VARIABLES:
   - register real xk   from:x
   - register real yk   from:y
   - register real zk   from:z
   - register real kchg from:chg
+  - register real kdq  from:dq onlyif:do_dl1
+  - register int  gk   from:grp onlyif:DEAD
 I_FORCE:
   - register real fix addto:gx
   - register real fiy addto:gy
@@ -46,18 +74,32 @@ K_FORCE:
   - register real fkx addto:gx
   - register real fky addto:gy
   - register real fkz addto:gz
+I_FORCE_DLMDA:
+  - register real dfix addto:dfdlx
+  - register real dfiy addto:dfdly
+  - register real dfiz addto:dfdlz
+K_FORCE_DLMDA:
+  - register real dfkx addto:dfdlx
+  - register real dfky addto:dfdly
+  - register real dfkz addto:dfdlz
 
 SCALED_PAIRWISE_INTERACTION: |
   real xr = @xi@ - @xk@;
   real yr = @yi@ - @yk@;
   real zr = @zi@ - @zk@;
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  // DEAD: a pair with a dead group has no charge or charge derivative, and its
+  // two sites may overlap (dlambda.f:eleclive)
+  if (r2 <= off * off and incl and (not DEAD or grpPairLive(liveMask, @gi@, @gk@))) {
     real r = REAL_SQRT(r2);
     real invr = REAL_RECIP(r);
     real e, de;
-    pair_chg_v3<do_g, ETYP, 0>(r, scalea, @ichg@, @kchg@, ebuffer, f, aewald,
-      cut, off, e, de);
+    MAYBE_UNUSED real dl1, dl2, dlde;
+    if CONSTEXPR (do_dl1)
+      pair_chg_lmda<do_g, do_dl2, do_fdl, ETYP, 0>(r, REAL_RECIP(r + ebuffer), scalea, @ichg@, @kchg@, @idq@, @kdq@,
+        f, aewald, cut, off, del, d2el, e, de, dl1, dl2, dlde);
+    else
+      pair_chg_v3<do_g, ETYP, 0>(r, scalea, @ichg@, @kchg@, ebuffer, f, aewald, cut, off, e, de);
     if CONSTEXPR (do_e) {
       ectl += floatTo<ebuf_prec>(e);
       if CONSTEXPR (do_a) {
@@ -77,7 +119,7 @@ SCALED_PAIRWISE_INTERACTION: |
       @fkx@ -= dedx;
       @fky@ -= dedy;
       @fkz@ -= dedz;
-      if CONSTEXPR (do_v) {
+      if CONSTEXPR (do_v and not tile_local) {
         vectlxx += floatTo<vbuf_prec>(xr * dedx);
         vectlyx += floatTo<vbuf_prec>(yr * dedx);
         vectlzx += floatTo<vbuf_prec>(zr * dedx);
@@ -86,18 +128,33 @@ SCALED_PAIRWISE_INTERACTION: |
         vectlzz += floatTo<vbuf_prec>(zr * dedz);
       }
     }
+    if CONSTEXPR (do_dl1) {
+      demdltl += floatTo<ebuf_prec>(dl1);
+      if CONSTEXPR (do_dl2)
+        d2emdl2tl += floatTo<ebuf_prec>(dl2);
+      if CONSTEXPR (do_fdl)
+        pair_dlforce<do_gdl, (do_vdl and not tile_local)>(dlde * invr, xr, yr, zr, @dfix@, @dfiy@, @dfiz@,
+          @dfkx@, @dfky@, @dfkz@, demvirdltlxx, demvirdltlyx, demvirdltlzx,
+          demvirdltlyy, demvirdltlzy, demvirdltlzz);
+    }
   }
 FULL_PAIRWISE_INTERACTION: |
   real xr = @xi@ - @xk@;
   real yr = @yi@ - @yk@;
   real zr = @zi@ - @zk@;
   real r2 = image2(xr, yr, zr);
-  if (r2 <= off * off and incl) {
+  // DEAD: a pair with a dead group has no charge or charge derivative, and its
+  // two sites may overlap (dlambda.f:eleclive)
+  if (r2 <= off * off and incl and (not DEAD or grpPairLive(liveMask, @gi@, @gk@))) {
     real r = REAL_SQRT(r2);
     real invr = REAL_RECIP(r);
     real e, de;
-    pair_chg_v3<do_g, ETYP, 1>(r, 1, @ichg@, @kchg@, ebuffer, f, aewald,
-      cut, off, e, de);
+    MAYBE_UNUSED real dl1, dl2, dlde;
+    if CONSTEXPR (do_dl1)
+      pair_chg_lmda<do_g, do_dl2, do_fdl, ETYP, 1>(r, REAL_RECIP(r + ebuffer), 1, @ichg@, @kchg@, @idq@, @kdq@,
+        f, aewald, cut, off, del, d2el, e, de, dl1, dl2, dlde);
+    else
+      pair_chg_v3<do_g, ETYP, 1>(r, 1, @ichg@, @kchg@, ebuffer, f, aewald, cut, off, e, de);
     if CONSTEXPR (do_e) {
       ectl += floatTo<ebuf_prec>(e);
       if CONSTEXPR (do_a) {
@@ -117,7 +174,7 @@ FULL_PAIRWISE_INTERACTION: |
       @fkx@ -= dedx;
       @fky@ -= dedy;
       @fkz@ -= dedz;
-      if CONSTEXPR (do_v) {
+      if CONSTEXPR (do_v and not tile_local) {
         vectlxx += floatTo<vbuf_prec>(xr * dedx);
         vectlyx += floatTo<vbuf_prec>(yr * dedx);
         vectlzx += floatTo<vbuf_prec>(zr * dedx);
@@ -125,5 +182,14 @@ FULL_PAIRWISE_INTERACTION: |
         vectlzy += floatTo<vbuf_prec>(zr * dedy);
         vectlzz += floatTo<vbuf_prec>(zr * dedz);
       }
+    }
+    if CONSTEXPR (do_dl1) {
+      demdltl += floatTo<ebuf_prec>(dl1);
+      if CONSTEXPR (do_dl2)
+        d2emdl2tl += floatTo<ebuf_prec>(dl2);
+      if CONSTEXPR (do_fdl)
+        pair_dlforce<do_gdl, (do_vdl and not tile_local)>(dlde * invr, xr, yr, zr, @dfix@, @dfiy@, @dfiz@,
+          @dfkx@, @dfky@, @dfkz@, demvirdltlxx, demvirdltlyx, demvirdltlzx,
+          demvirdltlyy, demvirdltlzy, demvirdltlzz);
     }
   }

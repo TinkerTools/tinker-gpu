@@ -1,0 +1,205 @@
+OUTPUT_DIR: src/cu
+KERNEL_NAME: echglj_cu1
+TEMPLATE_PARAMS: template <class Ver, class IMG, class ETYP, class RADRULE, class EPSRULE, bool SOFTCORE, bool LMDA>
+# the box shape as a template parameter, the parameters of the atoms in the
+# order of the spatial list, and the tiles near their centers imaged once
+IMAGE_TEMPLATE: IMG
+LOCAL_TILES: true
+CONSTEXPR_FLAGS: |
+  constexpr bool do_e = Ver::e;
+  constexpr bool do_g = Ver::g;
+  constexpr bool do_v = Ver::v;
+  constexpr bool do_dl1 = Ver::e_dlmda1;
+  constexpr bool do_dl2 = Ver::e_dlmda2;
+  constexpr bool do_gdl = Ver::g_dlmda;
+  constexpr bool do_vdl = Ver::v_dlmda;
+  // a local tile takes the lambda derivative of its virial from those of the
+  // forces
+  constexpr bool do_fdl = do_gdl or do_vdl;
+  static_assert(not do_vdl or do_gdl, "");
+  static_assert(not LMDA or SOFTCORE, "");
+  static_assert(LMDA or not do_dl1, "");
+
+ENERGY:
+  - ec
+ENERGY_DLMDA1:
+  - dedl
+ENERGY_DLMDA2:
+  - d2edl2
+VIRIAL:
+  - vec
+VIRIAL_DLMDA:
+  - dvirdl
+GRADIENT:
+  - gx
+  - gy
+  - gz
+GRADIENT_DLMDA:
+  - dfdlx
+  - dfdly
+  - dfdlz
+
+# the larger of the charge and van der Waals cutoffs, beyond each of which
+# its pair function gives zero
+OFF_DISTANCE: 'off'
+
+EXCLUDE_INFO: info
+SCALE_1X_TYPE: real2_const_array,0,1
+
+EXTRA_PARAMS: |
+  , real eccut, real ecoff, real f, real aewald, const real* restrict chg
+  , real evcut, real evoff, const real (*restrict radeps)[2]
+  , const int* restrict grp, EchgljLmda lm
+# IMPLICIT_PARAMS:
+
+I_VARIABLES:
+  - register real xi   from:x
+  - register real yi   from:y
+  - register real zi   from:z
+  - register real ichg from:chg sorted
+  - register real irad from:radeps,0 sorted
+  - register real ieps from:radeps,1 sorted
+  - register int  imut from:grp sorted onlyif:SOFTCORE
+  - register real idq  from:lm.dq sorted onlyif:do_dl1 ifset:lm.dq
+K_VARIABLES:
+  - register real xk   from:x
+  - register real yk   from:y
+  - register real zk   from:z
+  - register real kchg from:chg sorted
+  - register real krad from:radeps,0 sorted
+  - register real keps from:radeps,1 sorted
+  - register int  kmut from:grp sorted onlyif:SOFTCORE
+  - register real kdq  from:lm.dq sorted onlyif:do_dl1 ifset:lm.dq
+I_FORCE:
+  - register real fix addto:gx
+  - register real fiy addto:gy
+  - register real fiz addto:gz
+K_FORCE:
+  - register real fkx addto:gx
+  - register real fky addto:gy
+  - register real fkz addto:gz
+I_FORCE_DLMDA:
+  - register real dfix addto:dfdlx
+  - register real dfiy addto:dfdly
+  - register real dfiz addto:dfdlz
+K_FORCE_DLMDA:
+  - register real dfkx addto:dfdlx
+  - register real dfky addto:dfdly
+  - register real dfkz addto:dfdlz
+
+SCALED_PAIRWISE_INTERACTION: |
+  real xr = @xi@ - @xk@;
+  real yr = @yi@ - @yk@;
+  real zr = @zi@ - @zk@;
+  real r2 = image2(xr, yr, zr);
+  if (r2 <= off * off and incl) {
+    real r = REAL_SQRT(r2);
+    real invr = REAL_RECIP(r);
+    // two sites at one point take no force, and a dead charge at one adds
+    // nothing, as in elj (pair_lj_rinv) and echarge
+    if CONSTEXPR (SOFTCORE)
+      invr = pair_lj_rinv(invr);
+    real ecik, decik, evik, devik;
+    MAYBE_UNUSED real dl1, dl2, dlde;
+    bool live = true;
+    if CONSTEXPR (LMDA) {
+      live = echgljPairLmda<do_g, do_dl1, do_dl2, do_fdl, ETYP, RADRULE, EPSRULE, 0>(r, invr, scalea, scaleb,
+        @imut@, @kmut@, @ichg@, @kchg@, (do_dl1 ? @idq@ : 0), (do_dl1 ? @kdq@ : 0), @irad@, @ieps@, @krad@, @keps@, f,
+        aewald, eccut, ecoff, evcut, evoff, lm, ecik, decik, evik, devik, dl1, dl2, dlde);
+    } else {
+      echgljPairPlain<do_g, SOFTCORE, ETYP, RADRULE, EPSRULE, 0>(r, invr, scalea, scaleb, @imut@, @kmut@, @ichg@,
+        @kchg@, @irad@, @ieps@, @krad@, @keps@, f, aewald, eccut, ecoff, evcut, evoff, lm, ecik, decik, evik, devik);
+    }
+    if (live) {
+      if CONSTEXPR (do_e)
+        ectl += floatTo<ebuf_prec>(ecik + evik);
+      if CONSTEXPR (do_dl1)
+        dedltl += floatTo<ebuf_prec>(dl1);
+      if CONSTEXPR (do_dl2)
+        d2edl2tl += floatTo<ebuf_prec>(dl2);
+      if CONSTEXPR (do_g) {
+        real de = (decik + devik) * invr;
+        real dedx = de * xr;
+        real dedy = de * yr;
+        real dedz = de * zr;
+        @fix@ += dedx;
+        @fiy@ += dedy;
+        @fiz@ += dedz;
+        @fkx@ -= dedx;
+        @fky@ -= dedy;
+        @fkz@ -= dedz;
+        // a local tile takes its virial from the summed forces
+        if CONSTEXPR (do_v and not tile_local) {
+          vectlxx += floatTo<vbuf_prec>(xr * dedx);
+          vectlyx += floatTo<vbuf_prec>(yr * dedx);
+          vectlzx += floatTo<vbuf_prec>(zr * dedx);
+          vectlyy += floatTo<vbuf_prec>(yr * dedy);
+          vectlzy += floatTo<vbuf_prec>(zr * dedy);
+          vectlzz += floatTo<vbuf_prec>(zr * dedz);
+        }
+      }
+      if CONSTEXPR (do_fdl) {
+        pair_dlforce<do_gdl, (do_vdl and not tile_local)>(dlde * invr, xr, yr, zr, @dfix@, @dfiy@, @dfiz@,
+          @dfkx@, @dfky@, @dfkz@, dvirdltlxx, dvirdltlyx, dvirdltlzx,
+          dvirdltlyy, dvirdltlzy, dvirdltlzz);
+      }
+    }
+  }
+FULL_PAIRWISE_INTERACTION: |
+  real xr = @xi@ - @xk@;
+  real yr = @yi@ - @yk@;
+  real zr = @zi@ - @zk@;
+  real r2 = image2(xr, yr, zr);
+  if (r2 <= off * off and incl) {
+    real r = REAL_SQRT(r2);
+    real invr = REAL_RECIP(r);
+    // two sites at one point take no force, and a dead charge at one adds
+    // nothing, as in elj (pair_lj_rinv) and echarge
+    if CONSTEXPR (SOFTCORE)
+      invr = pair_lj_rinv(invr);
+    real ecik, decik, evik, devik;
+    MAYBE_UNUSED real dl1, dl2, dlde;
+    bool live = true;
+    if CONSTEXPR (LMDA) {
+      live = echgljPairLmda<do_g, do_dl1, do_dl2, do_fdl, ETYP, RADRULE, EPSRULE, 1>(r, invr, 1, 1,
+        @imut@, @kmut@, @ichg@, @kchg@, (do_dl1 ? @idq@ : 0), (do_dl1 ? @kdq@ : 0), @irad@, @ieps@, @krad@, @keps@, f,
+        aewald, eccut, ecoff, evcut, evoff, lm, ecik, decik, evik, devik, dl1, dl2, dlde);
+    } else {
+      echgljPairPlain<do_g, SOFTCORE, ETYP, RADRULE, EPSRULE, 1>(r, invr, 1, 1, @imut@, @kmut@, @ichg@,
+        @kchg@, @irad@, @ieps@, @krad@, @keps@, f, aewald, eccut, ecoff, evcut, evoff, lm, ecik, decik, evik, devik);
+    }
+    if (live) {
+      if CONSTEXPR (do_e)
+        ectl += floatTo<ebuf_prec>(ecik + evik);
+      if CONSTEXPR (do_dl1)
+        dedltl += floatTo<ebuf_prec>(dl1);
+      if CONSTEXPR (do_dl2)
+        d2edl2tl += floatTo<ebuf_prec>(dl2);
+      if CONSTEXPR (do_g) {
+        real de = (decik + devik) * invr;
+        real dedx = de * xr;
+        real dedy = de * yr;
+        real dedz = de * zr;
+        @fix@ += dedx;
+        @fiy@ += dedy;
+        @fiz@ += dedz;
+        @fkx@ -= dedx;
+        @fky@ -= dedy;
+        @fkz@ -= dedz;
+        // a local tile takes its virial from the summed forces
+        if CONSTEXPR (do_v and not tile_local) {
+          vectlxx += floatTo<vbuf_prec>(xr * dedx);
+          vectlyx += floatTo<vbuf_prec>(yr * dedx);
+          vectlzx += floatTo<vbuf_prec>(zr * dedx);
+          vectlyy += floatTo<vbuf_prec>(yr * dedy);
+          vectlzy += floatTo<vbuf_prec>(zr * dedy);
+          vectlzz += floatTo<vbuf_prec>(zr * dedz);
+        }
+      }
+      if CONSTEXPR (do_fdl) {
+        pair_dlforce<do_gdl, (do_vdl and not tile_local)>(dlde * invr, xr, yr, zr, @dfix@, @dfiy@, @dfiz@,
+          @dfkx@, @dfky@, @dfkz@, dvirdltlxx, dvirdltlyx, dvirdltlzx,
+          dvirdltlyy, dvirdltlzy, dvirdltlzz);
+      }
+    }
+  }

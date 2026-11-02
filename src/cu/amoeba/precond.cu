@@ -37,8 +37,12 @@ void sparsePrecondApply_cu(const real (*rsd)[3], const real (*rsdp)[3], real (*z
    ngrid *= BLOCK_DIM;
    int nparallel = std::max(st.niak, st.nakpl) * WARP_SIZE;
    nparallel = std::max(nparallel, ngrid);
-   launch_k1s(g::s0, nparallel, sparsePrecond_cu1, //
-      st.n, TINKER_IMAGE_ARGS, off, st.si1.bit0, nuexclude, uexclude, uexclude_scale, st.x, st.y, st.z, st.sorted,
-      st.nakpl, st.iakpl, st.niak, st.iak, st.lst, rsd, rsdp, zrsd, zrsdp, polarity, elecDeadGroups(), elecLiveMask());
+   boxShapeDispatch(box_shape, [&](auto img) {
+      using IMG = decltype(img);
+      launch_k1s(g::s0, nparallel, sparsePrecond_cu1<IMG>, //
+         st.n, TINKER_IMAGE_ARGS, off, st.si1.bit0, nuexclude, uexclude, uexclude_scale, st.x, st.y, st.z, st.sorted,
+         st.nakpl, st.iakpl, st.niak, st.iak, st.lst, st.akc, rsd, rsdp, zrsd, zrsdp, polarity, elecDeadGroups(),
+         elecLiveMask());
+   });
 }
 }

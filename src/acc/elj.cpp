@@ -21,7 +21,6 @@ static void elj_acc1()
 
    const real cut = switchCut(Switch::VDW);
    const real off = switchOff(Switch::VDW);
-   const real cut2 = cut * cut;
    const real off2 = off * off;
    const int maxnlist = clist_unit->maxnlst;
    const auto* nlst = clist_unit->nlst;
@@ -30,16 +29,21 @@ static void elj_acc1()
    auto bufsize = bufferSize();
 
    MAYBE_UNUSED int GRID_DIM = gpuGridSize(BLOCK_DIM);
+   // OpenACC refuses the lambda derivatives, the lambda methods and relative
+   // free energy (dlmdaData2), so only the soft core of a single ligand at a
+   // fixed lambda is needed.
+   const SoftCoreLmda ljs = ljSoft(1, false);
+   const SoftCoreLmda unit = {1, 0, 0, 0, 0, 0, 0};
    #pragma acc parallel async num_gangs(GRID_DIM) vector_length(BLOCK_DIM)\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(DEVICE_PTRS,nlst,lst)
+               deviceptr(DEVICE_PTRS,nlst,lst) firstprivate(ljs,unit)
    #pragma acc loop gang independent
    for (int i = 0; i < n; ++i) {
       int it = jvdw[i];
       real xi = x[i];
       real yi = y[i];
       real zi = z[i];
-      real imut = mut[i];
+      int imut = mut[i];
       MAYBE_UNUSED grad_prec gxi = 0, gyi = 0, gzi = 0;
 
       int nvlsti = nlst[i];
@@ -60,17 +64,9 @@ static void elj_acc1()
             real eps = epsilon[it * njvdw + kt];
 
             MAYBE_UNUSED real e, de;
-            real vlambda = pair_vlambda(vlam, vcouple, imut, kmut);
-            pair_lj_v1<do_g, true>(rik, vlambda, rv, eps, 1, e, de);
-
-            if (rik2 > cut2) {
-               real taper, dtaper;
-               switchTaper5<do_g>(rik, cut, off, taper, dtaper);
-               if CONSTEXPR (do_g)
-                  de = e * dtaper + de * taper;
-               if CONSTEXPR (do_e)
-                  e = e * taper;
-            }
+            const SoftCoreLmda lp = pair_mutik(vcouple, imut, kmut) ? ljs : unit;
+            const real invr = REAL_RECIP(rik);
+            pair_lj_v3<do_g, true, 1>(rik, invr, lp, 1, rv, eps, cut, off, e, de);
 
             if CONSTEXPR (do_a)
                // vscale is always 1, exclude e == 0
@@ -79,7 +75,7 @@ static void elj_acc1()
             if CONSTEXPR (do_e)
                atomic_add(e, ev, offset);
             if CONSTEXPR (do_g) {
-               de *= REAL_RECIP(rik);
+               de *= pair_lj_rinv(invr);
                real dedx = de * xr;
                real dedy = de * yr;
                real dedz = de * zr;
@@ -111,7 +107,7 @@ static void elj_acc1()
 
    #pragma acc parallel async\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(DEVICE_PTRS,vexclude,vexclude_scale)
+               deviceptr(DEVICE_PTRS,vexclude,vexclude_scale) firstprivate(ljs,unit)
    #pragma acc loop independent
    for (int ii = 0; ii < nvexclude; ++ii) {
       int offset = ii & (bufsize - 1);
@@ -139,17 +135,9 @@ static void elj_acc1()
          real eps = epsilon[it * njvdw + kt];
 
          MAYBE_UNUSED real e, de;
-         real vlambda = pair_vlambda(vlam, vcouple, imut, kmut);
-         pair_lj_v1<do_g, true>(rik, vlambda, rv, eps, vscale, e, de);
-
-         if (rik2 > cut2) {
-            real taper, dtaper;
-            switchTaper5<do_g>(rik, cut, off, taper, dtaper);
-            if CONSTEXPR (do_g)
-               de = e * dtaper + de * taper;
-            if CONSTEXPR (do_e)
-               e = e * taper;
-         }
+         const SoftCoreLmda lp = pair_mutik(vcouple, imut, kmut) ? ljs : unit;
+         const real invr = REAL_RECIP(rik);
+         pair_lj_v3<do_g, true, 0>(rik, invr, lp, vscale, rv, eps, cut, off, e, de);
 
          if CONSTEXPR (do_a)
             if (vscale == -1 && e != 0)
@@ -157,7 +145,7 @@ static void elj_acc1()
          if CONSTEXPR (do_e)
             atomic_add(e, ev, offset);
          if CONSTEXPR (do_g) {
-            de *= REAL_RECIP(rik);
+            de *= pair_lj_rinv(invr);
             real dedx = de * xr;
             real dedy = de * yr;
             real dedz = de * zr;
@@ -182,7 +170,7 @@ static void elj_acc1()
 
    #pragma acc parallel async\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(DEVICE_PTRS,vdw14ik,radmin4,epsilon4)
+               deviceptr(DEVICE_PTRS,vdw14ik,radmin4,epsilon4) firstprivate(ljs,unit)
    #pragma acc loop independent
    for (int ii = 0; ii < nvdw14; ++ii) {
       int offset = ii & (bufsize - 1);
@@ -211,27 +199,19 @@ static void elj_acc1()
          real eps4 = epsilon4[it * njvdw + kt];
 
          MAYBE_UNUSED real e, de, e4, de4;
-         real vlambda = pair_vlambda(vlam, vcouple, imut, kmut);
-         pair_lj_v1<do_g, true>(rik, vlambda, rv, eps, v4scale, e, de);
-         pair_lj_v1<do_g, true>(rik, vlambda, rv4, eps4, v4scale, e4, de4);
+         const SoftCoreLmda lp = pair_mutik(vcouple, imut, kmut) ? ljs : unit;
+         const real invr = REAL_RECIP(rik);
+         pair_lj_v3<do_g, true, 0>(rik, invr, lp, v4scale, rv, eps, cut, off, e, de);
+         pair_lj_v3<do_g, true, 0>(rik, invr, lp, v4scale, rv4, eps4, cut, off, e4, de4);
          e = e4 - e;
          if CONSTEXPR (do_g)
             de = de4 - de;
-
-         if (rik2 > cut2) {
-            real taper, dtaper;
-            switchTaper5<do_g>(rik, cut, off, taper, dtaper);
-            if CONSTEXPR (do_g)
-               de = e * dtaper + de * taper;
-            if CONSTEXPR (do_e)
-               e = e * taper;
-         }
 
          // if CONSTEXPR (do_a) {}
          if CONSTEXPR (do_e)
             atomic_add(e, ev, offset);
          if CONSTEXPR (do_g) {
-            de *= REAL_RECIP(rik);
+            de *= pair_lj_rinv(invr);
             real dedx = de * xr;
             real dedy = de * yr;
             real dedz = de * zr;

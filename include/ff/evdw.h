@@ -55,6 +55,7 @@ enum class Vdw : int
    MM3HB, ///< MM3 exp-6 potential.
    HAL,   ///< Halgren buffered 14-7 potential.
    GAUSS, ///< Gaussian expansion VDW potential.
+   NONE,  ///< No VDW potential is set up.
 };
 }
 
@@ -73,6 +74,17 @@ void evdw(int vers);
 void elj(int vers);
 /// \ingroup vdw
 void elj14(int vers);
+/// \ingroup vdw
+/// The soft core of a Lennard-Jones pair of ligand group \c ig, 1 or 2
+/// (pair_mutcls), at its lambda, \f$ L = \lambda^n \f$ and
+/// \f$ h = \alpha \lambda^m (1-\lambda)^p \f$ from LJ-SOFTCORE, with its main
+/// lambda derivative coefficients only if \c dodl (eljsc.f).
+SoftCoreLmda ljSoft(int ig, bool dodl);
+
+/// The soft core of a buffered 14-7 pair of ligand group \c ig, 1 or 2, from
+/// VDW-SOFTCORE (ehalsc.f), with its main lambda derivative coefficients only
+/// if \c dodl.
+SoftCoreLmda halSoft(int ig, bool dodl);
 
 /// \ingroup vdw
 void ebuck(int vers);
@@ -152,11 +164,12 @@ struct LrcSums
 /// dispersion correction from the Fortran setup.
 void lrcSetup(LrcSums& ls, bool dsp);
 
-/// The correction times the volume at vdw lambda \c vl, with its first and
-/// second derivatives carried to the main lambda by the vdw lambda derivatives
-/// \c dl and \c d2l (lmdaChain). A constant over the volume, its virial is
-/// minus the energy on each diagonal element.
-LmdaFn lrcEval(const LrcSums& ls, double vl, double dl, double d2l);
+/// The correction times the volume at vdw lambda \c v, given with its main
+/// lambda derivatives, with its own first and second derivatives only if
+/// \c dodl (lmdaPwrChain); ligand 2 couples as the complement
+/// (lmdaComplement). A constant over the volume, its virial is minus the
+/// energy on each diagonal element.
+LmdaFn lrcEval(const LrcSums& ls, const LmdaFn& v, bool dodl);
 
 /// Adds the correction at the current vlam over the box volume to the energy and
 /// virial of the term, \c eterm and \c vterm, and of van der Waals, with its
@@ -164,9 +177,10 @@ LmdaFn lrcEval(const LrcSums& ls, double vl, double dl, double d2l);
 /// them (evcorr.f).
 void lrcApply(int vers, int dlvers, const LrcSums& ls, energy_prec& eterm, virial_prec (&vterm)[9]);
 
-/// The long-range van der Waals energy and virial corrections at the current
-/// vdw lambda, each times the volume of the box.
-void evdwLrcVol(energy_prec& elrc, virial_prec& vlrc);
+/// Adds the long-range van der Waals correction at the current vdw lambda to
+/// energy_ev and virial_ev, with the lambda derivatives \c dlvers asks for
+/// (lrcApply).
+void evdwLrcApply(int vers, int dlvers);
 
 /// \ingroup vdw
 /// \brief Type or class index into vdw parameters for each atom.

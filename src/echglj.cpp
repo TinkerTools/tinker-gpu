@@ -1,6 +1,6 @@
 #include "ff/echglj.h"
 #include "ff/atom.h"
-#include "ff/box.h"
+#include "ff/dlmda.h"
 #include "ff/elec.h"
 #include "ff/energy.h"
 #include "ff/nblist.h"
@@ -57,12 +57,13 @@ void echgljData(RcOp op)
       darray::deallocate(cvexclude, cvexclude_scale);
       // allocated only for the fused kernel, so a later session may skip them
       darray::deallocate(atom_rad, atom_eps);
-      darray::deallocate(mut_coalesced, chg_coalesced, radeps_coalesced);
+      darray::deallocate(mut_coalesced, chg_coalesced, radeps_coalesced, dq_coalesced);
       atom_rad = nullptr;
       atom_eps = nullptr;
       mut_coalesced = nullptr;
       chg_coalesced = nullptr;
       radeps_coalesced = nullptr;
+      dq_coalesced = nullptr;
    }
 
    if (op & RcOp::ALLOC) {
@@ -273,6 +274,10 @@ void echgljData(RcOp op)
          darray::allocate(n, &mut_coalesced);
          darray::allocate(n, &chg_coalesced);
          darray::allocate(2 * n, &radeps_coalesced);
+         // as the charge derivatives they gather (pchgData)
+         dq_coalesced = nullptr;
+         if (use_edlmda)
+            darray::allocate(n, &dq_coalesced);
       }
    }
 
@@ -309,51 +314,31 @@ TINKER_FVOID2(acc0, cu1, echgljRadGeomEpsGeomNonEwald, int);
 TINKER_FVOID2(acc0, cu1, echgljRadGeomEpsGeomEwaldReal, int);
 void echglj(int vers)
 {
-   auto do_e = vers & calc::energy;
-   auto do_v = vers & calc::virial;
-
    zeroOnHost(energy_ec, virial_ec);
    zeroOnHost(energy_ev, virial_ev);
 
    assert(vdwtyp == Vdw::LJ);
    assert(radrule == Vdw::ARITHMETIC or radrule == Vdw::GEOMETRIC);
    assert(epsrule == Vdw::GEOMETRIC);
-   pchgEnsureElec();
+   // the charges and the Lennard-Jones pairs each take their lambda
+   // derivatives as lmdaDrv decides, the pair kernel whenever either does
+   const int edlvers = lmdaDerivVers(vers, edlmdaActive());
+   const int vdlvers = lmdaDerivVers(vers, vdlmdaActive());
+   const int dlvers = lmdaDerivVers(vers, edlmdaActive() or vdlmdaActive());
    if (useEwald()) {
-      echargeEwaldRecipSelf(vers);
+      echargeEwaldRecipSelf(edlvers);
       if (radrule == Vdw::GEOMETRIC)
-         TINKER_FCALL2(acc0, cu1, echgljRadGeomEpsGeomEwaldReal, vers);
+         TINKER_FCALL2(acc0, cu1, echgljRadGeomEpsGeomEwaldReal, dlvers);
       else
-         TINKER_FCALL2(acc0, cu1, echgljRadArithEpsGeomEwaldReal, vers);
+         TINKER_FCALL2(acc0, cu1, echgljRadArithEpsGeomEwaldReal, dlvers);
    } else {
       if (radrule == Vdw::GEOMETRIC)
-         TINKER_FCALL2(acc0, cu1, echgljRadGeomEpsGeomNonEwald, vers);
+         TINKER_FCALL2(acc0, cu1, echgljRadGeomEpsGeomNonEwald, dlvers);
       else
-         TINKER_FCALL2(acc0, cu1, echgljRadArithEpsGeomNonEwald, vers);
+         TINKER_FCALL2(acc0, cu1, echgljRadArithEpsGeomNonEwald, dlvers);
    }
-   exfield(vers, 0);
-
-   // at the current vdw lambda, which free energy perturbation moves
-   energy_prec elrc;
-   virial_prec vlrc;
-   evdwLrcVol(elrc, vlrc);
-   if (do_e) {
-      if (elrc != 0) {
-         energy_prec corr = elrc / boxVolume();
-         energy_ev += corr;
-         energy_vdw += corr;
-      }
-   }
-   if (do_v) {
-      if (vlrc != 0) {
-         virial_prec term = vlrc / boxVolume();
-         virial_ev[0] += term; // xx
-         virial_ev[4] += term; // yy
-         virial_ev[8] += term; // zz
-         virial_vdw[0] += term;
-         virial_vdw[4] += term;
-         virial_vdw[8] += term;
-      }
-   }
+   elj14(vdlvers);
+   exfield(edlvers, 0);
+   evdwLrcApply(vers, vdlvers);
 }
 }

@@ -26,6 +26,15 @@ namespace tinker {
 /// \note Unlike Tinker, where only non-zero charges will be stored, this
 /// array also includes zero charges.
 TINKER_EXTERN real* pchg;
+/// \ingroup charge
+/// \brief The derivative of each partial charge with respect to elambda, the
+/// unscaled charge times the slope of its group scale (dlambda.f:chgdlmda);
+/// allocated with the electrostatic lambda derivatives only.
+TINKER_EXTERN real* pchg_dq;
+/// \ingroup charge
+/// \brief The unscaled partial charges, kept while a ligand group can follow
+/// lambda, from which pchg is rescaled; otherwise null.
+TINKER_EXTERN real* pchgorig;
 
 TINKER_EXTERN CountBuffer nec;
 TINKER_EXTERN EnergyBuffer ec;

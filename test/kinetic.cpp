@@ -65,7 +65,7 @@ TEST_CASE("Bussi-OnDevice-ArBox", "[ff][kinetic][arbox]")
    TestSession session(argc, argv);
    testMdInit(298., 0);
 
-   rc_flag = calc::xyz | calc::vel | calc::mass | calc::md;
+   rc_flag = usage_;
    session.init();
 
    // the device path is CUDA only

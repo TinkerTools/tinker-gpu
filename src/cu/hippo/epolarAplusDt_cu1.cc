@@ -7,9 +7,9 @@ void epolarAplusDt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, Ene
    const unsigned* restrict mdpuinfo, int nexclude, const int (*restrict exclude)[2],
    const real (*restrict exclude_scale)[4], const real* restrict x, const real* restrict y, const real* restrict z,
    const Spatial::SortedAtom* restrict sorted, int nakpl, const int* restrict iakpl, int niak, const int* restrict iak,
-   const int* restrict lst, real (*restrict ufld)[3], real (*restrict dufld)[6], const real (*restrict uind)[3],
-   real* restrict pot, const real (*restrict rpole)[10], const real* restrict pdamp, real aewald, real f, real wa,
-   real wb, const int* restrict grp, RdtMask live)
+   const int* restrict lst, const Spatial::Center* restrict akc, real (*restrict ufld)[3], real (*restrict dufld)[6],
+   const real (*restrict uind)[3], real* restrict pot, const real (*restrict rpole)[10], const real* restrict pdamp,
+   real aewald, real f, real wa, real wb, const int* restrict grp, RdtMask live)
 {
    using d::jpolar;
    using d::njpolar;
@@ -145,6 +145,7 @@ void epolarAplusDt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, Ene
       gk = (grp ? grp[k] : 0);
 
       constexpr bool incl = true;
+      constexpr bool tile_local = false;
       real xr = xk[threadIdx.x] - xi[klane];
       real yr = yk[threadIdx.x] - yi[klane];
       real zr = zk[threadIdx.x] - zi[klane];
@@ -195,7 +196,7 @@ void epolarAplusDt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, Ene
                   neptl += 1;
             }
          }
-         if CONSTEXPR (do_v) {
+         if CONSTEXPR (do_v and not tile_local) {
             veptlxx += floatTo<vbuf_prec>(wa * (vxx + vxx1));
             if CONSTEXPR (do_vdl)
                dveptlxx += floatTo<vbuf_prec>(wb * (vxx + vxx1));
@@ -349,89 +350,230 @@ void epolarAplusDt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, Ene
       __syncwarp();
 
       unsigned int mdpuinfo0 = mdpuinfo[iw * WARP_SIZE + ilane];
-      for (int j = 0; j < WARP_SIZE; ++j) {
-         int srclane = (ilane + j) & (WARP_SIZE - 1);
-         int klane = srclane + threadIdx.x - ilane;
-         bool incl = iid < kid and kid < n;
-         int srcmask = 1 << srclane;
-         incl = incl and (mdpuinfo0 & srcmask) == 0;
-         real xr = xk[threadIdx.x] - xi[klane];
-         real yr = yk[threadIdx.x] - yi[klane];
-         real zr = zk[threadIdx.x] - zi[klane];
-         real r2 = image2(xr, yr, zr);
-         // grp is null when every group is live
-         if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
-            real pga = thlval[njpolar * jpi[klane] + jpk];
-            real pgd = thdval[njpolar * jpi[klane] + jpk];
-            real e, edamp, vxx, vyx, vzx, vyy, vzy, vzz;
-            real pota, potb;
-            pair_polar_aplus_v2<Ver, ETYP, CFLX>(                                            //
-               r2, xr, yr, zr, 1, 1,                                                         //
-               ci[klane], dix[klane], diy[klane], diz[klane],                                //
-               qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], //
-               uix[klane], uiy[klane], uiz[klane], pdi[klane], pga, pgd,                     //
-               ck[threadIdx.x], dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x],        //
-               qkxx[threadIdx.x], qkxy[threadIdx.x], qkxz[threadIdx.x], qkyy[threadIdx.x], qkyz[threadIdx.x],
-               qkzz[threadIdx.x],                                    //
-               ukx, uky, ukz, pdk,                                   //
-               f, aewald,                                            //
-               frcxi, frcyi, frczi, frcxk, frcyk, frczk,             //
-               ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k,       //
-               dufld0i, dufld1i, dufld2i, dufld3i, dufld4i, dufld5i, //
-               dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, //
-               e, edamp, vxx, vyx, vzx, vyy, vzy, vzz, pota, potb);
-            if CONSTEXPR (do_e) {
-               eptl += floatTo<ebuf_prec>(wa * e);
-               if CONSTEXPR (do_a) {
-                  if (edamp != 0)
-                     neptl += 1;
+      real xc = akc[ty].x;
+      real yc = akc[ty].y;
+      real zc = akc[ty].z;
+      const bool ilocal = akc[ty].w != 0;
+      if (ilocal) {
+         real xr, yr, zr;
+         xr = xi[threadIdx.x] - xc;
+         yr = yi[threadIdx.x] - yc;
+         zr = zi[threadIdx.x] - zc;
+         image2(xr, yr, zr);
+         xi[threadIdx.x] = xr;
+         yi[threadIdx.x] = yr;
+         zi[threadIdx.x] = zr;
+         xr = xk[threadIdx.x] - xc;
+         yr = yk[threadIdx.x] - yc;
+         zr = zk[threadIdx.x] - zc;
+         image2(xr, yr, zr);
+         xk[threadIdx.x] = xr;
+         yk[threadIdx.x] = yr;
+         zk[threadIdx.x] = zr;
+         __syncwarp();
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            int klane = srclane + threadIdx.x - ilane;
+            bool incl = iid < kid and kid < n;
+            int srcmask = 1 << srclane;
+            incl = incl and (mdpuinfo0 & srcmask) == 0;
+            constexpr bool tile_local = true;
+            real xr = xk[threadIdx.x] - xi[klane];
+            real yr = yk[threadIdx.x] - yi[klane];
+            real zr = zk[threadIdx.x] - zi[klane];
+            real r2 = (xr * xr + yr * yr + zr * zr);
+            // grp is null when every group is live
+            if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
+               real pga = thlval[njpolar * jpi[klane] + jpk];
+               real pgd = thdval[njpolar * jpi[klane] + jpk];
+               real e, edamp, vxx, vyx, vzx, vyy, vzy, vzz;
+               real pota, potb;
+               pair_polar_aplus_v2<Ver, ETYP, CFLX>(                                            //
+                  r2, xr, yr, zr, 1, 1,                                                         //
+                  ci[klane], dix[klane], diy[klane], diz[klane],                                //
+                  qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], //
+                  uix[klane], uiy[klane], uiz[klane], pdi[klane], pga, pgd,                     //
+                  ck[threadIdx.x], dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x],        //
+                  qkxx[threadIdx.x], qkxy[threadIdx.x], qkxz[threadIdx.x], qkyy[threadIdx.x], qkyz[threadIdx.x],
+                  qkzz[threadIdx.x],                                    //
+                  ukx, uky, ukz, pdk,                                   //
+                  f, aewald,                                            //
+                  frcxi, frcyi, frczi, frcxk, frcyk, frczk,             //
+                  ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k,       //
+                  dufld0i, dufld1i, dufld2i, dufld3i, dufld4i, dufld5i, //
+                  dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, //
+                  e, edamp, vxx, vyx, vzx, vyy, vzy, vzz, pota, potb);
+               if CONSTEXPR (do_e) {
+                  eptl += floatTo<ebuf_prec>(wa * e);
+                  if CONSTEXPR (do_a) {
+                     if (edamp != 0)
+                        neptl += 1;
+                  }
                }
-            }
-            if CONSTEXPR (do_v) {
-               veptlxx += floatTo<vbuf_prec>(wa * (vxx));
-               if CONSTEXPR (do_vdl)
-                  dveptlxx += floatTo<vbuf_prec>(wb * (vxx));
-               veptlyx += floatTo<vbuf_prec>(wa * (vyx));
-               if CONSTEXPR (do_vdl)
-                  dveptlyx += floatTo<vbuf_prec>(wb * (vyx));
-               veptlzx += floatTo<vbuf_prec>(wa * (vzx));
-               if CONSTEXPR (do_vdl)
-                  dveptlzx += floatTo<vbuf_prec>(wb * (vzx));
-               veptlyy += floatTo<vbuf_prec>(wa * (vyy));
-               if CONSTEXPR (do_vdl)
-                  dveptlyy += floatTo<vbuf_prec>(wb * (vyy));
-               veptlzy += floatTo<vbuf_prec>(wa * (vzy));
-               if CONSTEXPR (do_vdl)
-                  dveptlzy += floatTo<vbuf_prec>(wb * (vzy));
-               veptlzz += floatTo<vbuf_prec>(wa * (vzz));
-               if CONSTEXPR (do_vdl)
-                  dveptlzz += floatTo<vbuf_prec>(wb * (vzz));
-            }
-            if CONSTEXPR (CFLX) {
-               poti += pota;
-               potk += potb;
-            }
-         } // end if (include)
+               if CONSTEXPR (do_v and not tile_local) {
+                  veptlxx += floatTo<vbuf_prec>(wa * (vxx));
+                  if CONSTEXPR (do_vdl)
+                     dveptlxx += floatTo<vbuf_prec>(wb * (vxx));
+                  veptlyx += floatTo<vbuf_prec>(wa * (vyx));
+                  if CONSTEXPR (do_vdl)
+                     dveptlyx += floatTo<vbuf_prec>(wb * (vyx));
+                  veptlzx += floatTo<vbuf_prec>(wa * (vzx));
+                  if CONSTEXPR (do_vdl)
+                     dveptlzx += floatTo<vbuf_prec>(wb * (vzx));
+                  veptlyy += floatTo<vbuf_prec>(wa * (vyy));
+                  if CONSTEXPR (do_vdl)
+                     dveptlyy += floatTo<vbuf_prec>(wb * (vyy));
+                  veptlzy += floatTo<vbuf_prec>(wa * (vzy));
+                  if CONSTEXPR (do_vdl)
+                     dveptlzy += floatTo<vbuf_prec>(wb * (vzy));
+                  veptlzz += floatTo<vbuf_prec>(wa * (vzz));
+                  if CONSTEXPR (do_vdl)
+                     dveptlzz += floatTo<vbuf_prec>(wb * (vzz));
+               }
+               if CONSTEXPR (CFLX) {
+                  poti += pota;
+                  potk += potb;
+               }
+            } // end if (include)
 
-         iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
-         if CONSTEXPR (do_g) {
-            frcxi = __shfl_sync(ALL_LANES, frcxi, ilane + 1);
-            frcyi = __shfl_sync(ALL_LANES, frcyi, ilane + 1);
-            frczi = __shfl_sync(ALL_LANES, frczi, ilane + 1);
-            ufld0i = __shfl_sync(ALL_LANES, ufld0i, ilane + 1);
-            ufld1i = __shfl_sync(ALL_LANES, ufld1i, ilane + 1);
-            ufld2i = __shfl_sync(ALL_LANES, ufld2i, ilane + 1);
-            dufld0i = __shfl_sync(ALL_LANES, dufld0i, ilane + 1);
-            dufld1i = __shfl_sync(ALL_LANES, dufld1i, ilane + 1);
-            dufld2i = __shfl_sync(ALL_LANES, dufld2i, ilane + 1);
-            dufld3i = __shfl_sync(ALL_LANES, dufld3i, ilane + 1);
-            dufld4i = __shfl_sync(ALL_LANES, dufld4i, ilane + 1);
-            dufld5i = __shfl_sync(ALL_LANES, dufld5i, ilane + 1);
-            if CONSTEXPR (CFLX)
-               poti = __shfl_sync(ALL_LANES, poti, ilane + 1);
+            iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
+            if CONSTEXPR (do_g) {
+               frcxi = __shfl_sync(ALL_LANES, frcxi, ilane + 1);
+               frcyi = __shfl_sync(ALL_LANES, frcyi, ilane + 1);
+               frczi = __shfl_sync(ALL_LANES, frczi, ilane + 1);
+               ufld0i = __shfl_sync(ALL_LANES, ufld0i, ilane + 1);
+               ufld1i = __shfl_sync(ALL_LANES, ufld1i, ilane + 1);
+               ufld2i = __shfl_sync(ALL_LANES, ufld2i, ilane + 1);
+               dufld0i = __shfl_sync(ALL_LANES, dufld0i, ilane + 1);
+               dufld1i = __shfl_sync(ALL_LANES, dufld1i, ilane + 1);
+               dufld2i = __shfl_sync(ALL_LANES, dufld2i, ilane + 1);
+               dufld3i = __shfl_sync(ALL_LANES, dufld3i, ilane + 1);
+               dufld4i = __shfl_sync(ALL_LANES, dufld4i, ilane + 1);
+               dufld5i = __shfl_sync(ALL_LANES, dufld5i, ilane + 1);
+               if CONSTEXPR (CFLX)
+                  poti = __shfl_sync(ALL_LANES, poti, ilane + 1);
+            }
+         }
+
+         if CONSTEXPR (do_v) {
+            veptlxx += floatTo<vbuf_prec>(wa * (xi[threadIdx.x] * frcxi + xk[threadIdx.x] * frcxk));
+            veptlyx += floatTo<vbuf_prec>(wa
+               * (0.5f
+                  * (yi[threadIdx.x] * frcxi + yk[threadIdx.x] * frcxk + xi[threadIdx.x] * frcyi
+                     + xk[threadIdx.x] * frcyk)));
+            veptlzx += floatTo<vbuf_prec>(wa
+               * (0.5f
+                  * (zi[threadIdx.x] * frcxi + zk[threadIdx.x] * frcxk + xi[threadIdx.x] * frczi
+                     + xk[threadIdx.x] * frczk)));
+            veptlyy += floatTo<vbuf_prec>(wa * (yi[threadIdx.x] * frcyi + yk[threadIdx.x] * frcyk));
+            veptlzy += floatTo<vbuf_prec>(wa
+               * (0.5f
+                  * (zi[threadIdx.x] * frcyi + zk[threadIdx.x] * frcyk + yi[threadIdx.x] * frczi
+                     + yk[threadIdx.x] * frczk)));
+            veptlzz += floatTo<vbuf_prec>(wa * (zi[threadIdx.x] * frczi + zk[threadIdx.x] * frczk));
+         }
+         if CONSTEXPR (do_vdl) {
+            dveptlxx += floatTo<vbuf_prec>(wb * (xi[threadIdx.x] * frcxi + xk[threadIdx.x] * frcxk));
+            dveptlyx += floatTo<vbuf_prec>(wb
+               * (0.5f
+                  * (yi[threadIdx.x] * frcxi + yk[threadIdx.x] * frcxk + xi[threadIdx.x] * frcyi
+                     + xk[threadIdx.x] * frcyk)));
+            dveptlzx += floatTo<vbuf_prec>(wb
+               * (0.5f
+                  * (zi[threadIdx.x] * frcxi + zk[threadIdx.x] * frcxk + xi[threadIdx.x] * frczi
+                     + xk[threadIdx.x] * frczk)));
+            dveptlyy += floatTo<vbuf_prec>(wb * (yi[threadIdx.x] * frcyi + yk[threadIdx.x] * frcyk));
+            dveptlzy += floatTo<vbuf_prec>(wb
+               * (0.5f
+                  * (zi[threadIdx.x] * frcyi + zk[threadIdx.x] * frcyk + yi[threadIdx.x] * frczi
+                     + yk[threadIdx.x] * frczk)));
+            dveptlzz += floatTo<vbuf_prec>(wb * (zi[threadIdx.x] * frczi + zk[threadIdx.x] * frczk));
+         }
+      } else {
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            int klane = srclane + threadIdx.x - ilane;
+            bool incl = iid < kid and kid < n;
+            int srcmask = 1 << srclane;
+            incl = incl and (mdpuinfo0 & srcmask) == 0;
+            constexpr bool tile_local = false;
+            real xr = xk[threadIdx.x] - xi[klane];
+            real yr = yk[threadIdx.x] - yi[klane];
+            real zr = zk[threadIdx.x] - zi[klane];
+            real r2 = image2(xr, yr, zr);
+            // grp is null when every group is live
+            if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
+               real pga = thlval[njpolar * jpi[klane] + jpk];
+               real pgd = thdval[njpolar * jpi[klane] + jpk];
+               real e, edamp, vxx, vyx, vzx, vyy, vzy, vzz;
+               real pota, potb;
+               pair_polar_aplus_v2<Ver, ETYP, CFLX>(                                            //
+                  r2, xr, yr, zr, 1, 1,                                                         //
+                  ci[klane], dix[klane], diy[klane], diz[klane],                                //
+                  qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], //
+                  uix[klane], uiy[klane], uiz[klane], pdi[klane], pga, pgd,                     //
+                  ck[threadIdx.x], dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x],        //
+                  qkxx[threadIdx.x], qkxy[threadIdx.x], qkxz[threadIdx.x], qkyy[threadIdx.x], qkyz[threadIdx.x],
+                  qkzz[threadIdx.x],                                    //
+                  ukx, uky, ukz, pdk,                                   //
+                  f, aewald,                                            //
+                  frcxi, frcyi, frczi, frcxk, frcyk, frczk,             //
+                  ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k,       //
+                  dufld0i, dufld1i, dufld2i, dufld3i, dufld4i, dufld5i, //
+                  dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, //
+                  e, edamp, vxx, vyx, vzx, vyy, vzy, vzz, pota, potb);
+               if CONSTEXPR (do_e) {
+                  eptl += floatTo<ebuf_prec>(wa * e);
+                  if CONSTEXPR (do_a) {
+                     if (edamp != 0)
+                        neptl += 1;
+                  }
+               }
+               if CONSTEXPR (do_v and not tile_local) {
+                  veptlxx += floatTo<vbuf_prec>(wa * (vxx));
+                  if CONSTEXPR (do_vdl)
+                     dveptlxx += floatTo<vbuf_prec>(wb * (vxx));
+                  veptlyx += floatTo<vbuf_prec>(wa * (vyx));
+                  if CONSTEXPR (do_vdl)
+                     dveptlyx += floatTo<vbuf_prec>(wb * (vyx));
+                  veptlzx += floatTo<vbuf_prec>(wa * (vzx));
+                  if CONSTEXPR (do_vdl)
+                     dveptlzx += floatTo<vbuf_prec>(wb * (vzx));
+                  veptlyy += floatTo<vbuf_prec>(wa * (vyy));
+                  if CONSTEXPR (do_vdl)
+                     dveptlyy += floatTo<vbuf_prec>(wb * (vyy));
+                  veptlzy += floatTo<vbuf_prec>(wa * (vzy));
+                  if CONSTEXPR (do_vdl)
+                     dveptlzy += floatTo<vbuf_prec>(wb * (vzy));
+                  veptlzz += floatTo<vbuf_prec>(wa * (vzz));
+                  if CONSTEXPR (do_vdl)
+                     dveptlzz += floatTo<vbuf_prec>(wb * (vzz));
+               }
+               if CONSTEXPR (CFLX) {
+                  poti += pota;
+                  potk += potb;
+               }
+            } // end if (include)
+
+            iid = __shfl_sync(ALL_LANES, iid, ilane + 1);
+            if CONSTEXPR (do_g) {
+               frcxi = __shfl_sync(ALL_LANES, frcxi, ilane + 1);
+               frcyi = __shfl_sync(ALL_LANES, frcyi, ilane + 1);
+               frczi = __shfl_sync(ALL_LANES, frczi, ilane + 1);
+               ufld0i = __shfl_sync(ALL_LANES, ufld0i, ilane + 1);
+               ufld1i = __shfl_sync(ALL_LANES, ufld1i, ilane + 1);
+               ufld2i = __shfl_sync(ALL_LANES, ufld2i, ilane + 1);
+               dufld0i = __shfl_sync(ALL_LANES, dufld0i, ilane + 1);
+               dufld1i = __shfl_sync(ALL_LANES, dufld1i, ilane + 1);
+               dufld2i = __shfl_sync(ALL_LANES, dufld2i, ilane + 1);
+               dufld3i = __shfl_sync(ALL_LANES, dufld3i, ilane + 1);
+               dufld4i = __shfl_sync(ALL_LANES, dufld4i, ilane + 1);
+               dufld5i = __shfl_sync(ALL_LANES, dufld5i, ilane + 1);
+               if CONSTEXPR (CFLX)
+                  poti = __shfl_sync(ALL_LANES, poti, ilane + 1);
+            }
          }
       }
-
       if CONSTEXPR (do_g) {
          atomic_add(wa * frcxi, gx, i);
          if CONSTEXPR (do_gdl)
@@ -554,86 +696,224 @@ void epolarAplusDt_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nep, Ene
       gk = (grp ? grp[k] : 0);
       __syncwarp();
 
-      for (int j = 0; j < WARP_SIZE; ++j) {
-         int srclane = (ilane + j) & (WARP_SIZE - 1);
-         int klane = srclane + threadIdx.x - ilane;
-         bool incl = atomk > 0;
-         real xr = xk[threadIdx.x] - xi[klane];
-         real yr = yk[threadIdx.x] - yi[klane];
-         real zr = zk[threadIdx.x] - zi[klane];
-         real r2 = image2(xr, yr, zr);
-         // grp is null when every group is live
-         if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
-            real pga = thlval[njpolar * jpi[klane] + jpk];
-            real pgd = thdval[njpolar * jpi[klane] + jpk];
-            real e, edamp, vxx, vyx, vzx, vyy, vzy, vzz;
-            real pota, potb;
-            pair_polar_aplus_v2<Ver, ETYP, CFLX>(                                            //
-               r2, xr, yr, zr, 1, 1,                                                         //
-               ci[klane], dix[klane], diy[klane], diz[klane],                                //
-               qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], //
-               uix[klane], uiy[klane], uiz[klane], pdi[klane], pga, pgd,                     //
-               ck[threadIdx.x], dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x],        //
-               qkxx[threadIdx.x], qkxy[threadIdx.x], qkxz[threadIdx.x], qkyy[threadIdx.x], qkyz[threadIdx.x],
-               qkzz[threadIdx.x],                                    //
-               ukx, uky, ukz, pdk,                                   //
-               f, aewald,                                            //
-               frcxi, frcyi, frczi, frcxk, frcyk, frczk,             //
-               ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k,       //
-               dufld0i, dufld1i, dufld2i, dufld3i, dufld4i, dufld5i, //
-               dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, //
-               e, edamp, vxx, vyx, vzx, vyy, vzy, vzz, pota, potb);
-            if CONSTEXPR (do_e) {
-               eptl += floatTo<ebuf_prec>(wa * e);
-               if CONSTEXPR (do_a) {
-                  if (edamp != 0)
-                     neptl += 1;
+      real xc = akc[ty].x;
+      real yc = akc[ty].y;
+      real zc = akc[ty].z;
+      const bool ilocal = akc[ty].w != 0;
+      if (ilocal) {
+         real xr, yr, zr;
+         xr = xi[threadIdx.x] - xc;
+         yr = yi[threadIdx.x] - yc;
+         zr = zi[threadIdx.x] - zc;
+         image2(xr, yr, zr);
+         xi[threadIdx.x] = xr;
+         yi[threadIdx.x] = yr;
+         zi[threadIdx.x] = zr;
+         xr = xk[threadIdx.x] - xc;
+         yr = yk[threadIdx.x] - yc;
+         zr = zk[threadIdx.x] - zc;
+         image2(xr, yr, zr);
+         xk[threadIdx.x] = xr;
+         yk[threadIdx.x] = yr;
+         zk[threadIdx.x] = zr;
+         __syncwarp();
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            int klane = srclane + threadIdx.x - ilane;
+            bool incl = atomk > 0;
+            constexpr bool tile_local = true;
+            real xr = xk[threadIdx.x] - xi[klane];
+            real yr = yk[threadIdx.x] - yi[klane];
+            real zr = zk[threadIdx.x] - zi[klane];
+            real r2 = (xr * xr + yr * yr + zr * zr);
+            // grp is null when every group is live
+            if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
+               real pga = thlval[njpolar * jpi[klane] + jpk];
+               real pgd = thdval[njpolar * jpi[klane] + jpk];
+               real e, edamp, vxx, vyx, vzx, vyy, vzy, vzz;
+               real pota, potb;
+               pair_polar_aplus_v2<Ver, ETYP, CFLX>(                                            //
+                  r2, xr, yr, zr, 1, 1,                                                         //
+                  ci[klane], dix[klane], diy[klane], diz[klane],                                //
+                  qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], //
+                  uix[klane], uiy[klane], uiz[klane], pdi[klane], pga, pgd,                     //
+                  ck[threadIdx.x], dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x],        //
+                  qkxx[threadIdx.x], qkxy[threadIdx.x], qkxz[threadIdx.x], qkyy[threadIdx.x], qkyz[threadIdx.x],
+                  qkzz[threadIdx.x],                                    //
+                  ukx, uky, ukz, pdk,                                   //
+                  f, aewald,                                            //
+                  frcxi, frcyi, frczi, frcxk, frcyk, frczk,             //
+                  ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k,       //
+                  dufld0i, dufld1i, dufld2i, dufld3i, dufld4i, dufld5i, //
+                  dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, //
+                  e, edamp, vxx, vyx, vzx, vyy, vzy, vzz, pota, potb);
+               if CONSTEXPR (do_e) {
+                  eptl += floatTo<ebuf_prec>(wa * e);
+                  if CONSTEXPR (do_a) {
+                     if (edamp != 0)
+                        neptl += 1;
+                  }
                }
-            }
-            if CONSTEXPR (do_v) {
-               veptlxx += floatTo<vbuf_prec>(wa * (vxx));
-               if CONSTEXPR (do_vdl)
-                  dveptlxx += floatTo<vbuf_prec>(wb * (vxx));
-               veptlyx += floatTo<vbuf_prec>(wa * (vyx));
-               if CONSTEXPR (do_vdl)
-                  dveptlyx += floatTo<vbuf_prec>(wb * (vyx));
-               veptlzx += floatTo<vbuf_prec>(wa * (vzx));
-               if CONSTEXPR (do_vdl)
-                  dveptlzx += floatTo<vbuf_prec>(wb * (vzx));
-               veptlyy += floatTo<vbuf_prec>(wa * (vyy));
-               if CONSTEXPR (do_vdl)
-                  dveptlyy += floatTo<vbuf_prec>(wb * (vyy));
-               veptlzy += floatTo<vbuf_prec>(wa * (vzy));
-               if CONSTEXPR (do_vdl)
-                  dveptlzy += floatTo<vbuf_prec>(wb * (vzy));
-               veptlzz += floatTo<vbuf_prec>(wa * (vzz));
-               if CONSTEXPR (do_vdl)
-                  dveptlzz += floatTo<vbuf_prec>(wb * (vzz));
-            }
-            if CONSTEXPR (CFLX) {
-               poti += pota;
-               potk += potb;
-            }
-         } // end if (include)
+               if CONSTEXPR (do_v and not tile_local) {
+                  veptlxx += floatTo<vbuf_prec>(wa * (vxx));
+                  if CONSTEXPR (do_vdl)
+                     dveptlxx += floatTo<vbuf_prec>(wb * (vxx));
+                  veptlyx += floatTo<vbuf_prec>(wa * (vyx));
+                  if CONSTEXPR (do_vdl)
+                     dveptlyx += floatTo<vbuf_prec>(wb * (vyx));
+                  veptlzx += floatTo<vbuf_prec>(wa * (vzx));
+                  if CONSTEXPR (do_vdl)
+                     dveptlzx += floatTo<vbuf_prec>(wb * (vzx));
+                  veptlyy += floatTo<vbuf_prec>(wa * (vyy));
+                  if CONSTEXPR (do_vdl)
+                     dveptlyy += floatTo<vbuf_prec>(wb * (vyy));
+                  veptlzy += floatTo<vbuf_prec>(wa * (vzy));
+                  if CONSTEXPR (do_vdl)
+                     dveptlzy += floatTo<vbuf_prec>(wb * (vzy));
+                  veptlzz += floatTo<vbuf_prec>(wa * (vzz));
+                  if CONSTEXPR (do_vdl)
+                     dveptlzz += floatTo<vbuf_prec>(wb * (vzz));
+               }
+               if CONSTEXPR (CFLX) {
+                  poti += pota;
+                  potk += potb;
+               }
+            } // end if (include)
 
-         if CONSTEXPR (do_g) {
-            frcxi = __shfl_sync(ALL_LANES, frcxi, ilane + 1);
-            frcyi = __shfl_sync(ALL_LANES, frcyi, ilane + 1);
-            frczi = __shfl_sync(ALL_LANES, frczi, ilane + 1);
-            ufld0i = __shfl_sync(ALL_LANES, ufld0i, ilane + 1);
-            ufld1i = __shfl_sync(ALL_LANES, ufld1i, ilane + 1);
-            ufld2i = __shfl_sync(ALL_LANES, ufld2i, ilane + 1);
-            dufld0i = __shfl_sync(ALL_LANES, dufld0i, ilane + 1);
-            dufld1i = __shfl_sync(ALL_LANES, dufld1i, ilane + 1);
-            dufld2i = __shfl_sync(ALL_LANES, dufld2i, ilane + 1);
-            dufld3i = __shfl_sync(ALL_LANES, dufld3i, ilane + 1);
-            dufld4i = __shfl_sync(ALL_LANES, dufld4i, ilane + 1);
-            dufld5i = __shfl_sync(ALL_LANES, dufld5i, ilane + 1);
-            if CONSTEXPR (CFLX)
-               poti = __shfl_sync(ALL_LANES, poti, ilane + 1);
+            if CONSTEXPR (do_g) {
+               frcxi = __shfl_sync(ALL_LANES, frcxi, ilane + 1);
+               frcyi = __shfl_sync(ALL_LANES, frcyi, ilane + 1);
+               frczi = __shfl_sync(ALL_LANES, frczi, ilane + 1);
+               ufld0i = __shfl_sync(ALL_LANES, ufld0i, ilane + 1);
+               ufld1i = __shfl_sync(ALL_LANES, ufld1i, ilane + 1);
+               ufld2i = __shfl_sync(ALL_LANES, ufld2i, ilane + 1);
+               dufld0i = __shfl_sync(ALL_LANES, dufld0i, ilane + 1);
+               dufld1i = __shfl_sync(ALL_LANES, dufld1i, ilane + 1);
+               dufld2i = __shfl_sync(ALL_LANES, dufld2i, ilane + 1);
+               dufld3i = __shfl_sync(ALL_LANES, dufld3i, ilane + 1);
+               dufld4i = __shfl_sync(ALL_LANES, dufld4i, ilane + 1);
+               dufld5i = __shfl_sync(ALL_LANES, dufld5i, ilane + 1);
+               if CONSTEXPR (CFLX)
+                  poti = __shfl_sync(ALL_LANES, poti, ilane + 1);
+            }
+         }
+
+         if CONSTEXPR (do_v) {
+            veptlxx += floatTo<vbuf_prec>(wa * (xi[threadIdx.x] * frcxi + xk[threadIdx.x] * frcxk));
+            veptlyx += floatTo<vbuf_prec>(wa
+               * (0.5f
+                  * (yi[threadIdx.x] * frcxi + yk[threadIdx.x] * frcxk + xi[threadIdx.x] * frcyi
+                     + xk[threadIdx.x] * frcyk)));
+            veptlzx += floatTo<vbuf_prec>(wa
+               * (0.5f
+                  * (zi[threadIdx.x] * frcxi + zk[threadIdx.x] * frcxk + xi[threadIdx.x] * frczi
+                     + xk[threadIdx.x] * frczk)));
+            veptlyy += floatTo<vbuf_prec>(wa * (yi[threadIdx.x] * frcyi + yk[threadIdx.x] * frcyk));
+            veptlzy += floatTo<vbuf_prec>(wa
+               * (0.5f
+                  * (zi[threadIdx.x] * frcyi + zk[threadIdx.x] * frcyk + yi[threadIdx.x] * frczi
+                     + yk[threadIdx.x] * frczk)));
+            veptlzz += floatTo<vbuf_prec>(wa * (zi[threadIdx.x] * frczi + zk[threadIdx.x] * frczk));
+         }
+         if CONSTEXPR (do_vdl) {
+            dveptlxx += floatTo<vbuf_prec>(wb * (xi[threadIdx.x] * frcxi + xk[threadIdx.x] * frcxk));
+            dveptlyx += floatTo<vbuf_prec>(wb
+               * (0.5f
+                  * (yi[threadIdx.x] * frcxi + yk[threadIdx.x] * frcxk + xi[threadIdx.x] * frcyi
+                     + xk[threadIdx.x] * frcyk)));
+            dveptlzx += floatTo<vbuf_prec>(wb
+               * (0.5f
+                  * (zi[threadIdx.x] * frcxi + zk[threadIdx.x] * frcxk + xi[threadIdx.x] * frczi
+                     + xk[threadIdx.x] * frczk)));
+            dveptlyy += floatTo<vbuf_prec>(wb * (yi[threadIdx.x] * frcyi + yk[threadIdx.x] * frcyk));
+            dveptlzy += floatTo<vbuf_prec>(wb
+               * (0.5f
+                  * (zi[threadIdx.x] * frcyi + zk[threadIdx.x] * frcyk + yi[threadIdx.x] * frczi
+                     + yk[threadIdx.x] * frczk)));
+            dveptlzz += floatTo<vbuf_prec>(wb * (zi[threadIdx.x] * frczi + zk[threadIdx.x] * frczk));
+         }
+      } else {
+         for (int j = 0; j < WARP_SIZE; ++j) {
+            int srclane = (ilane + j) & (WARP_SIZE - 1);
+            int klane = srclane + threadIdx.x - ilane;
+            bool incl = atomk > 0;
+            constexpr bool tile_local = false;
+            real xr = xk[threadIdx.x] - xi[klane];
+            real yr = yk[threadIdx.x] - yi[klane];
+            real zr = zk[threadIdx.x] - zi[klane];
+            real r2 = image2(xr, yr, zr);
+            // grp is null when every group is live
+            if (r2 <= off * off and incl and (not grp or grpPairLive(live, gi[klane], gk))) {
+               real pga = thlval[njpolar * jpi[klane] + jpk];
+               real pgd = thdval[njpolar * jpi[klane] + jpk];
+               real e, edamp, vxx, vyx, vzx, vyy, vzy, vzz;
+               real pota, potb;
+               pair_polar_aplus_v2<Ver, ETYP, CFLX>(                                            //
+                  r2, xr, yr, zr, 1, 1,                                                         //
+                  ci[klane], dix[klane], diy[klane], diz[klane],                                //
+                  qixx[klane], qixy[klane], qixz[klane], qiyy[klane], qiyz[klane], qizz[klane], //
+                  uix[klane], uiy[klane], uiz[klane], pdi[klane], pga, pgd,                     //
+                  ck[threadIdx.x], dkx[threadIdx.x], dky[threadIdx.x], dkz[threadIdx.x],        //
+                  qkxx[threadIdx.x], qkxy[threadIdx.x], qkxz[threadIdx.x], qkyy[threadIdx.x], qkyz[threadIdx.x],
+                  qkzz[threadIdx.x],                                    //
+                  ukx, uky, ukz, pdk,                                   //
+                  f, aewald,                                            //
+                  frcxi, frcyi, frczi, frcxk, frcyk, frczk,             //
+                  ufld0i, ufld1i, ufld2i, ufld0k, ufld1k, ufld2k,       //
+                  dufld0i, dufld1i, dufld2i, dufld3i, dufld4i, dufld5i, //
+                  dufld0k, dufld1k, dufld2k, dufld3k, dufld4k, dufld5k, //
+                  e, edamp, vxx, vyx, vzx, vyy, vzy, vzz, pota, potb);
+               if CONSTEXPR (do_e) {
+                  eptl += floatTo<ebuf_prec>(wa * e);
+                  if CONSTEXPR (do_a) {
+                     if (edamp != 0)
+                        neptl += 1;
+                  }
+               }
+               if CONSTEXPR (do_v and not tile_local) {
+                  veptlxx += floatTo<vbuf_prec>(wa * (vxx));
+                  if CONSTEXPR (do_vdl)
+                     dveptlxx += floatTo<vbuf_prec>(wb * (vxx));
+                  veptlyx += floatTo<vbuf_prec>(wa * (vyx));
+                  if CONSTEXPR (do_vdl)
+                     dveptlyx += floatTo<vbuf_prec>(wb * (vyx));
+                  veptlzx += floatTo<vbuf_prec>(wa * (vzx));
+                  if CONSTEXPR (do_vdl)
+                     dveptlzx += floatTo<vbuf_prec>(wb * (vzx));
+                  veptlyy += floatTo<vbuf_prec>(wa * (vyy));
+                  if CONSTEXPR (do_vdl)
+                     dveptlyy += floatTo<vbuf_prec>(wb * (vyy));
+                  veptlzy += floatTo<vbuf_prec>(wa * (vzy));
+                  if CONSTEXPR (do_vdl)
+                     dveptlzy += floatTo<vbuf_prec>(wb * (vzy));
+                  veptlzz += floatTo<vbuf_prec>(wa * (vzz));
+                  if CONSTEXPR (do_vdl)
+                     dveptlzz += floatTo<vbuf_prec>(wb * (vzz));
+               }
+               if CONSTEXPR (CFLX) {
+                  poti += pota;
+                  potk += potb;
+               }
+            } // end if (include)
+
+            if CONSTEXPR (do_g) {
+               frcxi = __shfl_sync(ALL_LANES, frcxi, ilane + 1);
+               frcyi = __shfl_sync(ALL_LANES, frcyi, ilane + 1);
+               frczi = __shfl_sync(ALL_LANES, frczi, ilane + 1);
+               ufld0i = __shfl_sync(ALL_LANES, ufld0i, ilane + 1);
+               ufld1i = __shfl_sync(ALL_LANES, ufld1i, ilane + 1);
+               ufld2i = __shfl_sync(ALL_LANES, ufld2i, ilane + 1);
+               dufld0i = __shfl_sync(ALL_LANES, dufld0i, ilane + 1);
+               dufld1i = __shfl_sync(ALL_LANES, dufld1i, ilane + 1);
+               dufld2i = __shfl_sync(ALL_LANES, dufld2i, ilane + 1);
+               dufld3i = __shfl_sync(ALL_LANES, dufld3i, ilane + 1);
+               dufld4i = __shfl_sync(ALL_LANES, dufld4i, ilane + 1);
+               dufld5i = __shfl_sync(ALL_LANES, dufld5i, ilane + 1);
+               if CONSTEXPR (CFLX)
+                  poti = __shfl_sync(ALL_LANES, poti, ilane + 1);
+            }
          }
       }
-
       if CONSTEXPR (do_g) {
          atomic_add(wa * frcxi, gx, i);
          if CONSTEXPR (do_gdl)

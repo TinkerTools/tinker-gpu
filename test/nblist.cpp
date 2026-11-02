@@ -473,3 +473,35 @@ TEST_CASE("NBList-Prune-Keyword", "[ff][nblist][prune]")
    }
 }
 #endif
+
+// Repulsion, exchange polarization and charge transfer share the multipole
+// list, which holds pairs only out to the Ewald cutoff, so a longer cutoff of
+// theirs is refused (mechanic.f, test_nblist_cutoff). The CUDA build uses that
+// list even without NEIGHBOR-LIST, where the ACC build loops over all pairs and
+// Fortran runs.
+TEST_CASE("NBList-MlistCutoff", "[ff][nblist][hippo]")
+{
+   const std::string files = TINKER9_DIRSTR "/test/file/";
+   const char* x1 = "water2.xyz";
+   TestFile fx1(files + "mutate/water2.xyz", x1);
+   TestFile fpr(files + "commit_aad9340c/water21.prm");
+
+   auto run = [&](const char* k, bool refused) {
+      TestFile fke(files + "mutate/" + k, k);
+      const char* argv[] = {"dummy", x1, "-k", k};
+      int argc = 4;
+      TestSession session(argc, argv);
+      rc_flag = calc::xyz | calc::energy;
+      if (refused)
+         REQUIRE_THROWS_WITH(session.init(), Catch::Matchers::ContainsSubstring("exceeds the multipole list cutoff"));
+      else
+         REQUIRE_NOTHROW(session.init());
+   };
+   run("mlist_repcut_fatal.key", true);
+   run("mlist_ctcut_fatal.key", true);
+#if TINKER_GPULANG_CUDA
+   run("mlist_ctcut_nolist.key", true);
+#else
+   run("mlist_ctcut_nolist.key", false);
+#endif
+}
