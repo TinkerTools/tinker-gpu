@@ -330,6 +330,11 @@ static DHRc* ev_dptr;
 
 void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
 {
+   // The terms were never set up, so their arrays are whatever an earlier
+   // session left behind; an integrator asks for an energy here as it starts.
+   if (not useEnergyData())
+      return;
+
    // Nothing derived from the coordinates carries over from an earlier call.
    ++xyz_epoch;
 
@@ -532,9 +537,14 @@ void energy(int vers)
 }
 
 namespace tinker {
+bool useEnergyData()
+{
+   return rc_flag & calc::vmask;
+}
+
 void energyData(RcOp op)
 {
-   if ((rc_flag & calc::vmask) == 0)
+   if (not useEnergyData())
       return;
 
    RcMan egv42{egvData, op};

@@ -476,9 +476,10 @@ TEST_CASE("NBList-Prune-Keyword", "[ff][nblist][prune]")
 
 // Repulsion, exchange polarization and charge transfer share the multipole
 // list, which holds pairs only out to the Ewald cutoff, so a longer cutoff of
-// theirs is refused (mechanic.f, test_nblist_cutoff). The CUDA build uses that
-// list even without NEIGHBOR-LIST, where the ACC build loops over all pairs and
-// Fortran runs.
+// theirs is refused. With NEIGHBOR-LIST, Fortran mechanic.f refuses the key
+// with a fatal error that would end this program (test_nblist_cutoff covers
+// those keys). Without it Fortran loops over all pairs and runs, as the ACC
+// build does, but the CUDA build still uses the list and refuses the key.
 TEST_CASE("NBList-MlistCutoff", "[ff][nblist][hippo]")
 {
    const std::string files = TINKER9_DIRSTR "/test/file/";
@@ -497,8 +498,6 @@ TEST_CASE("NBList-MlistCutoff", "[ff][nblist][hippo]")
       else
          REQUIRE_NOTHROW(session.init());
    };
-   run("mlist_repcut_fatal.key", true);
-   run("mlist_ctcut_fatal.key", true);
 #if TINKER_GPULANG_CUDA
    run("mlist_ctcut_nolist.key", true);
 #else

@@ -67,7 +67,9 @@ private:
 /// that run after it.
 struct TestLmdaFlagGuard
 {
-   bool ost = use_ost, meta = use_meta, abf = use_abf, cv = use_lmdacv, mc = use_lmdamc;
+   bool ost = use_ost, meta = use_meta, abf = use_abf, cv = use_lmdacv, mc = use_lmdamc,
+        fill = use_lmdafill;
+   double fillr = lmdafillr;
    ~TestLmdaFlagGuard()
    {
       use_ost = ost;
@@ -75,8 +77,28 @@ struct TestLmdaFlagGuard
       use_abf = abf;
       use_lmdacv = cv;
       use_lmdamc = mc;
+      use_lmdafill = fill;
+      lmdafillr = fillr;
    }
 };
+
+/// \brief Sets the mean force of lambda bin \c i to \c f as one sample of data,
+/// so the bin counts as sampled and the fill of the bias keeps its value.
+inline void testSetLmdaBin(int i, double f)
+{
+   lmdafmean[i] = f;
+   lmdafsum[i] = f;
+   lmdafwt[i] = 1.0;
+}
+
+/// \brief Leaves lambda bin \c i without data, so the fill of the bias
+/// replaces its mean force.
+inline void testClearLmdaBin(int i)
+{
+   lmdafmean[i] = 0.0;
+   lmdafsum[i] = 0.0;
+   lmdafwt[i] = 0.0;
+}
 
 /// \brief The lambda-derivative sections of a reference file.
 ///

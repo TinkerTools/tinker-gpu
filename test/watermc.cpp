@@ -808,8 +808,9 @@ TEST_CASE("WaterMC-Lambda-Methods", "[ff][watermc]")
       // a bias that is not zero, as in a run that has deposited some
       energy(calc::v4);
       if (use_abf) {
+         // data in every bin, so no bin needs to be filled
          for (int i = 1; i <= nlmda; ++i)
-            lmdafmean[i] = 30.0 * (double)(i - 1) * wlmda;
+            testSetLmdaBin(i, 30.0 * (double)(i - 1) * wlmda);
       } else if (use_ost) {
          hbias = 2.0;
          lmdaavg = lambda;

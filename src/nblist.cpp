@@ -3,6 +3,7 @@
 #include "ff/echarge.h"
 #include "ff/echglj.h"
 #include "ff/elec.h"
+#include "ff/energy.h"
 #include "ff/evdw.h"
 #include "ff/hippo/edisp.h"
 #include "ff/hippo/erepel.h"
@@ -327,6 +328,9 @@ static void spatialBuild(SpatialUnit unt)
 
 void nblistData(RcOp op)
 {
+   if (not useEnergyData())
+      return;
+
    if (op & RcOp::DEALLOC) {
       NBListUnit::clear();
       vlist_unit.close();
@@ -558,6 +562,9 @@ void spatialUpdate(SpatialUnit unt)
 
 void nblistRefresh()
 {
+   if (not useEnergyData())
+      return;
+
    Nbl u = Nbl::UNDEFINED;
 
    // vlist

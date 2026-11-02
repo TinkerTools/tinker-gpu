@@ -12,6 +12,7 @@
 #include "test.h"
 #include "testrt.h"
 
+#include <cstdlib>
 #include <memory>
 #include <string>
 #include <vector>
@@ -56,7 +57,12 @@ TEST_CASE("Truncated-Octahedron", "[ff][pbc][arbox]")
 
    energy(calc::v3);
    COMPARE_REALS(esum, ref_e, eps_e);
-   COMPARE_INTS(countReduce(nev), ref_count);
+   // Atoms 126 and 198 sit 4.3e-7 Angstrom inside the 7 Angstrom cutoff, under
+   // two float roundings of r^2, so a single or mixed precision build counts
+   // the pair or not as its compiler orders the arithmetic; the taper leaves
+   // the energy unchanged either way.
+   const int count_tol = (TINKER_REAL_SIZE == 4) ? 1 : 0;
+   REQUIRE(std::abs(countReduce(nev) - ref_count) <= count_tol);
 
    energy(calc::v4);
    COMPARE_REALS(esum, ref_e, eps_e);
