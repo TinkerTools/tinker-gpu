@@ -51,6 +51,7 @@ void resetabf(int nl, int nhist)
    lmdacvstd = 0.0;
    lmdacvrat = 0.0;
    use_lmdafill = true;
+   lmdafillr = 0.1;
 
    lmdaihist.assign(sizelmdahist + 1, 0);
    lmdalhist.assign(sizelmdahist + 1, 0.0);
@@ -75,9 +76,10 @@ void resetabf(int nl, int nhist)
 }
 
 // fills the first nbin bins of the sampled mean force fsamp with the bins
-// flagged in sampled, checks the result against ref to within eps and against
-// the Fortran lmdafill exactly, and checks that fsamp is left unchanged
-void checkFill(int nbin, const std::vector<double>& fsamp, const std::vector<bool>& sampled,
+// flagged in sampled, within nreach bins of data, checks the result against ref
+// to within eps and against the Fortran lmdafill exactly, and checks that fsamp
+// is left unchanged
+void checkFill(int nbin, const std::vector<double>& fsamp, const std::vector<bool>& sampled, int nreach,
    const std::vector<double>& ref, double eps)
 {
    // the engine arrays are indexed 1..nbin, the Fortran ones 0..nbin-1
@@ -91,8 +93,8 @@ void checkFill(int nbin, const std::vector<double>& fsamp, const std::vector<boo
       sf[i - 1] = sampled[i - 1] ? 1 : 0;
    }
    const std::vector<double> fsave = f1;
-   lmdaFill(nbin, f1, s1, fbias);
-   tinker_f_lmdafill(&nbin, ff.data(), sf.data(), fbiasf.data());
+   lmdaFill(nbin, f1, s1, nreach, fbias);
+   tinker_f_lmdafill(&nbin, ff.data(), sf.data(), &nreach, fbiasf.data());
    for (int i = 1; i <= nbin; ++i) {
       CAPTURE(i);
       COMPARE_REALS(fbias[i], ref[i - 1], eps);
@@ -281,36 +283,53 @@ TEST_CASE("EABF-fill", "[ff][eabf]")
 {
    // A copy of the nearest sampled bin past either end of the data, linear
    // interpolation inside a gap, zero with no data, sampled bins kept exactly,
-   // and the sampled values left unchanged (test_eabf.f:test_eabf_fill).
+   // and the sampled values left unchanged, then the reach: a gap up to twice
+   // the reach is interpolated, a wider gap or an end is copied within reach
+   // and zero beyond it (test_eabf.f:test_eabf_fill).
    const bool T = true, F = false;
 
    // bins below the first sampled bin copy its mean force
-   checkFill(5, {0., 0., 0., -20., -40.}, {F, F, F, T, T}, {-20., -20., -20., -20., -40.}, 0.0);
+   checkFill(5, {0., 0., 0., -20., -40.}, {F, F, F, T, T}, 5, {-20., -20., -20., -20., -40.}, 0.0);
 
    // bins past the last sampled bin copy its mean force
-   checkFill(5, {-10., -20., 0., 0., 0.}, {T, T, F, F, F}, {-10., -20., -20., -20., -20.}, 0.0);
+   checkFill(5, {-10., -20., 0., 0., 0.}, {T, T, F, F, F}, 5, {-10., -20., -20., -20., -20.}, 0.0);
 
    // a gap between sampled bins is interpolated linearly
-   checkFill(5, {-10., 0., 0., -40., -50.}, {T, F, F, T, T}, {-10., -20., -30., -40., -50.}, 1.0e-12);
+   checkFill(5, {-10., 0., 0., -40., -50.}, {T, F, F, T, T}, 5, {-10., -20., -30., -40., -50.}, 1.0e-12);
 
    // a bin halfway between two sampled bins takes their average
-   checkFill(3, {-10., 0., -30.}, {T, F, T}, {-10., -20., -30.}, 0.0);
+   checkFill(3, {-10., 0., -30.}, {T, F, T}, 3, {-10., -20., -30.}, 0.0);
 
    // both ends and a gap are filled in the same profile
-   checkFill(5, {0., -10., 0., 0., -40.}, {F, T, F, F, T}, {-10., -10., -20., -30., -40.}, 1.0e-12);
+   checkFill(5, {0., -10., 0., 0., -40.}, {F, T, F, F, T}, 5, {-10., -10., -20., -30., -40.}, 1.0e-12);
 
    // a sampled zero is data, and values in unsampled bins are unused
-   checkFill(5, {7., 9., 0., -20., -40.}, {F, F, T, T, T}, {0., 0., 0., -20., -40.}, 0.0);
+   checkFill(5, {7., 9., 0., -20., -40.}, {F, F, T, T, T}, 5, {0., 0., 0., -20., -40.}, 0.0);
 
    // with no sampled bin the profile is zero
-   checkFill(5, {3., 1., 4., 1., 5.}, {F, F, F, F, F}, {0., 0., 0., 0., 0.}, 0.0);
+   checkFill(5, {3., 1., 4., 1., 5.}, {F, F, F, F, F}, 5, {0., 0., 0., 0., 0.}, 0.0);
 
    // a fully sampled profile is reproduced exactly
-   checkFill(5, {1.1, -2.3, 3.7, 0., -5.9}, {T, T, T, T, T}, {1.1, -2.3, 3.7, 0., -5.9}, 0.0);
+   checkFill(5, {1.1, -2.3, 3.7, 0., -5.9}, {T, T, T, T, T}, 5, {1.1, -2.3, 3.7, 0., -5.9}, 0.0);
 
    // a single bin keeps its data, or is zero without it
-   checkFill(1, {2.5}, {T}, {2.5}, 0.0);
-   checkFill(1, {2.5}, {F}, {0.}, 0.0);
+   checkFill(1, {2.5}, {T}, 1, {2.5}, 0.0);
+   checkFill(1, {2.5}, {F}, 1, {0.}, 0.0);
+
+   // a gap of twice the reach is interpolated across; unsampled bins hold junk
+   // values here, which must never reach the fill
+   checkFill(3, {-10., 7., -30.}, {T, F, T}, 1, {-10., -20., -30.}, 1.0e-12);
+   checkFill(5, {-10., 7., 9., 11., -50.}, {T, F, F, F, T}, 2, {-10., -20., -30., -40., -50.}, 1.0e-12);
+
+   // a gap wider than twice the reach copies each side within reach
+   checkFill(4, {-10., 7., 9., -40.}, {T, F, F, T}, 1, {-10., -10., -40., -40.}, 0.0);
+   checkFill(5, {-10., 7., 9., 11., -50.}, {T, F, F, F, T}, 1, {-10., -10., 0., -50., -50.}, 0.0);
+
+   // past either end of the data a bin within reach copies it
+   checkFill(5, {7., 9., 11., -40., 13.}, {F, F, F, T, F}, 1, {0., 0., -40., -40., -40.}, 0.0);
+
+   // a reach of zero fills nothing
+   checkFill(5, {7., -10., 9., -40., 11.}, {F, T, F, T, F}, 0, {0., -10., 0., -40., 0.}, 0.0);
 }
 
 TEST_CASE("EABF-fillbias", "[ff][eabf]")
@@ -323,7 +342,9 @@ TEST_CASE("EABF-fillbias", "[ff][eabf]")
    TestLmdaFlagGuard guard;
    resetabf(5, 8);
 
-   // sample the two top bins only, at lambda 0.75 and 1
+   // sample the two top bins only, at lambda 0.75 and 1, with a reach that
+   // fills every bin
+   lmdafillr = 1.0;
    nlmdahist = 2;
    lmdalhist[1] = 0.75;
    lmdafhist[1] = -20.0;
@@ -357,6 +378,19 @@ TEST_CASE("EABF-fillbias", "[ff][eabf]")
    REQUIRE(lmdafmean[1] == 0.0);
    REQUIRE(lmdafmean[4] == -20.0);
 
+   // a reach of one bin fills only the bin below lambda 0.75, so the mean
+   // force is 0, 0, -20, -20, -40
+   lmdafillr = 0.25;
+   lambda = 0.3;
+   eabfBias(calc::energy);
+   COMPARE_REALS(-bostlmda, 0.1, 1.0e-12);
+   COMPARE_REALS(lmdadfdl, -4.0, 1.0e-12);
+   lambda = 0.2;
+   eabfBias(calc::energy);
+   REQUIRE(bostlmda == 0.0);
+   REQUIRE(lmdadfdl == 0.0);
+   lmdafillr = 1.0;
+
    // without the fill the bias is the sampled free energy
    use_lmdafill = false;
    lambda = 0.3;
@@ -386,4 +420,119 @@ TEST_CASE("EABF-fillbias", "[ff][eabf]")
    eabfBias(calc::energy);
    REQUIRE(vfill == bostlmda);
    REQUIRE(dfill == lmdadfdl);
+}
+
+TEST_CASE("EABF-fillfull", "[ff][eabf]")
+{
+   // On the default grid of 201 bins a fill reach of one lambda, or more,
+   // gives the unlimited fill, where each end copies the nearest sampled bin
+   // and a gap of any width is interpolated, while a reach of 0.25, or the
+   // default 0.1, copies each side of a wider gap and the low end only within
+   // reach; each case is compared with a profile built here by hand
+   // (test_eabf.f:test_eabf_fillfull).
+   TestLmdaFlagGuard guard;
+
+   // sample only lambda 0.3 and 0.9, leaving 60 bins below the data, a gap of
+   // 120 bins and 20 bins above the data
+   resetabf(201, 1);
+   use_lmdafill = true;
+   const int ilo = 61, ihi = 181;
+   const double flo = -20.0, fhi = -80.0;
+   testSetLmdaBin(ilo, flo);
+   testSetLmdaBin(ihi, fhi);
+
+   // the reach and the bins it covers, where a reach of one or more covers
+   // every bin; 0.25 is 50 bins and 0.1 is 20, so the gap is wider than twice
+   // either reach
+   const int nall = nlmda;
+   const struct
+   {
+      double reach;
+      int nr;
+   } cases[] = {{1.0, nall}, {1.5, nall}, {0.25, 50}, {0.1, 20}};
+   for (const auto& c : cases) {
+      CAPTURE(c.reach);
+      lmdafillr = c.reach;
+
+      // build the expected profile by hand
+      std::vector<double> fref(nlmda + 1, 0.0);
+      for (int k = 1; k <= nlmda; ++k) {
+         if (c.nr == nall) {
+            if (k <= ilo)
+               fref[k] = flo;
+            else if (k >= ihi)
+               fref[k] = fhi;
+            else
+               fref[k] = flo + (double)(k - ilo) / (double)(ihi - ilo) * (fhi - flo);
+         } else {
+            if (k <= ilo) {
+               if (ilo - k <= c.nr)
+                  fref[k] = flo;
+            } else if (k < ihi) {
+               if (k - ilo <= c.nr)
+                  fref[k] = flo;
+               if (ihi - k <= c.nr)
+                  fref[k] = fhi;
+            } else {
+               if (k - ihi <= c.nr)
+                  fref[k] = fhi;
+            }
+         }
+      }
+
+      // compare the bias energy and slope over the lambda range
+      for (int i = 0; i <= 80; ++i) {
+         const double lmda = (double)i * 0.0125;
+         CAPTURE(lmda);
+         double eb, db, er, dr;
+         efreeBias(lmda, eb, db);
+         efreeProf(lmda, fref, er, dr);
+         COMPARE_REALS(eb, er, 1.0e-10);
+         COMPARE_REALS(db, dr, 1.0e-10);
+      }
+   }
+
+   // check a few bins of the 0.25 reach directly, at the edge of the low end
+   // and of each side of the gap
+   double eb, db;
+   lmdafillr = 0.25;
+   efreeBias(0.045, eb, db);
+   COMPARE_REALS(db, 0.0, 1.0e-9);
+   efreeBias(0.05, eb, db);
+   COMPARE_REALS(db, flo, 1.0e-9);
+   efreeBias(0.55, eb, db);
+   COMPARE_REALS(db, flo, 1.0e-9);
+   efreeBias(0.6, eb, db);
+   COMPARE_REALS(db, 0.0, 1.0e-9);
+   efreeBias(0.65, eb, db);
+   COMPARE_REALS(db, fhi, 1.0e-9);
+
+   // the default reach of 0.1 is 20 bins: bins 41 and 81 are the last ones
+   // filled on either side of lambda 0.3, so the segment just inside each holds
+   // the data value and the segment just outside is zero
+   lmdafillr = 0.1;
+   efreeBias(0.2025, eb, db);
+   REQUIRE(db == flo);
+   efreeBias(0.1925, eb, db);
+   REQUIRE(db == 0.0);
+   efreeBias(0.3975, eb, db);
+   REQUIRE(db == flo);
+   efreeBias(0.4075, eb, db);
+   REQUIRE(db == 0.0);
+
+   // a reach of 0.3 on 21 bins is 0.3/0.05 = 5.999... bins in floating point,
+   // which efreeBias must round to 6, so bins 5 and 17 are filled from data at
+   // bin 11 and bins 4 and 18 are not
+   resetabf(21, 1);
+   use_lmdafill = true;
+   lmdafillr = 0.3;
+   testSetLmdaBin(11, flo);
+   efreeBias(0.225, eb, db);
+   REQUIRE(db == flo);
+   efreeBias(0.125, eb, db);
+   REQUIRE(db == 0.0);
+   efreeBias(0.775, eb, db);
+   REQUIRE(db == flo);
+   efreeBias(0.875, eb, db);
+   REQUIRE(db == 0.0);
 }

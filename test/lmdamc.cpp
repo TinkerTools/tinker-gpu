@@ -432,7 +432,7 @@ void runStale(const char* mode)
    mcLoad();
    const bool ost = use_ost;
    for (int i = 1; i <= nlmda; ++i)
-      lmdafmean[i] = -1.0e5;
+      testSetLmdaBin(i, -1.0e5);
    bath::kelvin = 1.0e-6;
 
    // After a scaling barostat a downhill move is accepted whatever energy the
@@ -509,26 +509,27 @@ TEST_CASE("LMDAMC-keys", "[ff][lmdamc]")
       s.session.end();
    }
 
-   // the fill of unsampled bins is on by default, and turned off or on by
-   // keyword, where the bare keyword turns it on
+   // the fill of unsampled bins is on by default with a reach of 0.1, and
+   // turned off, or on with a reach whose sign is dropped, by keyword; with no
+   // reach, or a word other than NONE, the default reach is kept
+   const struct
    {
-      Setup s(kIonwat, "abf", kRc);
-      REQUIRE(use_lmdafill);
-      s.session.end();
-   }
-   {
-      Setup s(kIonwat, "abf", kRc, 0., "lambda-biasfill none\n");
-      REQUIRE_FALSE(use_lmdafill);
-      s.session.end();
-   }
-   {
-      Setup s(kIonwat, "abf", kRc, 0., "lambda-biasfill linear\n");
-      REQUIRE(use_lmdafill);
-      s.session.end();
-   }
-   {
-      Setup s(kIonwat, "abf", kRc, 0., "lambda-biasfill\n");
-      REQUIRE(use_lmdafill);
+      const char* extra;
+      bool fill;
+      double reach;
+   } fills[] = {
+      {"", true, 0.1},
+      {"lambda-biasfill none\n", false, 0.1},
+      {"lambda-biasfill 0.25\n", true, 0.25},
+      {"lambda-biasfill -0.25\n", true, 0.25},
+      {"lambda-biasfill\n", true, 0.1},
+      {"lambda-biasfill linear\n", true, 0.1},
+   };
+   for (const auto& f : fills) {
+      CAPTURE(f.extra);
+      Setup s(kIonwat, "abf", kRc, 0., f.extra);
+      REQUIRE(use_lmdafill == f.fill);
+      REQUIRE(lmdafillr == f.reach);
       s.session.end();
    }
 }
@@ -730,6 +731,8 @@ void runFill(const char* mode)
    Setup s(kIonwat, mode, kRc);
    const double e0 = mcLoad();
    REQUIRE(use_lmdafill);
+   // the start sits farther from the data than the default reach
+   lmdafillr = 1.0;
 
    // keep ABF data at lambda 0.9 and above, and start well below; the OST
    // gaussian sits at the starting lambda of 0.5, so start well above it
@@ -830,7 +833,7 @@ TEST_CASE("LMDAMC-stale-lists", "[ff][lmdamc]")
       "commit_6fe8e913/water03.prm");
    REQUIRE(n == 30);
    for (int i = 1; i <= nlmda; ++i)
-      lmdafmean[i] = -1.0e5;
+      testSetLmdaBin(i, -1.0e5);
    bath::kelvin = 1.0e-6;
    energy(calc::v4);
 
@@ -849,7 +852,7 @@ TEST_CASE("LMDAMC-after-volume-move", "[ff][lmdamc]")
    Setup s(kIonwat, "abf", kRcDyn, 1.);
    mcLoad();
    for (int i = 1; i <= nlmda; ++i)
-      lmdafmean[i] = -1.0e5;
+      testSetLmdaBin(i, -1.0e5);
    const int voltrial0 = bath::voltrial;
    const double volmove0 = bath::volmove;
    FstrView volscale = bath::volscale;

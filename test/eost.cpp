@@ -120,6 +120,7 @@ void resetost(int nl, int nf, int nhist)
    // the cases that write the mean force by hand leave the bin weights unset,
    // so the fill is off unless a case turns it on
    use_lmdafill = false;
+   lmdafillr = 0.1;
 }
 
 // resetmeta -- allocate metadynamics history arrays and the bin lookup
@@ -834,8 +835,10 @@ TEST_CASE("EOST-fill", "[ff][eost]")
    testSetLmdaBin(5, -40.0);
    dedl = 0.0;
 
-   // the f term holds a mean force of -20 below lambda 0.75
+   // the f term holds a mean force of -20 below lambda 0.75 with a reach that
+   // fills every row
    use_lmdafill = true;
+   lmdafillr = 1.0;
    lambda = 1.0;
    esum = 0.0;
    eostBias(calc::energy);
@@ -850,6 +853,12 @@ TEST_CASE("EOST-fill", "[ff][eost]")
    // the estimate keeps zero mean force in the unsupported rows
    COMPARE_REALS(efreeTot(), -10.0, 1.0e-12);
    REQUIRE(lmdafmean[1] == 0.0);
+
+   // a reach of one row fills only the row below lambda 0.75
+   lmdafillr = 0.25;
+   eostBias(calc::energy);
+   COMPARE_REALS(bgbias - bostlmda, 0.1, 1.0e-12);
+   COMPARE_REALS(lmdadfdl, -4.0, 1.0e-12);
 
    // without the fill the f term is the sampled free energy
    use_lmdafill = false;

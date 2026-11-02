@@ -520,6 +520,7 @@ void dlmda_mech()
    lmdamctrial = dlmda::lmdamctrial;
    lmdamcmove = dlmda::lmdamcmove;
    use_lmdafill = (dlmda::use_lmdafill != 0);
+   lmdafillr = dlmda::lmdafillr;
    nlmdamctry = 0;
    nlmdamcacc = 0;
 
@@ -830,26 +831,37 @@ void efreeProf(double lmda, const std::vector<double>& fprof, double& eflmda, do
    dfdl = fprof[nlmda];
 }
 
+// scratch sampled flags and filled mean force of efreeBias, indexed 1..nlmda
+static std::vector<bool> s_fillsamp;
+static std::vector<double> s_fillbias;
+
 // Free energy at lambda lmda that the adaptive bias removes, and its lambda
 // derivative, from the mean force that drives lambda, in which the unsampled
-// bins are filled from the sampled ones if use_lmdafill is set. It is the only
-// route by which filled values reach an energy or force, and no free energy
-// estimate may call it (dlambda.f:efreebias).
+// bins are filled from the sampled ones within the lambda reach lmdafillr if
+// use_lmdafill is set. It is the only route by which filled values reach an
+// energy or force, and no free energy estimate may call it
+// (dlambda.f:efreebias).
 void efreeBias(double lmda, double& eflmda, double& dfdl)
 {
-   // without the fill the bias follows the sampled mean force
-   if (not use_lmdafill) {
+   // convert the fill reach to a whole number of bins, where the cap at the bin
+   // count already reaches across every bin
+   int nreach = (int)std::min(lmdafillr / wlmda + 1.0e-6, (double)nlmda);
+
+   // without the fill, or with a reach under one bin, the bias follows the
+   // sampled mean force
+   if (not use_lmdafill or nreach == 0) {
       efreeProf(lmda, lmdafmean, eflmda, dfdl);
       return;
    }
 
-   // fill the unsampled bins, then integrate up to lambda
-   std::vector<bool> sampled(nlmda + 1, false);
+   // fill the unsampled bins, then integrate up to lambda; the scratch
+   // profiles keep their storage across calls, as this runs every step
+   s_fillsamp.assign(nlmda + 1, false);
    for (int i = 1; i <= nlmda; ++i)
-      sampled[i] = lmdaSampled(i);
-   std::vector<double> fbias(nlmda + 1, 0.0);
-   lmdaFill(nlmda, lmdafmean, sampled, fbias);
-   efreeProf(lmda, fbias, eflmda, dfdl);
+      s_fillsamp[i] = lmdaSampled(i);
+   s_fillbias.assign(nlmda + 1, 0.0);
+   lmdaFill(nlmda, lmdafmean, s_fillsamp, nreach, s_fillbias);
+   efreeProf(lmda, s_fillbias, eflmda, dfdl);
 }
 
 // Whether the mean force of a lambda bin comes from data, which is any total
@@ -863,11 +875,14 @@ bool lmdaSampled(int ilmda)
 }
 
 // Copies the sampled mean force fsamp of nbin lambda bins into fbias and fills
-// each unsampled bin by linear interpolation between the nearest sampled bins on
-// either side, or from the nearest sampled bin if there is only one side; with
-// no sampled bin the profile is zero. Sampled bins are copied unchanged, so a
-// fully sampled profile is reproduced exactly (dlambda.f:lmdafill).
-void lmdaFill(int nbin, const std::vector<double>& fsamp, const std::vector<bool>& sampled,
+// the unsampled bins from sampled bins no more than nreach bins away: a gap
+// between two sampled bins at most 2*nreach bins apart, where every bin is
+// within reach of data, is interpolated linearly, in a wider gap or past either
+// end of the data a bin within reach copies the nearest sampled bin, and any
+// other bin is zero. Sampled bins are copied unchanged, so a fully sampled
+// profile is reproduced exactly; a reach of at least nbin fills every bin, and a
+// reach of zero fills none (dlambda.f:lmdafill).
+void lmdaFill(int nbin, const std::vector<double>& fsamp, const std::vector<bool>& sampled, int nreach,
    std::vector<double>& fbias)
 {
    // at each sampled bin, fill the unsampled bins below it back to the
@@ -876,23 +891,29 @@ void lmdaFill(int nbin, const std::vector<double>& fsamp, const std::vector<bool
    for (int i = 1; i <= nbin; ++i) {
       if (not sampled[i])
          continue;
-      if (ilo == 0) {
-         for (int k = 1; k < i; ++k)
-            fbias[k] = fsamp[i];
-      } else {
+      if (ilo != 0 and i - ilo <= 2 * nreach) {
          for (int k = ilo + 1; k < i; ++k) {
             double t = (double)(k - ilo) / (double)(i - ilo);
             fbias[k] = fsamp[ilo] + t * (fsamp[i] - fsamp[ilo]);
+         }
+      } else {
+         for (int k = ilo + 1; k < i; ++k) {
+            if (ilo != 0 and k - ilo <= nreach)
+               fbias[k] = fsamp[ilo];
+            else if (i - k <= nreach)
+               fbias[k] = fsamp[i];
+            else
+               fbias[k] = 0.0;
          }
       }
       fbias[i] = fsamp[i];
       ilo = i;
    }
 
-   // bins past the last sampled bin take its mean force, and with no sampled
-   // bin the profile is zero
+   // bins past the last sampled bin take its mean force within reach, and with
+   // no sampled bin the profile is zero
    for (int k = ilo + 1; k <= nbin; ++k)
-      fbias[k] = (ilo == 0) ? 0.0 : fsamp[ilo];
+      fbias[k] = (ilo != 0 and k - ilo <= nreach) ? fsamp[ilo] : 0.0;
 }
 
 // Total free energy change, which efreeLmda integrates over the whole lambda

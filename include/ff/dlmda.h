@@ -318,20 +318,23 @@ void efreeLmda(double lmda, double& eflmda, double& dfdl);
 void efreeProf(double lmda, const std::vector<double>& fprof, double& eflmda, double& dfdl);
 /// Free energy at lambda \p lmda that the adaptive bias removes, and its lambda
 /// derivative, from the mean force that drives lambda, in which the unsampled
-/// bins are filled from the sampled ones if use_lmdafill is set; it is the only
-/// route by which filled values reach an energy or force, and no free energy
-/// estimate may call it (dlambda.f:efreebias).
+/// bins are filled from the sampled ones within the lambda reach given by
+/// lmdafillr if use_lmdafill is set; it is the only route by which filled
+/// values reach an energy or force, and no free energy estimate may call it
+/// (dlambda.f:efreebias).
 void efreeBias(double lmda, double& eflmda, double& dfdl);
 /// Whether the mean force of lambda bin \p ilmda comes from data, which is any
 /// total weight in the bin (dlambda.f:lmdasampled).
 bool lmdaSampled(int ilmda);
 /// Copies the sampled mean force \p fsamp of \p nbin lambda bins into \p fbias
-/// and fills each bin flagged false in \p sampled by linear interpolation
-/// between the nearest sampled bins on either side, or from the nearest sampled
-/// bin if there is only one side; with no sampled bin the profile is zero. All
-/// arrays are indexed 1..nbin (dlambda.f:lmdafill).
+/// and fills the bins flagged false in \p sampled from sampled bins no more
+/// than \p nreach bins away: a gap between two sampled bins at most 2*nreach
+/// bins apart is interpolated linearly, in a wider gap or past either end of the
+/// data a bin within reach copies the nearest sampled bin, and any other bin is
+/// zero. A reach of at least \p nbin fills every bin, and a reach of zero fills
+/// none. All arrays are indexed 1..nbin (dlambda.f:lmdafill).
 void lmdaFill(int nbin, const std::vector<double>& fsamp, const std::vector<bool>& sampled,
-   std::vector<double>& fbias);
+   int nreach, std::vector<double>& fbias);
 /// Total free energy change from the mean force, efreeLmda over the whole
 /// lambda range (dlambda.f:efreetot).
 double efreeTot();
@@ -480,6 +483,7 @@ TINKER_EXTERN int nlmdamcacc;     ///< number of lambda trial moves accepted.
 
 // fill of the bias mean force in lambda bins without data.
 TINKER_EXTERN bool use_lmdafill;  ///< fill unsampled bins of the bias mean force.
+TINKER_EXTERN double lmdafillr;   ///< lambda reach of the fill of unsampled bins.
 
 // current-step derived quantities and interval averages. The unbiased
 // dU/dlambda is \ref dedl itself.
