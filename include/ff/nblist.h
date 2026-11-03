@@ -41,6 +41,7 @@ Nbl vlistVersion();    ///< For Halgren Buffered 14-7 potential only,
 Nbl clistVersion();    ///< For partial charge models and for VDW models that do not have
                        ///< a separate set of coordinates.
 Nbl mlistVersion();    ///< For multipole, polarization, repulsion, etc.
+real mlistCutoff();    ///< The cutoff of the multipole list, Ewald or multipole.
 Nbl ulistVersion();    ///< For sparse preconditioner.
 Nbl dsplistVersion();  ///< For dispersion.
 Nbl nnlistVersion();   ///< For neural network.

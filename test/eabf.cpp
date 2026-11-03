@@ -2,11 +2,19 @@
 #include "ff/energy.h"
 #include "ff/eost.h"
 #include "math/const.h"
+#include "md/misc.h"
 #include "test.h"
 #include "testrt.h"
+#include "tinker9.h"
+#include "tool/iofortstr.h"
+#include <tinker/detail/bath.hh>
+#include <tinker/detail/dlmda.hh>
+#include <tinker/detail/files.hh>
 #include <tinker/routines.h>
 
 #include <cmath>
+#include <cstring>
+#include <string>
 #include <vector>
 
 // Port of the Fortran ABF unit tests of the ABF routines in
@@ -29,6 +37,7 @@ void resetabf(int nl, int nhist)
    wlmda2 = 0.5 * wlmda;
    nlmdahist = 0;
    sizelmdahist = nhist;
+   lmdastep = 0;
    lmdaintv = 10;
    lmdanpa = 3;
    lmdanpb = 3;
@@ -140,7 +149,7 @@ TEST_CASE("EABF-dyn", "[ff][eabf]")
    for (int istep = 1; istep <= lmdaintv; ++istep) {
       lambda = 0.5;
       dedl = 3.0;
-      elmdaDyn(istep);
+      elmdaDyn();
       if (istep < lmdaintv)
          COMPARE_INTS(nlmdahist, 0); // waits for the interval end
    }
@@ -159,7 +168,7 @@ TEST_CASE("EABF-dyn", "[ff][eabf]")
       dedl = 1.0;
       if (istep % 2 == 0)
          dedl = 11.0;
-      elmdaDyn(istep);
+      elmdaDyn();
    }
    COMPARE_INTS(nlmdahist, 2);
    REQUIRE(lmdafwt[3] == 2.0);
@@ -175,7 +184,7 @@ TEST_CASE("EABF-dyn", "[ff][eabf]")
       dedl = 1.0;
       if (istep % 2 == 0)
          dedl = 11.0;
-      elmdaDyn(istep);
+      elmdaDyn();
    }
    COMPARE_INTS(nlmdahist, 2);
    REQUIRE(lmdafwt[3] == 2.0);
@@ -186,7 +195,7 @@ TEST_CASE("EABF-dyn", "[ff][eabf]")
    for (int istep = 3 * lmdaintv + 1; istep <= 4 * lmdaintv; ++istep) {
       lambda = 0.5;
       dedl = 3.0;
-      elmdaDyn(istep);
+      elmdaDyn();
    }
    COMPARE_INTS(nlmdahist, 3);
    REQUIRE(lmdafwt[3] == 3.0);
@@ -236,7 +245,7 @@ TEST_CASE("EABF-gate", "[ff][eabf]")
    double lam[7] = {0};
    for (int istep = 1; istep <= lmdaintv; ++istep) {
       dedl = 1.0;
-      elmdaDyn(istep);
+      elmdaDyn();
       lam[istep] = lambda;
    }
 
@@ -266,7 +275,7 @@ TEST_CASE("EABF-resize", "[ff][eabf]")
    for (int istep = 1; istep <= 3 * lmdaintv; ++istep) {
       lambda = 0.25;
       dedl = (double)((istep - 1) / lmdaintv + 1);
-      elmdaDyn(istep);
+      elmdaDyn();
    }
    COMPARE_INTS(nlmdahist, 3);
    COMPARE_INTS(sizelmdahist, 4);
@@ -535,4 +544,99 @@ TEST_CASE("EABF-fillfull", "[ff][eabf]")
    REQUIRE(db == flo);
    efreeBias(0.875, eb, db);
    REQUIRE(db == 0.0);
+}
+
+// A history saved through the mdsave copies is continued by initabffile and
+// abfFromFortran on an interval boundary, its deposits numbered on from the
+// steps of the first run (test_eabf.f:test_eabf_restart).
+TEST_CASE("EABF-restart", "[ff][eabf]")
+{
+   const char* argv[] = {"dummy"};
+   tinkerFortranRuntimeBegin(1, (char**)argv);
+   initial();
+
+   // Ends the runtime and puts back the base name and the ABF flags as the
+   // case leaves scope, however it leaves.
+   struct Teardown
+   {
+      char savedname[240];
+      int savedleng;
+      std::string abffile;
+      ~Teardown()
+      {
+         try {
+            if (abffile.size())
+               fileExistsAndDelete(abffile);
+            std::memcpy(files::filename, savedname, 240);
+            files::leng = savedleng;
+            dlmda::use_abf = 0;
+            dlmda::use_abfdyn = 0;
+            testEnd();
+         } catch (...) {
+         }
+      }
+   } teardown;
+   std::memcpy(teardown.savedname, files::filename, 240);
+   teardown.savedleng = files::leng;
+   FstrView fname = files::filename;
+   fname = "abfsave_tmp";
+   files::leng = 11;
+
+   TestLmdaFlagGuard guard;
+   resetabf(5, 4);
+   lmdaintv = 4;
+   lmdanpa = 0;
+   lmdanpb = 0;
+   lmdanpc = 4;
+   lmdadfdl = 0.0;
+
+   // the Fortran state mutate.f would have set up
+   bath::kelvin = 300.0;
+   dlmda::use_abf = 1;
+   dlmda::use_abfdyn = 1;
+   dlmda::nlmda = nlmda;
+   dlmda::wlmda = wlmda;
+   dlmda::wlmda2 = wlmda2;
+   dlmda::lmdaintv = lmdaintv;
+   dlmda::lmdanpa = lmdanpa;
+   dlmda::lmdanpb = lmdanpb;
+   dlmda::lmdanpc = lmdanpc;
+   dlmda::lmdastep = 0;
+   tinker_f_mutate_abf();
+   tinker_f_initabffile();
+   teardown.abffile = FstrView(dlmda::lmdasavefile).trim();
+   abfFromFortran();
+   REQUIRE(lmdastep == 0);
+
+   // two intervals and part of a third, then a save
+   auto run = [](int nstep, double lmda, double dudl) {
+      for (int i = 0; i < nstep; ++i) {
+         lambda = lmda;
+         dedl = dudl;
+         elmdaDyn();
+      }
+   };
+   run(lmdaintv, 0.25, 1.0);
+   run(lmdaintv, 0.75, 5.0);
+   run(lmdaintv + 2, 0.75, 7.0);
+   REQUIRE(nlmdahist == 3);
+   REQUIRE(lmdastep == 14);
+   for (int k = 1; k <= 3; ++k)
+      REQUIRE(lmdaihist[k] == 4 * k);
+   mdsaveLmdaFinal(0);
+   REQUIRE(dlmda::lmdastep == 14);
+
+   // a fresh run continues the file at the last interval boundary
+   dlmda::lmdastep = 0;
+   tinker_f_mutate_abf();
+   tinker_f_initabffile();
+   REQUIRE(FstrView(dlmda::lmdasavefile).trim() == teardown.abffile);
+   abfFromFortran();
+   REQUIRE(nlmdahist == 3);
+   REQUIRE(lmdastep == 12);
+   for (int k = 1; k <= 3; ++k)
+      REQUIRE(lmdaihist[k] == 4 * k);
+   run(lmdaintv, 0.75, 7.0);
+   REQUIRE(nlmdahist == 4);
+   REQUIRE(lmdaihist[4] == 16);
 }

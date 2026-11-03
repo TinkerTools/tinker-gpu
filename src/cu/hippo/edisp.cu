@@ -2,6 +2,7 @@
 #include "ff/dlmda.h"
 #include "ff/image.h"
 #include "ff/pme.h"
+#include "ff/potent.h"
 #include "ff/spatial.h"
 #include "ff/switch.h"
 #include "seq/bsplgen.h"
@@ -284,21 +285,23 @@ static void edisp_cu(const DispSoft& ds1, const DispSoft& ds2)
       aewald = pu->aewald;
    }
 
-   // only a relative calculation pays for the classes of the ligand groups,
-   // and only the tail of a hal vdW for its weight (Ewald alone)
+   // only a mutation, or the lambda derivatives, pay for the soft core, and
+   // only the tail of a hal vdW for its weight (Ewald alone)
+   const bool mutated = use(Potent::MUTATE);
    constexpr bool can_hal = eq<DTYP, DEWALD>();
    const bool hal = can_hal and useDHal();
    const DispHal dh = dispHal();
    int ngrid = gpuGridSize(BLOCK_DIM);
    boxShapeDispatch(box_shape, [&](auto img) {
       using IMG = decltype(img);
-      auto ker = use_rel ? edisp_cu1<Ver, IMG, DTYP, true, false> : edisp_cu1<Ver, IMG, DTYP, false, false>;
-      if (hal)
-         ker = use_rel ? edisp_cu1<Ver, IMG, DTYP, true, can_hal> : edisp_cu1<Ver, IMG, DTYP, false, can_hal>;
+      constexpr bool sc0 = softCoreUnmutated(Ver::value);
+      auto ker = hal ? edisp_cu1<Ver, IMG, DTYP, true, can_hal> : edisp_cu1<Ver, IMG, DTYP, true, false>;
+      if (not mutated)
+         ker = hal ? edisp_cu1<Ver, IMG, DTYP, sc0, can_hal> : edisp_cu1<Ver, IMG, DTYP, sc0, false>;
       ker<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, ndisp, edsp, devdl_buf, d2evdl2_buf, vir_edsp,
          dvirdl_buf, dedspx, dedspy, dedspz, dfdlx, dfdly, dfdlz, cut, off, st.si1.bit0, ndspexclude, dspexclude,
          dspexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, st.akc, csix,
-         adisp, aewald, emGroup(), vdwMutclsTable(), vcouple, ds1, ds2, dh);
+         adisp, aewald, emGroup(), vdwMutclsTable(), ds1, ds2, dh);
    });
 }
 
@@ -437,7 +440,6 @@ void edisp_cu3(CountBuffer restrict ndisp, EnergyBuffer restrict edsp, const rea
          bsplgen<2, bsorder>(w2, thetai2, array);
          bsplgen<2, bsorder>(w3, thetai3, array);
 
-         real fi = csix[ii];
          real de1 = 0, de2 = 0, de3 = 0;
          real dl1 = 0, dl2 = 0, dl3 = 0;
          for (int iz = 0; iz < bsorder; ++iz) {
@@ -486,16 +488,16 @@ void edisp_cu3(CountBuffer restrict ndisp, EnergyBuffer restrict edsp, const rea
             }
          } // end for (iz)
 
-         real frcx = fi * (reca.x * de1 + recb.x * de2 + recc.x * de3);
-         real frcy = fi * (reca.y * de1 + recb.y * de2 + recc.y * de3);
-         real frcz = fi * (reca.z * de1 + recb.z * de2 + recc.z * de3);
+         real frcx = icsix * (reca.x * de1 + recb.x * de2 + recc.x * de3);
+         real frcy = icsix * (reca.y * de1 + recb.y * de2 + recc.y * de3);
+         real frcz = icsix * (reca.z * de1 + recb.z * de2 + recc.z * de3);
          atomic_add(frcx, gx, ii);
          atomic_add(frcy, gy, ii);
          atomic_add(frcz, gz, ii);
          if CONSTEXPR (do_gdl) {
-            atomic_add(fi * (reca.x * dl1 + recb.x * dl2 + recc.x * dl3), dlx, ii);
-            atomic_add(fi * (reca.y * dl1 + recb.y * dl2 + recc.y * dl3), dly, ii);
-            atomic_add(fi * (reca.z * dl1 + recb.z * dl2 + recc.z * dl3), dlz, ii);
+            atomic_add(icsix * (reca.x * dl1 + recb.x * dl2 + recc.x * dl3), dlx, ii);
+            atomic_add(icsix * (reca.y * dl1 + recb.y * dl2 + recc.y * dl3), dly, ii);
+            atomic_add(icsix * (reca.z * dl1 + recb.z * dl2 + recc.z * dl3), dlz, ii);
          }
       }
    }
@@ -510,8 +512,13 @@ static void edisp_cu4(const real* qgrid, int stride, const int* offset, const Di
    // The four points of a stencil row share a sector, which the default
    // carveout, sized for the shared memory of every resident block, leaves
    // about 28 KB of L1 to hold; on a 100k-atom HIPPO box the kernel ran 1.7
-   // times as long that way. Set at every launch, since a device reset clears it.
-   check_rt(cudaFuncSetAttribute(ker, cudaFuncAttributePreferredSharedMemoryCarveout, 50));
+   // times as long that way. Set once, since the only device reset comes before
+   // the first launch (gpuData).
+   static bool carveout = false;
+   if (not carveout) {
+      check_rt(cudaFuncSetAttribute(ker, cudaFuncAttributePreferredSharedMemoryCarveout, 50));
+      carveout = true;
+   }
    launch_k2b(g::s0, PME_BLOCKDIM, n, ker, //
       ndisp, edsp, csix, st.aewald, n, st.nfft1, st.nfft2, st.nfft3, x, y, z, qgrid, stride, recipa, recipb, recipc,
       dedspx, dedspy, dedspz, dfdlx, dfdly, dfdlz, offset, ds);

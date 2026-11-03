@@ -2,6 +2,7 @@
 #include "ff/hippo/erepel.h"
 #include "ff/image.h"
 #include "ff/modamoeba.h"
+#include "ff/potent.h"
 #include "ff/spatial.h"
 #include "ff/switch.h"
 #include "seq/add.h"
@@ -21,12 +22,19 @@ static void erepel_cu2()
    // A relative calculation labels atoms by ligand group (pair_mutcls).
    const int* grp = emGroup();
    constexpr bool dodl = lmdaDodl(Ver::value);
-   const SoftCoreLmda rs1 = repelSoft(1, dodl), rs2 = repelSoft(2, dodl);
+   SoftCoreLmda rs1, rs2;
+   grpSoftCores(repelSoft, dodl, rs1, rs2);
+
+   // only a mutation, or the lambda derivatives, pay for the soft core
+   const bool mutated = use(Potent::MUTATE);
 
    int ngrid = gpuGridSize(BLOCK_DIM);
    boxShapeDispatch(box_shape, [&](auto img) {
       using IMG = decltype(img);
-      erepel_cu1<Ver, IMG><<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nrep, er, devdl_buf, d2evdl2_buf, vir_er,
+      auto ker = erepel_cu1<Ver, IMG, true>;
+      if (not mutated)
+         ker = erepel_cu1<Ver, IMG, softCoreUnmutated(Ver::value)>;
+      ker<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nrep, er, devdl_buf, d2evdl2_buf, vir_er,
          dvirdl_buf, derx, dery, derz, dfdlx, dfdly, dfdlz, cut, off, st.si2.bit0, nrepexclude, repexclude,
          repexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, st.akc, trqx, trqy, trqz,
          dltrqx, dltrqy, dltrqz, rrepole, sizpr, elepr, dmppr, grp, vdwMutclsTable(), rs1, rs2);

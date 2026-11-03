@@ -245,8 +245,7 @@ static void edispNonEwald(int vers, const DispSoft& sc1, const DispSoft& sc2)
 struct DispHost
 {
    bool plain;
-   real cpr;
-   double dcpr, d2cpr;
+   double cpr, dcpr, d2cpr;
    double dself, d2self;
 };
 
@@ -397,11 +396,13 @@ static void edispEwald(int vers, const DispSoft& sc1, const DispSoft& sc2)
       TINKER_FCALL2(acc1, cu1, edispEwaldRecipSelfSlots, vers, ds, dsp_slots, dsp_stride, dsp_offset);
    }
 
-   // account for the total energy and virial correction term
+   // account for the total energy and virial correction term, the weighted C6
+   // pair sum of the zero wavevector times fcpr
+   const double aewald = u->aewald;
+   const double a3 = aewald * aewald * aewald;
+   const double fcpr = a3 * std::pow(M_PI, 1.5) / (6 * boxVolume());
    if (do_e || do_v) {
-      const real aewald = u->aewald;
-      const real denom0 = 6 * boxVolume() / std::pow(M_PI, 1.5);
-      energy_prec term = h.cpr * aewald * aewald * aewald / denom0;
+      energy_prec term = h.cpr * fcpr;
       if (do_e) {
          energy_edsp -= term;
          energy_vdw -= term;
@@ -419,9 +420,6 @@ static void edispEwald(int vers, const DispSoft& sc1, const DispSoft& sc2)
    // the lambda derivatives of the correction term and of the self terms
    // (edisp.f:dspself)
    if (do_dl1) {
-      const double aewald = u->aewald;
-      const double a3 = aewald * aewald * aewald;
-      const double fcpr = a3 * std::pow(M_PI, 1.5) / (6 * boxVolume());
       const double fself = a3 * a3 / 12;
       energy_prec term = h.dcpr * fcpr;
       energy_prec dl1 = h.dself * fself - term;
@@ -469,7 +467,8 @@ void edisp(int vers)
    const bool dodl = lmdaDodl(dlvers);
    // Ligand 2 of a relative calculation takes its own soft core.
    const DispSoft sc1 = dispSoft(vdwGroupPower(scexpd, 1, dodl), vdwGroupPower(scexpd + scexpdq, 1, dodl));
-   const DispSoft sc2 = dispSoft(vdwGroupPower(scexpd, 2, dodl), vdwGroupPower(scexpd + scexpdq, 2, dodl));
+   const DispSoft sc2 =
+      use_rel ? dispSoft(vdwGroupPower(scexpd, 2, dodl), vdwGroupPower(scexpd + scexpdq, 2, dodl)) : sc1;
    lmdaChannel(LmdaTerm::VDW).zero(vers);
    if (useDEwald())
       edispEwald(dlvers, sc1, sc2);

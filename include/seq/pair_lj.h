@@ -63,7 +63,7 @@ void pair_lj_v0(real r, real invr, const SoftCoreLmda& lp, real rad, real eps, r
          // overflows in single precision to give 0 * inf; s past the floor
          // only changes the derivatives where they vanish.
          real sd = REAL_MAX(sc, real(1e-8));
-         real invsd = 1 / sd;
+         real invsd = sc >= real(1e-8) ? invsc : real(1e8);
          real tt = 4 * (1 - sd) * invsd * invsd;
          real ts = 4 * (sd - 2) * invsd * invsd * invsd;
          real tss = 8 * (3 - sd) * invsd * invsd * invsd * invsd;

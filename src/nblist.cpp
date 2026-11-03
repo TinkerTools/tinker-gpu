@@ -117,6 +117,11 @@ Nbl clistVersion()
    return u;
 }
 
+real mlistCutoff()
+{
+   return useEwald() ? switchOff(Switch::EWALD) : switchOff(Switch::MPOLE);
+}
+
 Nbl mlistVersion()
 {
    Nbl u;
@@ -431,7 +436,7 @@ void nblistData(RcOp op)
 
    // mlist
    u = mlistVersion();
-   cut = useEwald() ? switchOff(Switch::EWALD) : switchOff(Switch::MPOLE);
+   cut = mlistCutoff();
    buf = neigh::lbuffer;
    // The list also serves repulsion, exchange polarization and charge transfer.
    prune = use_prune ? std::max({cut, (double)switchOff(Switch::REPULS), (double)switchOff(Switch::CHGTRN)}) : 0;

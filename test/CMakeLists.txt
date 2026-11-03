@@ -7,6 +7,8 @@ include (cmakesrc.txt)
 add_library (__t9_all_tests_o OBJECT ${__T9_TEST_SRC})
 target_link_libraries (__t9_all_tests_o PRIVATE __t9_intf tinkerFToCpp)
 set_target_properties (__t9_all_tests_o PROPERTIES CXX_STANDARD ${T9_CPPSTD})
+# the programs, for the cases that run one apart from this process
+target_compile_definitions (__t9_all_tests_o PRIVATE "TINKER9_BINDIRSTR=\"${CMAKE_BINARY_DIR}\"")
 if (14 LESS_EQUAL ${T9_CPPSTD})
    find_package (Catch2 PATHS "${CMAKE_BINARY_DIR}/catch2")
    if (NOT CATCH2_FOUND)

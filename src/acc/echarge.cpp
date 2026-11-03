@@ -48,11 +48,15 @@ static void echarge_acc1()
    const auto* nlst = clist_unit->nlst;
    const auto* lst = clist_unit->lst;
    auto bufsize = bufferSize();
+   // a pair with a dead group has no charge, and its two sites may overlap
+   // (dlambda.f:eleclive); null when every group is live, as in echarge_cu1
+   const int* grp = elecDeadGroups();
+   const unsigned live = static_cast<unsigned>(elecLiveMask());
 
    MAYBE_UNUSED int GRID_DIM = gpuGridSize(BLOCK_DIM);
    #pragma acc parallel async num_gangs(GRID_DIM) vector_length(BLOCK_DIM)\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(DEVICE_PTRS,nlst,lst)
+               deviceptr(DEVICE_PTRS,nlst,lst,grp)
    #pragma acc loop gang independent
    for (int i = 0; i < n; ++i) {
       real xi = x[i];
@@ -70,9 +74,10 @@ static void echarge_acc1()
          real yr = yi - y[k];
          real zr = zi - z[k];
          real ck = pchg[k];
+         bool alive = grp == nullptr or ((live >> grp[i]) & (live >> grp[k]) & 1);
 
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off2) {
+         if (r2 <= off2 and alive) {
             real r = REAL_SQRT(r2);
 
             int ctl;
@@ -127,7 +132,7 @@ static void echarge_acc1()
    } // end for (int i)
 
    #pragma acc parallel async present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
-               deviceptr(DEVICE_PTRS,cexclude,cexclude_scale)
+               deviceptr(DEVICE_PTRS,cexclude,cexclude_scale,grp)
    #pragma acc loop independent
    for (int ii = 0; ii < ncexclude; ++ii) {
       int offset = ii & (bufsize - 1);
@@ -146,8 +151,10 @@ static void echarge_acc1()
       real yr = yi - y[k];
       real zr = zi - z[k];
 
+      bool alive = grp == nullptr or ((live >> grp[i]) & (live >> grp[k]) & 1);
+
       real r2 = image2(xr, yr, zr);
-      if (r2 <= off2) {
+      if (r2 <= off2 and alive) {
          int ctl;
          real e, frcx, frcy, frcz, vxx, vxy, vxz, vyy, vyz, vzz;
          if CONSTEXPR (do_a) {

@@ -38,9 +38,6 @@ namespace tinker {
 /// \brief Constant flags for the VDW energy functions.
 enum class Vdw : int
 {
-   DECOUPLE = 0,   ///< VDW lambda type: decouple.
-   ANNIHILATE = 1, ///< VDW lambda type: annihilate.
-
    ATOM_TYPE = 10,  ///< Indexing mode.
    ATOM_CLASS = 11, ///< Indexing mode.
 
@@ -249,8 +246,6 @@ TINKER_EXTERN int* vexclude14;
 }
 
 namespace tinker {
-TINKER_EXTERN Vdw vcouple;
-
 /// \ingroup vdw
 /// \brief Exponential factor for soft core buffered 14-7 potential.
 TINKER_EXTERN double scexp;

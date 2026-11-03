@@ -1,8 +1,6 @@
 OUTPUT_DIR: src/cu
 KERNEL_NAME: ehal_cu1
-TEMPLATE_PARAMS: template <class Ver, class IMG>
-# the box shape as a template parameter, and the tiles near their centers
-# imaged once, their virial from the summed forces
+TEMPLATE_PARAMS: template <class Ver, class IMG, bool SOFTCORE>
 IMAGE_TEMPLATE: IMG
 LOCAL_TILES: true
 CONSTEXPR_FLAGS: |
@@ -56,13 +54,13 @@ I_VARIABLES:
   - register real yi   from:y
   - register real zi   from:z
   - register int ijvdw from:jvdw
-  - register int imutg from:mutg
+  - register int imutg from:mutg onlyif:SOFTCORE
 K_VARIABLES:
   - register real xk   from:x
   - register real yk   from:y
   - register real zk   from:z
   - register int kjvdw from:jvdw
-  - register int kmutg from:mutg
+  - register int kmutg from:mutg onlyif:SOFTCORE
 I_FORCE:
   - register real fix addto:gx
   - register real fiy addto:gy
@@ -85,8 +83,10 @@ SCALED_PAIRWISE_INTERACTION: |
   real yr = @yi@ - @yk@;
   real zr = @zi@ - @zk@;
   real r2 = image2(xr, yr, zr);
-  // The two ligands of a relative free energy calculation never interact.
-  int mc = pair_mutcls(mutcls, @imutg@, @kmutg@);
+  // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+  // relative calculation never interacting; without SOFTCORE no atom follows
+  // lambda
+  int mc = SOFTCORE ? pair_mutcls(mutcls, @imutg@, @kmutg@) : 0;
   if (r2 <= off * off and incl and mc >= 0) {
     real r = REAL_SQRT(r2);
     // A 1-4 pair takes the vdw14 radius and well depth, when there are any.
@@ -99,7 +99,7 @@ SCALED_PAIRWISE_INTERACTION: |
     const SoftCoreLmda lp = pair_vdw_softcore<true>(mc, lp1, lp2);
     real e, de;
     PairVdwLambda dl = {0, 0, 0};
-    pair_hal<do_g, 0, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, scalea, rv, eps, cut, off, lp,
+    pair_hal<do_g, 0, do_dl1, do_dl2, do_gdl>(r, scalea, rv, eps, cut, off, lp,
       GHAL, DHAL, e, de, &dl, mutik);
     if CONSTEXPR (do_e) {
       evtl += floatTo<ebuf_prec>(e);
@@ -148,8 +148,10 @@ FULL_PAIRWISE_INTERACTION: |
   real yr = @yi@ - @yk@;
   real zr = @zi@ - @zk@;
   real r2 = image2(xr, yr, zr);
-  // The two ligands of a relative free energy calculation never interact.
-  int mc = pair_mutcls(mutcls, @imutg@, @kmutg@);
+  // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+  // relative calculation never interacting; without SOFTCORE no atom follows
+  // lambda
+  int mc = SOFTCORE ? pair_mutcls(mutcls, @imutg@, @kmutg@) : 0;
   if (r2 <= off * off and incl and mc >= 0) {
     real r = REAL_SQRT(r2);
     real rv = radmin[@ijvdw@ * njvdw + @kjvdw@];
@@ -160,7 +162,7 @@ FULL_PAIRWISE_INTERACTION: |
     const SoftCoreLmda lp = pair_vdw_softcore<true>(mc, lp1, lp2);
     real e, de;
     PairVdwLambda dl = {0, 0, 0};
-    pair_hal<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, lp,
+    pair_hal<do_g, 1, do_dl1, do_dl2, do_gdl>(r, 1, rv, eps, cut, off, lp,
       GHAL, DHAL, e, de, &dl, mutik);
     if CONSTEXPR (do_e) {
       evtl += floatTo<ebuf_prec>(e);

@@ -199,6 +199,39 @@ TEST_CASE("NaCl-1", "[ff][evdw][evcorr][hal][switch][nacl]")
       COMPARE_VIR2(vir_em, vir_trq, ref_v, eps_v); \
    }
 
+// The CUDA buffered 14-7 kernel takes only the default gamma and delta. An
+// OpenACC build runs a system without a vdW list on OpenACC, which takes the
+// keyword values (Fortran analyze: 47.5289 at gamma 0.13, 49.4061 at delta
+// 0.08), but one with a list under PBC on CUDA if it has the CUDA runtime.
+TEST_CASE("NaCl-HalgrenKeywords", "[ff][evdw][hal][nacl]")
+{
+   TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
+   const char* x1 = "test_nacl.xyz";
+   TestFile fx1(TINKER9_DIRSTR "/test/file/nacl/nacl1.xyz", x1);
+   const char* argv[] = {"dummy", x1};
+   int argc = 2;
+
+   auto run = [&](const char* keys, double eref, bool refused) {
+      INFO(keys);
+      TestFile fke("", "test_nacl.key", std::string("parameters amoeba09\nvdwterm only\n") + keys);
+      TestSession session(argc, argv);
+      rc_flag = calc::xyz | calc::vmask;
+      if (refused) {
+         REQUIRE_THROWS_WITH(session.init(), Catch::Matchers::ContainsSubstring("HALGREN"));
+      } else {
+         session.init();
+         energy(calc::v0);
+         COMPARE_REALS(energy_ev, eref, 1.0e-3);
+         session.end();
+      }
+   };
+   const bool cuda = TINKER_GPULANG_CUDA;
+   run("gamma-halgren 0.13\n", 47.5289, cuda);
+   run("delta-halgren 0.08\n", 49.4061, cuda);
+   // the pair is well inside the cutoff and its images far outside it
+   run("gamma-halgren 0.13\nneighbor-list\na-axis 18.643\nvdw-cutoff 7.0\n", 47.5289, TINKER_CUDART);
+}
+
 TEST_CASE("NaCl-2", "[ff][empole][nonewald][nacl]")
 {
    TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");

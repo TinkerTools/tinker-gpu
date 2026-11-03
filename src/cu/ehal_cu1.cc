@@ -1,5 +1,5 @@
-// ck.py Version 3.1.0
-template <class Ver, class IMG>
+// ck.py Version 3.2.0
+template <class Ver, class IMG, bool SOFTCORE>
 __global__
 void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer restrict ev,
    EnergyBuffer restrict devdl, EnergyBuffer restrict d2evdl2, VirialBuffer restrict vev,
@@ -99,12 +99,14 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
       yi = y[i];
       zi = z[i];
       ijvdw = jvdw[i];
-      imutg = mutg[i];
+      if CONSTEXPR (SOFTCORE)
+         imutg = mutg[i];
       xk = x[k];
       yk = y[k];
       zk = z[k];
       kjvdw = jvdw[k];
-      kmutg = mutg[k];
+      if CONSTEXPR (SOFTCORE)
+         kmutg = mutg[k];
 
       constexpr bool incl = true;
       constexpr bool tile_local = false;
@@ -112,8 +114,10 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
       real yr = yi - yk;
       real zr = zi - zk;
       real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
-      // The two ligands of a relative free energy calculation never interact.
-      int mc = pair_mutcls(mutcls, imutg, kmutg);
+      // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+      // relative calculation never interacting; without SOFTCORE no atom follows
+      // lambda
+      int mc = SOFTCORE ? pair_mutcls(mutcls, imutg, kmutg) : 0;
       if (r2 <= off * off and incl and mc >= 0) {
          real r = REAL_SQRT(r2);
          // A 1-4 pair takes the vdw14 radius and well depth, when there are any.
@@ -126,8 +130,7 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
          const SoftCoreLmda lp = pair_vdw_softcore<true>(mc, lp1, lp2);
          real e, de;
          PairVdwLambda dl = {0, 0, 0};
-         pair_hal<do_g, 0, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, scalea, rv, eps, cut, off, lp, GHAL, DHAL, e, de, &dl,
-            mutik);
+         pair_hal<do_g, 0, do_dl1, do_dl2, do_gdl>(r, scalea, rv, eps, cut, off, lp, GHAL, DHAL, e, de, &dl, mutik);
          if CONSTEXPR (do_e) {
             evtl += floatTo<ebuf_prec>(e);
             if (mutik) {
@@ -221,12 +224,14 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
       ijvdw = jvdw[i];
-      imutg = mutg[i];
+      if CONSTEXPR (SOFTCORE)
+         imutg = mutg[i];
       xk = sorted[atomk].x;
       yk = sorted[atomk].y;
       zk = sorted[atomk].z;
       kjvdw = jvdw[k];
-      kmutg = mutg[k];
+      if CONSTEXPR (SOFTCORE)
+         kmutg = mutg[k];
 
       unsigned int info0 = info[iw * WARP_SIZE + ilane];
       real xc = akc[ty].x;
@@ -259,8 +264,10 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
             real yr = yi - yk;
             real zr = zi - zk;
             real r2 = (xr * xr + yr * yr + zr * zr);
-            // The two ligands of a relative free energy calculation never interact.
-            int mc = pair_mutcls(mutcls, imutg, kmutg);
+            // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+            // relative calculation never interacting; without SOFTCORE no atom follows
+            // lambda
+            int mc = SOFTCORE ? pair_mutcls(mutcls, imutg, kmutg) : 0;
             if (r2 <= off * off and incl and mc >= 0) {
                real r = REAL_SQRT(r2);
                real rv = radmin[ijvdw * njvdw + kjvdw];
@@ -271,8 +278,7 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
                const SoftCoreLmda lp = pair_vdw_softcore<true>(mc, lp1, lp2);
                real e, de;
                PairVdwLambda dl = {0, 0, 0};
-               pair_hal<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, lp, GHAL, DHAL, e, de,
-                  &dl, mutik);
+               pair_hal<do_g, 1, do_dl1, do_dl2, do_gdl>(r, 1, rv, eps, cut, off, lp, GHAL, DHAL, e, de, &dl, mutik);
                if CONSTEXPR (do_e) {
                   evtl += floatTo<ebuf_prec>(e);
                   if (mutik) {
@@ -321,7 +327,8 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
             yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
             zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
             ijvdw = __shfl_sync(ALL_LANES, ijvdw, ilane + 1);
-            imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
+            if CONSTEXPR (SOFTCORE)
+               imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
             if CONSTEXPR (do_g) {
                fix = __shfl_sync(ALL_LANES, fix, ilane + 1);
                fiy = __shfl_sync(ALL_LANES, fiy, ilane + 1);
@@ -361,8 +368,10 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
             real yr = yi - yk;
             real zr = zi - zk;
             real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
-            // The two ligands of a relative free energy calculation never interact.
-            int mc = pair_mutcls(mutcls, imutg, kmutg);
+            // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+            // relative calculation never interacting; without SOFTCORE no atom follows
+            // lambda
+            int mc = SOFTCORE ? pair_mutcls(mutcls, imutg, kmutg) : 0;
             if (r2 <= off * off and incl and mc >= 0) {
                real r = REAL_SQRT(r2);
                real rv = radmin[ijvdw * njvdw + kjvdw];
@@ -373,8 +382,7 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
                const SoftCoreLmda lp = pair_vdw_softcore<true>(mc, lp1, lp2);
                real e, de;
                PairVdwLambda dl = {0, 0, 0};
-               pair_hal<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, lp, GHAL, DHAL, e, de,
-                  &dl, mutik);
+               pair_hal<do_g, 1, do_dl1, do_dl2, do_gdl>(r, 1, rv, eps, cut, off, lp, GHAL, DHAL, e, de, &dl, mutik);
                if CONSTEXPR (do_e) {
                   evtl += floatTo<ebuf_prec>(e);
                   if (mutik) {
@@ -423,7 +431,8 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
             yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
             zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
             ijvdw = __shfl_sync(ALL_LANES, ijvdw, ilane + 1);
-            imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
+            if CONSTEXPR (SOFTCORE)
+               imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
             if CONSTEXPR (do_g) {
                fix = __shfl_sync(ALL_LANES, fix, ilane + 1);
                fiy = __shfl_sync(ALL_LANES, fiy, ilane + 1);
@@ -481,12 +490,14 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
       yi = sorted[atomi].y;
       zi = sorted[atomi].z;
       ijvdw = jvdw[i];
-      imutg = mutg[i];
+      if CONSTEXPR (SOFTCORE)
+         imutg = mutg[i];
       xk = sorted[atomk].x;
       yk = sorted[atomk].y;
       zk = sorted[atomk].z;
       kjvdw = jvdw[k];
-      kmutg = mutg[k];
+      if CONSTEXPR (SOFTCORE)
+         kmutg = mutg[k];
 
       real xc = akc[ty].x;
       real yc = akc[ty].y;
@@ -515,8 +526,10 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
             real yr = yi - yk;
             real zr = zi - zk;
             real r2 = (xr * xr + yr * yr + zr * zr);
-            // The two ligands of a relative free energy calculation never interact.
-            int mc = pair_mutcls(mutcls, imutg, kmutg);
+            // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+            // relative calculation never interacting; without SOFTCORE no atom follows
+            // lambda
+            int mc = SOFTCORE ? pair_mutcls(mutcls, imutg, kmutg) : 0;
             if (r2 <= off * off and incl and mc >= 0) {
                real r = REAL_SQRT(r2);
                real rv = radmin[ijvdw * njvdw + kjvdw];
@@ -527,8 +540,7 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
                const SoftCoreLmda lp = pair_vdw_softcore<true>(mc, lp1, lp2);
                real e, de;
                PairVdwLambda dl = {0, 0, 0};
-               pair_hal<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, lp, GHAL, DHAL, e, de,
-                  &dl, mutik);
+               pair_hal<do_g, 1, do_dl1, do_dl2, do_gdl>(r, 1, rv, eps, cut, off, lp, GHAL, DHAL, e, de, &dl, mutik);
                if CONSTEXPR (do_e) {
                   evtl += floatTo<ebuf_prec>(e);
                   if (mutik) {
@@ -576,7 +588,8 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
             yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
             zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
             ijvdw = __shfl_sync(ALL_LANES, ijvdw, ilane + 1);
-            imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
+            if CONSTEXPR (SOFTCORE)
+               imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
             if CONSTEXPR (do_g) {
                fix = __shfl_sync(ALL_LANES, fix, ilane + 1);
                fiy = __shfl_sync(ALL_LANES, fiy, ilane + 1);
@@ -613,8 +626,10 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
             real yr = yi - yk;
             real zr = zi - zk;
             real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
-            // The two ligands of a relative free energy calculation never interact.
-            int mc = pair_mutcls(mutcls, imutg, kmutg);
+            // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+            // relative calculation never interacting; without SOFTCORE no atom follows
+            // lambda
+            int mc = SOFTCORE ? pair_mutcls(mutcls, imutg, kmutg) : 0;
             if (r2 <= off * off and incl and mc >= 0) {
                real r = REAL_SQRT(r2);
                real rv = radmin[ijvdw * njvdw + kjvdw];
@@ -625,8 +640,7 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
                const SoftCoreLmda lp = pair_vdw_softcore<true>(mc, lp1, lp2);
                real e, de;
                PairVdwLambda dl = {0, 0, 0};
-               pair_hal<do_g, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, 1, rv, eps, cut, off, lp, GHAL, DHAL, e, de,
-                  &dl, mutik);
+               pair_hal<do_g, 1, do_dl1, do_dl2, do_gdl>(r, 1, rv, eps, cut, off, lp, GHAL, DHAL, e, de, &dl, mutik);
                if CONSTEXPR (do_e) {
                   evtl += floatTo<ebuf_prec>(e);
                   if (mutik) {
@@ -674,7 +688,8 @@ void ehal_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer
             yi = __shfl_sync(ALL_LANES, yi, ilane + 1);
             zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
             ijvdw = __shfl_sync(ALL_LANES, ijvdw, ilane + 1);
-            imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
+            if CONSTEXPR (SOFTCORE)
+               imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
             if CONSTEXPR (do_g) {
                fix = __shfl_sync(ALL_LANES, fix, ilane + 1);
                fiy = __shfl_sync(ALL_LANES, fiy, ilane + 1);

@@ -545,10 +545,9 @@ TEST_CASE("LMDAMC-particle", "[ff][lmdamc]")
    const double theta0 = lmdatheta;
    lmdavtheta = 0.0;
    lmdadfdl = 0.0;
-   int istep = 0;
    for (int i = 0; i < 2 * lmdaintv; ++i) {
       dedl = 40.0;
-      elmdaDyn(++istep);
+      elmdaDyn();
    }
    REQUIRE(lambda == 0.5);
    REQUIRE(lmdatheta == theta0);
@@ -559,7 +558,7 @@ TEST_CASE("LMDAMC-particle", "[ff][lmdamc]")
    use_lmdamc = false;
    for (int i = 0; i < lmdaintv; ++i) {
       dedl = 40.0;
-      elmdaDyn(++istep);
+      elmdaDyn();
    }
    REQUIRE(lambda != 0.5);
    s.session.end();

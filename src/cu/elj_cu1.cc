@@ -1,5 +1,5 @@
-// ck.py Version 3.1.0
-template <class Ver, class IMG, bool REL, bool SOFTCORE>
+// ck.py Version 3.2.0
+template <class Ver, class IMG, bool SOFTCORE>
 __global__
 void elj_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer restrict ev,
    EnergyBuffer restrict devdl, EnergyBuffer restrict d2evdl2, VirialBuffer restrict vev,
@@ -113,10 +113,10 @@ void elj_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer 
       real zr = zi - zk;
       real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
       // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
-      // relative calculation (REL) never interacting; without SOFTCORE no atom
-      // follows lambda
+      // relative calculation never interacting; without SOFTCORE no atom follows
+      // lambda
       int mc = SOFTCORE ? pair_mutcls(mutcls, imutg, kmutg) : 0;
-      if (r2 <= off * off and incl and (not REL or mc >= 0)) {
+      if (r2 <= off * off and incl and mc >= 0) {
          real r = REAL_SQRT(r2);
          // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
          real invr = REAL_RSQRT_V2(r2);
@@ -125,11 +125,11 @@ void elj_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer 
          // Ligand 2 couples as the complement of vlambda; a mutated pair is also the
          // pair that carries dE/dL (elj1.f).
          const bool mutik = mc > 0;
-         const SoftCoreLmda lp = pair_vdw_softcore<REL>(mc, lp1, lp2);
+         const SoftCoreLmda lp = pair_vdw_softcore<true>(mc, lp1, lp2);
          real e, de;
          PairVdwLambda dl = {0, 0, 0};
-         pair_lj_v3<do_g, SOFTCORE, 0, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, invr, lp, scalea, rv, eps, cut, off, e,
-            de, &dl, mutik);
+         pair_lj_v3<do_g, SOFTCORE, 0, do_dl1, do_dl2, do_gdl>(r, invr, lp, scalea, rv, eps, cut, off, e, de, &dl,
+            mutik);
          if CONSTEXPR (do_e) {
             evtl += floatTo<ebuf_prec>(e);
             if (mutik) {
@@ -264,10 +264,10 @@ void elj_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer 
             real zr = zi - zk;
             real r2 = (xr * xr + yr * yr + zr * zr);
             // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
-            // relative calculation (REL) never interacting; without SOFTCORE no atom
-            // follows lambda
+            // relative calculation never interacting; without SOFTCORE no atom follows
+            // lambda
             int mc = SOFTCORE ? pair_mutcls(mutcls, imutg, kmutg) : 0;
-            if (r2 <= off * off and incl and (not REL or mc >= 0)) {
+            if (r2 <= off * off and incl and mc >= 0) {
                real r = REAL_SQRT(r2);
                // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
                real invr = REAL_RSQRT_V2(r2);
@@ -276,11 +276,11 @@ void elj_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer 
                // Ligand 2 couples as the complement of vlambda; a mutated pair is also the
                // pair that carries dE/dL (elj1.f).
                const bool mutik = mc > 0;
-               const SoftCoreLmda lp = pair_vdw_softcore<REL>(mc, lp1, lp2);
+               const SoftCoreLmda lp = pair_vdw_softcore<true>(mc, lp1, lp2);
                real e, de;
                PairVdwLambda dl = {0, 0, 0};
-               pair_lj_v3<do_g, SOFTCORE, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, invr, lp, 1, rv, eps, cut, off, e,
-                  de, &dl, mutik);
+               pair_lj_v3<do_g, SOFTCORE, 1, do_dl1, do_dl2, do_gdl>(r, invr, lp, 1, rv, eps, cut, off, e, de, &dl,
+                  mutik);
                if CONSTEXPR (do_e) {
                   evtl += floatTo<ebuf_prec>(e);
                   if (mutik) {
@@ -371,10 +371,10 @@ void elj_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer 
             real zr = zi - zk;
             real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
             // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
-            // relative calculation (REL) never interacting; without SOFTCORE no atom
-            // follows lambda
+            // relative calculation never interacting; without SOFTCORE no atom follows
+            // lambda
             int mc = SOFTCORE ? pair_mutcls(mutcls, imutg, kmutg) : 0;
-            if (r2 <= off * off and incl and (not REL or mc >= 0)) {
+            if (r2 <= off * off and incl and mc >= 0) {
                real r = REAL_SQRT(r2);
                // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
                real invr = REAL_RSQRT_V2(r2);
@@ -383,11 +383,11 @@ void elj_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer 
                // Ligand 2 couples as the complement of vlambda; a mutated pair is also the
                // pair that carries dE/dL (elj1.f).
                const bool mutik = mc > 0;
-               const SoftCoreLmda lp = pair_vdw_softcore<REL>(mc, lp1, lp2);
+               const SoftCoreLmda lp = pair_vdw_softcore<true>(mc, lp1, lp2);
                real e, de;
                PairVdwLambda dl = {0, 0, 0};
-               pair_lj_v3<do_g, SOFTCORE, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, invr, lp, 1, rv, eps, cut, off, e,
-                  de, &dl, mutik);
+               pair_lj_v3<do_g, SOFTCORE, 1, do_dl1, do_dl2, do_gdl>(r, invr, lp, 1, rv, eps, cut, off, e, de, &dl,
+                  mutik);
                if CONSTEXPR (do_e) {
                   evtl += floatTo<ebuf_prec>(e);
                   if (mutik) {
@@ -532,10 +532,10 @@ void elj_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer 
             real zr = zi - zk;
             real r2 = (xr * xr + yr * yr + zr * zr);
             // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
-            // relative calculation (REL) never interacting; without SOFTCORE no atom
-            // follows lambda
+            // relative calculation never interacting; without SOFTCORE no atom follows
+            // lambda
             int mc = SOFTCORE ? pair_mutcls(mutcls, imutg, kmutg) : 0;
-            if (r2 <= off * off and incl and (not REL or mc >= 0)) {
+            if (r2 <= off * off and incl and mc >= 0) {
                real r = REAL_SQRT(r2);
                // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
                real invr = REAL_RSQRT_V2(r2);
@@ -544,11 +544,11 @@ void elj_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer 
                // Ligand 2 couples as the complement of vlambda; a mutated pair is also the
                // pair that carries dE/dL (elj1.f).
                const bool mutik = mc > 0;
-               const SoftCoreLmda lp = pair_vdw_softcore<REL>(mc, lp1, lp2);
+               const SoftCoreLmda lp = pair_vdw_softcore<true>(mc, lp1, lp2);
                real e, de;
                PairVdwLambda dl = {0, 0, 0};
-               pair_lj_v3<do_g, SOFTCORE, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, invr, lp, 1, rv, eps, cut, off, e,
-                  de, &dl, mutik);
+               pair_lj_v3<do_g, SOFTCORE, 1, do_dl1, do_dl2, do_gdl>(r, invr, lp, 1, rv, eps, cut, off, e, de, &dl,
+                  mutik);
                if CONSTEXPR (do_e) {
                   evtl += floatTo<ebuf_prec>(e);
                   if (mutik) {
@@ -635,10 +635,10 @@ void elj_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer 
             real zr = zi - zk;
             real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
             // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
-            // relative calculation (REL) never interacting; without SOFTCORE no atom
-            // follows lambda
+            // relative calculation never interacting; without SOFTCORE no atom follows
+            // lambda
             int mc = SOFTCORE ? pair_mutcls(mutcls, imutg, kmutg) : 0;
-            if (r2 <= off * off and incl and (not REL or mc >= 0)) {
+            if (r2 <= off * off and incl and mc >= 0) {
                real r = REAL_SQRT(r2);
                // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
                real invr = REAL_RSQRT_V2(r2);
@@ -647,11 +647,11 @@ void elj_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nev, EnergyBuffer 
                // Ligand 2 couples as the complement of vlambda; a mutated pair is also the
                // pair that carries dE/dL (elj1.f).
                const bool mutik = mc > 0;
-               const SoftCoreLmda lp = pair_vdw_softcore<REL>(mc, lp1, lp2);
+               const SoftCoreLmda lp = pair_vdw_softcore<true>(mc, lp1, lp2);
                real e, de;
                PairVdwLambda dl = {0, 0, 0};
-               pair_lj_v3<do_g, SOFTCORE, 1, do_dl1, do_dl2, (do_gdl or do_vdl)>(r, invr, lp, 1, rv, eps, cut, off, e,
-                  de, &dl, mutik);
+               pair_lj_v3<do_g, SOFTCORE, 1, do_dl1, do_dl2, do_gdl>(r, invr, lp, 1, rv, eps, cut, off, e, de, &dl,
+                  mutik);
                if CONSTEXPR (do_e) {
                   evtl += floatTo<ebuf_prec>(e);
                   if (mutik) {

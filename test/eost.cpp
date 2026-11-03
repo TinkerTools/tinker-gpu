@@ -38,6 +38,7 @@ int& HEAD(int i, int j) { return osthead[gidx(i, j)]; }
 // (test_eost.f:resetost).
 void resetost(int nl, int nf, int nhist)
 {
+   lmdastep = 0; // the deposits are stamped with it
    nlmda = nl;
    nflmda = nf;
    fli0 = (nflmda + 1) / 2;
@@ -127,6 +128,7 @@ void resetost(int nl, int nf, int nhist)
 // (test_eost.f:resetmeta).
 void resetmeta(int nhist)
 {
+   lmdastep = 0;
    sizemetahist = nhist;
    nmetahist = 0;
    metalhist.assign(sizemetahist + 1, 0.0);
@@ -1020,7 +1022,7 @@ TEST_CASE("EOST-metadyn", "[ff][eost]")
    double lam[5] = {0.0, 0.1, 0.2, 0.4, 0.6};
    for (int istep = 1; istep <= lmdaintv; ++istep) {
       lambda = lam[istep];
-      elmdaDyn(istep);
+      elmdaDyn();
       if (istep < lmdaintv)
          COMPARE_INTS(nmetahist, 0); // no deposit before the interval boundary
    }
@@ -1048,7 +1050,7 @@ TEST_CASE("EOST-metadyn", "[ff][eost]")
       dedl = 1.0;
       if (istep % 2 == 0)
          dedl = 11.0;
-      elmdaDyn(istep);
+      elmdaDyn();
       lmv[istep - lmdaintv] = lambda;
    }
    COMPARE_INTS(nmetahist, 2); // a noisy interval still deposits
@@ -1296,7 +1298,7 @@ TEST_CASE("EOST-ostdyn", "[ff][eost]")
    for (int istep = 1; istep <= lmdaintv; ++istep) {
       lambda = 0.5;
       dedl = 1.0;
-      elmdaDyn(istep);
+      elmdaDyn();
       if (istep < lmdaintv)
          COMPARE_INTS(nlmdahist, 0); // waits for the interval end
    }
@@ -1314,7 +1316,7 @@ TEST_CASE("EOST-ostdyn", "[ff][eost]")
       dedl = 1.0;
       if (istep % 2 == 0)
          dedl = 11.0;
-      elmdaDyn(istep);
+      elmdaDyn();
    }
    COMPARE_REALS(dedlavg, 6.0, 1.0e-12);
    COMPARE_REALS(dedlstd, 5.0, 1.0e-12);
@@ -1333,7 +1335,7 @@ TEST_CASE("EOST-ostdyn", "[ff][eost]")
          lambda = 0.5;
          dedl = 2.0;
       }
-      elmdaDyn(istep);
+      elmdaDyn();
    }
    COMPARE_INTS(nlmdahist, 2);
    COMPARE_REALS(lmdalhist[2], 0.5, 1.0e-12);
@@ -1375,7 +1377,7 @@ TEST_CASE("EOST-ostgate", "[ff][eost]")
    double lam[7] = {0.0};
    for (int istep = 1; istep <= lmdaintv; ++istep) {
       dedl = 1.0;
-      elmdaDyn(istep);
+      elmdaDyn();
       lam[istep] = lambda;
    }
 
@@ -1452,7 +1454,7 @@ TEST_CASE("EOST-ostlocal", "[ff][eost]")
    for (int istep = 1; istep <= lmdaintv; ++istep) {
       lambda = (double)(imax - 1) * wlmda;
       dedl = 0.0;
-      elmdaDyn(istep);
+      elmdaDyn();
    }
    double hglobal = hbias * std::exp(-(gmin - ostgthresh) / rt);
    COMPARE_INTS(nlmdahist, 3);
@@ -1469,7 +1471,7 @@ TEST_CASE("EOST-ostlocal", "[ff][eost]")
    for (int istep = lmdaintv + 1; istep <= 2 * lmdaintv; ++istep) {
       lambda = (double)(imin - 1) * wlmda;
       dedl = 0.0;
-      elmdaDyn(istep);
+      elmdaDyn();
    }
    hglobal = hbias * std::exp(-std::max(0.0, gmin - ostgthresh) / rt);
    COMPARE_INTS(nlmdahist, 4);
@@ -1625,7 +1627,7 @@ TEST_CASE("EOST-metatemper", "[ff][eost]")
    const int ndep = 5;
    for (int istep = 1; istep <= ndep * lmdaintv; ++istep) {
       lambda = 0.5;
-      elmdaDyn(istep);
+      elmdaDyn();
    }
    COMPARE_INTS(nmetahist, ndep);
 

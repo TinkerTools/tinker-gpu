@@ -83,7 +83,7 @@ inline real dspInfluence(int r1, int r2, int r3, int k1, int k2, int k3, real3 r
       // mixed precision energy and virial
       real erfcterm = REAL_ERFC_ACCURATE(b);
       if (shape == BoxShape::UNBOUND) {
-         real coef = (1 - REAL_COS(pi * lvec1x * REAL_SQRT(hsq)));
+         real coef = (1 - REAL_COS(pi * lvec1x * h));
          expterm *= coef;
          erfcterm *= coef;
       } else if (shape == BoxShape::OCT) {

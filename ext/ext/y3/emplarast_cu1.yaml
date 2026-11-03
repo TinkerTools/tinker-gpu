@@ -3,8 +3,8 @@ KERNEL_VERSION_NUMBER: 23
 OUTPUT_DIR: src/cu/amoeba
 KERNEL_NAME: emplarast_cu1
 TEMPLATE_PARAMS: template <class Ver, class ETYP>
-# one copy for every box shape, imaged at run time (lambda runs only), and
-# the tiles near their centers imaged once, their virial from the summed forces
+# no IMAGE_TEMPLATE: one copy for every box shape, imaged at run time
+# (lambda runs only)
 LOCAL_TILES: true
 # the multipole pair forces are off the line of centers
 LOCAL_VIRIAL: symmetric
@@ -38,7 +38,7 @@ EXTRA_PARAMS: |
   , const real (*restrict rpole)[10]
   , const real (*restrict uind)[3], const real (*restrict uinp)[3]
   , const int* restrict grp
-  , real f, real aewald, GrpScale esc, real deldl
+  , real f, real aewald, const TINKER_GRID_CONSTANT GrpScale esc, real deldl
   , RdtMask live
 IMPLICIT_PARAMS:
   - d::jpolar

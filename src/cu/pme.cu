@@ -34,6 +34,8 @@ void gridPut_cu1(const real* restrict x, const real* restrict y, const real* res
    MAYBE_UNUSED const real(*fuind)[3] = (real(*)[3])ptr1;
    MAYBE_UNUSED const real(*fuinp)[3] = (real(*)[3])ptr2;
    MAYBE_UNUSED const int* doffset = (const int*)ptr2;
+   // the one-set charge grid is spread by gridPchgOneSet_cu instead
+   static_assert(not(eq<T, PCHG>() and ONE_SET), "");
    // ONE_SET: the padded rows of an in-place real FFT
    MAYBE_UNUSED const int ldx = ONE_SET ? 2 * (nfft1 / 2 + 1) : nfft1;
 
@@ -71,10 +73,13 @@ void gridPut_cu1(const real* restrict x, const real* restrict y, const real* res
          real chgi = pchg[i];
          if (chgi == 0)
             continue;
-         // a complex grid holds one real grid in its real parts
+         // a complex grid holds one real grid in its real parts; the one-set
+         // dispersion grids are real, a site going to the grid of its slot
+         // (gridDispSlots, as gridPut_acc)
+         constexpr bool SLOTS = eq<T, DISP>() and ONE_SET;
          real* q = qgrid;
          int stride = 2;
-         if CONSTEXPR (ONE_SET) {
+         if CONSTEXPR (SLOTS) {
             int off = doffset[i];
             if (off < 0)
                continue;
@@ -1325,6 +1330,7 @@ static void pmeConv_cu1(int nfft1, int nfft2, int nfft3, real (*restrict qgrid)[
    TINKER_IMAGE_PARAMS, real box_volume, EnergyBuffer restrict gpu_e, VirialBuffer restrict gpu_vir,
    VirialBuffer restrict dl_vir, real wdv)
 {
+   static_assert(not SKEW or ONE_SET, "");
    int ithread = threadIdx.x + blockIdx.x * blockDim.x;
    int stride = blockDim.x * gridDim.x;
 
@@ -1529,9 +1535,12 @@ static void pmeConv_cu2(PMEUnit pme_u, real* dlgrid, EnergyBuffer gpu_e, VirialB
    real aewald = st.aewald;
    real box_volume = boxVolume();
 
+   // only the half spectrum has a SKEW copy; ONE_SET stands in for true, since
+   // the device code is C++14 and a plain branch would instantiate both
+   constexpr bool SKEW = ONE_SET;
    auto ker = pmeConv_cu1<DO_E, DO_V, DO_DL, ONE_SET>;
    if (ONE_SET and (box_shape == BoxShape::MONO or box_shape == BoxShape::TRI))
-      ker = pmeConv_cu1<DO_E, DO_V, DO_DL, ONE_SET, ONE_SET>;
+      ker = pmeConv_cu1<DO_E, DO_V, DO_DL, ONE_SET, SKEW>;
    auto stream = use_pme_stream ? g::spme : g::s0;
    int ngrid = gpuGridSize(BLOCK_DIM);
    ker<<<ngrid, BLOCK_DIM, 0, stream>>>(n1, n2, n3, qgrid, dlqgrid, bsmod1, bsmod2, bsmod3, f, aewald,
@@ -1571,6 +1580,15 @@ void pmeConvOneSet_cu(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
    pmeConv_cu3<true>(pme_u, gpu_e, gpu_vir);
 }
 
+// Every caller of the lambda convolutions takes the second lambda derivatives,
+// and lmdaDerivMask gives such a version with the virial the lambda derivative
+// of the virial too, so the two come together.
+static void pmeConvDlmdaVirial(VirialBuffer dl_vir)
+{
+   if (dl_vir == nullptr)
+      TINKER_THROW("The reciprocal virial with lambda derivatives needs the lambda derivative of the virial.");
+}
+
 void pmeConvDlmda_cu(PMEUnit pme_u, PMEUnit dlpme_u, VirialBuffer gpu_vir, VirialBuffer dl_vir, real wdv)
 {
    real* dlgrid = dlpme_u->qgrid;
@@ -1578,22 +1596,17 @@ void pmeConvDlmda_cu(PMEUnit pme_u, PMEUnit dlpme_u, VirialBuffer gpu_vir, Viria
       pmeConv_cu2<false, false, true>(pme_u, dlgrid, nullptr, nullptr, nullptr);
       return;
    }
-   if (dl_vir == nullptr) {
-      dl_vir = gpu_vir;
-      wdv = 0;
-   }
+   pmeConvDlmdaVirial(dl_vir);
    pmeConv_cu2<false, true, true>(pme_u, dlgrid, nullptr, gpu_vir, dl_vir, wdv);
 }
 
 void pmeConvOneSetDlmda_cu(PMEUnit pme_u, real* dlgrid, EnergyBuffer gpu_e, VirialBuffer gpu_vir,
    VirialBuffer dl_vir, real wdv)
 {
-   // a version with the lambda derivative of the virial has the virial
-   assert(gpu_vir or not dl_vir);
-   if (dl_vir == nullptr) {
-      dl_vir = gpu_vir;
-      wdv = 0;
-   }
+   if (gpu_vir)
+      pmeConvDlmdaVirial(dl_vir);
+   else if (dl_vir)
+      TINKER_THROW("The lambda derivative of the reciprocal virial needs the virial.");
    if (gpu_vir == nullptr) {
       if (gpu_e == nullptr)
          pmeConv_cu2<false, false, true, true>(pme_u, dlgrid, nullptr, nullptr, nullptr);

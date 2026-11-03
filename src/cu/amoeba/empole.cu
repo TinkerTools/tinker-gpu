@@ -6,10 +6,10 @@
 #include "ff/pme.h"
 #include "ff/spatial.h"
 #include "ff/switch.h"
-#include "seq/emselfamoeba.h"
+#include "seq/emselfdlmda.h"
 #include "seq/launch.h"
+#include "seq/pair_dlmda.h"
 #include "seq/pair_mpole.h"
-#include "seq/pair_vlambda.h"
 #include "seq/triangle.h"
 #include <tinker/detail/extfld.hh>
 

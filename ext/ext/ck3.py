@@ -301,7 +301,8 @@ void KERNEL_NAME(int n,         \
 # distances, its virial built from the forces summed over the tile; the other
 # tiles image every pair.
 # LOCAL_VIRIAL: symmetric takes the symmetric part of that virial, for pair
-# forces off the line of centers whose pair virials are symmetrized
+# forces off the line of centers whose pair virials are symmetrized. The virial
+# takes the one scale of the forces, and its lambda derivative the dlsink scale.
 def _local_tiles(kernel:str, nloop:int) -> str:
     heads = ['        KERNEL_LOAD_INFO_VARIABLES\n        for (int j = 0; j < WARP_SIZE; ++j) {',
              '        for (int j = 0; j < WARP_SIZE; ++j) {\n            KERNEL_KLANE2']
@@ -955,6 +956,9 @@ class KernelWriter:
         # sorted sources and local tiles
         k1, v1 = 'SORTED_KERNEL_PARAMS', ''
         if use_ikvars and (ivars.any_sorted() or kvars.any_sorted()):
+            # only kernel 21 takes bnum for its exclusion loop
+            if self.config.get(self.yk_kernel_version_number, 21) != 21:
+                raise ValueError('sorted sources need KERNEL_VERSION_NUMBER 21.')
             v1 = ', const int* restrict bnum'
         k2, v2 = 'LOCAL_KERNEL_PARAMS', ''
         k3, v3 = 'KERNEL_LOCAL_IMAGE', ''
@@ -1049,7 +1053,7 @@ class KernelWriter:
 
     @staticmethod
     def version() -> str:
-        return '3.1.0'
+        return '3.2.0'
 
     @staticmethod
     def _replace(s:str, d:dict) -> str:
@@ -1070,7 +1074,7 @@ class KernelWriter:
         if kernel_num == 11:
             outstr = outstr + self._replace(rc_kernel11, d)
         else:
-            # the number of tile loops of each template
+            # local tiles rewrite a template, given its number of tile loops
             local = _local_tiles if self._kv(self.yk_local_tiles) else (lambda k, nloop: k)
             if kernel_num == 23:
                 if self.yk_scale_1x_type in self.config.keys():

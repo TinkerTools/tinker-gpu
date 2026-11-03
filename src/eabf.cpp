@@ -102,6 +102,9 @@ void abfFromFortran()
    // kept by initabffile, so only the history and lambda particle come back.
    sizelmdahist = dlmda::sizelmdahist;
    nlmdahist = dlmda::nlmdahist;
+   // the step count of a continued history, which initabffile has put on an
+   // interval boundary, so the deposits go on numbering from it
+   lmdastep = dlmda::lmdastep;
    lmdaihist.assign(sizelmdahist + 1, 0);
    lmdalhist.assign(sizelmdahist + 1, 0.0);
    lmdafhist.assign(sizelmdahist + 1, 0.0);

@@ -171,6 +171,20 @@ struct TestLmdaFlagReset
 /// \brief Returns the file name part of a path.
 std::string testBaseName(const std::string& path);
 
+/// \brief Requires that without analysis every term adds into the shared lambda
+/// derivative buffers rather than keep its own (LmdaBuffer).
+void testRequireSharedLmdaBuffers();
+
+/// \brief The message of the refusal of atom group weights (groupData).
+constexpr const char* testGroupWeightsRefusal = "Atom group weights";
+
+/// \brief Requires that a fixture whose key, \c dir/name.key under test/file,
+/// tinker9 refuses as it sets up, with \c xyz and \c prm under test/file and
+/// the run flags \c flags, throws a message containing \c what, so that a
+/// throw for another reason does not pass.
+void testRefusedFixture(
+   const char* dir, const char* name, const char* xyz, const char* prm, int flags, const char* what);
+
 /// \brief Initializes MD in the test.
 void testMdInit(double t = 0,  ///< Temperature in Kelvin.
                 double atm = 0 ///< Atmosphere in atm.

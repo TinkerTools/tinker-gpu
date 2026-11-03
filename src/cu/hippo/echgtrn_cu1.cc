@@ -1,4 +1,4 @@
-// ck.py Version 3.1.0
+// ck.py Version 3.2.0
 template <class Ver, class IMG, Chgtrn CT>
 __global__
 void echgtrn_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nc, EnergyBuffer restrict ec,
@@ -9,7 +9,7 @@ void echgtrn_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nc, EnergyBuff
    const real* restrict y, const real* restrict z, const Spatial::SortedAtom* restrict sorted, int nakpl,
    const int* restrict iakpl, int niak, const int* restrict iak, const int* restrict lst,
    const Spatial::Center* restrict akc, real* restrict chgct, real* restrict dmpct, real f, const int* restrict grp,
-   GrpPairScale ctsc)
+   const TINKER_GRID_CONSTANT GrpPairScale ctsc)
 {
    constexpr bool do_a = Ver::a;
    constexpr bool do_e = Ver::e;
@@ -115,6 +115,7 @@ void echgtrn_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nc, EnergyBuff
       int ik = 3 * igrp + kgrp;
       if (r2 <= off * off and incl and (ctsc.live >> ik & 1)) {
          real r = REAL_SQRT(r2);
+         real rinv = REAL_RECIP(r);
          e_prec e, de;
          if CONSTEXPR (CT == Chgtrn::SEPARATE)
             pair_chgtrn<do_g>(r, cut, off, scalea, f, alphai, chgi, alphak, chgk, 1, e, de);
@@ -126,9 +127,9 @@ void echgtrn_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nc, EnergyBuff
          if (grpPairLmdaActive<do_dl2>(w)) {
             pair_grpscale_dl<do_dl1, do_dl2>(w, e, dcdltl, d2cdl2tl);
             // the separation runs from i to k here
-            if CONSTEXPR (do_gdl or do_vdl)
-               pair_dlforce<do_gdl, (do_vdl and not tile_local)>(w.dl * de * REAL_RECIP(r), -xr, -yr, -zr, dgxi, dgyi,
-                  dgzi, dgxk, dgyk, dgzk, dvcdltlxx, dvcdltlyx, dvcdltlzx, dvcdltlyy, dvcdltlzy, dvcdltlzz);
+            if CONSTEXPR (do_gdl)
+               pair_dlforce<do_gdl, (do_vdl and not tile_local)>(w.dl * de * rinv, -xr, -yr, -zr, dgxi, dgyi, dgzi,
+                  dgxk, dgyk, dgzk, dvcdltlxx, dvcdltlyx, dvcdltlzx, dvcdltlyy, dvcdltlzy, dvcdltlzz);
          }
          real sc = w.sc;
          e *= sc;
@@ -139,7 +140,7 @@ void echgtrn_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nc, EnergyBuff
          if CONSTEXPR (do_e)
             ectl += floatTo<ebuf_prec>(e);
          if CONSTEXPR (do_g) {
-            de *= REAL_RECIP(r);
+            de *= rinv;
             real dedx = de * xr;
             real dedy = de * yr;
             real dedz = de * zr;
@@ -256,6 +257,7 @@ void echgtrn_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nc, EnergyBuff
             int ik = 3 * igrp + kgrp;
             if (r2 <= off * off and incl and (ctsc.live >> ik & 1)) {
                real r = REAL_SQRT(r2);
+               real rinv = REAL_RECIP(r);
                e_prec e, de;
                if CONSTEXPR (CT == Chgtrn::SEPARATE)
                   pair_chgtrn<do_g>(r, cut, off, 1, f, alphai, chgi, alphak, chgk, 1, e, de);
@@ -267,9 +269,9 @@ void echgtrn_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nc, EnergyBuff
                if (grpPairLmdaActive<do_dl2>(w)) {
                   pair_grpscale_dl<do_dl1, do_dl2>(w, e, dcdltl, d2cdl2tl);
                   // the separation runs from i to k here
-                  if CONSTEXPR (do_gdl or do_vdl)
-                     pair_dlforce<do_gdl, (do_vdl and not tile_local)>(w.dl * de * REAL_RECIP(r), -xr, -yr, -zr, dgxi,
-                        dgyi, dgzi, dgxk, dgyk, dgzk, dvcdltlxx, dvcdltlyx, dvcdltlzx, dvcdltlyy, dvcdltlzy, dvcdltlzz);
+                  if CONSTEXPR (do_gdl)
+                     pair_dlforce<do_gdl, (do_vdl and not tile_local)>(w.dl * de * rinv, -xr, -yr, -zr, dgxi, dgyi,
+                        dgzi, dgxk, dgyk, dgzk, dvcdltlxx, dvcdltlyx, dvcdltlzx, dvcdltlyy, dvcdltlzy, dvcdltlzz);
                }
                real sc = w.sc;
                e *= sc;
@@ -280,7 +282,7 @@ void echgtrn_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nc, EnergyBuff
                if CONSTEXPR (do_e)
                   ectl += floatTo<ebuf_prec>(e);
                if CONSTEXPR (do_g) {
-                  de *= REAL_RECIP(r);
+                  de *= rinv;
                   real dedx = de * xr;
                   real dedy = de * yr;
                   real dedz = de * zr;
@@ -352,6 +354,7 @@ void echgtrn_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nc, EnergyBuff
             int ik = 3 * igrp + kgrp;
             if (r2 <= off * off and incl and (ctsc.live >> ik & 1)) {
                real r = REAL_SQRT(r2);
+               real rinv = REAL_RECIP(r);
                e_prec e, de;
                if CONSTEXPR (CT == Chgtrn::SEPARATE)
                   pair_chgtrn<do_g>(r, cut, off, 1, f, alphai, chgi, alphak, chgk, 1, e, de);
@@ -363,9 +366,9 @@ void echgtrn_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nc, EnergyBuff
                if (grpPairLmdaActive<do_dl2>(w)) {
                   pair_grpscale_dl<do_dl1, do_dl2>(w, e, dcdltl, d2cdl2tl);
                   // the separation runs from i to k here
-                  if CONSTEXPR (do_gdl or do_vdl)
-                     pair_dlforce<do_gdl, (do_vdl and not tile_local)>(w.dl * de * REAL_RECIP(r), -xr, -yr, -zr, dgxi,
-                        dgyi, dgzi, dgxk, dgyk, dgzk, dvcdltlxx, dvcdltlyx, dvcdltlzx, dvcdltlyy, dvcdltlzy, dvcdltlzz);
+                  if CONSTEXPR (do_gdl)
+                     pair_dlforce<do_gdl, (do_vdl and not tile_local)>(w.dl * de * rinv, -xr, -yr, -zr, dgxi, dgyi,
+                        dgzi, dgxk, dgyk, dgzk, dvcdltlxx, dvcdltlyx, dvcdltlzx, dvcdltlyy, dvcdltlzy, dvcdltlzz);
                }
                real sc = w.sc;
                e *= sc;
@@ -376,7 +379,7 @@ void echgtrn_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nc, EnergyBuff
                if CONSTEXPR (do_e)
                   ectl += floatTo<ebuf_prec>(e);
                if CONSTEXPR (do_g) {
-                  de *= REAL_RECIP(r);
+                  de *= rinv;
                   real dedx = de * xr;
                   real dedy = de * yr;
                   real dedz = de * zr;
@@ -502,6 +505,7 @@ void echgtrn_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nc, EnergyBuff
             int ik = 3 * igrp + kgrp;
             if (r2 <= off * off and incl and (ctsc.live >> ik & 1)) {
                real r = REAL_SQRT(r2);
+               real rinv = REAL_RECIP(r);
                e_prec e, de;
                if CONSTEXPR (CT == Chgtrn::SEPARATE)
                   pair_chgtrn<do_g>(r, cut, off, 1, f, alphai, chgi, alphak, chgk, 1, e, de);
@@ -513,9 +517,9 @@ void echgtrn_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nc, EnergyBuff
                if (grpPairLmdaActive<do_dl2>(w)) {
                   pair_grpscale_dl<do_dl1, do_dl2>(w, e, dcdltl, d2cdl2tl);
                   // the separation runs from i to k here
-                  if CONSTEXPR (do_gdl or do_vdl)
-                     pair_dlforce<do_gdl, (do_vdl and not tile_local)>(w.dl * de * REAL_RECIP(r), -xr, -yr, -zr, dgxi,
-                        dgyi, dgzi, dgxk, dgyk, dgzk, dvcdltlxx, dvcdltlyx, dvcdltlzx, dvcdltlyy, dvcdltlzy, dvcdltlzz);
+                  if CONSTEXPR (do_gdl)
+                     pair_dlforce<do_gdl, (do_vdl and not tile_local)>(w.dl * de * rinv, -xr, -yr, -zr, dgxi, dgyi,
+                        dgzi, dgxk, dgyk, dgzk, dvcdltlxx, dvcdltlyx, dvcdltlzx, dvcdltlyy, dvcdltlzy, dvcdltlzz);
                }
                real sc = w.sc;
                e *= sc;
@@ -526,7 +530,7 @@ void echgtrn_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nc, EnergyBuff
                if CONSTEXPR (do_e)
                   ectl += floatTo<ebuf_prec>(e);
                if CONSTEXPR (do_g) {
-                  de *= REAL_RECIP(r);
+                  de *= rinv;
                   real dedx = de * xr;
                   real dedy = de * yr;
                   real dedz = de * zr;
@@ -594,6 +598,7 @@ void echgtrn_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nc, EnergyBuff
             int ik = 3 * igrp + kgrp;
             if (r2 <= off * off and incl and (ctsc.live >> ik & 1)) {
                real r = REAL_SQRT(r2);
+               real rinv = REAL_RECIP(r);
                e_prec e, de;
                if CONSTEXPR (CT == Chgtrn::SEPARATE)
                   pair_chgtrn<do_g>(r, cut, off, 1, f, alphai, chgi, alphak, chgk, 1, e, de);
@@ -605,9 +610,9 @@ void echgtrn_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nc, EnergyBuff
                if (grpPairLmdaActive<do_dl2>(w)) {
                   pair_grpscale_dl<do_dl1, do_dl2>(w, e, dcdltl, d2cdl2tl);
                   // the separation runs from i to k here
-                  if CONSTEXPR (do_gdl or do_vdl)
-                     pair_dlforce<do_gdl, (do_vdl and not tile_local)>(w.dl * de * REAL_RECIP(r), -xr, -yr, -zr, dgxi,
-                        dgyi, dgzi, dgxk, dgyk, dgzk, dvcdltlxx, dvcdltlyx, dvcdltlzx, dvcdltlyy, dvcdltlzy, dvcdltlzz);
+                  if CONSTEXPR (do_gdl)
+                     pair_dlforce<do_gdl, (do_vdl and not tile_local)>(w.dl * de * rinv, -xr, -yr, -zr, dgxi, dgyi,
+                        dgzi, dgxk, dgyk, dgzk, dvcdltlxx, dvcdltlyx, dvcdltlzx, dvcdltlyy, dvcdltlzy, dvcdltlzz);
                }
                real sc = w.sc;
                e *= sc;
@@ -618,7 +623,7 @@ void echgtrn_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nc, EnergyBuff
                if CONSTEXPR (do_e)
                   ectl += floatTo<ebuf_prec>(e);
                if CONSTEXPR (do_g) {
-                  de *= REAL_RECIP(r);
+                  de *= rinv;
                   real dedx = de * xr;
                   real dedy = de * yr;
                   real dedz = de * zr;

@@ -325,6 +325,9 @@ void echglj(int vers)
    const int edlvers = lmdaDerivVers(vers, edlmdaActive());
    const int vdlvers = lmdaDerivVers(vers, vdlmdaActive());
    const int dlvers = lmdaDerivVers(vers, edlmdaActive() or vdlmdaActive());
+   // ahead of the reciprocal space, which reads the coordinates on the PME
+   // stream while bounds() would move them on s0
+   exfield(edlvers, 0);
    if (useEwald()) {
       echargeEwaldRecipSelf(edlvers);
       if (radrule == Vdw::GEOMETRIC)
@@ -338,7 +341,6 @@ void echglj(int vers)
          TINKER_FCALL2(acc0, cu1, echgljRadArithEpsGeomNonEwald, dlvers);
    }
    elj14(vdlvers);
-   exfield(edlvers, 0);
    evdwLrcApply(vers, vdlvers);
 }
 }

@@ -253,6 +253,15 @@ RdtMask elecLiveMask()
    return dead ? RdtMask::ENV : coupledMask();
 }
 
+RdtMask elecLiveMask(const GrpScale& esc)
+{
+   auto bits = static_cast<unsigned>(elecLiveMask());
+   for (int g = 0; g < 3; ++g)
+      if (esc.s[g] == 0 and esc.ds[g] == 0)
+         bits &= ~(1u << g);
+   return static_cast<RdtMask>(bits);
+}
+
 const int* elecDeadGroups()
 {
    // A relative leg always annihilates one ligand; otherwise only a dead
@@ -370,6 +379,12 @@ SoftCoreLmda grpSoftCore(int ig, const SoftCoreParams& sc, bool dodl)
 {
    const LmdaFn v = vdwGroupLmda(ig);
    return softCoreLmda(v.f, sc.n, sc.alpha, sc.m, sc.p, v.d1, v.d2, dodl);
+}
+
+void grpSoftCores(SoftCoreLmda (*soft)(int, bool), bool dodl, SoftCoreLmda& s1, SoftCoreLmda& s2)
+{
+   s1 = soft(1, dodl);
+   s2 = use_rel ? soft(2, dodl) : s1;
 }
 
 void dtNeed(const LmdaFn& w, bool& need0, bool& need1)
@@ -532,7 +547,8 @@ void dlmda_mech()
    dlmda::use_metadyn = use_meta;
    dlmda::use_abfdyn = use_abf;
 
-   // adaptive lambda bias state shared by OST and ABF.
+   // adaptive lambda bias state shared by OST and ABF; an ABF history that is
+   // continued brings its step count back later (abfFromFortran)
    lmdastep = dlmda::lmdastep;
    lmdaintv = dlmda::lmdaintv;
    lmdanpa = dlmda::lmdanpa;
@@ -782,10 +798,12 @@ static void lmdaBiasDerivs()
 // particle; when the lambda is moved by Monte Carlo trials the particle is left
 // alone and lmdaMonte changes the lambda once the step is complete
 // (dlambda.f:elmdadyn).
-void elmdaDyn(int istep)
+void elmdaDyn()
 {
-   int im = istep % lmdaintv;
-   int isamp = (istep - 1) % lmdaintv;
+   // the step count of the bias, which a continued history carries on
+   lmdastep = lmdastep + 1;
+   int im = lmdastep % lmdaintv;
+   int isamp = (lmdastep - 1) % lmdaintv;
 
    // build the effective lambda derivative from the unbiased dedl left behind
    // by the energy call and the bias saved this step by eostBias or eabfBias
@@ -813,12 +831,12 @@ void elmdaDyn(int istep)
          avgstd(lmdaflist, nskip, lmdanpc, dedlavg, dedlstd);
          if (depcriteria(dedlavg, dedlstd)) {
             if (use_ost)
-               ostDeposit(istep);
+               ostDeposit(lmdastep);
             if (use_abf)
-               abfDeposit(istep);
+               abfDeposit(lmdastep);
          }
       } else if (use_meta) {
-         metaDeposit(istep);
+         metaDeposit(lmdastep);
       }
    }
 
@@ -1161,7 +1179,7 @@ void lmdaWinDyn(int istep)
    // advance the adaptive lambda bias and the lambda particle, now that the
    // step and any Monte Carlo box change are complete
    if (lmdaBiased())
-      elmdaDyn(istep);
+      elmdaDyn();
 
    // collect dU/dlambda for thermodynamic integration
    if (use_ti)

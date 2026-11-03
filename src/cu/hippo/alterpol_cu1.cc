@@ -1,4 +1,4 @@
-// ck.py Version 3.1.0
+// ck.py Version 3.2.0
 template <class IMG, int MUTPSC>
 __global__
 void alterpol_cu1(int n, TINKER_IMAGE_PARAMS, real cut, real off, const unsigned* restrict dinfo, int nexclude,

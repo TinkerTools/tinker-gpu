@@ -3,8 +3,6 @@ KERNEL_VERSION_NUMBER: 23
 OUTPUT_DIR: src/cu/amoeba
 KERNEL_NAME: emplar_cu1
 TEMPLATE_PARAMS: template <class Ver, class IMG, class ETYP>
-# the box shape as a template parameter, and the tiles near their centers
-# imaged once, their virial from the summed forces
 IMAGE_TEMPLATE: IMG
 LOCAL_TILES: true
 # the multipole pair forces are off the line of centers

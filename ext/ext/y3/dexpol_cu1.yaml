@@ -1,9 +1,6 @@
 OUTPUT_DIR: src/cu/hippo
 KERNEL_NAME: dexpol_cu1
 TEMPLATE_PARAMS: template <class Ver, class IMG>
-# the box shape as a template parameter, and the tiles near their centers
-# imaged once, their virial from the summed forces (scaled by wa, and by wb
-# for its lambda derivative)
 IMAGE_TEMPLATE: IMG
 LOCAL_TILES: true
 # the exchange polarization pair forces are off the line of centers

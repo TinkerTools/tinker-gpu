@@ -1,8 +1,6 @@
 OUTPUT_DIR: src/cu/hippo
 KERNEL_NAME: edisp_cu1
-TEMPLATE_PARAMS: template <class Ver, class IMG, class DTYP, bool REL, bool DHAL>
-# the box shape as a template parameter, and the tiles near their centers
-# imaged once
+TEMPLATE_PARAMS: template <class Ver, class IMG, class DTYP, bool SOFTCORE, bool DHAL>
 IMAGE_TEMPLATE: IMG
 LOCAL_TILES: true
 CONSTEXPR_FLAGS: |
@@ -45,7 +43,7 @@ SCALE_1X_TYPE: real_const_array
 
 EXTRA_PARAMS: |
   , const real* restrict csix, const real* restrict adisp, real aewald
-  , const int* restrict mutg, int mutcls, Vdw vcouple, DispSoft ds1, DispSoft ds2, DispHal dh
+  , const int* restrict mutg, int mutcls, DispSoft ds1, DispSoft ds2, DispHal dh
 # IMPLICIT_PARAMS:
 
 I_VARIABLES:
@@ -54,14 +52,14 @@ I_VARIABLES:
   - register real zi   from:z
   - register real ci   from:csix
   - register real ai   from:adisp
-  - register int  imutg from:mutg
+  - register int  imutg from:mutg onlyif:SOFTCORE
 K_VARIABLES:
   - register real xk   from:x
   - register real yk   from:y
   - register real zk   from:z
   - register real ck   from:csix
   - register real ak   from:adisp
-  - register int  kmutg from:mutg
+  - register int  kmutg from:mutg onlyif:SOFTCORE
 I_FORCE:
   - register real gxi addto:gx
   - register real gyi addto:gy
@@ -84,16 +82,17 @@ SCALED_PAIRWISE_INTERACTION: |
   real yr = @yi@ - @yk@;
   real zr = @zi@ - @zk@;
   real r2 = image2(xr, yr, zr);
-  // REL: the class of a pair of ligand groups, the two ligands never
-  // interacting; otherwise whether the pair is mutated, as plain runs need
-  int mc = REL ? pair_mutcls(mutcls, @imutg@, @kmutg@) : int(pair_mutik(vcouple, @imutg@, @kmutg@));
+  // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+  // relative calculation never interacting; without SOFTCORE no atom follows
+  // lambda
+  int mc = SOFTCORE ? pair_mutcls(mutcls, @imutg@, @kmutg@) : 0;
   if (r2 <= off * off and incl and mc >= 0) {
     real r = REAL_SQRT(r2);
     // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
     real rr1 = REAL_RSQRT_V2(r2);
     real e, de, dle, dle2, dlde;
     pair_disp<do_g, DTYP, 0, do_dl1, do_dl2, do_gdl, DHAL>(r, r2, rr1,
-      scalea, aewald, @ci@, @ai@, @ck@, @ak@, mc, ds1, (REL ? ds2 : ds1), cut, off, dh,
+      scalea, aewald, @ci@, @ai@, @ck@, @ak@, mc, ds1, ds2, cut, off, dh,
       e, de, dle, dle2, dlde);
     if CONSTEXPR (do_e) {
       edtl += floatTo<ebuf_prec>(e);
@@ -141,16 +140,17 @@ FULL_PAIRWISE_INTERACTION: |
   real yr = @yi@ - @yk@;
   real zr = @zi@ - @zk@;
   real r2 = image2(xr, yr, zr);
-  // REL: the class of a pair of ligand groups, the two ligands never
-  // interacting; otherwise whether the pair is mutated, as plain runs need
-  int mc = REL ? pair_mutcls(mutcls, @imutg@, @kmutg@) : int(pair_mutik(vcouple, @imutg@, @kmutg@));
+  // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+  // relative calculation never interacting; without SOFTCORE no atom follows
+  // lambda
+  int mc = SOFTCORE ? pair_mutcls(mutcls, @imutg@, @kmutg@) : 0;
   if (r2 <= off * off and incl and mc >= 0) {
     real r = REAL_SQRT(r2);
     // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
     real rr1 = REAL_RSQRT_V2(r2);
     real e, de, dle, dle2, dlde;
     pair_disp<do_g, DTYP, 1, do_dl1, do_dl2, do_gdl, DHAL>(r, r2, rr1,
-      1, aewald, @ci@, @ai@, @ck@, @ak@, mc, ds1, (REL ? ds2 : ds1), cut, off, dh,
+      1, aewald, @ci@, @ai@, @ck@, @ak@, mc, ds1, ds2, cut, off, dh,
       e, de, dle, dle2, dlde);
     if CONSTEXPR (do_e) {
       edtl += floatTo<ebuf_prec>(e);

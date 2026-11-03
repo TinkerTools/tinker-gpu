@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <tinker/detail/boxes.hh>
 #include <tinker/detail/mutant.hh>
@@ -271,6 +272,26 @@ const Fixture& fx(const char* name)
    return kFixtures[0];
 }
 
+// The derivatives a fixture key asks for are on, so that a key whose request is
+// lost cannot pass against references that vanish (146).
+void requireKeyDerivs(const std::string& keyname)
+{
+   std::ifstream fin(keyname);
+   std::string line;
+   bool d1 = false, d2 = false;
+   while (std::getline(fin, line)) {
+      std::string word;
+      std::istringstream(line) >> word;
+      std::transform(word.begin(), word.end(), word.begin(), ::toupper);
+      d1 = d1 or word == "LAMBDA-DERIV" or word == "LAMBDA-DERIV2";
+      d2 = d2 or word == "LAMBDA-DERIV2";
+   }
+   if (d1)
+      REQUIRE(use_dlmda);
+   if (d2)
+      REQUIRE(use_d2lmda);
+}
+
 // With analyz off the fixture runs as dynamics does: the terms keep no lambda
 // derivative buffers of their own and add into the shared ones, so only the
 // totals are reported and compared.
@@ -302,16 +323,11 @@ void runFixture(const Fixture& fx, bool analyz = true)
    if (not analyz)
       rc_flag &= ~calc::analyz;
    session.init();
+   requireKeyDerivs(keyname);
    if (not analyz) {
-      auto shared = [](EnergyBuffer term, EnergyBuffer total) { return term == nullptr or term == total; };
       if (use_dlmda)
          REQUIRE(dedl_buf != nullptr);
-      REQUIRE(shared(demdl_buf, dedl_buf));
-      REQUIRE(shared(depdl_buf, dedl_buf));
-      REQUIRE(shared(devdl_buf, dedl_buf));
-      REQUIRE(shared(d2emdl2_buf, d2edl2_buf));
-      REQUIRE(shared(d2epdl2_buf, d2edl2_buf));
-      REQUIRE(shared(d2evdl2_buf, d2edl2_buf));
+      testRequireSharedLmdaBuffers();
    }
    // The total and, under analysis, the van der Waals, multipole and
    // polarization breakdown.
@@ -389,29 +405,14 @@ void runRepeatedFixture(const Fixture& fx)
    session.end();
 }
 
-// A fixture whose key tinker9 refuses as it sets up, with a message containing
-// what, so that a throw for another reason does not pass. The throws come
-// before pmeData() opens anything a later case could trip on.
+// A fixture whose key tinker9 refuses as it sets up (testRefusedFixture). The
+// throws come before pmeData() opens anything a later case could trip on.
 void runRefusedFixture(const Fixture& fx, const char* what)
 {
-   TestLmdaFlagReset lmdaReset;
-
-   const std::string files = TINKER9_DIRSTR "/test/file/";
-   const std::string xyzname = testBaseName(fx.xyz);
-   TestFile fxyz(files + fx.xyz, xyzname);
-   std::string keyname = std::string(fx.name) + ".key";
-   TestFile fkey(files + "testlmda/" + keyname, keyname);
-   TestFile fprm(files + fx.prm);
-
-   const char* argv[] = {"dummy", xyzname.c_str(), "-k", keyname.c_str()};
-   int argc = 4;
-   TestSession session(argc, argv);
-
    FdTestOptions opts;
    opts.analyt = true;
    opts.numer = true;
-   rc_flag = testlmdaFlags(opts);
-   REQUIRE_THROWS_WITH(session.init(), Catch::Matchers::ContainsSubstring(what));
+   testRefusedFixture("testlmda", fx.name, fx.xyz, fx.prm, testlmdaFlags(opts), what);
 }
 
 // The long range correction from its class sums against Fortran evcorr1 at a
@@ -624,9 +625,7 @@ TEST_CASE("TESTLMDA-52_apgas_pol_ewald_dt_l04", "[ff][testlmda][cflux][adtpol]")
 TEST_CASE("TESTLMDA-54_hipmix_pol_ewald_dt_l04", "[ff][testlmda][cflux][adtpol]") { runFixture(fx("54_hipmix_pol_ewald_dt_l04")); }
 // Atom group weights on HIPPO water with charge flux, which tinker9 refuses
 // (test_testlmda.f case 55).
-// the refusal of atom group weights (groupData)
-const char* const kGroupWeights = "Atom group weights";
-TEST_CASE("TESTLMDA-55_hipwat_group_ost_l04", "[ff][testlmda][cflux]") { runRefusedFixture(fx("55_hipwat_group_ost_l04"), kGroupWeights); }
+TEST_CASE("TESTLMDA-55_hipwat_group_ost_l04", "[ff][testlmda][cflux]") { runRefusedFixture(fx("55_hipwat_group_ost_l04"), testGroupWeightsRefusal); }
 TEST_CASE("TESTLMDA-56_hipwat_pol_split_dt_l04", "[ff][testlmda][cflux][adtpol]") { runFixture(fx("56_hipwat_pol_split_dt_l04")); }
 TEST_CASE("TESTLMDA-59_aptetra_pol_mlist_dt_l04", "[ff][testlmda][cflux][adtpol]") { runFixture(fx("59_aptetra_pol_mlist_dt_l04")); }
 TEST_CASE("TESTLMDA-60_aptetra_rel_lig1_l085", "[ff][testlmda][cflux][rdt]") { runFixture(fx("60_aptetra_rel_lig1_l085")); }
@@ -659,7 +658,7 @@ TEST_CASE("TESTLMDA-77_hipwat_ct_lin_dt_l00", "[ff][testlmda][ct]") { runFixture
 TEST_CASE("TESTLMDA-78_hipwat_pol_ct_split_st_l04", "[ff][testlmda][ct]") { runFixture(fx("78_hipwat_pol_ct_split_st_l04")); }
 TEST_CASE("TESTLMDA-79_hipwat_pol_ct_ewald_dt_l04", "[ff][testlmda][ct]") { runFixture(fx("79_hipwat_pol_ct_ewald_dt_l04")); }
 TEST_CASE("TESTLMDA-80_aptetra_ct_st_l04", "[ff][testlmda][ct]") { runFixture(fx("80_aptetra_ct_st_l04")); }
-TEST_CASE("TESTLMDA-82_hipwat_ct_group_ost_l04", "[ff][testlmda][ct]") { runRefusedFixture(fx("82_hipwat_ct_group_ost_l04"), kGroupWeights); }
+TEST_CASE("TESTLMDA-82_hipwat_ct_group_ost_l04", "[ff][testlmda][ct]") { runRefusedFixture(fx("82_hipwat_ct_group_ost_l04"), testGroupWeightsRefusal); }
 TEST_CASE("TESTLMDA-83_hipwat_ct_off_st_l04", "[ff][testlmda][ct]") { runFixture(fx("83_hipwat_ct_off_st_l04")); }
 TEST_CASE("TESTLMDA-84_aptetra_ct_rel_lig1_st_l085", "[ff][testlmda][ct][rdt]") { runFixture(fx("84_aptetra_ct_rel_lig1_st_l085")); }
 TEST_CASE("TESTLMDA-85_aptetra_ct_rel_lig2_st_l015", "[ff][testlmda][ct][rdt]") { runFixture(fx("85_aptetra_ct_rel_lig2_st_l015")); }
@@ -699,7 +698,7 @@ TEST_CASE("TESTLMDA-109_hipmix_dsp_ewald_l10", "[ff][testlmda][disp]") { runFixt
 TEST_CASE("TESTLMDA-110_hipmix_dsp_d1_n1_l04", "[ff][testlmda][disp]") { runFixture(fx("110_hipmix_dsp_d1_n1_l04")); }
 // The reciprocal space lambda derivative of the force reuses the PME grid.
 TEST_CASE("TESTLMDA-repeat-105_hipmix_dsp_ewald_l04", "[ff][testlmda][disp]") { runRepeatedFixture(fx("105_hipmix_dsp_ewald_l04")); }
-TEST_CASE("TESTLMDA-112_hipmix_dsp_ewald_group_l04", "[ff][testlmda][disp]") { runRefusedFixture(fx("112_hipmix_dsp_ewald_group_l04"), kGroupWeights); }
+TEST_CASE("TESTLMDA-112_hipmix_dsp_ewald_group_l04", "[ff][testlmda][disp]") { runRefusedFixture(fx("112_hipmix_dsp_ewald_group_l04"), testGroupWeightsRefusal); }
 // The long range dispersion correction follows the lambda power of the soft
 // core, alone, under annihilation, with an exponent of one, and with an
 // exponent of two at lambda 0 (test_testlmda.f cases 113 to 116).
@@ -932,30 +931,30 @@ TEST_CASE("TESTLMDA-DYN-124_hipmix_dsp_corr_qnt_l06", "[ff][testlmda][dyn][disp]
 TEST_CASE("TESTLMDA-DYN-125_hipmix_dsp_ewald_inv_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("125_hipmix_dsp_ewald_inv_l04"), false); }
 TEST_CASE("TESTLMDA-DYN-118_water_vsoft_m15_p3_l05", "[ff][testlmda][dyn]") { runFixture(fx("118_water_vsoft_m15_p3_l05"), false); }
 TEST_CASE("TESTLMDA-DYN-119_water_vsoft_m05_p1_l03", "[ff][testlmda][dyn]") { runFixture(fx("119_water_vsoft_m05_p1_l03"), false); }
-TEST_CASE("TESTLMDA-DYN-126_water_rep_rels_vdwm_l05", "[ff][testlmda][dyn][rdt]") { runFixture(fx("126_water_rep_rels_vdwm_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-127_water_rep_rels_vdwm_nlist_l05", "[ff][testlmda][dyn][rdt]") { runFixture(fx("127_water_rep_rels_vdwm_nlist_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-128_water_rep_rels_vdwm_annih_l05", "[ff][testlmda][dyn][rdt]") { runFixture(fx("128_water_rep_rels_vdwm_annih_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-129_water_rep_rels_vdwm_qnt_l035", "[ff][testlmda][dyn][rdt]") { runFixture(fx("129_water_rep_rels_vdwm_qnt_l035"), false); }
-TEST_CASE("TESTLMDA-DYN-130_water_rep_rels3_l050", "[ff][testlmda][dyn][rdt]") { runFixture(fx("130_water_rep_rels3_l050"), false); }
-TEST_CASE("TESTLMDA-DYN-131_water_rep_rels3_l085", "[ff][testlmda][dyn][rdt]") { runFixture(fx("131_water_rep_rels3_l085"), false); }
-TEST_CASE("TESTLMDA-DYN-132_water_rep_rels3_l015", "[ff][testlmda][dyn][rdt]") { runFixture(fx("132_water_rep_rels3_l015"), false); }
-TEST_CASE("TESTLMDA-DYN-134_water_dsp_rels_vdwm_l05", "[ff][testlmda][dyn][rdt]") { runFixture(fx("134_water_dsp_rels_vdwm_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-135_water_dsp_rels_vdwm_nlist_l05", "[ff][testlmda][dyn][rdt]") { runFixture(fx("135_water_dsp_rels_vdwm_nlist_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-136_water_dsp_rels_vdwm_annih_l05", "[ff][testlmda][dyn][rdt]") { runFixture(fx("136_water_dsp_rels_vdwm_annih_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-137_water_dsp_rels_vdwm_corr_l03", "[ff][testlmda][dyn][rdt]") { runFixture(fx("137_water_dsp_rels_vdwm_corr_l03"), false); }
-TEST_CASE("TESTLMDA-DYN-138_water_dsp_ewald_rels_vdwm_l04", "[ff][testlmda][dyn][rdt]") { runFixture(fx("138_water_dsp_ewald_rels_vdwm_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-139_water_dsp_ewald_rels_vdwm_nlist_l04", "[ff][testlmda][dyn][rdt]") { runFixture(fx("139_water_dsp_ewald_rels_vdwm_nlist_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-140_water_dsp_ewald_rels_vdwm_annih_l04", "[ff][testlmda][dyn][rdt]") { runFixture(fx("140_water_dsp_ewald_rels_vdwm_annih_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-141_water_dsp_ewald_rels_vdwm_qnt_l035", "[ff][testlmda][dyn][rdt]") { runFixture(fx("141_water_dsp_ewald_rels_vdwm_qnt_l035"), false); }
-TEST_CASE("TESTLMDA-DYN-142_water_dsp_ewald_rels3_l050", "[ff][testlmda][dyn][rdt]") { runFixture(fx("142_water_dsp_ewald_rels3_l050"), false); }
-TEST_CASE("TESTLMDA-DYN-143_water_dsp_ewald_rels3_l085", "[ff][testlmda][dyn][rdt]") { runFixture(fx("143_water_dsp_ewald_rels3_l085"), false); }
-TEST_CASE("TESTLMDA-DYN-144_water_dsp_ewald_rels3_l015", "[ff][testlmda][dyn][rdt]") { runFixture(fx("144_water_dsp_ewald_rels3_l015"), false); }
+TEST_CASE("TESTLMDA-DYN-126_water_rep_rels_vdwm_l05", "[ff][testlmda][dyn][rdt][repel]") { runFixture(fx("126_water_rep_rels_vdwm_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-127_water_rep_rels_vdwm_nlist_l05", "[ff][testlmda][dyn][rdt][repel]") { runFixture(fx("127_water_rep_rels_vdwm_nlist_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-128_water_rep_rels_vdwm_annih_l05", "[ff][testlmda][dyn][rdt][repel]") { runFixture(fx("128_water_rep_rels_vdwm_annih_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-129_water_rep_rels_vdwm_qnt_l035", "[ff][testlmda][dyn][rdt][repel]") { runFixture(fx("129_water_rep_rels_vdwm_qnt_l035"), false); }
+TEST_CASE("TESTLMDA-DYN-130_water_rep_rels3_l050", "[ff][testlmda][dyn][rdt][repel]") { runFixture(fx("130_water_rep_rels3_l050"), false); }
+TEST_CASE("TESTLMDA-DYN-131_water_rep_rels3_l085", "[ff][testlmda][dyn][rdt][repel]") { runFixture(fx("131_water_rep_rels3_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-132_water_rep_rels3_l015", "[ff][testlmda][dyn][rdt][repel]") { runFixture(fx("132_water_rep_rels3_l015"), false); }
+TEST_CASE("TESTLMDA-DYN-134_water_dsp_rels_vdwm_l05", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("134_water_dsp_rels_vdwm_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-135_water_dsp_rels_vdwm_nlist_l05", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("135_water_dsp_rels_vdwm_nlist_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-136_water_dsp_rels_vdwm_annih_l05", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("136_water_dsp_rels_vdwm_annih_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-137_water_dsp_rels_vdwm_corr_l03", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("137_water_dsp_rels_vdwm_corr_l03"), false); }
+TEST_CASE("TESTLMDA-DYN-138_water_dsp_ewald_rels_vdwm_l04", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("138_water_dsp_ewald_rels_vdwm_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-139_water_dsp_ewald_rels_vdwm_nlist_l04", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("139_water_dsp_ewald_rels_vdwm_nlist_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-140_water_dsp_ewald_rels_vdwm_annih_l04", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("140_water_dsp_ewald_rels_vdwm_annih_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-141_water_dsp_ewald_rels_vdwm_qnt_l035", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("141_water_dsp_ewald_rels_vdwm_qnt_l035"), false); }
+TEST_CASE("TESTLMDA-DYN-142_water_dsp_ewald_rels3_l050", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("142_water_dsp_ewald_rels3_l050"), false); }
+TEST_CASE("TESTLMDA-DYN-143_water_dsp_ewald_rels3_l085", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("143_water_dsp_ewald_rels3_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-144_water_dsp_ewald_rels3_l015", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("144_water_dsp_ewald_rels3_l015"), false); }
 TEST_CASE("TESTLMDA-DYN-146_water_dsp_ewald_annih_all_l00", "[ff][testlmda][dyn][disp]") { runFixture(fx("146_water_dsp_ewald_annih_all_l00"), false); }
-TEST_CASE("TESTLMDA-DYN-147_water_dhal_l05", "[ff][testlmda][dyn][dhal]") { runFixture(fx("147_water_dhal_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-148_water_dhal_rels_vdwm_l04", "[ff][testlmda][dyn][dhal]") { runFixture(fx("148_water_dhal_rels_vdwm_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-149_water_dhal_rels3_l015", "[ff][testlmda][dyn][dhal]") { runFixture(fx("149_water_dhal_rels3_l015"), false); }
-TEST_CASE("TESTLMDA-DYN-150_water_dhal_rels3_l085", "[ff][testlmda][dyn][dhal]") { runFixture(fx("150_water_dhal_rels3_l085"), false); }
-TEST_CASE("TESTLMDA-DYN-151_water_dhal_rels_vdwm_damp_l04", "[ff][testlmda][dyn][dhal]") { runFixture(fx("151_water_dhal_rels_vdwm_damp_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-147_water_dhal_l05", "[ff][testlmda][dyn][dhal][disp]") { runFixture(fx("147_water_dhal_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-148_water_dhal_rels_vdwm_l04", "[ff][testlmda][dyn][dhal][disp]") { runFixture(fx("148_water_dhal_rels_vdwm_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-149_water_dhal_rels3_l015", "[ff][testlmda][dyn][dhal][disp]") { runFixture(fx("149_water_dhal_rels3_l015"), false); }
+TEST_CASE("TESTLMDA-DYN-150_water_dhal_rels3_l085", "[ff][testlmda][dyn][dhal][disp]") { runFixture(fx("150_water_dhal_rels3_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-151_water_dhal_rels_vdwm_damp_l04", "[ff][testlmda][dyn][dhal][disp]") { runFixture(fx("151_water_dhal_rels_vdwm_damp_l04"), false); }
 TEST_CASE("TESTLMDA-DYN-153_tip3_lj_l04", "[ff][testlmda][dyn][lj]") { runFixture(fx("153_tip3_lj_l04"), false); }
 TEST_CASE("TESTLMDA-DYN-154_tip3_lj_nlist_soft_l03", "[ff][testlmda][dyn][lj]") { runFixture(fx("154_tip3_lj_nlist_soft_l03"), false); }
 TEST_CASE("TESTLMDA-DYN-155_tip3_lj_lights_annih_l03", "[ff][testlmda][dyn][lj]") { runFixture(fx("155_tip3_lj_lights_annih_l03"), false); }

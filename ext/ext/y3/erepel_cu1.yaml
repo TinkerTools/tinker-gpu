@@ -1,8 +1,6 @@
 OUTPUT_DIR: src/cu/hippo
 KERNEL_NAME: erepel_cu1
-TEMPLATE_PARAMS: template <class Ver, class IMG>
-# the box shape as a template parameter, and the tiles near their centers
-# imaged once, their virial from the summed forces
+TEMPLATE_PARAMS: template <class Ver, class IMG, bool SOFTCORE>
 IMAGE_TEMPLATE: IMG
 LOCAL_TILES: true
 # the multipole pair forces are off the line of centers
@@ -79,7 +77,7 @@ I_VARIABLES:
   - shared real sizi from:sizpr
   - shared real dmpi from:dmppr
   - shared real vali from:elepr
-  - shared int  imutg from:mutg
+  - shared int  imutg from:mutg onlyif:SOFTCORE
 K_VARIABLES:
   - shared   real xk  from:x
   - shared   real yk  from:y
@@ -97,7 +95,7 @@ K_VARIABLES:
   - register real sizk from:sizpr
   - register real dmpk from:dmppr
   - register real valk from:elepr
-  - register int  kmutg from:mutg
+  - register int  kmutg from:mutg onlyif:SOFTCORE
 I_FORCE:
   - register real gxi addto:gx
   - register real gyi addto:gy
@@ -138,8 +136,10 @@ FULL_PAIRWISE_INTERACTION: |
   zero(pgrad);
 
   real r2 = image2(xr, yr, zr);
-  // The two ligands of a relative calculation never interact.
-  int mc = pair_mutcls(mutcls, @imutg@, @kmutg@);
+  // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+  // relative calculation never interacting; without SOFTCORE no atom follows
+  // lambda
+  int mc = SOFTCORE ? pair_mutcls(mutcls, @imutg@, @kmutg@) : 0;
   if (r2 <= off * off and incl and mc >= 0) {
     pair_repel<do_g, do_dl1, do_dl2, do_tdl>( //
       r2, scalea, mc > 0, pair_softcore(mc == 2, rs1, rs2), cut, off, xr, yr, zr,

@@ -256,13 +256,43 @@ void gridCuindOneSet_acc(PMEUnit pme_u, const real (*cind)[3])
    gridPut_acc<UIND, true>(pme_u, (real*)fuind, nullptr);
 }
 
+// The influence function at the grid indices k1, k2, k3, zero past the cutoff
+// of the exponential, with the wavevector h, its square and the exponent for
+// the virial (as pmeConv_cu1's influence).
+#pragma acc routine seq
+static real pmeInfluence_acc(int k1, int k2, int k3, int nfft1, int nfft2, int nfft3, real3 ra, real3 rb, real3 rc,
+   real pterm, real box_volume, const real* bsmod1, const real* bsmod2, const real* bsmod3, BoxShape shape,
+   real lvec1x, real& h1, real& h2, real& h3, real& hsq, real& term)
+{
+   int r1 = (k1 < (nfft1 + 1) / 2) ? k1 : (k1 - nfft1);
+   int r2 = (k2 < (nfft2 + 1) / 2) ? k2 : (k2 - nfft2);
+   int r3 = (k3 < (nfft3 + 1) / 2) ? k3 : (k3 - nfft3);
+   h1 = ra.x * r1 + rb.x * r2 + rc.x * r3;
+   h2 = ra.y * r1 + rb.y * r2 + rc.y * r3;
+   h3 = ra.z * r1 + rb.z * r2 + rc.z * r3;
+   hsq = h1 * h1 + h2 * h2 + h3 * h3;
+   term = -pterm * hsq;
+   real expterm = 0;
+   if (term > -50) {
+      real denom = hsq * pi * box_volume * bsmod1[k1] * bsmod2[k2] * bsmod3[k3];
+      expterm = REAL_EXP(term) / denom;
+      if (shape == BoxShape::UNBOUND)
+         expterm *= (1 - REAL_COS(pi * lvec1x * REAL_SQRT(hsq)));
+      else if (shape == BoxShape::OCT)
+         if ((k1 + k2 + k3) & 1)
+            expterm = 0;
+   }
+   return expterm;
+}
+
 // ONE_SET: the half spectrum, k1 <= nfft1/2, of a real grid, fftfrontOneSet,
-// for the potential alone
-template <bool DO_E, bool DO_V, bool ONE_SET = false>
+// for the potential alone; SKEW: in a monoclinic or triclinic box
+template <bool DO_E, bool DO_V, bool ONE_SET = false, bool SKEW = false>
 static void pmeConv_acc1(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
 {
    // the energy and virial of the half spectrum would count its points twice
    static_assert(not ONE_SET or not(DO_E or DO_V), "");
+   static_assert(not SKEW or ONE_SET, "");
    auto& st = *pme_u;
    real(*restrict qgrid)[2] = reinterpret_cast<real(*)[2]>(st.qgrid);
    const real* bsmod1 = st.bsmod1;
@@ -299,29 +329,14 @@ static void pmeConv_acc1(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir
       int k2 = j / nx;
       int k1 = j - k2 * nx;
 
-      int r1 = (k1 < (nfft1 + 1) / 2) ? k1 : (k1 - nfft1);
-      int r2 = (k2 < (nfft2 + 1) / 2) ? k2 : (k2 - nfft2);
-      int r3 = (k3 < (nfft3 + 1) / 2) ? k3 : (k3 - nfft3);
-
-      real h1 = recipa.x * r1 + recipb.x * r2 + recipc.x * r3;
-      real h2 = recipa.y * r1 + recipb.y * r2 + recipc.y * r3;
-      real h3 = recipa.z * r1 + recipb.z * r2 + recipc.z * r3;
-      real hsq = h1 * h1 + h2 * h2 + h3 * h3;
+      real h1, h2, h3, hsq, term;
+      real expterm = pmeInfluence_acc(k1, k2, k3, nfft1, nfft2, nfft3, recipa, recipb, recipc, pterm, box_volume,
+         bsmod1, bsmod2, bsmod3, box_shape, lvec1.x, h1, h2, h3, hsq, term);
 
       real gridx = qgrid[i][0];
       real gridy = qgrid[i][1];
-      real term = -pterm * hsq;
-      real expterm = 0;
-      if (term > -50) {
-         real denom = hsq * pi * box_volume * bsmod1[k1] * bsmod2[k2] * bsmod3[k3];
-         expterm = REAL_EXP(term) / denom;
-         if (box_shape == BoxShape::UNBOUND)
-            expterm *= (1 - REAL_COS(pi * lvec1.x * REAL_SQRT(hsq)));
-         else if (box_shape == BoxShape::OCT)
-            if ((k1 + k2 + k3) & 1)
-               expterm = 0; // end if ((k1 + k2 + k3) % 2 != 0)
-
-         if CONSTEXPR (DO_E || DO_V) {
+      if CONSTEXPR (DO_E || DO_V) {
+         if (term > -50) {
             real struc2 = gridx * gridx + gridy * gridy;
             real eterm = 0.5f * f * expterm * struc2;
             if CONSTEXPR (DO_E) {
@@ -338,37 +353,21 @@ static void pmeConv_acc1(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir
                real vzz = (h3 * h3 * vterm - eterm);
                atomic_add(vxx, vxy, vxz, vyy, vyz, vzz, gpu_vir, i & (bufsize - 1));
             }
-         } // end if (e or v)
+         }
       }
 
-      // ONE_SET: on a plane of Nyquist indices the missing conjugate is not at
+      // SKEW: on a plane of Nyquist indices the missing conjugate is not at
       // -k, and the potential, which must stay Hermitian as a full transform's
       // real part is, takes the mean influence function of the two, which
       // differ only in a skewed box (dspWaves)
-      if CONSTEXPR (ONE_SET) {
-         const bool skew = box_shape == BoxShape::MONO or box_shape == BoxShape::TRI;
-         if (skew and (2 * k1 == nfft1 or 2 * k2 == nfft2 or 2 * k3 == nfft3)) {
+      if CONSTEXPR (SKEW) {
+         if (2 * k1 == nfft1 or 2 * k2 == nfft2 or 2 * k3 == nfft3) {
             int p1 = k1 ? nfft1 - k1 : 0;
             int p2 = k2 ? nfft2 - k2 : 0;
             int p3 = k3 ? nfft3 - k3 : 0;
-            int s1 = (p1 < (nfft1 + 1) / 2) ? p1 : (p1 - nfft1);
-            int s2 = (p2 < (nfft2 + 1) / 2) ? p2 : (p2 - nfft2);
-            int s3 = (p3 < (nfft3 + 1) / 2) ? p3 : (p3 - nfft3);
-            real g1 = recipa.x * s1 + recipb.x * s2 + recipc.x * s3;
-            real g2 = recipa.y * s1 + recipb.y * s2 + recipc.y * s3;
-            real g3 = recipa.z * s1 + recipb.z * s2 + recipc.z * s3;
-            real gsq = g1 * g1 + g2 * g2 + g3 * g3;
-            real gterm = -pterm * gsq;
-            real expp = 0;
-            if (gterm > -50) {
-               real denom = gsq * pi * box_volume * bsmod1[p1] * bsmod2[p2] * bsmod3[p3];
-               expp = REAL_EXP(gterm) / denom;
-               if (box_shape == BoxShape::UNBOUND)
-                  expp *= (1 - REAL_COS(pi * lvec1.x * REAL_SQRT(gsq)));
-               else if (box_shape == BoxShape::OCT)
-                  if ((p1 + p2 + p3) & 1)
-                     expp = 0;
-            }
+            real g1, g2, g3, gsq, gterm;
+            real expp = pmeInfluence_acc(p1, p2, p3, nfft1, nfft2, nfft3, recipa, recipb, recipc, pterm, box_volume,
+               bsmod1, bsmod2, bsmod3, box_shape, lvec1.x, g1, g2, g3, gsq, gterm);
             expterm = (expterm + expp) / 2;
          }
       }
@@ -398,7 +397,10 @@ void pmeConv_acc(PMEUnit pme_u, EnergyBuffer gpu_e, VirialBuffer gpu_vir)
 
 void pmeConvOneSet_acc(PMEUnit pme_u)
 {
-   pmeConv_acc1<false, false, true>(pme_u, nullptr, nullptr);
+   if (box_shape == BoxShape::MONO or box_shape == BoxShape::TRI)
+      pmeConv_acc1<false, false, true, true>(pme_u, nullptr, nullptr);
+   else
+      pmeConv_acc1<false, false, true>(pme_u, nullptr, nullptr);
 }
 
 // ONE_SET: UIND/UIND2 read fuind's potential from qgrid as the real output of

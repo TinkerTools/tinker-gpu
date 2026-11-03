@@ -16,6 +16,16 @@ set_target_properties (tinker9_cu
       CUDA_ARCHITECTURES          "${T9_CUCCLIST}"
 )
 target_include_directories (tinker9_cu PRIVATE "${PROJECT_SOURCE_DIR}/include/syntax/cu")
+# __grid_constant__ kernel parameters need sm_70 for every target and nvcc 11.7
+set (__t9_cc_min 1000)
+foreach (var ${T9_CUCCLIST})
+   if (var LESS __t9_cc_min)
+      set (__t9_cc_min ${var})
+   endif ()
+endforeach ()
+if (__t9_cc_min GREATER_EQUAL 70 AND CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.7)
+   target_compile_definitions (tinker9_cu PRIVATE TINKER_CUDA_GRID_CONSTANT)
+endif ()
 target_link_libraries (tinker9_cu PRIVATE __t9_intf tinkerFToCpp)
 target_link_libraries (tinker9_cu PUBLIC cufft cublas)
 

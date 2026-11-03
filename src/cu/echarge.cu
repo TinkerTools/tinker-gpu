@@ -9,7 +9,7 @@
 #include "seq/bsplgen.h"
 #include "seq/launch.h"
 #include "seq/pair_charge.h"
-#include "seq/pair_vlambda.h"
+#include "seq/pair_dlmda.h"
 #include "seq/triangle.h"
 #include <tinker/detail/extfld.hh>
 
@@ -22,20 +22,16 @@ static void echarge_cu()
    // Only a run with a dead atom group pays for the test (elecDeadGroups).
    const int* grp = elecDeadGroups();
    const auto& st = *cspatial_v2_unit;
-   real cut, off;
+   const real f = electric / dielec;
+   real cut, off, aewald = 0;
    if CONSTEXPR (eq<ETYP, EWALD>()) {
       off = switchOff(Switch::EWALD);
       cut = off; // not used
+      PMEUnit pu = epme_unit;
+      aewald = pu->aewald;
    } else {
       off = switchOff(Switch::CHARGE);
       cut = switchCut(Switch::CHARGE);
-   }
-
-   const real f = electric / dielec;
-   real aewald = 0;
-   if CONSTEXPR (eq<ETYP, EWALD>()) {
-      PMEUnit pu = epme_unit;
-      aewald = pu->aewald;
    }
 
    int ngrid = gpuGridSize(BLOCK_DIM);
@@ -351,15 +347,13 @@ static void exfieldCharge_cu1(CountBuffer restrict nec, EnergyBuffer restrict ec
             atomic_add(e1 * del, dl1b, ithread);
             if CONSTEXPR (do_dl2)
                atomic_add(e1 * d2el, dl2b, ithread);
-            if CONSTEXPR (do_gdl or do_vdl) {
+            if CONSTEXPR (do_gdl) {
                real frx = -f * ef1 * dci * del;
                real fry = -f * ef2 * dci * del;
                real frz = -f * ef3 * dci * del;
-               if CONSTEXPR (do_gdl) {
-                  atomic_add(frx, dfx, ii);
-                  atomic_add(fry, dfy, ii);
-                  atomic_add(frz, dfz, ii);
-               }
+               atomic_add(frx, dfx, ii);
+               atomic_add(fry, dfy, ii);
+               atomic_add(frz, dfz, ii);
                if CONSTEXPR (do_vdl) {
                   real vxx = xi * frx;
                   real vyy = yi * fry;

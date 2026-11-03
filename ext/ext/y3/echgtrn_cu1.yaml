@@ -1,8 +1,6 @@
 OUTPUT_DIR: src/cu/hippo
 KERNEL_NAME: echgtrn_cu1
 TEMPLATE_PARAMS: template <class Ver, class IMG, Chgtrn CT>
-# the box shape as a template parameter, and the tiles near their centers
-# imaged once
 IMAGE_TEMPLATE: IMG
 LOCAL_TILES: true
 CONSTEXPR_FLAGS: |
@@ -48,7 +46,7 @@ EXTRA_PARAMS: |
   , real *restrict dmpct
   , real f
   , const int* restrict grp
-  , GrpPairScale ctsc
+  , const TINKER_GRID_CONSTANT GrpPairScale ctsc
 # IMPLICIT_PARAMS:
 
 I_VARIABLES:
@@ -92,6 +90,7 @@ SCALED_PAIRWISE_INTERACTION: |
   int ik = 3 * @igrp@ + @kgrp@;
   if (r2 <= off * off and incl and (ctsc.live >> ik & 1)) {
     real r = REAL_SQRT(r2);
+    real rinv = REAL_RECIP(r);
     e_prec e, de;
     if CONSTEXPR (CT == Chgtrn::SEPARATE)
       pair_chgtrn<do_g>      (r, cut, off, scalea, f, @alphai@, @chgi@, @alphak@, @chgk@, 1, e, de);
@@ -103,8 +102,8 @@ SCALED_PAIRWISE_INTERACTION: |
     if (grpPairLmdaActive<do_dl2>(w)) {
       pair_grpscale_dl<do_dl1, do_dl2>(w, e, dcdltl, d2cdl2tl);
       // the separation runs from i to k here
-      if CONSTEXPR (do_gdl or do_vdl)
-        pair_dlforce<do_gdl, (do_vdl and not tile_local)>(w.dl * de * REAL_RECIP(r), -xr, -yr, -zr, @dgxi@, @dgyi@,
+      if CONSTEXPR (do_gdl)
+        pair_dlforce<do_gdl, (do_vdl and not tile_local)>(w.dl * de * rinv, -xr, -yr, -zr, @dgxi@, @dgyi@,
           @dgzi@, @dgxk@, @dgyk@, @dgzk@, dvcdltlxx, dvcdltlyx, dvcdltlzx, dvcdltlyy, dvcdltlzy, dvcdltlzz);
     }
     real sc = w.sc;
@@ -116,7 +115,7 @@ SCALED_PAIRWISE_INTERACTION: |
     if CONSTEXPR (do_e)
         ectl += floatTo<ebuf_prec>(e);
     if CONSTEXPR (do_g) {
-      de *= REAL_RECIP(r);
+      de *= rinv;
       real dedx = de * xr;
       real dedy = de * yr;
       real dedz = de * zr;
@@ -146,6 +145,7 @@ FULL_PAIRWISE_INTERACTION: |
   int ik = 3 * @igrp@ + @kgrp@;
   if (r2 <= off * off and incl and (ctsc.live >> ik & 1)) {
     real r = REAL_SQRT(r2);
+    real rinv = REAL_RECIP(r);
     e_prec e, de;
     if CONSTEXPR (CT == Chgtrn::SEPARATE)
       pair_chgtrn<do_g>      (r, cut, off, 1, f, @alphai@, @chgi@, @alphak@, @chgk@, 1, e, de);
@@ -157,8 +157,8 @@ FULL_PAIRWISE_INTERACTION: |
     if (grpPairLmdaActive<do_dl2>(w)) {
       pair_grpscale_dl<do_dl1, do_dl2>(w, e, dcdltl, d2cdl2tl);
       // the separation runs from i to k here
-      if CONSTEXPR (do_gdl or do_vdl)
-        pair_dlforce<do_gdl, (do_vdl and not tile_local)>(w.dl * de * REAL_RECIP(r), -xr, -yr, -zr, @dgxi@, @dgyi@,
+      if CONSTEXPR (do_gdl)
+        pair_dlforce<do_gdl, (do_vdl and not tile_local)>(w.dl * de * rinv, -xr, -yr, -zr, @dgxi@, @dgyi@,
           @dgzi@, @dgxk@, @dgyk@, @dgzk@, dvcdltlxx, dvcdltlyx, dvcdltlzx, dvcdltlyy, dvcdltlzy, dvcdltlzz);
     }
     real sc = w.sc;
@@ -170,7 +170,7 @@ FULL_PAIRWISE_INTERACTION: |
     if CONSTEXPR (do_e)
         ectl += floatTo<ebuf_prec>(e);
     if CONSTEXPR (do_g) {
-      de *= REAL_RECIP(r);
+      de *= rinv;
       real dedx = de * xr;
       real dedy = de * yr;
       real dedz = de * zr;

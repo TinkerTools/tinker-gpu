@@ -223,6 +223,9 @@ void echarge(int vers)
    // The charges take their lambda derivatives as lmdaDrv decides
    // (dlambda.f:chgdlflags).
    const int dlvers = lmdaDerivVers(vers, edlmdaActive());
+   // ahead of the reciprocal space, which may read the coordinates on the PME
+   // stream while bounds() would move them on s0
+   exfield(dlvers, 0);
    if (useEwald()) {
       // The analysis buffers are zeroed and reduced inside this function, on
       // the main stream. The PME stream must not start before the zeroing and
@@ -235,7 +238,6 @@ void echarge(int vers)
    } else {
       echargeNonEwald(dlvers);
    }
-   exfield(dlvers, 0);
 
    if (rc_a) {
       if (do_e) {

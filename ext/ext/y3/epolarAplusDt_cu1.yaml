@@ -1,9 +1,8 @@
 OUTPUT_DIR: src/cu/hippo
 KERNEL_NAME: epolarAplusDt_cu1
 TEMPLATE_PARAMS: template <class Ver, class ETYP, bool CFLX>
-# one copy for every box shape, imaged at run time (lambda runs only), and
-# the tiles near their centers imaged once, their virial from the summed forces
-# (scaled by wa, and by wb for its lambda derivative)
+# no IMAGE_TEMPLATE: one copy for every box shape, imaged at run time
+# (lambda runs only)
 LOCAL_TILES: true
 # the multipole pair forces are off the line of centers
 LOCAL_VIRIAL: symmetric

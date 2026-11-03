@@ -10,7 +10,7 @@
 #include "ff/spatial.h"
 #include "ff/switch.h"
 #include "seq/damp.h"
-#include "seq/emselfamoeba.h"
+#include "seq/emselfdlmda.h"
 #include "seq/launch.h"
 #include "seq/pair_mplar.h"
 #include "seq/triangle.h"
@@ -53,15 +53,9 @@ static void emplarast_cu(const real (*uind)[3], const real (*uinp)[3])
       if CONSTEXPR (Ver::e)
          empoleSelfDlmdaAmoeba<Ver>(nullptr, em, f, aewald);
    }
-   // An annihilated site has no multipole and no induced dipole, so a group
-   // without a scale or a slope is left out of the live groups.
    const GrpScale esc = grpScale(elam);
    const real del = elecChain().d1;
-   auto bits = static_cast<unsigned>(elecLiveMask());
-   for (int g = 0; g < 3; ++g)
-      if (esc.s[g] == 0 and esc.ds[g] == 0)
-         bits &= ~(1u << g);
-   const RdtMask live = static_cast<RdtMask>(bits);
+   const RdtMask live = elecLiveMask(esc);
 
    int ngrid = gpuGridSize(BLOCK_DIM);
    auto kera = emplarast_cu1a<Ver, ETYP>;

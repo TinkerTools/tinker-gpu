@@ -772,6 +772,112 @@ void setApm(int nn, double rho)
 }
 }
 
+// The values and chain rule derivatives of each map type at one main lambda,
+// each sub-lambda on its own parameters so that a crossed argument would land
+// on the wrong one (test_eostmap.f:test_eostmap_mapsub).
+TEST_CASE("DLMDA-map-values", "[ff][dlmda]")
+{
+   ApmScope scope;
+   auto setType = [](Lmdamap t) { elmdamap.type = plmdamap.type = vlmdamap.type = t; };
+   // the sub-lambdas carry float round-off; the derivatives are double
+   auto check = [](double p, double dp, double d2p, double e, double de, double d2e, double v, double dv, double d2v) {
+      COMPARE_REALS(plam, p, 1.0e-6);
+      COMPARE_REALS(dpldlmda, dp, 1.0e-12);
+      COMPARE_REALS(d2pldlmda2, d2p, 1.0e-12);
+      COMPARE_REALS(elam, e, 1.0e-6);
+      COMPARE_REALS(deldlmda, de, 1.0e-12);
+      COMPARE_REALS(d2eldlmda2, d2e, 1.0e-12);
+      COMPARE_REALS(vlam, v, 1.0e-6);
+      COMPARE_REALS(dvldlmda, dv, 1.0e-12);
+      COMPARE_REALS(d2vldlmda2, d2v, 1.0e-12);
+   };
+
+   setType(Lmdamap::EXP);
+   plmdamap.exp = 2, elmdamap.exp = 3, vlmdamap.exp = 4;
+   mapAt(0.25);
+   check(0.0625, 0.5, 2.0, 0.015625, 0.1875, 1.5, 0.00390625, 0.0625, 0.75);
+
+   setType(Lmdamap::INV);
+   plmdamap.invn = 2, elmdamap.invn = 3, vlmdamap.invn = 4;
+   plmdamap.inveps = 0.01, elmdamap.inveps = 0.02, vlmdamap.inveps = 0.03;
+   mapAt(0.25);
+   check(0.452936557937477, 1.08352945028593, -2.08371048131911, 0.509927040983045, 1.08536378202464,
+      -2.67991057290036, 0.526434441030379, 1.09852311505228, -2.94247262960432);
+
+   setType(Lmdamap::APM);
+   plmdamap.apmn = 2, elmdamap.apmn = 3, vlmdamap.apmn = 4;
+   plmdamap.apmrho = 1.5, elmdamap.apmrho = 2.0, vlmdamap.apmrho = 2.5;
+   mapAt(0.25);
+   check(0.3203125, 1.09375, -1.25, 0.3818359375, 1.140625, -2.4375, 0.43017578125, 1.134765625, -3.34375);
+
+   // the quintic taper, each sub-lambda in its own window: one half at the
+   // middle of all three, with different slopes
+   setType(Lmdamap::QNT);
+   plmdamap.qnt0 = 0.2, plmdamap.qnt1 = 0.8;
+   elmdamap.qnt0 = 0.3, elmdamap.qnt1 = 0.7;
+   vlmdamap.qnt0 = 0.1, vlmdamap.qnt1 = 0.9;
+   mapAt(0.5);
+   check(0.5, 3.125, 0.0, 0.5, 4.6875, 0.0, 0.5, 2.34375, 0.0);
+   // off center, the complement of the taper and of its derivatives
+   mapAt(0.35);
+   COMPARE_REALS(plam, 1.0 - 0.896484375, 1.0e-6);
+   COMPARE_REALS(dpldlmda, 1.7578125, 1.0e-12);
+   COMPARE_REALS(d2pldlmda2, 15.625, 1.0e-12);
+   // off below the window and on above it, edges included
+   for (double l : {0.1, 0.2}) {
+      mapAt(l);
+      COMPARE_REALS(plam, 0.0, 1.0e-12);
+      COMPARE_REALS(dpldlmda, 0.0, 1.0e-12);
+   }
+   for (double l : {0.8, 0.9}) {
+      mapAt(l);
+      COMPARE_REALS(plam, 1.0, 1.0e-12);
+      COMPARE_REALS(dpldlmda, 0.0, 1.0e-12);
+   }
+}
+
+// The endpoints of the power law, whose first and second derivatives survive
+// at zero for exponents of one and two, and the inverse power map, the
+// identity for an exponent of one or less and with a shift of 0.1 for a
+// nonpositive one (test_eostmap.f:test_eostmap_sublmda).
+TEST_CASE("DLMDA-power-endpoints", "[ff][dlmda]")
+{
+   struct Case
+   {
+      double x, a, f, df, d2f;
+   };
+   const Case cases[] = {{0.0, 1.0, 0.0, 1.0, 0.0}, {0.0, 2.0, 0.0, 0.0, 2.0}, {0.0, 3.0, 0.0, 0.0, 0.0},
+      {1.0, 3.0, 1.0, 3.0, 6.0}, {0.5, 1.0, 0.5, 1.0, 0.0}};
+   for (const auto& c : cases) {
+      double f, df, d2f;
+      lmdaPwr(c.x, c.a, true, f, df, d2f);
+      CAPTURE(c.x, c.a);
+      COMPARE_REALS(f, c.f, 1.0e-12);
+      COMPARE_REALS(df, c.df, 1.0e-12);
+      COMPARE_REALS(d2f, c.d2f, 1.0e-12);
+   }
+
+   ApmScope scope;
+   elmdamap.type = plmdamap.type = vlmdamap.type = Lmdamap::INV;
+   for (int nn : {1, 0}) {
+      plmdamap.invn = nn, plmdamap.inveps = 0.1;
+      mapAt(0.4);
+      COMPARE_REALS(plam, 0.4, 1.0e-6);
+      COMPARE_REALS(dpldlmda, 1.0, 1.0e-12);
+      COMPARE_REALS(d2pldlmda2, 0.0, 1.0e-12);
+   }
+   plmdamap.invn = 2, plmdamap.inveps = 0.1;
+   mapAt(0.25);
+   const double p0 = plam, dp0 = dpldlmda, d2p0 = d2pldlmda2;
+   for (double eps : {0.0, -1.0}) {
+      plmdamap.inveps = eps;
+      mapAt(0.25);
+      COMPARE_REALS(plam, p0, 1.0e-12);
+      COMPARE_REALS(dpldlmda, dp0, 1.0e-12);
+      COMPARE_REALS(d2pldlmda2, d2p0, 1.0e-12);
+   }
+}
+
 TEST_CASE("DLMDA-apm-endpoints", "[ff][dlmda]")
 {
    // The map pins both endpoint values and carries the slope ratio at the

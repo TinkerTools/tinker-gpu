@@ -7,6 +7,7 @@
 #include "seq/add.h"
 #include "seq/pair_lj.h"
 #include "tool/externfunc.h"
+#include "tool/error.h"
 #include "tool/gpucard.h"
 
 namespace tinker {
@@ -34,6 +35,9 @@ static void elj_acc1()
    // fixed lambda is needed.
    const SoftCoreLmda ljs = ljSoft(1, false);
    const SoftCoreLmda unit = {1, 0, 0, 0, 0, 0, 0};
+   // the class of a pair of groups (pair_mutcls), 0 or 1 without a relative
+   // calculation
+   const int mutcls = vdwMutclsTable();
    #pragma acc parallel async num_gangs(GRID_DIM) vector_length(BLOCK_DIM)\
                present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
                deviceptr(DEVICE_PTRS,nlst,lst) firstprivate(ljs,unit)
@@ -64,7 +68,7 @@ static void elj_acc1()
             real eps = epsilon[it * njvdw + kt];
 
             MAYBE_UNUSED real e, de;
-            const SoftCoreLmda lp = pair_mutik(vcouple, imut, kmut) ? ljs : unit;
+            const SoftCoreLmda lp = pair_mutcls(mutcls, imut, kmut) > 0 ? ljs : unit;
             const real invr = REAL_RECIP(rik);
             pair_lj_v3<do_g, true, 1>(rik, invr, lp, 1, rv, eps, cut, off, e, de);
 
@@ -135,7 +139,7 @@ static void elj_acc1()
          real eps = epsilon[it * njvdw + kt];
 
          MAYBE_UNUSED real e, de;
-         const SoftCoreLmda lp = pair_mutik(vcouple, imut, kmut) ? ljs : unit;
+         const SoftCoreLmda lp = pair_mutcls(mutcls, imut, kmut) > 0 ? ljs : unit;
          const real invr = REAL_RECIP(rik);
          pair_lj_v3<do_g, true, 0>(rik, invr, lp, vscale, rv, eps, cut, off, e, de);
 
@@ -199,7 +203,7 @@ static void elj_acc1()
          real eps4 = epsilon4[it * njvdw + kt];
 
          MAYBE_UNUSED real e, de, e4, de4;
-         const SoftCoreLmda lp = pair_mutik(vcouple, imut, kmut) ? ljs : unit;
+         const SoftCoreLmda lp = pair_mutcls(mutcls, imut, kmut) > 0 ? ljs : unit;
          const real invr = REAL_RECIP(rik);
          pair_lj_v3<do_g, true, 0>(rik, invr, lp, v4scale, rv, eps, cut, off, e, de);
          pair_lj_v3<do_g, true, 0>(rik, invr, lp, v4scale, rv4, eps4, cut, off, e4, de4);
@@ -249,6 +253,9 @@ void elj_acc(int vers)
       elj_acc1<calc::V5>();
    else if (vers == calc::v6)
       elj_acc1<calc::V6>();
+   else
+      // CUDA only, which dlmdaData2 refuses first, as in echarge_acc
+      TINKER_THROW(format("The OpenACC Lennard-Jones kernels do not take version %d.", vers));
 }
 
 void ebuck_acc(int)

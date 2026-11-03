@@ -1,5 +1,5 @@
-// ck.py Version 3.1.0
-template <class Ver, class IMG>
+// ck.py Version 3.2.0
+template <class Ver, class IMG, bool SOFTCORE>
 __global__
 void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffer restrict er,
    EnergyBuffer restrict dvdl, EnergyBuffer restrict d2vdl2, VirialBuffer restrict vr, VirialBuffer restrict dvvirdl,
@@ -132,7 +132,8 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
       sizi[klane] = sizpr[i];
       dmpi[klane] = dmppr[i];
       vali[klane] = elepr[i];
-      imutg[klane] = mutg[i];
+      if CONSTEXPR (SOFTCORE)
+         imutg[klane] = mutg[i];
       xk[threadIdx.x] = x[k];
       yk[threadIdx.x] = y[k];
       zk[threadIdx.x] = z[k];
@@ -149,7 +150,8 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
       sizk = sizpr[k];
       dmpk = dmppr[k];
       valk = elepr[k];
-      kmutg = mutg[k];
+      if CONSTEXPR (SOFTCORE)
+         kmutg = mutg[k];
 
       constexpr bool incl = true;
       constexpr bool tile_local = false;
@@ -162,8 +164,10 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
       zero(pgrad);
 
       real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
-      // The two ligands of a relative calculation never interact.
-      int mc = pair_mutcls(mutcls, imutg[klane], kmutg);
+      // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+      // relative calculation never interacting; without SOFTCORE no atom follows
+      // lambda
+      int mc = SOFTCORE ? pair_mutcls(mutcls, imutg[klane], kmutg) : 0;
       if (r2 <= off * off and incl and mc >= 0) {
          pair_repel<do_g, do_dl1, do_dl2, do_tdl>( //
             r2, scalea, mc > 0, pair_softcore(mc == 2, rs1, rs2), cut, off, xr, yr, zr, sizi[klane], dmpi[klane],
@@ -325,7 +329,8 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
       sizi[threadIdx.x] = sizpr[i];
       dmpi[threadIdx.x] = dmppr[i];
       vali[threadIdx.x] = elepr[i];
-      imutg[threadIdx.x] = mutg[i];
+      if CONSTEXPR (SOFTCORE)
+         imutg[threadIdx.x] = mutg[i];
       xk[threadIdx.x] = sorted[atomk].x;
       yk[threadIdx.x] = sorted[atomk].y;
       zk[threadIdx.x] = sorted[atomk].z;
@@ -342,7 +347,8 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
       sizk = sizpr[k];
       dmpk = dmppr[k];
       valk = elepr[k];
-      kmutg = mutg[k];
+      if CONSTEXPR (SOFTCORE)
+         kmutg = mutg[k];
       __syncwarp();
 
       unsigned int rinfo0 = rinfo[iw * WARP_SIZE + ilane];
@@ -384,8 +390,10 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
             zero(pgrad);
 
             real r2 = (xr * xr + yr * yr + zr * zr);
-            // The two ligands of a relative calculation never interact.
-            int mc = pair_mutcls(mutcls, imutg[klane], kmutg);
+            // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+            // relative calculation never interacting; without SOFTCORE no atom follows
+            // lambda
+            int mc = SOFTCORE ? pair_mutcls(mutcls, imutg[klane], kmutg) : 0;
             if (r2 <= off * off and incl and mc >= 0) {
                pair_repel<do_g, do_dl1, do_dl2, do_tdl>( //
                   r2, scalea, mc > 0, pair_softcore(mc == 2, rs1, rs2), cut, off, xr, yr, zr, sizi[klane], dmpi[klane],
@@ -513,8 +521,10 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
             zero(pgrad);
 
             real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
-            // The two ligands of a relative calculation never interact.
-            int mc = pair_mutcls(mutcls, imutg[klane], kmutg);
+            // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+            // relative calculation never interacting; without SOFTCORE no atom follows
+            // lambda
+            int mc = SOFTCORE ? pair_mutcls(mutcls, imutg[klane], kmutg) : 0;
             if (r2 <= off * off and incl and mc >= 0) {
                pair_repel<do_g, do_dl1, do_dl2, do_tdl>( //
                   r2, scalea, mc > 0, pair_softcore(mc == 2, rs1, rs2), cut, off, xr, yr, zr, sizi[klane], dmpi[klane],
@@ -692,7 +702,8 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
       sizi[threadIdx.x] = sizpr[i];
       dmpi[threadIdx.x] = dmppr[i];
       vali[threadIdx.x] = elepr[i];
-      imutg[threadIdx.x] = mutg[i];
+      if CONSTEXPR (SOFTCORE)
+         imutg[threadIdx.x] = mutg[i];
       xk[threadIdx.x] = sorted[atomk].x;
       yk[threadIdx.x] = sorted[atomk].y;
       zk[threadIdx.x] = sorted[atomk].z;
@@ -709,7 +720,8 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
       sizk = sizpr[k];
       dmpk = dmppr[k];
       valk = elepr[k];
-      kmutg = mutg[k];
+      if CONSTEXPR (SOFTCORE)
+         kmutg = mutg[k];
       __syncwarp();
 
       real xc = akc[ty].x;
@@ -748,8 +760,10 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
             zero(pgrad);
 
             real r2 = (xr * xr + yr * yr + zr * zr);
-            // The two ligands of a relative calculation never interact.
-            int mc = pair_mutcls(mutcls, imutg[klane], kmutg);
+            // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+            // relative calculation never interacting; without SOFTCORE no atom follows
+            // lambda
+            int mc = SOFTCORE ? pair_mutcls(mutcls, imutg[klane], kmutg) : 0;
             if (r2 <= off * off and incl and mc >= 0) {
                pair_repel<do_g, do_dl1, do_dl2, do_tdl>( //
                   r2, scalea, mc > 0, pair_softcore(mc == 2, rs1, rs2), cut, off, xr, yr, zr, sizi[klane], dmpi[klane],
@@ -874,8 +888,10 @@ void erepel_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nr, EnergyBuffe
             zero(pgrad);
 
             real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
-            // The two ligands of a relative calculation never interact.
-            int mc = pair_mutcls(mutcls, imutg[klane], kmutg);
+            // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+            // relative calculation never interacting; without SOFTCORE no atom follows
+            // lambda
+            int mc = SOFTCORE ? pair_mutcls(mutcls, imutg[klane], kmutg) : 0;
             if (r2 <= off * off and incl and mc >= 0) {
                pair_repel<do_g, do_dl1, do_dl2, do_tdl>( //
                   r2, scalea, mc > 0, pair_softcore(mc == 2, rs1, rs2), cut, off, xr, yr, zr, sizi[klane], dmpi[klane],

@@ -1,4 +1,4 @@
-// ck.py Version 3.1.0
+// ck.py Version 3.2.0
 template <class Ver, class IMG, class ETYP, class RADRULE, class EPSRULE, bool SOFTCORE, bool LMDA>
 __global__
 void echglj_cu1(int n, TINKER_IMAGE_PARAMS, EnergyBuffer restrict ec, EnergyBuffer restrict dedl,
@@ -18,9 +18,6 @@ void echglj_cu1(int n, TINKER_IMAGE_PARAMS, EnergyBuffer restrict ec, EnergyBuff
    constexpr bool do_dl2 = Ver::e_dlmda2;
    constexpr bool do_gdl = Ver::g_dlmda;
    constexpr bool do_vdl = Ver::v_dlmda;
-   // a local tile takes the lambda derivative of its virial from those of the
-   // forces
-   constexpr bool do_fdl = do_gdl or do_vdl;
    static_assert(not do_vdl or do_gdl, "");
    static_assert(not LMDA or SOFTCORE, "");
    static_assert(LMDA or not do_dl1, "");
@@ -132,7 +129,7 @@ void echglj_cu1(int n, TINKER_IMAGE_PARAMS, EnergyBuffer restrict ec, EnergyBuff
          MAYBE_UNUSED real dl1, dl2, dlde;
          bool live = true;
          if CONSTEXPR (LMDA) {
-            live = echgljPairLmda<do_g, do_dl1, do_dl2, do_fdl, ETYP, RADRULE, EPSRULE, 0>(r, invr, scalea, scaleb,
+            live = echgljPairLmda<do_g, do_dl1, do_dl2, do_gdl, ETYP, RADRULE, EPSRULE, 0>(r, invr, scalea, scaleb,
                imut, kmut, ichg, kchg, (do_dl1 ? idq : 0), (do_dl1 ? kdq : 0), irad, ieps, krad, keps, f, aewald, eccut,
                ecoff, evcut, evoff, lm, ecik, decik, evik, devik, dl1, dl2, dlde);
          } else {
@@ -167,7 +164,7 @@ void echglj_cu1(int n, TINKER_IMAGE_PARAMS, EnergyBuffer restrict ec, EnergyBuff
                   vectlzz += floatTo<vbuf_prec>(zr * dedz);
                }
             }
-            if CONSTEXPR (do_fdl) {
+            if CONSTEXPR (do_gdl) {
                pair_dlforce<do_gdl, (do_vdl and not tile_local)>(dlde * invr, xr, yr, zr, dfix, dfiy, dfiz, dfkx, dfky,
                   dfkz, dvirdltlxx, dvirdltlyx, dvirdltlzx, dvirdltlyy, dvirdltlzy, dvirdltlzz);
             }
@@ -284,7 +281,7 @@ void echglj_cu1(int n, TINKER_IMAGE_PARAMS, EnergyBuffer restrict ec, EnergyBuff
                MAYBE_UNUSED real dl1, dl2, dlde;
                bool live = true;
                if CONSTEXPR (LMDA) {
-                  live = echgljPairLmda<do_g, do_dl1, do_dl2, do_fdl, ETYP, RADRULE, EPSRULE, 1>(r, invr, 1, 1, imut,
+                  live = echgljPairLmda<do_g, do_dl1, do_dl2, do_gdl, ETYP, RADRULE, EPSRULE, 1>(r, invr, 1, 1, imut,
                      kmut, ichg, kchg, (do_dl1 ? idq : 0), (do_dl1 ? kdq : 0), irad, ieps, krad, keps, f, aewald, eccut,
                      ecoff, evcut, evoff, lm, ecik, decik, evik, devik, dl1, dl2, dlde);
                } else {
@@ -319,7 +316,7 @@ void echglj_cu1(int n, TINKER_IMAGE_PARAMS, EnergyBuffer restrict ec, EnergyBuff
                         vectlzz += floatTo<vbuf_prec>(zr * dedz);
                      }
                   }
-                  if CONSTEXPR (do_fdl) {
+                  if CONSTEXPR (do_gdl) {
                      pair_dlforce<do_gdl, (do_vdl and not tile_local)>(dlde * invr, xr, yr, zr, dfix, dfiy, dfiz, dfkx,
                         dfky, dfkz, dvirdltlxx, dvirdltlyx, dvirdltlzx, dvirdltlyy, dvirdltlzy, dvirdltlzz);
                   }
@@ -387,7 +384,7 @@ void echglj_cu1(int n, TINKER_IMAGE_PARAMS, EnergyBuffer restrict ec, EnergyBuff
                MAYBE_UNUSED real dl1, dl2, dlde;
                bool live = true;
                if CONSTEXPR (LMDA) {
-                  live = echgljPairLmda<do_g, do_dl1, do_dl2, do_fdl, ETYP, RADRULE, EPSRULE, 1>(r, invr, 1, 1, imut,
+                  live = echgljPairLmda<do_g, do_dl1, do_dl2, do_gdl, ETYP, RADRULE, EPSRULE, 1>(r, invr, 1, 1, imut,
                      kmut, ichg, kchg, (do_dl1 ? idq : 0), (do_dl1 ? kdq : 0), irad, ieps, krad, keps, f, aewald, eccut,
                      ecoff, evcut, evoff, lm, ecik, decik, evik, devik, dl1, dl2, dlde);
                } else {
@@ -422,7 +419,7 @@ void echglj_cu1(int n, TINKER_IMAGE_PARAMS, EnergyBuffer restrict ec, EnergyBuff
                         vectlzz += floatTo<vbuf_prec>(zr * dedz);
                      }
                   }
-                  if CONSTEXPR (do_fdl) {
+                  if CONSTEXPR (do_gdl) {
                      pair_dlforce<do_gdl, (do_vdl and not tile_local)>(dlde * invr, xr, yr, zr, dfix, dfiy, dfiz, dfkx,
                         dfky, dfkz, dvirdltlxx, dvirdltlyx, dvirdltlzx, dvirdltlyy, dvirdltlzy, dvirdltlzz);
                   }
@@ -552,7 +549,7 @@ void echglj_cu1(int n, TINKER_IMAGE_PARAMS, EnergyBuffer restrict ec, EnergyBuff
                MAYBE_UNUSED real dl1, dl2, dlde;
                bool live = true;
                if CONSTEXPR (LMDA) {
-                  live = echgljPairLmda<do_g, do_dl1, do_dl2, do_fdl, ETYP, RADRULE, EPSRULE, 1>(r, invr, 1, 1, imut,
+                  live = echgljPairLmda<do_g, do_dl1, do_dl2, do_gdl, ETYP, RADRULE, EPSRULE, 1>(r, invr, 1, 1, imut,
                      kmut, ichg, kchg, (do_dl1 ? idq : 0), (do_dl1 ? kdq : 0), irad, ieps, krad, keps, f, aewald, eccut,
                      ecoff, evcut, evoff, lm, ecik, decik, evik, devik, dl1, dl2, dlde);
                } else {
@@ -587,7 +584,7 @@ void echglj_cu1(int n, TINKER_IMAGE_PARAMS, EnergyBuffer restrict ec, EnergyBuff
                         vectlzz += floatTo<vbuf_prec>(zr * dedz);
                      }
                   }
-                  if CONSTEXPR (do_fdl) {
+                  if CONSTEXPR (do_gdl) {
                      pair_dlforce<do_gdl, (do_vdl and not tile_local)>(dlde * invr, xr, yr, zr, dfix, dfiy, dfiz, dfkx,
                         dfky, dfkz, dvirdltlxx, dvirdltlyx, dvirdltlzx, dvirdltlyy, dvirdltlzy, dvirdltlzz);
                   }
@@ -651,7 +648,7 @@ void echglj_cu1(int n, TINKER_IMAGE_PARAMS, EnergyBuffer restrict ec, EnergyBuff
                MAYBE_UNUSED real dl1, dl2, dlde;
                bool live = true;
                if CONSTEXPR (LMDA) {
-                  live = echgljPairLmda<do_g, do_dl1, do_dl2, do_fdl, ETYP, RADRULE, EPSRULE, 1>(r, invr, 1, 1, imut,
+                  live = echgljPairLmda<do_g, do_dl1, do_dl2, do_gdl, ETYP, RADRULE, EPSRULE, 1>(r, invr, 1, 1, imut,
                      kmut, ichg, kchg, (do_dl1 ? idq : 0), (do_dl1 ? kdq : 0), irad, ieps, krad, keps, f, aewald, eccut,
                      ecoff, evcut, evoff, lm, ecik, decik, evik, devik, dl1, dl2, dlde);
                } else {
@@ -686,7 +683,7 @@ void echglj_cu1(int n, TINKER_IMAGE_PARAMS, EnergyBuffer restrict ec, EnergyBuff
                         vectlzz += floatTo<vbuf_prec>(zr * dedz);
                      }
                   }
-                  if CONSTEXPR (do_fdl) {
+                  if CONSTEXPR (do_gdl) {
                      pair_dlforce<do_gdl, (do_vdl and not tile_local)>(dlde * invr, xr, yr, zr, dfix, dfiy, dfiz, dfkx,
                         dfky, dfkz, dvirdltlxx, dvirdltlyx, dvirdltlzx, dvirdltlyy, dvirdltlzy, dvirdltlzz);
                   }

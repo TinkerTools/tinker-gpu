@@ -7,7 +7,7 @@
 #include "seq/add.h"
 #include "seq/launch.h"
 #include "seq/pair_chgtrn.h"
-#include "seq/pair_vlambda.h"
+#include "seq/pair_dlmda.h"
 #include "seq/pairchgtrnaplus.h"
 #include "seq/triangle.h"
 #include <cassert>

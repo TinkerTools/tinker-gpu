@@ -123,6 +123,11 @@ struct SoftCoreParams
 /// (dlambda.f:grpsoft, grpsoftd).
 SoftCoreLmda grpSoftCore(int ig, const SoftCoreParams& sc, bool dodl);
 
+/// The soft cores of ligand groups 1 and 2 of a term by \c soft (as ljSoft),
+/// that of group 2 only for a relative calculation, which alone has a group 2;
+/// otherwise both are those of group 1.
+void grpSoftCores(SoftCoreLmda (*soft)(int, bool), bool dodl, SoftCoreLmda& s1, SoftCoreLmda& s2);
+
 /// The class of every pair of atom groups, 0 for the environment and 1 or 2 for
 /// a ligand, as Fortran mutant::mutcls holds it (dlambda.f:grppcls), plus one
 /// in two bits each at bits 2 (3 i + k), for pair_mutcls().
@@ -195,8 +200,16 @@ RdtMask coupledMask();
 /// skip it rather than form 0 * (1/r^n) for two sites that may overlap.
 RdtMask elecLiveMask();
 
+/// The groups of elecLiveMask() that also have a scale or a slope at the group
+/// scales \c esc; an annihilated site has no multipole and no induced dipole.
+RdtMask elecLiveMask(const GrpScale& esc);
+
 /// The group array the pair kernels test against \c elecLiveMask(), or null
-/// when every group is live and there is nothing to skip.
+/// when every group is live and there is nothing to skip. The multipole and
+/// polarization kernels test the null pointer per pair (`ifset:grp`); the
+/// plain charge kernel echarge_cu1 takes it as the DEAD template instead,
+/// since the run-time test cost it 3%; the fused charge-LJ lambda kernel
+/// loads the groups for the vdW classes anyway and tests a flag.
 const int* elecDeadGroups();
 
 /// \ingroup ff
@@ -332,8 +345,8 @@ void lmdaLangStep(double gauss);
 /// Advances the OST, metadynamics or ABF lambda bias by one dynamics step:
 /// builds the effective lambda derivative, saves the interval samples, deposits
 /// the interval average at the end of each interval and propagates the lambda
-/// particle (dlambda.f:elmdadyn).
-void elmdaDyn(int istep);
+/// particle; the step is \ref lmdastep, which it advances (dlambda.f:elmdadyn).
+void elmdaDyn();
 /// Free energy estimate at lambda \p lmda and its lambda derivative from the
 /// sampled mean force, where an unsampled bin counts as zero mean force; the
 /// bias that drives lambda fills those bins instead, via efreeBias
@@ -466,6 +479,15 @@ inline int lmdaDerivVers(int vers, bool term_driven)
 constexpr bool lmdaDodl(int vers)
 {
    return vers & calc::energy_dlmda1;
+}
+
+/// The SOFTCORE flag of a van der Waals-like pair kernel in a run without
+/// mutated atoms: off for a plain version, but on for a lambda derivative
+/// version, whose kernel always carries it, so that no lambda kernel without
+/// it is instantiated.
+constexpr bool softCoreUnmutated(int vers)
+{
+   return lmdaDodl(vers);
 }
 
 /// The one main lambda, mirroring mutant::lambda. Whichever method owns it --

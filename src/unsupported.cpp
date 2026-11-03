@@ -1,10 +1,12 @@
 #include "ff/dlmda.h"
 #include "ff/elec.h"
+#include "ff/nblist.h"
 #include "ff/potent.h"
 #include "ff/switch.h"
 #include "tool/error.h"
 #include "tool/iofortstr.h"
 #include "tool/platform.h"
+#include <tinker/detail/bound.hh>
 #include <tinker/detail/chgpot.hh>
 #include <tinker/detail/limits.hh>
 #include <tinker/detail/polpot.hh>
@@ -25,12 +27,24 @@ void unsupportedData(RcOp op)
          TINKER_THROW(format("Lambda derivatives and relative free energy are not supported for %s vdW.", typ.trim()));
       // the CUDA buffered 14-7 kernel folds the default gamma and delta into
       // its arithmetic (ehal.cu), where the long-range correction takes the
-      // keyword values
-      if ((pltfm_config & Platform::CUDA) and typ == "BUFFERED-14-7"
-         and (vdwpot::ghal != 0.12 or vdwpot::dhal != 0.07))
+      // keyword values; an OpenACC build runs it on CUDA only with a vdW list
+      // under PBC (vlistVersion(), which may switch the platform and is not
+      // called here)
+      const bool cuda_hal = TINKER_GPULANG_CUDA
+         or ((pltfm_config & Platform::CUDA) and limits::use_vlist and bound::use_bounds);
+      if (cuda_hal and typ == "BUFFERED-14-7" and (vdwpot::ghal != 0.12 or vdwpot::dhal != 0.07))
          TINKER_THROW(format("GAMMA-HALGREN %.4f and DELTA-HALGREN %.4f are not supported on the CUDA platform, "
                              "which takes 0.12 and 0.07.",
             vdwpot::ghal, vdwpot::dhal));
+   }
+
+   // the induced dipoles are always solved to self-consistency; the direct,
+   // perturbation (OPT) and truncated conjugate gradient (TCG) models would run
+   // as MUTUAL without a word
+   if (use(Potent::POLAR)) {
+      FstrView typ = polpot::poltyp;
+      if (not(typ == "MUTUAL"))
+         TINKER_THROW(format("POLARIZATION %s is not supported; only MUTUAL is.", typ.trim()));
    }
 
    // neutral group cutoffs and neighbors (kcharge.f)
@@ -44,7 +58,7 @@ void unsupportedData(RcOp op)
    // it may also switch the platform).
    const bool mlist = TINKER_GPULANG_CUDA or limits::use_mlist;
    if (mlist) {
-      const real mcut = useEwald() ? switchOff(Switch::EWALD) : switchOff(Switch::MPOLE);
+      const real mcut = mlistCutoff();
       const real rcut = switchOff(Switch::REPULS), ccut = switchOff(Switch::CHGTRN);
       const bool rep = (use(Potent::REPULS) or polpot::use_expol) and rcut > mcut;
       const bool ct = use(Potent::CHGTRN) and ccut > mcut;

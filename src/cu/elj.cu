@@ -37,7 +37,6 @@ void elj_cu2(EnergyBuffer restrict ebuf, EnergyBuffer restrict dlbuf,
    constexpr bool do_dl2 = Ver::e_dlmda2;
    constexpr bool do_gdl = Ver::g_dlmda;
    constexpr bool do_vdl = Ver::v_dlmda;
-   constexpr bool do_dlde = do_gdl or do_vdl;
 
    using ebuf_prec = EnergyBufferTraits::type;
    using vbuf_prec = VirialBufferTraits::type;
@@ -106,8 +105,8 @@ void elj_cu2(EnergyBuffer restrict ebuf, EnergyBuffer restrict dlbuf,
       const SoftCoreLmda lp = pair_vdw_softcore<true>(mc, lp1, lp2);
       real e, de, e4, de4;
       PairVdwLambda dl = {0, 0, 0}, dl4 = {0, 0, 0};
-      pair_lj_v3<do_g, true, 0, do_dl1, do_dl2, do_dlde>(r, invr, lp, v4scale, rv, eps, cut, off, e, de, &dl, mutik);
-      pair_lj_v3<do_g, true, 0, do_dl1, do_dl2, do_dlde>(
+      pair_lj_v3<do_g, true, 0, do_dl1, do_dl2, do_gdl>(r, invr, lp, v4scale, rv, eps, cut, off, e, de, &dl, mutik);
+      pair_lj_v3<do_g, true, 0, do_dl1, do_dl2, do_gdl>(
          r, invr, lp, v4scale, rv4, eps4, cut, off, e4, de4, &dl4, mutik);
       e = e4 - e;
       if CONSTEXPR (do_g)
@@ -145,20 +144,18 @@ void elj_cu2(EnergyBuffer restrict ebuf, EnergyBuffer restrict dlbuf,
          atomic_add(-dedy, gy, k);
          atomic_add(-dedz, gz, k);
       }
-      if CONSTEXPR (do_dlde) {
+      if CONSTEXPR (do_gdl) {
          if (mutik) {
             real dlde = (dl4.dlde - dl.dlde) * rinv;
             real dldedx = dlde * xr;
             real dldedy = dlde * yr;
             real dldedz = dlde * zr;
-            if CONSTEXPR (do_gdl) {
-               atomic_add(dldedx, dlx, i);
-               atomic_add(dldedy, dly, i);
-               atomic_add(dldedz, dlz, i);
-               atomic_add(-dldedx, dlx, k);
-               atomic_add(-dldedy, dly, k);
-               atomic_add(-dldedz, dlz, k);
-            }
+            atomic_add(dldedx, dlx, i);
+            atomic_add(dldedy, dly, i);
+            atomic_add(dldedz, dlz, i);
+            atomic_add(-dldedx, dlx, k);
+            atomic_add(-dldedy, dly, k);
+            atomic_add(-dldedz, dlz, k);
             if CONSTEXPR (do_vdl) {
                dvtlxx += floatTo<vbuf_prec>(xr * dldedx);
                dvtlyx += floatTo<vbuf_prec>(yr * dldedx);
@@ -188,16 +185,6 @@ void elj_cu2(EnergyBuffer restrict ebuf, EnergyBuffer restrict dlbuf,
    }
 }
 
-// The soft cores of ligand groups 1 and 2, that of group 2 only for a relative
-// calculation, which alone has a group 2 (eljsc.f).
-template <class Ver>
-static void eljSofts(SoftCoreLmda& lp1, SoftCoreLmda& lp2)
-{
-   constexpr bool dodl = lmdaDodl(Ver::value);
-   lp1 = ljSoft(1, dodl);
-   lp2 = use_rel ? ljSoft(2, dodl) : lp1;
-}
-
 template <class Ver>
 static void elj_cu4(const SoftCoreLmda& lp1, const SoftCoreLmda& lp2)
 {
@@ -207,18 +194,15 @@ static void elj_cu4(const SoftCoreLmda& lp1, const SoftCoreLmda& lp2)
    // A relative calculation labels atoms by ligand group; ligand 2 couples as
    // the complement of vlambda.
    const int* grp = emGroup();
-   // only a relative calculation pays for the classes of the ligand groups,
-   // and only a mutation for the soft core
-   const bool soft = use(Potent::MUTATE);
+   // only a mutation, or the lambda derivatives, pay for the soft core
+   const bool mutated = use(Potent::MUTATE);
 
    int ngrid = gpuGridSize(BLOCK_DIM);
    boxShapeDispatch(box_shape, [&](auto img) {
       using IMG = decltype(img);
-      // the lambda derivatives need the soft core, and CONSTEXPR may be empty
-      constexpr bool plain = not(Ver::value & calc::dlmda);
-      auto ker = use_rel ? elj_cu1<Ver, IMG, true, true> : elj_cu1<Ver, IMG, false, true>;
-      if (plain and not soft)
-         ker = elj_cu1<Ver, IMG, false, not plain>;
+      auto ker = elj_cu1<Ver, IMG, true>;
+      if (not mutated)
+         ker = elj_cu1<Ver, IMG, softCoreUnmutated(Ver::value)>;
       ker<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, devdl_buf, d2evdl2_buf, vir_ev,
          dvirdl_buf, devx, devy, devz, dfdlx, dfdly, dfdlz, cut, off, st.si2.bit0, nvexclude, vexclude, vexclude_scale,
          st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak, st.lst, st.akc, njvdw, radmin, epsilon, jvdw,
@@ -247,8 +231,11 @@ static void elj_cu5(const SoftCoreLmda& lp1, const SoftCoreLmda& lp2)
 template <class Ver>
 static void elj_cu5()
 {
+   // nothing to set up without 1-4 pairs
+   if (nvdw14 == 0)
+      return;
    SoftCoreLmda lp1, lp2;
-   eljSofts<Ver>(lp1, lp2);
+   grpSoftCores(ljSoft, lmdaDodl(Ver::value), lp1, lp2);
    elj_cu5<Ver>(lp1, lp2);
 }
 
@@ -256,7 +243,7 @@ template <class Ver>
 static void elj_cu6()
 {
    SoftCoreLmda lp1, lp2;
-   eljSofts<Ver>(lp1, lp2);
+   grpSoftCores(ljSoft, lmdaDodl(Ver::value), lp1, lp2);
    elj_cu4<Ver>(lp1, lp2);
    elj_cu5<Ver>(lp1, lp2);
 }

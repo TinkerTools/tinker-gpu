@@ -494,10 +494,6 @@ void epolarData(RcOp op)
       // so anything that is not that model, or that adds a lambda dependence
       // altpolr does not scale linearly, is out.
       if (use_epast) {
-         FstrView poltypstr = polpot::poltyp;
-         if (not(poltypstr == "MUTUAL"))
-            TINKER_THROW("Single topology polarization dU/dLambda supports "
-                         "MUTUAL polarization only.");
          if (not(polpot::use_thole or mplpot::use_chgpen))
             TINKER_THROW("Single topology polarization dU/dLambda supports "
                          "Thole or charge penetration damping only.");

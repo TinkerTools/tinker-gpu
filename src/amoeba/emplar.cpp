@@ -14,7 +14,9 @@
 #include "math/zero.h"
 #include "tool/error.h"
 #include "tool/externfunc.h"
+#include <tinker/detail/ewald.hh>
 #include <tinker/detail/mplpot.hh>
+#include <tinker/detail/pme.hh>
 
 #include <cassert>
 
@@ -39,6 +41,12 @@ static bool emplarDecide()
    // The fused kernel has no dual topology form, and the multipoles never
    // use dual topology, so dual topology polarization always runs apart.
    if (use_epdt)
+      return false;
+
+   // The fused kernel takes the induced dipoles' reciprocal potential on the
+   // multipole PME grid, so both need the same Ewald coefficient and B-spline
+   // order (pmeData opens one unit for both only then).
+   if (useEwald() and (ewald::aeewald != ewald::apewald or pme::bseorder != pme::bsporder))
       return false;
 
    return true;

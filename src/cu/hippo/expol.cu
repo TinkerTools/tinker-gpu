@@ -9,6 +9,7 @@
 #include "seq/launch.h"
 #include "seq/pair_alterpol.h"
 #include "seq/triangle.h"
+#include "tool/error.h"
 
 namespace tinker {
 #include "alterpol_cu1.cc"
@@ -70,10 +71,8 @@ void alterpol_cu(real (*polscale)[3][3], real (*polinv)[3][3])
       darray::zero(g::q0, n, dpscdl);
    boxShapeDispatch(box_shape, [&](auto img) {
       using IMG = decltype(img);
-      if (expol_mutpsc)
-         alterpol_cu1<IMG, 1><<<ngrid, BLOCK_DIM, 0, g::s0>>>(ALTERPOL_CU1_ARGS);
-      else
-         alterpol_cu1<IMG, 0><<<ngrid, BLOCK_DIM, 0, g::s0>>>(ALTERPOL_CU1_ARGS);
+      auto ker = expol_mutpsc ? alterpol_cu1<IMG, 1> : alterpol_cu1<IMG, 0>;
+      ker<<<ngrid, BLOCK_DIM, 0, g::s0>>>(ALTERPOL_CU1_ARGS);
    });
 #undef ALTERPOL_CU1_ARGS
 
@@ -102,18 +101,18 @@ void dexpol_cu(int vers, const real (*uind)[3], grad_prec* depx, grad_prec* depy
    // on (lmdaDerivMask), so V9 and V10 cover both
    const bool do_gdl = vers & calc::grad_dlmda;
    assert(not do_gdl or (bool)(vers & calc::virial) == (bool)(vers & calc::virial_dlmda));
+   if (not(vers & calc::grad))
+      TINKER_THROW(format("dexpol_cu takes a gradient version, not %d.", vers));
    boxShapeDispatch(box_shape, [&](auto img) {
       using IMG = decltype(img);
       if ((vers & calc::virial) and do_gdl) {
          dexpol_cu1<calc::V9, IMG><<<ngrid, BLOCK_DIM, 0, g::s0>>>(DEXPOL_CU1_ARGS);
       } else if (vers & calc::virial) {
          dexpol_cu1<calc::V6, IMG><<<ngrid, BLOCK_DIM, 0, g::s0>>>(DEXPOL_CU1_ARGS);
-      } else if ((vers & calc::grad) and do_gdl) {
+      } else if (do_gdl) {
          dexpol_cu1<calc::V10, IMG><<<ngrid, BLOCK_DIM, 0, g::s0>>>(DEXPOL_CU1_ARGS);
-      } else if (vers & calc::grad) {
-         dexpol_cu1<calc::V5, IMG><<<ngrid, BLOCK_DIM, 0, g::s0>>>(DEXPOL_CU1_ARGS);
       } else {
-         assert(false && "This function should not have been called if neither gradient nor virial is calculated.");
+         dexpol_cu1<calc::V5, IMG><<<ngrid, BLOCK_DIM, 0, g::s0>>>(DEXPOL_CU1_ARGS);
       }
    });
 

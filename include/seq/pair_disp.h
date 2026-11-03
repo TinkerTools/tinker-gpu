@@ -130,10 +130,10 @@ void pair_disp(real r,
       dspscale = 1;
 
    const bool mutik = mc > 0;
-   const bool two = mc == 2;
+   const DispSoft ds = pair_dispsoft(mc == 2, ds1, ds2);
    real soft = 1, dsoft = 0, dsdl = 0, d2sdl2 = 0, d2sdldr = 0;
    if (mutik)
-      pair_dspsc<DL1, DL2, GDL>(r, r2, pair_dispsoft(two, ds1, ds2), soft, dsoft, dsdl, d2sdl2, d2sdldr);
+      pair_dspsc<DL1, DL2, GDL>(r, r2, ds, soft, dsoft, dsdl, d2sdl2, d2sdldr);
 
    if CONSTEXPR (eq<DTYP, DEWALD>()) {
       real ralpha2 = r2 * aewald * aewald;
@@ -144,7 +144,7 @@ void pair_disp(real r,
       // the plain lambda power weights the share of the reciprocal space
       real wsc = 1, scs = dspscale;
       if (mutik) {
-         wsc = two ? ds2.dlsc : ds1.dlsc;
+         wsc = ds.dlsc;
          scs = dspscale * soft;
       }
       e = -ci * ck * rr6 * (scs * dmp2 + wsc * expa - wsc);
@@ -156,14 +156,13 @@ void pair_disp(real r,
       if (mutik) {
          real e0 = -ci * ck * rr6;
          real scale = dspscale * dmp2;
-         const real dlsc1 = two ? ds2.dlsc1 : ds1.dlsc1;
          if CONSTEXPR (DL1)
-            dle = e0 * (dsdl * scale + dlsc1 * (expa - 1));
+            dle = e0 * (dsdl * scale + ds.dlsc1 * (expa - 1));
          if CONSTEXPR (DL2)
-            dle2 = e0 * (d2sdl2 * scale + (two ? ds2.dlsc2 : ds1.dlsc2) * (expa - 1));
+            dle2 = e0 * (d2sdl2 * scale + ds.dlsc2 * (expa - 1));
          if CONSTEXPR (GDL)
             dlde = -6 * dle * rr1
-               - ci * ck * rr6 * (dlsc1 * rterm + 2 * dspscale * dmpd * dsdl + scale * d2sdldr);
+               - ci * ck * rr6 * (ds.dlsc1 * rterm + 2 * dspscale * dmpd * dsdl + scale * d2sdldr);
       }
    } else if CONSTEXPR (eq<DTYP, NON_EWALD_TAPER>()) {
       e = -ci * ck * rr6;

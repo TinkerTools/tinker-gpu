@@ -60,10 +60,6 @@ void vdwSoftcoreData(RcOp op)
 
    if (op & RcOp::INIT) {
       vlam = mutant::vlambda;
-      if (static_cast<int>(Vdw::DECOUPLE) == mutant::vcouple)
-         vcouple = Vdw::DECOUPLE;
-      else if (static_cast<int>(Vdw::ANNIHILATE) == mutant::vcouple)
-         vcouple = Vdw::ANNIHILATE;
       std::vector<int> mutvec(n);
       for (int i = 0; i < n; ++i) {
          if (mutant::mutg[i] != 0) {

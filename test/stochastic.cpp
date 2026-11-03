@@ -751,65 +751,70 @@ void sdCellTests(Cell c)
       // only shifts every atom by the same amount, which changes neither the
       // forces nor the noise, so there the potential energy matches at every
       // step and the final structure matches up to a common offset.
-      const int nsteps = 10;
-      const double dt = 0.0001; // ps
-      const int ib = c.pbc ? 1 : 0;
+      // Fortran mdinit takes the magnitude of a negative FRICTION, so it gives
+      // the same trajectory (test_stochastic.f:test_sd_fricsign).
+      for (std::string friction : {"91.0", "-91.0"}) {
+         CAPTURE(friction);
+         const int nsteps = 10;
+         const double dt = 0.0001; // ps
+         const int ib = c.pbc ? 1 : 0;
 
-      std::vector<double> pot, kin;
-      std::vector<pos_prec> fx1(natom), fy1(natom), fz1(natom);
-      runG3(c, "\nFRICTION 91.0\nSD-NOISE TINKER\n", 298., nsteps, dt,
-         [] { return new StochasticIntegrator; },
-         [&](int i) {
-            if (i == 0)
-               return;
-            pot.push_back(esum);
-            kin.push_back(eksum);
-            if (i == nsteps) {
-               darray::copyout(g::q0, natom, fx1.data(), xpos);
-               darray::copyout(g::q0, natom, fy1.data(), ypos);
-               darray::copyout(g::q0, natom, fz1.data(), zpos);
-               waitFor(g::q0);
-            }
-         });
+         std::vector<double> pot, kin;
+         std::vector<pos_prec> fx1(natom), fy1(natom), fz1(natom);
+         runG3(c, "\nFRICTION " + friction + "\nSD-NOISE TINKER\n", 298., nsteps, dt,
+            [] { return new StochasticIntegrator; },
+            [&](int i) {
+               if (i == 0)
+                  return;
+               pot.push_back(esum);
+               kin.push_back(eksum);
+               if (i == nsteps) {
+                  darray::copyout(g::q0, natom, fx1.data(), xpos);
+                  darray::copyout(g::q0, natom, fy1.data(), ypos);
+                  darray::copyout(g::q0, natom, fz1.data(), zpos);
+                  waitFor(g::q0);
+               }
+            });
 
-      // The reference energies are only printed to four decimals, so half a
-      // unit in the last place is already +/- 5e-5 before any real
-      // difference. What is left over is the force difference between the two
-      // codes, which for this system stays at the 1e-4 level over ten steps.
-      const double eps_e = 5e-4;
-      const int nsame = c.rest ? cell_irest : nsteps;
-      COMPARE_INTS((int)pot.size(), nsteps);
-      for (int i = 0; i < nsteps; ++i) {
-         CAPTURE(i + 1);
-         if (i < nsame or c.pbc)
-            COMPARE_REALS(pot[i], g3_pot[ib][i], eps_e);
-         if (i < nsame)
-            COMPARE_REALS(kin[i], g3_kin[ib][i], eps_e);
-      }
-
-      // Energies are averages over the whole system and can hide a single bad
-      // atom or a transposed component, so the final structure is checked
-      // atom by atom as well, up to the common offset that removing the
-      // translation leaves under periodic boundaries.
-      if (c.rest and not c.pbc)
-         return;
-      double off[3] = {0};
-      if (c.rest) {
-         for (int i = 0; i < natom; ++i) {
-            off[0] += (fx1[i] - g3_xyz10[ib][i][0]) / natom;
-            off[1] += (fy1[i] - g3_xyz10[ib][i][1]) / natom;
-            off[2] += (fz1[i] - g3_xyz10[ib][i][2]) / natom;
+         // The reference energies are only printed to four decimals, so half a
+         // unit in the last place is already +/- 5e-5 before any real
+         // difference. What is left over is the force difference between the two
+         // codes, which for this system stays at the 1e-4 level over ten steps.
+         const double eps_e = 5e-4;
+         const int nsame = c.rest ? cell_irest : nsteps;
+         COMPARE_INTS((int)pot.size(), nsteps);
+         for (int i = 0; i < nsteps; ++i) {
+            CAPTURE(i + 1);
+            if (i < nsame or c.pbc)
+               COMPARE_REALS(pot[i], g3_pot[ib][i], eps_e);
+            if (i < nsame)
+               COMPARE_REALS(kin[i], g3_kin[ib][i], eps_e);
          }
-      }
-      // The archive prints six decimals, and the two codes agree to that
-      // rounding (5e-7). epsilon(0) drops the hidden relative tolerance of
-      // Approx, which would otherwise allow about 2e-4 Angstrom here.
-      const double eps_x = 1e-5;
-      for (int i = 0; i < natom; ++i) {
-         CAPTURE(i);
-         REQUIRE((double)fx1[i] - off[0] == Approx(g3_xyz10[ib][i][0]).epsilon(0).margin(eps_x));
-         REQUIRE((double)fy1[i] - off[1] == Approx(g3_xyz10[ib][i][1]).epsilon(0).margin(eps_x));
-         REQUIRE((double)fz1[i] - off[2] == Approx(g3_xyz10[ib][i][2]).epsilon(0).margin(eps_x));
+
+         // Energies are averages over the whole system and can hide a single bad
+         // atom or a transposed component, so the final structure is checked
+         // atom by atom as well, up to the common offset that removing the
+         // translation leaves under periodic boundaries.
+         if (c.rest and not c.pbc)
+            continue;
+         double off[3] = {0};
+         if (c.rest) {
+            for (int i = 0; i < natom; ++i) {
+               off[0] += (fx1[i] - g3_xyz10[ib][i][0]) / natom;
+               off[1] += (fy1[i] - g3_xyz10[ib][i][1]) / natom;
+               off[2] += (fz1[i] - g3_xyz10[ib][i][2]) / natom;
+            }
+         }
+         // The archive prints six decimals, and the two codes agree to that
+         // rounding (5e-7). epsilon(0) drops the hidden relative tolerance of
+         // Approx, which would otherwise allow about 2e-4 Angstrom here.
+         const double eps_x = 1e-5;
+         for (int i = 0; i < natom; ++i) {
+            CAPTURE(i);
+            REQUIRE((double)fx1[i] - off[0] == Approx(g3_xyz10[ib][i][0]).epsilon(0).margin(eps_x));
+            REQUIRE((double)fy1[i] - off[1] == Approx(g3_xyz10[ib][i][1]).epsilon(0).margin(eps_x));
+            REQUIRE((double)fz1[i] - off[2] == Approx(g3_xyz10[ib][i][2]).epsilon(0).margin(eps_x));
+         }
       }
    }
 }

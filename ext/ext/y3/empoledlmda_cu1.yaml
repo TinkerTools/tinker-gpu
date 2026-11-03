@@ -1,8 +1,8 @@
 OUTPUT_DIR: src/cu/amoeba
 KERNEL_NAME: empoledlmda_cu1
 TEMPLATE_PARAMS: template <class Ver, class ETYP>
-# one copy for every box shape, imaged at run time (lambda runs only), and
-# the tiles near their centers imaged once, their virial from the summed forces
+# no IMAGE_TEMPLATE: one copy for every box shape, imaged at run time
+# (lambda runs only)
 LOCAL_TILES: true
 # the multipole pair forces are off the line of centers
 LOCAL_VIRIAL: symmetric

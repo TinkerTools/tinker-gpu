@@ -15,11 +15,43 @@ struct FFTPlanCUFFT : public FFTPlan
    bool has_real = false; ///< The real plans are made on the first one-set FFT.
    cufftHandle hr2c;      ///< Real-to-complex plan.
    cufftHandle hc2r;      ///< Complex-to-real plan.
-   int nbatch = 0;        ///< Number of grids of the batched real plans, made on first use.
-   int sbatch = 0;        ///< Their stride in reals.
-   cufftHandle hr2cb;     ///< Batched real-to-complex plan.
-   cufftHandle hc2rb;     ///< Batched complex-to-real plan.
+   int sbatch = 0;        ///< Stride in reals of the batched real plans.
+   bool has_batch[2] = {}; ///< The batched real plans of 2 and 3 grids, made on first use.
+   cufftHandle hr2cb[2];   ///< Batched real-to-complex plans.
+   cufftHandle hc2rb[2];   ///< Batched complex-to-real plans.
 };
+
+#if TINKER_REAL_SIZE == 4
+static const cufftType fftTypeC2C = CUFFT_C2C, fftTypeR2C = CUFFT_R2C, fftTypeC2R = CUFFT_C2R;
+#elif TINKER_REAL_SIZE == 8
+static const cufftType fftTypeC2C = CUFFT_Z2Z, fftTypeR2C = CUFFT_D2Z, fftTypeC2R = CUFFT_Z2D;
+#else
+static_assert(false, "");
+#endif
+
+static void fftSetStream(cufftHandle h)
+{
+   check_rt(cufftSetStream(h, use_pme_stream ? g::spme : g::s0));
+}
+
+// in place on the padded rows of the half spectrum
+static void fftExecR2C(cufftHandle h, real* q)
+{
+#if TINKER_REAL_SIZE == 4
+   cufftExecR2C(h, reinterpret_cast<cufftReal*>(q), reinterpret_cast<cufftComplex*>(q));
+#else
+   cufftExecD2Z(h, reinterpret_cast<cufftDoubleReal*>(q), reinterpret_cast<cufftDoubleComplex*>(q));
+#endif
+}
+
+static void fftExecC2R(cufftHandle h, real* q)
+{
+#if TINKER_REAL_SIZE == 4
+   cufftExecC2R(h, reinterpret_cast<cufftComplex*>(q), reinterpret_cast<cufftReal*>(q));
+#else
+   cufftExecZ2D(h, reinterpret_cast<cufftDoubleComplex*>(q), reinterpret_cast<cufftDoubleReal*>(q));
+#endif
+}
 
 void fftData(RcOp op)
 {
@@ -36,9 +68,11 @@ void fftData(RcOp op)
             cufftDestroy(ps.hr2c);
             cufftDestroy(ps.hc2r);
          }
-         if (ps.nbatch) {
-            cufftDestroy(ps.hr2cb);
-            cufftDestroy(ps.hc2rb);
+         for (int k = 0; k < 2; ++k) {
+            if (ps.has_batch[k]) {
+               cufftDestroy(ps.hr2cb[k]);
+               cufftDestroy(ps.hc2rb[k]);
+            }
          }
          ++idx;
       }
@@ -53,14 +87,6 @@ void fftData(RcOp op)
    }
 
    if (op & RcOp::INIT) {
-#if TINKER_REAL_SIZE == 4
-      const cufftType typ = CUFFT_C2C;
-#elif TINKER_REAL_SIZE == 8
-      const cufftType typ = CUFFT_Z2Z;
-#else
-      static_assert(false, "");
-#endif
-
       int idx = 0;
       while (idx < FFTPlanUnit::size()) {
          FFTPlanUnit plan_u = idx;
@@ -71,48 +97,33 @@ void fftData(RcOp op)
          int nfast = st.nfft1;
          int nslow = st.nfft3;
          // different from FFTW Fortran API
-         check_rt(cufftPlan3d(&iplan, nslow, st.nfft2, nfast, typ));
-         auto stream = g::s0;
-         if (use_pme_stream)
-            stream = g::spme;
-         check_rt(cufftSetStream(iplan, stream));
+         check_rt(cufftPlan3d(&iplan, nslow, st.nfft2, nfast, fftTypeC2C));
+         fftSetStream(iplan);
          ++idx;
       }
    }
 }
 
-void fftfront(PMEUnit pme_u)
+static void fftExecC2C(PMEUnit pme_u, int dir)
 {
    FFTPlanUnit iplan_u = static_cast<int>(pme_u);
    auto& iplan = iplan_u->castTo<FFTPlanCUFFT>().h;
-   auto& st = *pme_u;
-
+   real* q = pme_u->qgrid;
 #if TINKER_REAL_SIZE == 4
-   cufftExecC2C(iplan, reinterpret_cast<cufftComplex*>(st.qgrid), reinterpret_cast<cufftComplex*>(st.qgrid),
-      CUFFT_FORWARD);
-#elif TINKER_REAL_SIZE == 8
-   cufftExecZ2Z(iplan, reinterpret_cast<cufftDoubleComplex*>(st.qgrid), reinterpret_cast<cufftDoubleComplex*>(st.qgrid),
-      CUFFT_FORWARD);
+   cufftExecC2C(iplan, reinterpret_cast<cufftComplex*>(q), reinterpret_cast<cufftComplex*>(q), dir);
 #else
-   static_assert(false, "");
+   cufftExecZ2Z(iplan, reinterpret_cast<cufftDoubleComplex*>(q), reinterpret_cast<cufftDoubleComplex*>(q), dir);
 #endif
+}
+
+void fftfront(PMEUnit pme_u)
+{
+   fftExecC2C(pme_u, CUFFT_FORWARD);
 }
 
 void fftback(PMEUnit pme_u)
 {
-   FFTPlanUnit iplan_u = static_cast<int>(pme_u);
-   auto& iplan = iplan_u->castTo<FFTPlanCUFFT>().h;
-   auto& st = *pme_u;
-
-#if TINKER_REAL_SIZE == 4
-   cufftExecC2C(iplan, reinterpret_cast<cufftComplex*>(st.qgrid), reinterpret_cast<cufftComplex*>(st.qgrid),
-      CUFFT_INVERSE);
-#elif TINKER_REAL_SIZE == 8
-   cufftExecZ2Z(iplan, reinterpret_cast<cufftDoubleComplex*>(st.qgrid), reinterpret_cast<cufftDoubleComplex*>(st.qgrid),
-      CUFFT_INVERSE);
-#else
-   static_assert(false, "");
-#endif
+   fftExecC2C(pme_u, CUFFT_INVERSE);
 }
 
 static FFTPlanCUFFT& fftRealPlans(PMEUnit pme_u)
@@ -121,21 +132,11 @@ static FFTPlanCUFFT& fftRealPlans(PMEUnit pme_u)
    auto& iplan = iplan_u->castTo<FFTPlanCUFFT>();
    if (not iplan.has_real) {
       auto& st = *pme_u;
-#if TINKER_REAL_SIZE == 4
-      const cufftType typf = CUFFT_R2C, typb = CUFFT_C2R;
-#elif TINKER_REAL_SIZE == 8
-      const cufftType typf = CUFFT_D2Z, typb = CUFFT_Z2D;
-#else
-      static_assert(false, "");
-#endif
       // in place, so the real grid has the padded rows of the half spectrum
-      check_rt(cufftPlan3d(&iplan.hr2c, st.nfft3, st.nfft2, st.nfft1, typf));
-      check_rt(cufftPlan3d(&iplan.hc2r, st.nfft3, st.nfft2, st.nfft1, typb));
-      auto stream = g::s0;
-      if (use_pme_stream)
-         stream = g::spme;
-      check_rt(cufftSetStream(iplan.hr2c, stream));
-      check_rt(cufftSetStream(iplan.hc2r, stream));
+      check_rt(cufftPlan3d(&iplan.hr2c, st.nfft3, st.nfft2, st.nfft1, fftTypeR2C));
+      check_rt(cufftPlan3d(&iplan.hc2r, st.nfft3, st.nfft2, st.nfft1, fftTypeC2R));
+      fftSetStream(iplan.hr2c);
+      fftSetStream(iplan.hc2r);
       iplan.has_real = true;
    }
    return iplan;
@@ -143,93 +144,64 @@ static FFTPlanCUFFT& fftRealPlans(PMEUnit pme_u)
 
 void fftfrontOneSet(PMEUnit pme_u, real* grid)
 {
-   auto& iplan = fftRealPlans(pme_u);
-   real* q = grid ? grid : pme_u->qgrid;
-
-#if TINKER_REAL_SIZE == 4
-   cufftExecR2C(iplan.hr2c, reinterpret_cast<cufftReal*>(q), reinterpret_cast<cufftComplex*>(q));
-#elif TINKER_REAL_SIZE == 8
-   cufftExecD2Z(iplan.hr2c, reinterpret_cast<cufftDoubleReal*>(q),
-      reinterpret_cast<cufftDoubleComplex*>(q));
-#else
-   static_assert(false, "");
-#endif
+   fftExecR2C(fftRealPlans(pme_u).hr2c, grid ? grid : pme_u->qgrid);
 }
 
 void fftbackOneSet(PMEUnit pme_u, real* grid)
 {
-   auto& iplan = fftRealPlans(pme_u);
-   real* q = grid ? grid : pme_u->qgrid;
-
-#if TINKER_REAL_SIZE == 4
-   cufftExecC2R(iplan.hc2r, reinterpret_cast<cufftComplex*>(q), reinterpret_cast<cufftReal*>(q));
-#elif TINKER_REAL_SIZE == 8
-   cufftExecZ2D(iplan.hc2r, reinterpret_cast<cufftDoubleComplex*>(q),
-      reinterpret_cast<cufftDoubleReal*>(q));
-#else
-   static_assert(false, "");
-#endif
+   fftExecC2R(fftRealPlans(pme_u).hc2r, grid ? grid : pme_u->qgrid);
 }
 
-// The plans of fftRealPlans for nset grids stride reals apart, remade when
-// either changes.
-static FFTPlanCUFFT& fftRealPlans(PMEUnit pme_u, int nset, int stride)
+// The plans of fftRealPlans for nset grids stride reals apart, one pair for
+// each nset kept, since the number of dispersion slots changes with lambda
+// and a new plan synchronizes the device; a single grid takes the plans of
+// fftRealPlans. All are remade if the stride changes.
+static void fftRealPlans(PMEUnit pme_u, int nset, int stride, cufftHandle& r2c, cufftHandle& c2r)
 {
-   FFTPlanUnit iplan_u = static_cast<int>(pme_u);
-   auto& iplan = iplan_u->castTo<FFTPlanCUFFT>();
-   if (iplan.nbatch != nset or iplan.sbatch != stride) {
-      if (iplan.nbatch) {
-         cufftDestroy(iplan.hr2cb);
-         cufftDestroy(iplan.hc2rb);
+   assert(stride % 2 == 0);
+   assert(1 <= nset and nset <= 3);
+   auto& iplan = fftRealPlans(pme_u);
+   if (nset == 1) {
+      r2c = iplan.hr2c, c2r = iplan.hc2r;
+      return;
+   }
+   if (iplan.sbatch != stride) {
+      for (int k = 0; k < 2; ++k) {
+         if (iplan.has_batch[k]) {
+            cufftDestroy(iplan.hr2cb[k]);
+            cufftDestroy(iplan.hc2rb[k]);
+            iplan.has_batch[k] = false;
+         }
       }
+      iplan.sbatch = stride;
+   }
+   const int k = nset - 2;
+   if (not iplan.has_batch[k]) {
       auto& st = *pme_u;
-#if TINKER_REAL_SIZE == 4
-      const cufftType typf = CUFFT_R2C, typb = CUFFT_C2R;
-#elif TINKER_REAL_SIZE == 8
-      const cufftType typf = CUFFT_D2Z, typb = CUFFT_Z2D;
-#else
-      static_assert(false, "");
-#endif
       // the padded rows of an in-place transform, as fftRealPlans takes them
       int nfft[3] = {st.nfft3, st.nfft2, st.nfft1};
       int rembed[3] = {st.nfft3, st.nfft2, 2 * (st.nfft1 / 2 + 1)};
       int cembed[3] = {st.nfft3, st.nfft2, st.nfft1 / 2 + 1};
-      check_rt(cufftPlanMany(&iplan.hr2cb, 3, nfft, rembed, 1, stride, cembed, 1, stride / 2, typf, nset));
-      check_rt(cufftPlanMany(&iplan.hc2rb, 3, nfft, cembed, 1, stride / 2, rembed, 1, stride, typb, nset));
-      auto stream = g::s0;
-      if (use_pme_stream)
-         stream = g::spme;
-      check_rt(cufftSetStream(iplan.hr2cb, stream));
-      check_rt(cufftSetStream(iplan.hc2rb, stream));
-      iplan.nbatch = nset;
-      iplan.sbatch = stride;
+      check_rt(cufftPlanMany(&iplan.hr2cb[k], 3, nfft, rembed, 1, stride, cembed, 1, stride / 2, fftTypeR2C, nset));
+      check_rt(cufftPlanMany(&iplan.hc2rb[k], 3, nfft, cembed, 1, stride / 2, rembed, 1, stride, fftTypeC2R, nset));
+      fftSetStream(iplan.hr2cb[k]);
+      fftSetStream(iplan.hc2rb[k]);
+      iplan.has_batch[k] = true;
    }
-   return iplan;
+   r2c = iplan.hr2cb[k], c2r = iplan.hc2rb[k];
 }
 
 void fftfrontOneSet(PMEUnit pme_u, real* grids, int nset, int stride)
 {
-   assert(stride % 2 == 0);
-   auto& iplan = fftRealPlans(pme_u, nset, stride);
-#if TINKER_REAL_SIZE == 4
-   cufftExecR2C(iplan.hr2cb, reinterpret_cast<cufftReal*>(grids), reinterpret_cast<cufftComplex*>(grids));
-#elif TINKER_REAL_SIZE == 8
-   cufftExecD2Z(iplan.hr2cb, reinterpret_cast<cufftDoubleReal*>(grids), reinterpret_cast<cufftDoubleComplex*>(grids));
-#else
-   static_assert(false, "");
-#endif
+   cufftHandle r2c, c2r;
+   fftRealPlans(pme_u, nset, stride, r2c, c2r);
+   fftExecR2C(r2c, grids);
 }
 
 void fftbackOneSet(PMEUnit pme_u, real* grids, int nset, int stride)
 {
-   assert(stride % 2 == 0);
-   auto& iplan = fftRealPlans(pme_u, nset, stride);
-#if TINKER_REAL_SIZE == 4
-   cufftExecC2R(iplan.hc2rb, reinterpret_cast<cufftComplex*>(grids), reinterpret_cast<cufftReal*>(grids));
-#elif TINKER_REAL_SIZE == 8
-   cufftExecZ2D(iplan.hc2rb, reinterpret_cast<cufftDoubleComplex*>(grids), reinterpret_cast<cufftDoubleReal*>(grids));
-#else
-   static_assert(false, "");
-#endif
+   cufftHandle r2c, c2r;
+   fftRealPlans(pme_u, nset, stride, r2c, c2r);
+   fftExecC2R(c2r, grids);
 }
 }

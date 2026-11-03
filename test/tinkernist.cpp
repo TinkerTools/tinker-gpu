@@ -8,6 +8,11 @@
 #include "test.h"
 #include "testrt.h"
 
+#include <cstdlib>
+#include <fstream>
+#include <iterator>
+#include <string>
+#include <sys/wait.h>
 #include <unistd.h>
 
 using namespace tinker;
@@ -887,4 +892,36 @@ TEST_CASE("TinkerNIST-EXC-MOMENT", "[ff][tinkerNIST]")
          COMPARE_REALS(uind_ref[istep][i], uind_tst[istep][i], eps_u);
       }
    }
+}
+
+// A run stopped by an end file writes the frame of that step and ends
+// normally. Fortran mdsave ends the program once it finds the file, so the
+// dynamic program runs apart from this one (test_thermint.f:test_thermint_stop).
+TEST_CASE("TinkerNIST-END-FILE", "[ff][tinkerNIST]")
+{
+   const std::string files = TINKER9_DIRSTR "/test/file/";
+   TestFile fx(files + "mutate/water2.xyz", "endstop.xyz");
+   TestFile fp(files + "commit_6bd0b6fd/water03.prm");
+   TestFile fk("", "endstop.key",
+      "parameters water03\na-axis 18.643\nvdw-cutoff 7.0\newald\newald-cutoff 7.0\nintegrator verlet\nrandomseed 1\n");
+   TestFile fe("", "endstop.end", "\n");
+   TestRemoveFileOnExit farc("endstop.arc"), fdyn("endstop.dyn"), flog("endstop.log");
+
+   // 20 steps of 1 fs, saved every 10
+   const std::string cmd =
+      std::string(TINKER9_BINDIRSTR) + "/tinker9 dynamic endstop.xyz 20 1.0 0.01 2 300 > endstop.log 2>&1";
+   const int rc = std::system(cmd.c_str());
+   REQUIRE(WIFEXITED(rc));
+   REQUIRE(WEXITSTATUS(rc) == 0);
+
+   std::ifstream log("endstop.log");
+   std::string text((std::istreambuf_iterator<char>(log)), std::istreambuf_iterator<char>());
+   REQUIRE(text.find("due to User Request") != std::string::npos);
+
+   // the first frame alone: the title, the box and 30 atoms
+   std::ifstream arc("endstop.arc");
+   int nline = 0;
+   for (std::string line; std::getline(arc, line);)
+      ++nline;
+   REQUIRE(nline == 32);
 }

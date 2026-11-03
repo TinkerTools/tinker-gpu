@@ -1,11 +1,11 @@
-// ck.py Version 3.1.0
+// ck.py Version 3.2.0
 template <class Ver, class ETYP>
 __global__
 void emplarast_cu1c(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, EnergyBuffer restrict demdl,
    VirialBuffer restrict vbuf, grad_prec* restrict gx, grad_prec* restrict gy, grad_prec* restrict gz, real off,
    real* restrict trqx, real* restrict trqy, real* restrict trqz, const real (*restrict rpole)[10],
    const real (*restrict uind)[3], const real (*restrict uinp)[3], const int* restrict grp, real f, real aewald,
-   GrpScale esc, real deldl, RdtMask live, int nexclude, const int (*restrict exclude)[2],
+   const TINKER_GRID_CONSTANT GrpScale esc, real deldl, RdtMask live, int nexclude, const int (*restrict exclude)[2],
    const real (*restrict exclude_scale)[4], const real* restrict x, const real* restrict y, const real* restrict z)
 {
    using d::jpolar;
@@ -197,8 +197,8 @@ void emplarast_cu1b(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, EnergyBuffe
    VirialBuffer restrict vbuf, grad_prec* restrict gx, grad_prec* restrict gy, grad_prec* restrict gz, real off,
    real* restrict trqx, real* restrict trqy, real* restrict trqz, const real (*restrict rpole)[10],
    const real (*restrict uind)[3], const real (*restrict uinp)[3], const int* restrict grp, real f, real aewald,
-   GrpScale esc, real deldl, RdtMask live, const Spatial::SortedAtom* restrict sorted, int n, int nakpl,
-   const int* restrict iakpl, const Spatial::Center* restrict akc)
+   const TINKER_GRID_CONSTANT GrpScale esc, real deldl, RdtMask live, const Spatial::SortedAtom* restrict sorted, int n,
+   int nakpl, const int* restrict iakpl, const Spatial::Center* restrict akc)
 {
    using d::jpolar;
    using d::njpolar;
@@ -488,8 +488,8 @@ void emplarast_cu1a(TINKER_IMAGE_PARAMS, EnergyBuffer restrict ebuf, EnergyBuffe
    VirialBuffer restrict vbuf, grad_prec* restrict gx, grad_prec* restrict gy, grad_prec* restrict gz, real off,
    real* restrict trqx, real* restrict trqy, real* restrict trqz, const real (*restrict rpole)[10],
    const real (*restrict uind)[3], const real (*restrict uinp)[3], const int* restrict grp, real f, real aewald,
-   GrpScale esc, real deldl, RdtMask live, const Spatial::SortedAtom* restrict sorted, int niak,
-   const int* restrict iak, const int* restrict lst, const Spatial::Center* restrict akc)
+   const TINKER_GRID_CONSTANT GrpScale esc, real deldl, RdtMask live, const Spatial::SortedAtom* restrict sorted,
+   int niak, const int* restrict iak, const int* restrict lst, const Spatial::Center* restrict akc)
 {
    using d::jpolar;
    using d::njpolar;

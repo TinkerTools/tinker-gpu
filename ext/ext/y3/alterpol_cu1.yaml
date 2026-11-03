@@ -1,8 +1,6 @@
 OUTPUT_DIR: src/cu/hippo
 KERNEL_NAME: alterpol_cu1
 TEMPLATE_PARAMS: template <class IMG, int MUTPSC>
-# the box shape as a template parameter, and the tiles near their centers
-# imaged once, their virial from the summed forces
 IMAGE_TEMPLATE: IMG
 LOCAL_TILES: true
 # CONSTEXPR_FLAGS:

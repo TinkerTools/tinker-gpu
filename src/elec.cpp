@@ -15,6 +15,7 @@
 #include "tool/error.h"
 #include "tool/externfunc.h"
 #include "tool/iofortstr.h"
+#include "tool/iotext.h"
 #include <tinker/detail/atoms.hh>
 #include <tinker/detail/bound.hh>
 #include <tinker/detail/chgpen.hh>
@@ -23,6 +24,7 @@
 #include <tinker/detail/dlmda.hh>
 #include <tinker/detail/extfld.hh>
 #include <tinker/detail/kchrge.hh>
+#include <tinker/detail/keys.hh>
 #include <tinker/detail/limits.hh>
 #include <tinker/detail/mplpot.hh>
 #include <tinker/detail/mpole.hh>
@@ -32,6 +34,7 @@
 #include <tinker/detail/sizes.hh>
 
 #include <cmath>
+#include <sstream>
 
 namespace tinker {
 // The net partial charge of each lambda group, unscaled, for the Ewald uniform
@@ -65,6 +68,27 @@ static void pchgScale(double lmda)
    pchg_lmda_mask = chargeMask();
 }
 
+// The partial charges of the atoms, those of their types unless a keyword
+// "CHARGE -i value" gives atom i its own (kcharge.f).
+static std::vector<double> pchgAtoms()
+{
+   std::vector<double> c(n);
+   for (int i = 0; i < n; ++i)
+      c[i] = kchrge::chg[atoms::type[i] - 1];
+   for (int i = 0; i < keys::nkey; ++i) {
+      FstrView fsv = keys::keyline[i];
+      std::istringstream record(fsv.trim());
+      std::string keyword;
+      int ia;
+      double cg;
+      record >> keyword;
+      Text::upcase(keyword);
+      if (keyword == "CHARGE" and record >> ia >> cg and ia < 0 and ia >= -n)
+         c[-ia - 1] = cg;
+   }
+   return c;
+}
+
 static void pchgData(RcOp op)
 {
    if (not use(Potent::CHARGE))
@@ -90,10 +114,11 @@ static void pchgData(RcOp op)
    }
 
    if (op & RcOp::INIT) {
+      const std::vector<double> chg = pchgAtoms();
       std::vector<real> chgbuf(n);
       std::fill_n(pchg_net, 3, 0.0);
       for (int i = 0; i < n; ++i) {
-         double c = kchrge::chg[atoms::type[i] - 1];
+         double c = chg[i];
          chgbuf[i] = c;
          // In double precision, so that a neutral cell sums to zero.
          pchg_net[hostGroup(i)] += c;
@@ -204,9 +229,6 @@ static void mpoleData(RcOp op)
       // they are made here (mutate.f:mutate_check).
       if (use(Potent::POLAR) and mplpot::use_chgpen and not polpot::use_tholed) {
          if (use_epast) {
-            FstrView poltypstr = polpot::poltyp;
-            if (not(poltypstr == "MUTUAL"))
-               TINKER_THROW("Single topology polarization dU/dLambda supports MUTUAL polarization only.");
             if (use(Potent::SOLV))
                TINKER_THROW("Single topology polarization dU/dLambda does not support implicit solvent.");
          }
@@ -1002,8 +1024,9 @@ static double ewaldBackgroundCoef(real aewald)
 // an interaction whenever the cell is charged (empole3.f, echarge3.f). The term
 // scales as 1/V, so its virial is -e on the diagonal, and the lambda derivative
 // of that virial is -dE/dl on the diagonal (echarge1.f, empole1.f, empole4.f).
-static void ewaldBackground(int vers, int dlvers, double q, double dq, double deldl, double d2eldl2, real aewald,
-   CountBuffer nc, EnergyBuffer eb, EnergyBuffer dl1b, EnergyBuffer dl2b, VirialBuffer vb, VirialBuffer dvb)
+// Q is linear in elambda, which carries it to the main lambda (elecChain).
+static void ewaldBackground(int vers, int dlvers, double q, double dq, real aewald, CountBuffer nc, EnergyBuffer eb,
+   EnergyBuffer dl1b, EnergyBuffer dl2b, VirialBuffer vb, VirialBuffer dvb)
 {
    const bool charged = std::abs(q) > 1.0e-10;
    const bool do_e = vers & calc::energy;
@@ -1017,7 +1040,8 @@ static void ewaldBackground(int vers, int dlvers, double q, double dq, double de
 
    // f q^2 with the net charge q linear in elambda
    const double fterm = ewaldBackgroundCoef(aewald);
-   const LmdaFn e = lmdaChain(fterm * q * q, 2 * fterm * q * dq, 2 * fterm * dq * dq, deldl, d2eldl2);
+   const LmdaFn el = elecChain();
+   const LmdaFn e = lmdaChain(fterm * q * q, 2 * fterm * q * dq, 2 * fterm * dq * dq, el.d1, el.d2);
    const int count = (vers & calc::analyz) and charged ? 1 : 0;
 
    TINKER_FCALL2(acc1, cu1, ewaldBackgroundAdd, count ? nc : nullptr, do_e ? eb : nullptr, do_dl1 ? dl1b : nullptr,
@@ -1072,17 +1096,14 @@ void empoleEwaldBackground(int vers, int dlvers, bool cflux)
    double q = pole_net[0], dq = 0;
    if (pole_net_orig)
       grpNet(grpScale(elam), pole_net, q, dq);
-   const LmdaFn e = elecChain();
-   ewaldBackground(vers, dlvers, q, dq, e.d1, e.d2, aewald, nem, em, demdl_buf, d2emdl2_buf, vir_em, dvirdl_buf);
+   ewaldBackground(vers, dlvers, q, dq, aewald, nem, em, demdl_buf, d2emdl2_buf, vir_em, dvirdl_buf);
 }
 
 void echargeEwaldBackground(int vers)
 {
    double q, dq;
    grpNet(grpScale(elam), pchg_net, q, dq);
-   const LmdaFn e = elecChain();
-   ewaldBackground(
-      vers, vers, q, dq, e.d1, e.d2, epme_unit->aewald, nec, ec, demdl_buf, d2emdl2_buf, vir_ec, dvirdl_buf);
+   ewaldBackground(vers, vers, q, dq, epme_unit->aewald, nec, ec, demdl_buf, d2emdl2_buf, vir_ec, dvirdl_buf);
 }
 
 TINKER_FVOID2(acc1, cu1, exfieldCharge, int);

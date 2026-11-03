@@ -243,16 +243,21 @@ TEST_CASE("LocalTiles-ChargeLJ", "[ff][localtiles][echglj][echarge][lj][water4]"
 }
 
 // The buffered 14-7 van der Waals of the AMOEBA water box of 30 A at a 6 A
-// cutoff, plain and with the lambda derivatives of a water.
+// cutoff, plain and with the lambda derivatives of a water to the second and,
+// as dynamics takes them, the first order, with and without analysis.
 TEST_CASE("LocalTiles-Hal", "[ff][localtiles][ehal][vdw]")
 {
    const std::string cut6 = "\nvdwterm only\nvdw-cutoff 6.0\nneighbor-list\n";
    const char* prm = "commit_6fe8e913/water03.prm";
-   const LocalCase w30 = {kWater, "water30/water30.key", prm, cut6, {&vspatial_v2_unit}};
-   const LocalCase w30l = {kWater, "water30/water30.key", prm, cut6 + "\nligand -1 3\n" + vdwLmda(2),
-      {&vspatial_v2_unit}};
-   localCompare(w30, "1.0", "7.0", false);
-   localCompare(w30l, "1.0", "7.0", false);
+   auto w30 = [&](const std::string& extra) {
+      return LocalCase{kWater, "water30/water30.key", prm, cut6 + extra, {&vspatial_v2_unit}};
+   };
+   for (bool analyz : {false, true}) {
+      INFO("analysis " << analyz);
+      localCompare(w30(""), "1.0", "7.0", analyz);
+      localCompare(w30("\nligand -1 3\n" + vdwLmda(2)), "1.0", "7.0", analyz);
+      localCompare(w30("\nligand -1 3\n" + vdwLmda(1)), "1.0", "7.0", analyz);
+   }
 }
 
 // The AMOEBA water box of 30 A at a 6 A cutoff: multipoles, polarization and

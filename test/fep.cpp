@@ -1248,3 +1248,24 @@ TEST_CASE("FEP-dyn-montecarlo", "[ff][fep]")
 }
 
 #endif
+
+// tinker9 solves the induced dipoles to self-consistency only, so it refuses
+// the perturbation and truncated conjugate gradient models of test_fep_terms
+// rather than run them as MUTUAL.
+TEST_CASE("FEP-polarization-models-refused", "[ff][fep][polar]")
+{
+   const std::string files = TINKER9_DIRSTR "/test/file/";
+   const char* xn = "water2.xyz";
+   TestFile fx(files + "mutate/water2.xyz", xn);
+   TestFile fp(files + "commit_6bd0b6fd/water03.prm");
+   for (const char* k : {"opt", "tcg"}) {
+      const std::string kn = std::string(k) + ".key";
+      TestFile fk(files + "fep/" + kn, kn);
+      const char* argv[] = {"dummy", xn, "-k", kn.c_str()};
+      int argc = 4;
+      TestLmdaFlagReset lmdaReset;
+      TestSession session(argc, argv);
+      rc_flag = calc::xyz | calc::energy;
+      REQUIRE_THROWS_WITH(session.init(), Catch::Matchers::ContainsSubstring("is not supported; only MUTUAL"));
+   }
+}

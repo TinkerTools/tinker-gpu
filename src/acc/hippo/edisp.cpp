@@ -7,10 +7,18 @@
 #include "seq/bsplgen.h"
 #include "seq/dspslot.h"
 #include "seq/pair_disp.h"
+#include "tool/error.h"
 #include "tool/gpucard.h"
 #include <cassert>
 
 namespace tinker {
+// The lambda derivative versions are CUDA only, which dlmdaData2 refuses
+// first, as in echarge_acc.
+static void edispVersRefused(int vers)
+{
+   TINKER_THROW(format("The OpenACC dispersion kernels do not take version %d.", vers));
+}
+
 // SLOTS: the half spectrum, k1 <= nfft1/2, of the nslot real grids of
 // gridDispSlots, stride reals apart from qgrid, whose transforms are weighted
 // pair by pair; each grid then holds the potential its sites feel, weighted
@@ -118,8 +126,8 @@ static void pmeConvDisp_acc1(EnergyBuffer gpu_e, VirialBuffer gpu_v, real* qgrid
 template <bool SLOTS>
 static void pmeConvDisp_acc2(int vers, real* qgrid, int stride, const DispSlots& ds)
 {
-   assert(not(vers & calc::dlmda) && "damped dispersion lambda derivatives are CUDA only");
-   vers &= ~calc::dlmda;
+   if (vers & calc::dlmda)
+      edispVersRefused(vers);
    bool do_e = vers & calc::energy;
    bool do_v = vers & calc::virial;
    // the potentials only feed the gradient
@@ -169,6 +177,9 @@ static void edisp_acc1(DispSoft ds)
    const auto* nlst = dsplist_unit->nlst;
    const auto* lst = dsplist_unit->lst;
    size_t bufsize = bufferSize();
+   // the class of a pair of groups (pair_mutcls), 0 or 1 without a relative
+   // calculation
+   const int mutcls = vdwMutclsTable();
 
    #pragma acc parallel async present(lvec1,lvec2,lvec3,recipa,recipb,recipc)\
                deviceptr(x,y,z,dedspx,dedspy,dedspz,ndisp,edsp,vir_edsp,\
@@ -197,7 +208,7 @@ static void edisp_acc1(DispSoft ds)
          real r = REAL_SQRT(r2);
          real rr1 = REAL_RECIP(r);
          real e0, de0, e1, de1;
-         bool mutik = pair_mutik(vcouple, imut, kmut);
+         bool mutik = pair_mutcls(mutcls, imut, kmut) > 0;
          pair_disp<do_g, DTYP, 0, DHAL>(r, r2, rr1, scalea, aewald, ci, ai, ck, ak, mutik, ds, cut, off, dh, e0, de0);
          pair_disp<do_g, DTYP, 1, DHAL>(r, r2, rr1, 1, aewald, ci, ai, ck, ak, mutik, ds, cut, off, dh, e1, de1);
          real e, de;
@@ -273,7 +284,7 @@ static void edisp_acc1(DispSoft ds)
             real r = REAL_SQRT(r2);
             real rr1 = REAL_RECIP(r);
             real e, de;
-            bool mutik = pair_mutik(vcouple, imut, kmut);
+            bool mutik = pair_mutcls(mutcls, imut, kmut) > 0;
             pair_disp<do_g, DTYP, 1, DHAL>(r, r2, rr1, 1, aewald, ci, ai, ck, ak, mutik, ds, cut, off, dh, e, de);
             if CONSTEXPR (do_e) {
                etl += e;
@@ -329,8 +340,8 @@ static void edisp_acc1(DispSoft ds)
 // ds2, of ligand 2 of a relative calculation, goes unused: OpenACC refuses it.
 void edispNonEwald_acc(int vers, DispSoft ds, DispSoft)
 {
-   assert(not(vers & calc::dlmda) && "damped dispersion lambda derivatives are CUDA only");
-   vers &= ~calc::dlmda;
+   if (vers & calc::dlmda)
+      edispVersRefused(vers);
    if (vers == calc::v0)
       edisp_acc1<calc::V0, NON_EWALD_TAPER>(ds);
    else if (vers == calc::v1)
@@ -348,8 +359,8 @@ void edispNonEwald_acc(int vers, DispSoft ds, DispSoft)
 template <bool DHAL>
 static void edispEwaldReal_acc1(int vers, DispSoft ds)
 {
-   assert(not(vers & calc::dlmda) && "damped dispersion lambda derivatives are CUDA only");
-   vers &= ~calc::dlmda;
+   if (vers & calc::dlmda)
+      edispVersRefused(vers);
    if (vers == calc::v0)
       edisp_acc1<calc::V0, DEWALD, DHAL>(ds);
    else if (vers == calc::v1)
@@ -512,8 +523,8 @@ static void edisp_acc2(const real* qgrid, int stride, const int* slotoff, DispSl
 template <bool SLOTS>
 static void edisp_acc3(int vers, const real* qgrid, int stride, const int* offset, const DispSlots& ds)
 {
-   assert(not(vers & calc::dlmda) && "damped dispersion lambda derivatives are CUDA only");
-   vers &= ~calc::dlmda;
+   if (vers & calc::dlmda)
+      edispVersRefused(vers);
    constexpr int order = 4;
    assert(dpme_unit->bsorder == order);
    if (vers == calc::v0)

@@ -8,14 +8,13 @@
 #include "ff/potent.h"
 #include "ff/spatial.h"
 #include "ff/switch.h"
-#include "seq/emselfamoeba.h"
+#include "seq/emselfdlmda.h"
 #include "seq/launch.h"
+#include "seq/pair_dlmda.h"
 #include "seq/pair_mpole_chgpen.h"
-#include "seq/pair_vlambda.h"
 #include "seq/pairmpoleaplus.h"
 #include "seq/triangle.h"
 #include "tool/error.h"
-#include <cassert>
 
 namespace tinker {
 #include "empoleChgpenDlmda_cu1.cc"

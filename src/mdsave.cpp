@@ -13,6 +13,7 @@
 #include "tool/cudalib.h"
 #include "tool/iofortstr.h"
 #include <condition_variable>
+#include <fstream>
 #include <future>
 #include <mutex>
 #include <tinker/detail/atomid.hh>
@@ -131,13 +132,13 @@ static void mdsaveWriteLmda()
       dlmda::dedl = s_dedl;
 }
 
-static void mdsaveDupLmdaBias(int istep)
+static void mdsaveDupLmdaBias()
 {
    bias_snap_active = use_ost or use_meta or use_abf;
    if (not bias_snap_active)
       return;
 
-   s_lmdastep = istep;
+   s_lmdastep = lmdastep;
    s_nflmda = nflmda;
    s_fli0 = fli0;
    s_ostdgdl = ostdgdl;
@@ -316,6 +317,15 @@ static void mdsaveWriteFep()
    fep::nfep = s_nfep;
 }
 
+// Same test as the one at the end of mdsave.f.
+static bool mdsaveEndRequested()
+{
+   if (std::ifstream("tinker.end").good())
+      return true;
+   std::string endfile = FstrView(files::filename)(1, files::leng).trim() + ".end";
+   return std::ifstream(endfile).good();
+}
+
 static void mdsaveDupThenWrite(int istep, time_prec dt)
 {
 #if TINKER_CUDART
@@ -362,7 +372,7 @@ static void mdsaveDupThenWrite(int istep, time_prec dt)
       darray::copy(g::q0, 9 * n, &dup_buf_polscale[0][0][0], &polscale[0][0][0]);
 
    mdsaveDupLmda();
-   mdsaveDupLmdaBias(istep);
+   mdsaveDupLmdaBias();
    mdsaveDupTi();
    mdsaveDupFep();
 
@@ -506,6 +516,19 @@ void mdsaveAsync(int istep, time_prec dt)
    if (mdsaveUseUstc() and (use(Potent::MPOLE) or use(Potent::POLAR)))
       mpoleEnsurePhysical();
 
+   // Fortran mdsave ends the program (fatal) after writing the frame if it
+   // finds an end file. The exit destroys fut_dup_then_write, which joins the
+   // writing thread, so it must not happen on that thread. Write this frame on
+   // the calling thread instead.
+   if (mdsaveEndRequested()) {
+      lck_write.unlock();
+      mdsaveSynchronize();
+      mdsaveDupThenWrite(istep, dt);
+      // only reached if the end file was removed in the meantime
+      idle_dup = false;
+      return;
+   }
+
    fut_dup_then_write = std::async(std::launch::async, mdsaveDupThenWrite, istep, dt);
 
    std::unique_lock<std::mutex> lck_copy(mtx_dup);
@@ -523,7 +546,7 @@ void mdsaveLmdaFinal(int istep)
 {
    mdsaveDupLmda();
    mdsaveWriteLmda();
-   mdsaveDupLmdaBias(istep);
+   mdsaveDupLmdaBias();
    mdsaveWriteLmdaBias();
    mdsaveDupTi();
    mdsaveWriteTi();

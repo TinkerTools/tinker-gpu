@@ -8,6 +8,7 @@
 #include "tool/rcman.h"
 #include <fstream>
 #include <limits>
+#include <memory>
 #include <random>
 #include <set>
 #include <sstream>
@@ -449,6 +450,84 @@ TEST_CASE("NBList-Octahedron", "[ff][nblist][octahedron]")
    }
 }
 
+// Scales the box and the coordinates by s, as a barostat does, then refreshes
+// the lists.
+static void scaleBoxAndAtoms(double s)
+{
+   Box b;
+   boxGetCurrent(b);
+   for (real3* v : {&b.lvec1, &b.lvec2, &b.lvec3})
+      v->x *= s, v->y *= s, v->z *= s;
+   for (real3* v : {&b.recipa, &b.recipb, &b.recipc})
+      v->x /= s, v->y /= s, v->z /= s;
+   boxSetCurrent(b);
+   std::vector<pos_prec> xs(n), ys(n), zs(n);
+   darray::copyout(g::q0, n, xs.data(), xpos);
+   darray::copyout(g::q0, n, ys.data(), ypos);
+   darray::copyout(g::q0, n, zs.data(), zpos);
+   waitFor(g::q0);
+   for (int i = 0; i < n; ++i) {
+      xs[i] *= s;
+      ys[i] *= s;
+      zs[i] *= s;
+   }
+   darray::copyin(g::q0, n, xpos, xs.data());
+   darray::copyin(g::q0, n, ypos, ys.data());
+   darray::copyin(g::q0, n, zpos, zs.data());
+   waitFor(g::q0);
+   copyPosToXyz(true);
+}
+
+// The four force fields of the octahedral water box in every list they use:
+// built, after short and long moves, and after the box and the coordinates
+// are scaled as a barostat scales them (test_nblist.f:test_nblist_key).
+TEST_CASE("NBList-Octwater-Keys", "[ff][nblist][octahedron]")
+{
+   const std::string f = TINKER9_DIRSTR "/test/file/";
+   struct Case
+   {
+      const char* key;
+      const char* prm;
+      std::vector<SpatialUnit*> units;
+   };
+   const Case cases[] = {
+      {"octamoeba", "commit_6fe8e913/water03.prm", {&vspatial_v2_unit, &mspatial_v2_unit, &uspatial_v2_unit}},
+      {"octhippo", "commit_aad9340c/water21.prm", {&mspatial_v2_unit, &uspatial_v2_unit, &dspspatial_v2_unit}},
+      {"octhippoc6", "trunc8/water21c6.prm", {&mspatial_v2_unit, &uspatial_v2_unit, &dspspatial_v2_unit}},
+      {"octtip3p", nullptr, {&cspatial_v2_unit}},
+   };
+   const char* x1 = "test_oct.xyz";
+   TestFile fx1(f + "trunc8/octwater.xyz", x1);
+   for (const auto& c : cases) {
+      INFO(c.key);
+      const char* k = "test_oct.key";
+      TestFile fke(f + "trunc8/" + c.key + ".key", k);
+      std::unique_ptr<TestFile> fpr;
+      if (c.prm)
+         fpr = std::make_unique<TestFile>(f + c.prm);
+      const char* argv[] = {"dummy", x1};
+      int argc = 2;
+      TestSession session(argc, argv);
+      rc_flag = calc::xyz | calc::energy;
+      session.init();
+      REQUIRE(box_shape == BoxShape::OCT);
+
+      auto check = [&](bool built) {
+         for (auto* u : c.units)
+            checkSpatialList(**u, built);
+      };
+      check(true);
+      std::mt19937 gen(2026);
+      moveAtoms(gen, 0.0);
+      check(false);
+      moveAtoms(gen, 3.0);
+      check(true);
+      scaleBoxAndAtoms(1.003);
+      check(false);
+      session.end();
+   }
+}
+
 TEST_CASE("NBList-Prune-Keyword", "[ff][nblist][prune]")
 {
    const char* x1 = "test_water30.xyz";
@@ -487,20 +566,22 @@ TEST_CASE("NBList-MlistCutoff", "[ff][nblist][hippo]")
    TestFile fx1(files + "mutate/water2.xyz", x1);
    TestFile fpr(files + "commit_aad9340c/water21.prm");
 
-   auto run = [&](const char* k, bool refused) {
-      TestFile fke(files + "mutate/" + k, k);
+   // the charge transfer cutoff of the key, repulsion's in its place, and both
+   const char* k = "mlist_ctcut_nolist.key";
+   auto run = [&](const char* extra, const char* what, bool refused) {
+      TestFile fke(files + "mutate/" + k, k, extra);
       const char* argv[] = {"dummy", x1, "-k", k};
       int argc = 4;
       TestSession session(argc, argv);
       rc_flag = calc::xyz | calc::energy;
       if (refused)
-         REQUIRE_THROWS_WITH(session.init(), Catch::Matchers::ContainsSubstring("exceeds the multipole list cutoff"));
+         REQUIRE_THROWS_WITH(session.init(),
+            Catch::Matchers::ContainsSubstring(what) and Catch::Matchers::ContainsSubstring("exceeds the multipole list cutoff"));
       else
          REQUIRE_NOTHROW(session.init());
    };
-#if TINKER_GPULANG_CUDA
-   run("mlist_ctcut_nolist.key", true);
-#else
-   run("mlist_ctcut_nolist.key", false);
-#endif
+   const bool cuda = TINKER_GPULANG_CUDA;
+   run("", "CHGTRN-CUTOFF 7.00", cuda);
+   run("\nchgtrn-cutoff 6.0\nrepuls-cutoff 7.0\n", "REPULS-CUTOFF 7.00", cuda);
+   run("\nrepuls-cutoff 7.0\n", "REPULS-CUTOFF 7.00 and CHGTRN-CUTOFF 7.00", cuda);
 }

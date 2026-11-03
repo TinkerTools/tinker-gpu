@@ -1,4 +1,4 @@
-// ck.py Version 3.1.0
+// ck.py Version 3.2.0
 template <class Ver, class IMG, class ETYP, bool DEAD>
 __global__
 void echarge_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nec, EnergyBuffer restrict ec,
@@ -19,9 +19,6 @@ void echarge_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nec, EnergyBuf
    constexpr bool do_dl2 = Ver::e_dlmda2;
    constexpr bool do_gdl = Ver::g_dlmda;
    constexpr bool do_vdl = Ver::v_dlmda;
-   // a local tile takes the lambda derivative of its virial from those of the
-   // forces
-   constexpr bool do_fdl = do_gdl or do_vdl;
    static_assert(not do_vdl or do_gdl, "");
    const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
    const int iwarp = ithread / WARP_SIZE;
@@ -127,7 +124,7 @@ void echarge_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nec, EnergyBuf
          real e, de;
          MAYBE_UNUSED real dl1, dl2, dlde;
          if CONSTEXPR (do_dl1)
-            pair_chg_lmda<do_g, do_dl2, do_fdl, ETYP, 0>(r, REAL_RECIP(r + ebuffer), scalea, ichg, kchg, idq, kdq, f,
+            pair_chg_lmda<do_g, do_dl2, do_gdl, ETYP, 0>(r, REAL_RECIP(r + ebuffer), scalea, ichg, kchg, idq, kdq, f,
                aewald, cut, off, del, d2el, e, de, dl1, dl2, dlde);
          else
             pair_chg_v3<do_g, ETYP, 0>(r, scalea, ichg, kchg, ebuffer, f, aewald, cut, off, e, de);
@@ -163,7 +160,7 @@ void echarge_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nec, EnergyBuf
             demdltl += floatTo<ebuf_prec>(dl1);
             if CONSTEXPR (do_dl2)
                d2emdl2tl += floatTo<ebuf_prec>(dl2);
-            if CONSTEXPR (do_fdl)
+            if CONSTEXPR (do_gdl)
                pair_dlforce<do_gdl, (do_vdl and not tile_local)>(dlde * invr, xr, yr, zr, dfix, dfiy, dfiz, dfkx, dfky,
                   dfkz, demvirdltlxx, demvirdltlyx, demvirdltlzx, demvirdltlyy, demvirdltlzy, demvirdltlzz);
          }
@@ -272,7 +269,7 @@ void echarge_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nec, EnergyBuf
                real e, de;
                MAYBE_UNUSED real dl1, dl2, dlde;
                if CONSTEXPR (do_dl1)
-                  pair_chg_lmda<do_g, do_dl2, do_fdl, ETYP, 1>(r, REAL_RECIP(r + ebuffer), 1, ichg, kchg, idq, kdq, f,
+                  pair_chg_lmda<do_g, do_dl2, do_gdl, ETYP, 1>(r, REAL_RECIP(r + ebuffer), 1, ichg, kchg, idq, kdq, f,
                      aewald, cut, off, del, d2el, e, de, dl1, dl2, dlde);
                else
                   pair_chg_v3<do_g, ETYP, 1>(r, 1, ichg, kchg, ebuffer, f, aewald, cut, off, e, de);
@@ -308,7 +305,7 @@ void echarge_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nec, EnergyBuf
                   demdltl += floatTo<ebuf_prec>(dl1);
                   if CONSTEXPR (do_dl2)
                      d2emdl2tl += floatTo<ebuf_prec>(dl2);
-                  if CONSTEXPR (do_fdl)
+                  if CONSTEXPR (do_gdl)
                      pair_dlforce<do_gdl, (do_vdl and not tile_local)>(dlde * invr, xr, yr, zr, dfix, dfiy, dfiz, dfkx,
                         dfky, dfkz, demvirdltlxx, demvirdltlyx, demvirdltlzx, demvirdltlyy, demvirdltlzy, demvirdltlzz);
                }
@@ -370,7 +367,7 @@ void echarge_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nec, EnergyBuf
                real e, de;
                MAYBE_UNUSED real dl1, dl2, dlde;
                if CONSTEXPR (do_dl1)
-                  pair_chg_lmda<do_g, do_dl2, do_fdl, ETYP, 1>(r, REAL_RECIP(r + ebuffer), 1, ichg, kchg, idq, kdq, f,
+                  pair_chg_lmda<do_g, do_dl2, do_gdl, ETYP, 1>(r, REAL_RECIP(r + ebuffer), 1, ichg, kchg, idq, kdq, f,
                      aewald, cut, off, del, d2el, e, de, dl1, dl2, dlde);
                else
                   pair_chg_v3<do_g, ETYP, 1>(r, 1, ichg, kchg, ebuffer, f, aewald, cut, off, e, de);
@@ -406,7 +403,7 @@ void echarge_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nec, EnergyBuf
                   demdltl += floatTo<ebuf_prec>(dl1);
                   if CONSTEXPR (do_dl2)
                      d2emdl2tl += floatTo<ebuf_prec>(dl2);
-                  if CONSTEXPR (do_fdl)
+                  if CONSTEXPR (do_gdl)
                      pair_dlforce<do_gdl, (do_vdl and not tile_local)>(dlde * invr, xr, yr, zr, dfix, dfiy, dfiz, dfkx,
                         dfky, dfkz, demvirdltlxx, demvirdltlyx, demvirdltlzx, demvirdltlyy, demvirdltlzy, demvirdltlzz);
                }
@@ -526,7 +523,7 @@ void echarge_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nec, EnergyBuf
                real e, de;
                MAYBE_UNUSED real dl1, dl2, dlde;
                if CONSTEXPR (do_dl1)
-                  pair_chg_lmda<do_g, do_dl2, do_fdl, ETYP, 1>(r, REAL_RECIP(r + ebuffer), 1, ichg, kchg, idq, kdq, f,
+                  pair_chg_lmda<do_g, do_dl2, do_gdl, ETYP, 1>(r, REAL_RECIP(r + ebuffer), 1, ichg, kchg, idq, kdq, f,
                      aewald, cut, off, del, d2el, e, de, dl1, dl2, dlde);
                else
                   pair_chg_v3<do_g, ETYP, 1>(r, 1, ichg, kchg, ebuffer, f, aewald, cut, off, e, de);
@@ -562,7 +559,7 @@ void echarge_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nec, EnergyBuf
                   demdltl += floatTo<ebuf_prec>(dl1);
                   if CONSTEXPR (do_dl2)
                      d2emdl2tl += floatTo<ebuf_prec>(dl2);
-                  if CONSTEXPR (do_fdl)
+                  if CONSTEXPR (do_gdl)
                      pair_dlforce<do_gdl, (do_vdl and not tile_local)>(dlde * invr, xr, yr, zr, dfix, dfiy, dfiz, dfkx,
                         dfky, dfkz, demvirdltlxx, demvirdltlyx, demvirdltlzx, demvirdltlyy, demvirdltlzy, demvirdltlzz);
                }
@@ -620,7 +617,7 @@ void echarge_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nec, EnergyBuf
                real e, de;
                MAYBE_UNUSED real dl1, dl2, dlde;
                if CONSTEXPR (do_dl1)
-                  pair_chg_lmda<do_g, do_dl2, do_fdl, ETYP, 1>(r, REAL_RECIP(r + ebuffer), 1, ichg, kchg, idq, kdq, f,
+                  pair_chg_lmda<do_g, do_dl2, do_gdl, ETYP, 1>(r, REAL_RECIP(r + ebuffer), 1, ichg, kchg, idq, kdq, f,
                      aewald, cut, off, del, d2el, e, de, dl1, dl2, dlde);
                else
                   pair_chg_v3<do_g, ETYP, 1>(r, 1, ichg, kchg, ebuffer, f, aewald, cut, off, e, de);
@@ -656,7 +653,7 @@ void echarge_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nec, EnergyBuf
                   demdltl += floatTo<ebuf_prec>(dl1);
                   if CONSTEXPR (do_dl2)
                      d2emdl2tl += floatTo<ebuf_prec>(dl2);
-                  if CONSTEXPR (do_fdl)
+                  if CONSTEXPR (do_gdl)
                      pair_dlforce<do_gdl, (do_vdl and not tile_local)>(dlde * invr, xr, yr, zr, dfix, dfiy, dfiz, dfkx,
                         dfky, dfkz, demvirdltlxx, demvirdltlyx, demvirdltlzx, demvirdltlyy, demvirdltlzy, demvirdltlzz);
                }

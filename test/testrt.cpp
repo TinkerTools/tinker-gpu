@@ -327,6 +327,36 @@ std::string testBaseName(const std::string& path)
    return path.substr(path.find_last_of('/') + 1);
 }
 
+void testRequireSharedLmdaBuffers()
+{
+   auto shared = [](EnergyBuffer term, EnergyBuffer total) { return term == nullptr or term == total; };
+   REQUIRE(shared(demdl_buf, dedl_buf));
+   REQUIRE(shared(depdl_buf, dedl_buf));
+   REQUIRE(shared(devdl_buf, dedl_buf));
+   REQUIRE(shared(d2emdl2_buf, d2edl2_buf));
+   REQUIRE(shared(d2epdl2_buf, d2edl2_buf));
+   REQUIRE(shared(d2evdl2_buf, d2edl2_buf));
+}
+
+void testRefusedFixture(
+   const char* dir, const char* name, const char* xyz, const char* prm, int flags, const char* what)
+{
+   TestLmdaFlagReset lmdaReset;
+
+   const std::string files = TINKER9_DIRSTR "/test/file/";
+   const std::string xyzname = testBaseName(xyz);
+   TestFile fxyz(files + xyz, xyzname);
+   std::string keyname = std::string(name) + ".key";
+   TestFile fkey(files + dir + "/" + keyname, keyname);
+   TestFile fprm(files + prm);
+
+   const char* argv[] = {"dummy", xyzname.c_str(), "-k", keyname.c_str()};
+   int argc = 4;
+   TestSession session(argc, argv);
+   rc_flag = flags;
+   REQUIRE_THROWS_WITH(session.init(), Catch::Matchers::ContainsSubstring(what));
+}
+
 TestSession::TestSession(int argc, const char** argv)
 {
    testBeginWithArgs(argc, argv);
@@ -468,6 +498,11 @@ void testLmdaCompare(const TestLmdaSnapshot& a, const TestLmdaSnapshot& b, doubl
       COMPARE_REALS(a.vir[k], b.vir[k], eps_v);
       COMPARE_REALS(a.dvirdl[k], b.dvirdl[k], eps_v);
    }
+   // a snapshot without the gradient would skip the comparison below
+   REQUIRE(a.g.size() > 0);
+   REQUIRE(a.g.size() == b.g.size());
+   REQUIRE(a.dfdl.size() == a.g.size());
+   REQUIRE(b.dfdl.size() == b.g.size());
    double dg = 0, ddl = 0;
    for (size_t k = 0; k < a.g.size(); ++k) {
       dg = std::max(dg, std::abs(a.g[k] - b.g[k]));

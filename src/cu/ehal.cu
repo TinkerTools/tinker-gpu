@@ -1,6 +1,7 @@
 #include "ff/dlmda.h"
 #include "ff/evdw.h"
 #include "ff/image.h"
+#include "ff/potent.h"
 #include "ff/spatial.h"
 #include "ff/switch.h"
 #include "math/switch.h"
@@ -71,40 +72,11 @@ void ehalResolveGradient_cu(const grad_prec* gxred, const grad_prec* gyred, cons
 }
 }
 
-/**
- * Overheads:
- *    - Different vcouple methods.
- *    - PBC type in image().
- *    - Random access to the "i" parameters and gradients.
- *    - (If not hard-coded) ghal, dhal, scexp.
- */
-
-/**
- * Kernel ehal_cu1 on GTX 1070 for DHFR2
- * 7 angstroms cutoff and 10 % buffer
- *
- * unsorted (a) | generic image (b) | decouple vlambda (c) | 1e-6 s
- * --------------------------------------------------------------------
- * -            | -                 | -                    | 342
- * +            | -                 | -                    | 348
- * +            | -                 | +                    | 366
- * +            | +                 | -                    | 373
- * +            | +                 | +                    | 382
- * --------------------------------------------------------------------
- * (a) - assuming sorted[i].unsorted == i, no random memory access for the "i"
- *     parameters and gradients; + the original code.
- * (b) - hard-coded orthogonal image routine; + generic image routine.
- * (c) - hard-coded decouple method; + generic vlambda method.
- */
-
 namespace tinker {
-#if 1
-#define GHAL    (real)0.12
-#define DHAL    (real)0.07
-#elif 0
-#define GHAL    ghal
-#define DHAL    dhal
-#endif
+// the default gamma and delta, folded into the arithmetic; the others are
+// refused (unsupportedData)
+#define GHAL (real)0.12
+#define DHAL (real)0.07
 #include "ehal_cu1.cc"
 
 template <class Ver>
@@ -122,7 +94,8 @@ static void ehal_cu3()
    // the complement of vlambda.
    const int* grp = emGroup();
    // The soft core terms, taken here once instead of per pair.
-   const SoftCoreLmda lp1 = halSoft(1, dodl), lp2 = halSoft(2, dodl);
+   SoftCoreLmda lp1, lp2;
+   grpSoftCores(halSoft, dodl, lp1, lp2);
 
    if CONSTEXPR (do_g) {
       darray::zero(g::q0, n, gxred, gyred, gzred);
@@ -130,10 +103,15 @@ static void ehal_cu3()
          darray::zero(g::q0, n, gxred_dlmda, gyred_dlmda, gzred_dlmda);
    }
 
+   // only a mutation, or the lambda derivatives, pay for the soft core
+   const bool mutated = use(Potent::MUTATE);
+
    int ngrid = gpuGridSize(BLOCK_DIM);
    boxShapeDispatch(box_shape, [&](auto img) {
       using IMG = decltype(img);
-      auto ker1 = ehal_cu1<Ver, IMG>;
+      auto ker1 = ehal_cu1<Ver, IMG, true>;
+      if (not mutated)
+         ker1 = ehal_cu1<Ver, IMG, softCoreUnmutated(Ver::value)>;
       ker1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(st.n, TINKER_IMAGE_ARGS, nev, ev, devdl_buf, d2evdl2_buf, vir_ev,
          dvirdl_buf, gxred, gyred, gzred, gxred_dlmda, gyred_dlmda, gzred_dlmda, cut, off, st.si1.bit0,
          nvexclude_scaled, vexclude, vexclude_scale, st.x, st.y, st.z, st.sorted, st.nakpl, st.iakpl, st.niak, st.iak,

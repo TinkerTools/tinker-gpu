@@ -63,15 +63,15 @@ void echgljData_cu(RcOp op)
 namespace tinker {
 // The soft cores and lambda derivatives of the fused kernel: the charge
 // derivatives of the atoms, null unless the charges take theirs, the van der
-// Waals pair class table (vdwMutclsTable), whether any electrostatic group is
-// dead and the groups that are live (elecDeadGroups), the Lennard-Jones soft
-// cores of the two ligands (ljSoft), whether the Lennard-Jones pairs take
-// their lambda derivatives, and the slope and curvature of elambda.
+// Waals pair class table (vdwMutclsTable), the electrostatic groups that are
+// live (elecLiveMask), every group present when none is dead, the
+// Lennard-Jones soft cores of the two ligands (ljSoft), whether the
+// Lennard-Jones pairs take their lambda derivatives, and the slope and
+// curvature of elambda.
 struct EchgljLmda
 {
    const real* dq;
    int mutcls;
-   bool dead;
    RdtMask live;
    SoftCoreLmda lp1, lp2;
    bool vdl;
@@ -106,7 +106,7 @@ inline bool echgljPairLmda(real r, real invr, real cscale, real vscale, int gi, 
    real evcut, real evoff, const EchgljLmda& lm, real& restrict ec, real& restrict dec, real& restrict ev,
    real& restrict dev, real& restrict dl1, real& restrict dl2, real& restrict dlde)
 {
-   const bool clive = not lm.dead or grpPairLive(lm.live, gi, gk);
+   const bool clive = grpPairLive(lm.live, gi, gk);
    const int mc = pair_mutcls(lm.mutcls, gi, gk);
    ec = 0, dec = 0, ev = 0, dev = 0, dl1 = 0, dl2 = 0, dlde = 0;
    if (clive)
@@ -193,13 +193,11 @@ static void echglj_cu3()
    if CONSTEXPR (SOFTCORE) {
       constexpr bool dodl = lmdaDodl(Ver::value);
       lm.mutcls = vdwMutclsTable();
-      lm.lp1 = ljSoft(1, dodl);
-      lm.lp2 = use_rel ? ljSoft(2, dodl) : lm.lp1;
+      grpSoftCores(ljSoft, dodl, lm.lp1, lm.lp2);
    }
    if CONSTEXPR (LMDA) {
       const LmdaFn el = elecChain();
       lm.dq = edlmdaActive() ? dq_coalesced : nullptr;
-      lm.dead = elecDeadGroups() != nullptr;
       lm.live = elecLiveMask();
       lm.vdl = vdlmdaActive();
       lm.del = el.d1;

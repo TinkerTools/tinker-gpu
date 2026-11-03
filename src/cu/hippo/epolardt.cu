@@ -14,7 +14,6 @@
 #include "seq/pairpolaraplus.h"
 #include "seq/triangle.h"
 #include "tool/error.h"
-#include <cassert>
 #include <tinker/detail/polpot.hh>
 
 namespace tinker {

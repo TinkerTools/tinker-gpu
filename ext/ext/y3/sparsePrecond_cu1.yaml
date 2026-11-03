@@ -1,8 +1,6 @@
 OUTPUT_DIR: src/cu/amoeba
 KERNEL_NAME: sparsePrecond_cu1
 TEMPLATE_PARAMS: template <class IMG>
-# the box shape as a template parameter, and the tiles near their centers
-# imaged once
 IMAGE_TEMPLATE: IMG
 LOCAL_TILES: true
 # CONSTEXPR_FLAGS:

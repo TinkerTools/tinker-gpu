@@ -6,8 +6,8 @@
 #include "ff/switch.h"
 #include "seq/add.h"
 #include "seq/pair_repel.h"
+#include "tool/error.h"
 #include "tool/gpucard.h"
-#include <cassert>
 
 namespace tinker {
 #define DEVICE_PTRS x, y, z, derx, dery, derz, rrepole, sizpr, dmppr, elepr, nrep, er, vir_er, trqx, trqy, trqz, mut
@@ -32,6 +32,9 @@ static void erepel_acc1()
    // OpenACC refuses every lambda mode, relative free energy included, so only
    // the soft core scaling of a single ligand is needed.
    const SoftCoreLmda rs = repelSoft(1, false);
+   // the class of a pair of groups (pair_mutcls), 0 or 1 without a relative
+   // calculation
+   const int mutcls = vdwMutclsTable();
 
    MAYBE_UNUSED int GRID_DIM = gpuGridSize(BLOCK_DIM);
    #pragma acc parallel async num_gangs(GRID_DIM) vector_length(BLOCK_DIM)\
@@ -79,7 +82,7 @@ static void erepel_acc1()
          if (r2 <= off2) {
             real e;
             zero(pgrad);
-            bool mutik = pair_mutik(vcouple, imut, kmut);
+            bool mutik = pair_mutcls(mutcls, imut, kmut) > 0;
             pair_repel<do_g>( //
                r2, 1, mutik, rs, cut, off, xr, yr, zr, sizi, dmpi, vali, ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz,
                qizz, sizk, dmpk, valk, rrepole[k][MPL_PME_0], rrepole[k][MPL_PME_X], rrepole[k][MPL_PME_Y],
@@ -170,7 +173,7 @@ static void erepel_acc1()
       real r2 = image2(xr, yr, zr);
       if (r2 <= off2 and rscale != 0) {
          real e;
-         bool mutik = pair_mutik(vcouple, imut, kmut);
+         bool mutik = pair_mutcls(mutcls, imut, kmut) > 0;
          pair_repel<do_g>( //
             r2, rscale, mutik, rs, cut, off, xr, yr, zr, sizi, dmpi, vali, ci, dix, diy, diz, qixx, qixy, qixz, qiyy,
             qiyz, qizz, sizk, dmpk, valk, rrepole[k][MPL_PME_0], rrepole[k][MPL_PME_X], rrepole[k][MPL_PME_Y],
@@ -215,8 +218,10 @@ static void erepel_acc1()
 
 void erepel_acc(int vers)
 {
-   assert(not(vers & calc::dlmda) && "Pauli repulsion lambda derivatives are CUDA only");
-   vers &= ~calc::dlmda;
+   // the lambda derivative versions are CUDA only, which dlmdaData2 refuses
+   // first, as in echarge_acc
+   if (vers & calc::dlmda)
+      TINKER_THROW(format("The OpenACC repulsion kernels do not take version %d.", vers));
    if (vers == calc::v0)
       erepel_acc1<calc::V0>();
    else if (vers == calc::v1)

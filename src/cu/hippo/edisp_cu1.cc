@@ -1,5 +1,5 @@
-// ck.py Version 3.1.0
-template <class Ver, class IMG, class DTYP, bool REL, bool DHAL>
+// ck.py Version 3.2.0
+template <class Ver, class IMG, class DTYP, bool SOFTCORE, bool DHAL>
 __global__
 void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer restrict ed,
    EnergyBuffer restrict dvdl, EnergyBuffer restrict d2vdl2, VirialBuffer restrict vd, VirialBuffer restrict dvvirdl,
@@ -9,7 +9,7 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
    const real* restrict y, const real* restrict z, const Spatial::SortedAtom* restrict sorted, int nakpl,
    const int* restrict iakpl, int niak, const int* restrict iak, const int* restrict lst,
    const Spatial::Center* restrict akc, const real* restrict csix, const real* restrict adisp, real aewald,
-   const int* restrict mutg, int mutcls, Vdw vcouple, DispSoft ds1, DispSoft ds2, DispHal dh)
+   const int* restrict mutg, int mutcls, DispSoft ds1, DispSoft ds2, DispHal dh)
 {
    constexpr bool do_a = Ver::a;
    constexpr bool do_e = Ver::e;
@@ -98,13 +98,15 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
       zi = z[i];
       ci = csix[i];
       ai = adisp[i];
-      imutg = mutg[i];
+      if CONSTEXPR (SOFTCORE)
+         imutg = mutg[i];
       xk = x[k];
       yk = y[k];
       zk = z[k];
       ck = csix[k];
       ak = adisp[k];
-      kmutg = mutg[k];
+      if CONSTEXPR (SOFTCORE)
+         kmutg = mutg[k];
 
       constexpr bool incl = true;
       constexpr bool tile_local = false;
@@ -112,16 +114,17 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
       real yr = yi - yk;
       real zr = zi - zk;
       real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
-      // REL: the class of a pair of ligand groups, the two ligands never
-      // interacting; otherwise whether the pair is mutated, as plain runs need
-      int mc = REL ? pair_mutcls(mutcls, imutg, kmutg) : int(pair_mutik(vcouple, imutg, kmutg));
+      // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+      // relative calculation never interacting; without SOFTCORE no atom follows
+      // lambda
+      int mc = SOFTCORE ? pair_mutcls(mutcls, imutg, kmutg) : 0;
       if (r2 <= off * off and incl and mc >= 0) {
          real r = REAL_SQRT(r2);
          // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
          real rr1 = REAL_RSQRT_V2(r2);
          real e, de, dle, dle2, dlde;
          pair_disp<do_g, DTYP, 0, do_dl1, do_dl2, do_gdl, DHAL>(r, r2, rr1, scalea, aewald, ci, ai, ck, ak, mc, ds1,
-            (REL ? ds2 : ds1), cut, off, dh, e, de, dle, dle2, dlde);
+            ds2, cut, off, dh, e, de, dle, dle2, dlde);
          if CONSTEXPR (do_e) {
             edtl += floatTo<ebuf_prec>(e);
             // a pair counts if its damped pair, which the tail of a hal vdW weights
@@ -215,13 +218,15 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
       zi = sorted[atomi].z;
       ci = csix[i];
       ai = adisp[i];
-      imutg = mutg[i];
+      if CONSTEXPR (SOFTCORE)
+         imutg = mutg[i];
       xk = sorted[atomk].x;
       yk = sorted[atomk].y;
       zk = sorted[atomk].z;
       ck = csix[k];
       ak = adisp[k];
-      kmutg = mutg[k];
+      if CONSTEXPR (SOFTCORE)
+         kmutg = mutg[k];
 
       unsigned int dinfo0 = dinfo[iw * WARP_SIZE + ilane];
       real xc = akc[ty].x;
@@ -254,16 +259,17 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
             real yr = yi - yk;
             real zr = zi - zk;
             real r2 = (xr * xr + yr * yr + zr * zr);
-            // REL: the class of a pair of ligand groups, the two ligands never
-            // interacting; otherwise whether the pair is mutated, as plain runs need
-            int mc = REL ? pair_mutcls(mutcls, imutg, kmutg) : int(pair_mutik(vcouple, imutg, kmutg));
+            // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+            // relative calculation never interacting; without SOFTCORE no atom follows
+            // lambda
+            int mc = SOFTCORE ? pair_mutcls(mutcls, imutg, kmutg) : 0;
             if (r2 <= off * off and incl and mc >= 0) {
                real r = REAL_SQRT(r2);
                // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
                real rr1 = REAL_RSQRT_V2(r2);
                real e, de, dle, dle2, dlde;
                pair_disp<do_g, DTYP, 1, do_dl1, do_dl2, do_gdl, DHAL>(r, r2, rr1, 1, aewald, ci, ai, ck, ak, mc, ds1,
-                  (REL ? ds2 : ds1), cut, off, dh, e, de, dle, dle2, dlde);
+                  ds2, cut, off, dh, e, de, dle, dle2, dlde);
                if CONSTEXPR (do_e) {
                   edtl += floatTo<ebuf_prec>(e);
                   if CONSTEXPR (do_a) {
@@ -309,7 +315,8 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
             zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
             ci = __shfl_sync(ALL_LANES, ci, ilane + 1);
             ai = __shfl_sync(ALL_LANES, ai, ilane + 1);
-            imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
+            if CONSTEXPR (SOFTCORE)
+               imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
             if CONSTEXPR (do_g) {
                gxi = __shfl_sync(ALL_LANES, gxi, ilane + 1);
                gyi = __shfl_sync(ALL_LANES, gyi, ilane + 1);
@@ -349,16 +356,17 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
             real yr = yi - yk;
             real zr = zi - zk;
             real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
-            // REL: the class of a pair of ligand groups, the two ligands never
-            // interacting; otherwise whether the pair is mutated, as plain runs need
-            int mc = REL ? pair_mutcls(mutcls, imutg, kmutg) : int(pair_mutik(vcouple, imutg, kmutg));
+            // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+            // relative calculation never interacting; without SOFTCORE no atom follows
+            // lambda
+            int mc = SOFTCORE ? pair_mutcls(mutcls, imutg, kmutg) : 0;
             if (r2 <= off * off and incl and mc >= 0) {
                real r = REAL_SQRT(r2);
                // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
                real rr1 = REAL_RSQRT_V2(r2);
                real e, de, dle, dle2, dlde;
                pair_disp<do_g, DTYP, 1, do_dl1, do_dl2, do_gdl, DHAL>(r, r2, rr1, 1, aewald, ci, ai, ck, ak, mc, ds1,
-                  (REL ? ds2 : ds1), cut, off, dh, e, de, dle, dle2, dlde);
+                  ds2, cut, off, dh, e, de, dle, dle2, dlde);
                if CONSTEXPR (do_e) {
                   edtl += floatTo<ebuf_prec>(e);
                   if CONSTEXPR (do_a) {
@@ -404,7 +412,8 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
             zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
             ci = __shfl_sync(ALL_LANES, ci, ilane + 1);
             ai = __shfl_sync(ALL_LANES, ai, ilane + 1);
-            imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
+            if CONSTEXPR (SOFTCORE)
+               imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
             if CONSTEXPR (do_g) {
                gxi = __shfl_sync(ALL_LANES, gxi, ilane + 1);
                gyi = __shfl_sync(ALL_LANES, gyi, ilane + 1);
@@ -463,13 +472,15 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
       zi = sorted[atomi].z;
       ci = csix[i];
       ai = adisp[i];
-      imutg = mutg[i];
+      if CONSTEXPR (SOFTCORE)
+         imutg = mutg[i];
       xk = sorted[atomk].x;
       yk = sorted[atomk].y;
       zk = sorted[atomk].z;
       ck = csix[k];
       ak = adisp[k];
-      kmutg = mutg[k];
+      if CONSTEXPR (SOFTCORE)
+         kmutg = mutg[k];
 
       real xc = akc[ty].x;
       real yc = akc[ty].y;
@@ -498,16 +509,17 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
             real yr = yi - yk;
             real zr = zi - zk;
             real r2 = (xr * xr + yr * yr + zr * zr);
-            // REL: the class of a pair of ligand groups, the two ligands never
-            // interacting; otherwise whether the pair is mutated, as plain runs need
-            int mc = REL ? pair_mutcls(mutcls, imutg, kmutg) : int(pair_mutik(vcouple, imutg, kmutg));
+            // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+            // relative calculation never interacting; without SOFTCORE no atom follows
+            // lambda
+            int mc = SOFTCORE ? pair_mutcls(mutcls, imutg, kmutg) : 0;
             if (r2 <= off * off and incl and mc >= 0) {
                real r = REAL_SQRT(r2);
                // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
                real rr1 = REAL_RSQRT_V2(r2);
                real e, de, dle, dle2, dlde;
                pair_disp<do_g, DTYP, 1, do_dl1, do_dl2, do_gdl, DHAL>(r, r2, rr1, 1, aewald, ci, ai, ck, ak, mc, ds1,
-                  (REL ? ds2 : ds1), cut, off, dh, e, de, dle, dle2, dlde);
+                  ds2, cut, off, dh, e, de, dle, dle2, dlde);
                if CONSTEXPR (do_e) {
                   edtl += floatTo<ebuf_prec>(e);
                   if CONSTEXPR (do_a) {
@@ -552,7 +564,8 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
             zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
             ci = __shfl_sync(ALL_LANES, ci, ilane + 1);
             ai = __shfl_sync(ALL_LANES, ai, ilane + 1);
-            imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
+            if CONSTEXPR (SOFTCORE)
+               imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
             if CONSTEXPR (do_g) {
                gxi = __shfl_sync(ALL_LANES, gxi, ilane + 1);
                gyi = __shfl_sync(ALL_LANES, gyi, ilane + 1);
@@ -589,16 +602,17 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
             real yr = yi - yk;
             real zr = zi - zk;
             real r2 = IMG::img2(xr, yr, zr, TINKER_IMAGE_ARGS);
-            // REL: the class of a pair of ligand groups, the two ligands never
-            // interacting; otherwise whether the pair is mutated, as plain runs need
-            int mc = REL ? pair_mutcls(mutcls, imutg, kmutg) : int(pair_mutik(vcouple, imutg, kmutg));
+            // the class of a pair of ligand groups (pair_mutcls), the two ligands of a
+            // relative calculation never interacting; without SOFTCORE no atom follows
+            // lambda
+            int mc = SOFTCORE ? pair_mutcls(mutcls, imutg, kmutg) : 0;
             if (r2 <= off * off and incl and mc >= 0) {
                real r = REAL_SQRT(r2);
                // the same rsqrt in every kernel version (see REAL_RSQRT_V2)
                real rr1 = REAL_RSQRT_V2(r2);
                real e, de, dle, dle2, dlde;
                pair_disp<do_g, DTYP, 1, do_dl1, do_dl2, do_gdl, DHAL>(r, r2, rr1, 1, aewald, ci, ai, ck, ak, mc, ds1,
-                  (REL ? ds2 : ds1), cut, off, dh, e, de, dle, dle2, dlde);
+                  ds2, cut, off, dh, e, de, dle, dle2, dlde);
                if CONSTEXPR (do_e) {
                   edtl += floatTo<ebuf_prec>(e);
                   if CONSTEXPR (do_a) {
@@ -643,7 +657,8 @@ void edisp_cu1(int n, TINKER_IMAGE_PARAMS, CountBuffer restrict nd, EnergyBuffer
             zi = __shfl_sync(ALL_LANES, zi, ilane + 1);
             ci = __shfl_sync(ALL_LANES, ci, ilane + 1);
             ai = __shfl_sync(ALL_LANES, ai, ilane + 1);
-            imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
+            if CONSTEXPR (SOFTCORE)
+               imutg = __shfl_sync(ALL_LANES, imutg, ilane + 1);
             if CONSTEXPR (do_g) {
                gxi = __shfl_sync(ALL_LANES, gxi, ilane + 1);
                gyi = __shfl_sync(ALL_LANES, gyi, ilane + 1);

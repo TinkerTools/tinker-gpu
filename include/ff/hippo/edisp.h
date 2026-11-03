@@ -62,7 +62,7 @@ struct DispSlots
 //====================================================================//
 
 namespace tinker {
-TINKER_EXTERN real csixpr;
+TINKER_EXTERN double csixpr;
 TINKER_EXTERN real* csix;
 TINKER_EXTERN real* adisp;
 

@@ -6,6 +6,7 @@
 #include "seq/add.h"
 #include "seq/pair_hal.h"
 #include "seq/pair_vlambda.h"
+#include "tool/error.h"
 #include "tool/gpucard.h"
 
 namespace tinker {
@@ -69,6 +70,9 @@ static void ehal_acc1()
    const SoftCoreLmda lpm = halSoft(1, false);
    const real vlamexp = lpm.p0;
    const real vlamsc = lpm.sc;
+   // the class of a pair of groups (pair_mutcls), 0 or 1 without a relative
+   // calculation
+   const int mutcls = vdwMutclsTable();
 
    auto bufsize = bufferSize();
 
@@ -99,7 +103,7 @@ static void ehal_acc1()
          real zr = zi - zred[k];
          int mut2 = mut[k];
 
-         bool mutik = pair_mutik(vcouple, mut1, mut2);
+         bool mutik = pair_mutcls(mutcls, mut1, mut2) > 0;
          SoftCoreLmda lp = {1, 0, 0, 0, 0, 0, 0};
          if (mutik)
             lp = {vlamexp, vlamsc, 0, 0, 0, 0, 0};
@@ -178,7 +182,7 @@ static void ehal_acc1()
       real zr = zi - zred[k];
       int mut2 = mut[k];
 
-      bool mutik = pair_mutik(vcouple, mut1, mut2);
+      bool mutik = pair_mutcls(mutcls, mut1, mut2) > 0;
       SoftCoreLmda lp = {1, 0, 0, 0, 0, 0, 0};
       if (mutik)
          lp = {vlamexp, vlamsc, 0, 0, 0, 0, 0};
@@ -257,5 +261,8 @@ void ehal_acc(int vers)
       ehal_acc1<calc::V5>();
    else if (vers == calc::v6)
       ehal_acc1<calc::V6>();
+   else
+      // CUDA only, which dlmdaData2 refuses first, as in echarge_acc
+      TINKER_THROW(format("The OpenACC buffered 14-7 kernels do not take version %d.", vers));
 }
 }

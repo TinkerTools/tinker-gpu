@@ -180,6 +180,7 @@ struct calc
       static_assert(e_dlmda2 ? (bool)e : true, "If calc::energy_dlmda2, must calc::energy.");
       static_assert(g_dlmda ? (bool)g : true, "If calc::grad_dlmda, must calc::grad.");
       static_assert(v_dlmda ? (bool)g : true, "If calc::virial_dlmda, must calc::grad.");
+      static_assert(v_dlmda ? (bool)g_dlmda : true, "If calc::virial_dlmda, must calc::grad_dlmda.");
    };
 };
 }
