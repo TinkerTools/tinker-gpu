@@ -213,8 +213,13 @@ void mdPropagate(int nsteps, time_prec dt_ps)
          lmdaWinStep(istep);
    }
    mdsaveSynchronize();
-   if (!output::dynsave)
-      tinker_f_prtdyn();
+
+   // save the restart file at the end if it was not saved during the run, or
+   // if the last step was not a save step but the adaptive bias history saved
+   // at the end holds it (dynamic.f)
+   const bool bias = use_ost or use_meta or use_abf;
+   if (!output::dynsave or (bias and nsteps % inform::iwrite != 0))
+      mdsaveFinalDyn();
 }
 
 const TimeScaleConfig& respaTSConfig()

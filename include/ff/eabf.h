@@ -30,6 +30,7 @@ void buildAbfKernel();
 void resizeAbfHist();
 
 /// Copies the ABF history and lambda particle state that initabffile set up,
-/// including a continued history, back from the Fortran modules.
+/// including a continued history, back from the Fortran modules; eabfData calls
+/// it for a continued history.
 void abfFromFortran();
 }

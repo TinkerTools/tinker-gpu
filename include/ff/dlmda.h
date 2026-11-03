@@ -406,11 +406,19 @@ void lmdaWinDyn(int istep);
 /// an accepted move replaces with the energy at the new lambda; a rejected
 /// move leaves the step as it was. \c istep is the step elmdaDyn was given.
 void lmdaMonte(int istep);
-/// Stops a dynamics run that would move an adaptively biased lambda by Monte
-/// Carlo trials with no thermostat, as the moves are accepted at a set
-/// temperature. For the dynamic program, once the ensemble is known and before
-/// the system is set up, so it reads the Fortran flags (dynamic.f).
-void lmdaMonteCheck();
+/// Stops OST, metadynamics or ABF dynamics that has no thermostat or runs at
+/// 0 K, as the bias, the lambda particle and Monte Carlo lambda moves work at a
+/// set temperature, which the OST and metadynamics histories store. For the
+/// dynamic program, once the ensemble is known and before the system is set up,
+/// so it reads the Fortran flags (dynamic.f).
+void lmdaDynCheck();
+/// Opens the adaptive bias history file of the dynamic program, continuing an
+/// existing one (eost.f:initostfile, initmetafile, eabf.f:initabffile), and
+/// copies the restored lambda particle, step count and flambda grid from the
+/// Fortran modules. Called before the system is set up, so that the initial
+/// forces are those at the restored lambda; eostData and eabfData then copy a
+/// continued history and rebuild the bias before those forces.
+void lmdaBiasOpen();
 /// Moves the main lambda to the next window in the schedule; past the final
 /// window further calls have no effect (dlambda.f:nextlmdawin).
 void nextLmdaWin();

@@ -14,6 +14,7 @@
 #include <string>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <utility>
 
 using namespace tinker;
 
@@ -924,4 +925,80 @@ TEST_CASE("TinkerNIST-END-FILE", "[ff][tinkerNIST]")
    for (std::string line; std::getline(arc, line);)
       ++nline;
    REQUIRE(nline == 32);
+}
+
+// A second OST run continues the bias history and the trajectory of the first
+// in place, and runs whose stored settings differ from the history or that
+// have no thermostat are refused and leave the history as it was. A run that
+// does not end on a save step writes its restart file at its last step, as
+// the history is. The refusals end the program, so it runs apart from this
+// one (test_eost.f:eostrstrun).
+TEST_CASE("TinkerNIST-LMDA-RESTART", "[ff][tinkerNIST]")
+{
+   const std::string files = TINKER9_DIRSTR "/test/file/";
+   TestFile fx(files + "mutate/water2.xyz", "lmdarst.xyz");
+   TestFile fp(files + "commit_6bd0b6fd/water03.prm");
+   TestFile fk("", "lmdarst.key",
+      "parameters water03\na-axis 18.643\nvdw-cutoff 7.0\newald\newald-cutoff 7.0\npolarization MUTUAL\n"
+      "polar-eps 0.00001\nvdw-annihilate\nvdw-softcore 0.2 5.0\nvalenceterm none\nligand -1 6\n"
+      "vdw-lmda-map exp\nvdw-lmda-exp 1\nele-lambda 0.0\npol-lambda 0.0\nlambda 0.5\nlambda-mode ost\n"
+      "lambda-interval 10\nintegrator verlet\nrandomseed 1\n");
+   TestRemoveFileOnExit farc("lmdarst.arc"), fdyn("lmdarst.dyn"), fost("lmdarst.ost"), fost2("lmdarst.ost_2"),
+      flog("lmdarst.log");
+
+   // runs of 1 fs steps, saved every 10, at the given step count and temperature
+   auto run = [](const char* args) {
+      const std::string cmd =
+         std::string(TINKER9_BINDIRSTR) + "/tinker9 dynamic lmdarst.xyz " + args + " > lmdarst.log 2>&1";
+      const int rc = std::system(cmd.c_str());
+      std::ifstream log("lmdarst.log");
+      std::string text((std::istreambuf_iterator<char>(log)), std::istreambuf_iterator<char>());
+      return std::make_pair(rc, text);
+   };
+   auto has = [](const std::string& text, const char* phrase) { return text.find(phrase) != std::string::npos; };
+   auto historyStep = []() {
+      std::ifstream f("lmdarst.ost");
+      std::string line;
+      for (int i = 0; i < 3; ++i)
+         std::getline(f, line);
+      return std::stoi(line);
+   };
+
+   auto r1 = run("20 1.0 0.01 2 300");
+   REQUIRE(WIFEXITED(r1.first));
+   REQUIRE(WEXITSTATUS(r1.first) == 0);
+   REQUIRE(has(r1.second, "Bias History Written To"));
+   REQUIRE(historyStep() == 20);
+
+   auto r2 = run("20 1.0 0.01 2 300");
+   REQUIRE(WIFEXITED(r2.first));
+   REQUIRE(WEXITSTATUS(r2.first) == 0);
+   REQUIRE(has(r2.second, "Bias History Continued From"));
+   REQUIRE(has(r2.second, "Restarting Molecular Dynamics"));
+   REQUIRE(historyStep() == 40);
+   std::ifstream ost2("lmdarst.ost_2");
+   REQUIRE(not ost2.good());
+
+   auto r3 = run("20 1.0 0.01 2 310");
+   REQUIRE(has(r3.second, "Setting Differs from the Bias History"));
+   auto r4 = run("20 1.0 0.01 1");
+   REQUIRE(has(r4.second, "a Constant Temperature Ensemble"));
+   REQUIRE(historyStep() == 40);
+
+   // a run shorter than the save interval saves nothing on the way, so the
+   // restart file is written at its last step, along with the history
+   fileExistsAndDelete("lmdarst.dyn");
+   auto r5 = run("5 1.0 0.01 2 300");
+   REQUIRE(WIFEXITED(r5.first));
+   REQUIRE(WEXITSTATUS(r5.first) == 0);
+   REQUIRE(std::ifstream("lmdarst.dyn").good());
+   REQUIRE(historyStep() == 45);
+
+   // the next run continues both, the history from its last full interval
+   auto r6 = run("20 1.0 0.01 2 300");
+   REQUIRE(WIFEXITED(r6.first));
+   REQUIRE(WEXITSTATUS(r6.first) == 0);
+   REQUIRE(has(r6.second, "Bias History Continued From"));
+   REQUIRE(has(r6.second, "Restarting Molecular Dynamics"));
+   REQUIRE(historyStep() == 60);
 }

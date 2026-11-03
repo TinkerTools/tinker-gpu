@@ -326,6 +326,66 @@ static bool mdsaveEndRequested()
    return std::ifstream(endfile).good();
 }
 
+// Copies the box, coordinates, velocities and accelerations of a frame on the
+// device to the Fortran modules that mdsave and prtdyn write.
+static void mdsaveCopyFrame(int q, const Box& box, const pos_prec* qx, const pos_prec* qy, const pos_prec* qz,
+   const vel_prec* qvx, const vel_prec* qvy, const vel_prec* qvz, const grad_prec* qgx, const grad_prec* qgy,
+   const grad_prec* qgz)
+{
+   boxSetTinker(box);
+   if (sizeof(pos_prec) == sizeof(double)) {
+      darray::copyout(q, n, atoms::x, qx);
+      darray::copyout(q, n, atoms::y, qy);
+      darray::copyout(q, n, atoms::z, qz);
+      waitFor(q);
+   } else {
+      std::vector<pos_prec> arrx(n), arry(n), arrz(n);
+      darray::copyout(q, n, arrx.data(), qx);
+      darray::copyout(q, n, arry.data(), qy);
+      darray::copyout(q, n, arrz.data(), qz);
+      waitFor(q);
+      for (int i = 0; i < n; ++i) {
+         atoms::x[i] = arrx[i];
+         atoms::y[i] = arry[i];
+         atoms::z[i] = arrz[i];
+      }
+   }
+
+   {
+      std::vector<vel_prec> arrx(n), arry(n), arrz(n);
+      darray::copyout(q, n, arrx.data(), qvx);
+      darray::copyout(q, n, arry.data(), qvy);
+      darray::copyout(q, n, arrz.data(), qvz);
+      waitFor(q);
+      for (int i = 0; i < n; ++i) {
+         int j = 3 * i;
+         moldyn::v[j] = arrx[i];
+         moldyn::v[j + 1] = arry[i];
+         moldyn::v[j + 2] = arrz[i];
+      }
+   }
+
+   {
+      std::vector<double> arrx(n), arry(n), arrz(n);
+      copyGradientSync(calc::grad, arrx.data(), arry.data(), arrz.data(), qgx, qgy, qgz, q);
+      // convert gradient to acceleration
+      const double ekcal = units::ekcal;
+      for (int i = 0; i < n; ++i) {
+         int j = 3 * i;
+         deriv::desum[j + 0] = arrx[i];
+         deriv::desum[j + 1] = arry[i];
+         deriv::desum[j + 2] = arrz[i];
+         double invmass = 1.0 / atomid::mass[i];
+         moldyn::a[j + 0] = -ekcal * arrx[i] * invmass;
+         moldyn::a[j + 1] = -ekcal * arry[i] * invmass;
+         moldyn::a[j + 2] = -ekcal * arrz[i] * invmass;
+         moldyn::aalt[j + 0] = 0;
+         moldyn::aalt[j + 1] = 0;
+         moldyn::aalt[j + 2] = 0;
+      }
+   }
+}
+
 static void mdsaveDupThenWrite(int istep, time_prec dt)
 {
 #if TINKER_CUDART
@@ -391,58 +451,8 @@ static void mdsaveDupThenWrite(int istep, time_prec dt)
    // get gpu buffer and write to external files
 
    energy_prec epot = dup_buf_esum;
-   boxSetTinker(dup_buf_box);
-   if (sizeof(pos_prec) == sizeof(double)) {
-      darray::copyout(g::q1, n, atoms::x, dup_buf_x);
-      darray::copyout(g::q1, n, atoms::y, dup_buf_y);
-      darray::copyout(g::q1, n, atoms::z, dup_buf_z);
-      waitFor(g::q1);
-   } else {
-      std::vector<pos_prec> arrx(n), arry(n), arrz(n);
-      darray::copyout(g::q1, n, arrx.data(), dup_buf_x);
-      darray::copyout(g::q1, n, arry.data(), dup_buf_y);
-      darray::copyout(g::q1, n, arrz.data(), dup_buf_z);
-      waitFor(g::q1);
-      for (int i = 0; i < n; ++i) {
-         atoms::x[i] = arrx[i];
-         atoms::y[i] = arry[i];
-         atoms::z[i] = arrz[i];
-      }
-   }
-
-   {
-      std::vector<vel_prec> arrx(n), arry(n), arrz(n);
-      darray::copyout(g::q1, n, arrx.data(), dup_buf_vx);
-      darray::copyout(g::q1, n, arry.data(), dup_buf_vy);
-      darray::copyout(g::q1, n, arrz.data(), dup_buf_vz);
-      waitFor(g::q1);
-      for (int i = 0; i < n; ++i) {
-         int j = 3 * i;
-         moldyn::v[j] = arrx[i];
-         moldyn::v[j + 1] = arry[i];
-         moldyn::v[j + 2] = arrz[i];
-      }
-   }
-
-   {
-      std::vector<double> arrx(n), arry(n), arrz(n);
-      copyGradientSync(calc::grad, arrx.data(), arry.data(), arrz.data(), dup_buf_gx, dup_buf_gy, dup_buf_gz, g::q1);
-      // convert gradient to acceleration
-      const double ekcal = units::ekcal;
-      for (int i = 0; i < n; ++i) {
-         int j = 3 * i;
-         deriv::desum[j + 0] = arrx[i];
-         deriv::desum[j + 1] = arry[i];
-         deriv::desum[j + 2] = arrz[i];
-         double invmass = 1.0 / atomid::mass[i];
-         moldyn::a[j + 0] = -ekcal * arrx[i] * invmass;
-         moldyn::a[j + 1] = -ekcal * arry[i] * invmass;
-         moldyn::a[j + 2] = -ekcal * arrz[i] * invmass;
-         moldyn::aalt[j + 0] = 0;
-         moldyn::aalt[j + 1] = 0;
-         moldyn::aalt[j + 2] = 0;
-      }
-   }
+   mdsaveCopyFrame(g::q1, dup_buf_box, dup_buf_x, dup_buf_y, dup_buf_z, dup_buf_vx, dup_buf_vy, dup_buf_vz,
+      dup_buf_gx, dup_buf_gy, dup_buf_gz);
 
    if (mdsaveUseUind()) {
       darray::copyout(g::q1, n, polar::uind, dup_buf_uind);
@@ -540,6 +550,17 @@ void mdsaveSynchronize()
 {
    if (fut_dup_then_write.valid())
       fut_dup_then_write.get();
+}
+
+void mdsaveFinalDyn()
+{
+   // the Fortran modules hold the frame of the last save, so copy the current
+   // one before the restart file is written
+   mdsaveSynchronize();
+   Box p;
+   boxGetCurrent(p);
+   mdsaveCopyFrame(g::q0, p, xpos, ypos, zpos, vx, vy, vz, gx, gy, gz);
+   tinker_f_prtdyn();
 }
 
 void mdsaveLmdaFinal(int istep)

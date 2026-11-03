@@ -24,6 +24,7 @@
 #include <tinker/detail/mplpot.hh>
 #include <tinker/detail/mutant.hh>
 #include <tinker/detail/units.hh>
+#include <tinker/routines.h>
 
 #include <algorithm>
 #include <cmath>
@@ -547,8 +548,9 @@ void dlmda_mech()
    dlmda::use_metadyn = use_meta;
    dlmda::use_abfdyn = use_abf;
 
-   // adaptive lambda bias state shared by OST and ABF; an ABF history that is
-   // continued brings its step count back later (abfFromFortran)
+   // adaptive lambda bias state shared by OST and ABF; a continued history
+   // puts back its step count and lambda particle in the Fortran modules, and
+   // lmdaBiasOpen copies them again
    lmdastep = dlmda::lmdastep;
    lmdaintv = dlmda::lmdaintv;
    lmdanpa = dlmda::lmdanpa;
@@ -1167,11 +1169,33 @@ void lmdaMonte(int istep)
       copyGradient(gx, gy, gz, gx_lmdamc, gy_lmdamc, gz_lmdamc);
 }
 
-void lmdaMonteCheck()
+void lmdaDynCheck()
 {
-   const bool bias = dlmda::use_ost or dlmda::use_meta or dlmda::use_abf;
-   if (dlmda::use_lmdamc and bias and not bath::isothermal)
-      TINKER_THROW("DYNAMIC  --  Monte Carlo Lambda Moves Require a Constant Temperature Ensemble");
+   // the adaptive lambda bias, its lambda particle and Monte Carlo lambda moves
+   // all work at a set temperature, which the ost and metadynamics histories
+   // store; unlike dynamic.f, the temperature prompt here accepts 0 K
+   const bool bias = dlmda::use_ostdyn or dlmda::use_metadyn or dlmda::use_abfdyn;
+   if (bias and (not bath::isothermal or bath::kelvin <= 0))
+      TINKER_THROW("DYNAMIC  --  Lambda Bias Dynamics Requires a Constant Temperature Ensemble");
+}
+
+void lmdaBiasOpen()
+{
+   // open the file holding the adaptive bias history, continuing an earlier one
+   if (dlmda::use_ostdyn)
+      tinker_f_initostfile();
+   if (dlmda::use_metadyn)
+      tinker_f_initmetafile();
+   if (dlmda::use_abfdyn)
+      tinker_f_initabffile();
+
+   // A continued history has put back the lambda particle, the step count and
+   // the flambda grid in the Fortran modules after mechanic2 copied them, so
+   // copy them again before the initial forces are computed.
+   if (dlmda::use_ostdyn or dlmda::use_metadyn or dlmda::use_abfdyn) {
+      dlmda_mech();
+      ost_mech();
+   }
 }
 
 void lmdaWinDyn(int istep)

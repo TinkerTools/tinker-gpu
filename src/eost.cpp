@@ -7,6 +7,7 @@
 #include "math/const.h"
 #include "tool/darray.h"
 #include <tinker/detail/bath.hh>
+#include <tinker/detail/dlmda.hh>
 #include <tinker/detail/ost.hh>
 #include <tinker/detail/units.hh>
 
@@ -701,6 +702,77 @@ void updateKernels()
       addKernelHist(nlmdahist, true);
 }
 
+// Copies the OST history that initostfile read back from the Fortran modules
+// and rebuilds the kernels. lmdaBiasOpen has already copied the lambda
+// particle, the step count and the flambda grid, so eostData sized the kernels
+// to that grid.
+static void ostFromFortran()
+{
+   sizelmdahist = dlmda::sizelmdahist;
+   nlmdahist = dlmda::nlmdahist;
+   osthist.assign(sizelmdahist + 1, 0);
+   lmdaihist.assign(sizelmdahist + 1, 0);
+   ostnext.assign(sizelmdahist + 1, 0);
+   lmdalhist.assign(sizelmdahist + 1, 0.0);
+   lmdafhist.assign(sizelmdahist + 1, 0.0);
+   osthhist.assign(sizelmdahist + 1, 0.0);
+   ostwlhist.assign(sizelmdahist + 1, 0.0);
+   ostwfhist.assign(sizelmdahist + 1, 0.0);
+   for (int k = 1; k <= nlmdahist; ++k) {
+      osthist[k] = ost::osthist[k - 1];
+      lmdaihist[k] = dlmda::lmdaihist[k - 1];
+      lmdalhist[k] = dlmda::lmdalhist[k - 1];
+      lmdafhist[k] = dlmda::lmdafhist[k - 1];
+      osthhist[k] = ost::osthhist[k - 1];
+      ostwlhist[k] = ost::ostwlhist[k - 1];
+      ostwfhist[k] = ost::ostwfhist[k - 1];
+   }
+   lmdallist.assign(lmdaintv, 0.0);
+   lmdaflist.assign(lmdaintv, 0.0);
+
+   // rebuild the lookup and the kernels from the saved gaussians, as
+   // rdosthist does
+   buildOstIndex();
+   if (fastkernel) {
+      buildKernels();
+   } else {
+      buildGkernel();
+      buildFkernel();
+   }
+   lmdadeltag = dlmda::lmdadeltag;
+}
+
+// Copies the metadynamics history that initmetafile read back from the Fortran
+// modules and rebuilds the grid. lmdaBiasOpen has already copied the lambda
+// particle and the step count.
+static void metaFromFortran()
+{
+   sizemetahist = ost::sizemetahist;
+   nmetahist = ost::nmetahist;
+   metalhist.assign(sizemetahist + 1, 0.0);
+   metahhist.assign(sizemetahist + 1, 0.0);
+   metawhist.assign(sizemetahist + 1, 0.0);
+   metaihist.assign(sizemetahist + 1, 0);
+   metanext.assign(sizemetahist + 1, 0);
+   for (int k = 1; k <= nmetahist; ++k) {
+      metalhist[k] = ost::metalhist[k - 1];
+      metahhist[k] = ost::metahhist[k - 1];
+      metawhist[k] = ost::metawhist[k - 1];
+      metaihist[k] = ost::metaihist[k - 1];
+   }
+   metahead.assign(nlmda + 1, 0);
+   lmdallist.assign(lmdaintv, 0.0);
+
+   // rebuild the lookup and the bias grid from the saved gaussians, as
+   // rdmetahist does
+   vmetagrid.assign(nlmda + 1, 0.0);
+   dvmetagrid.assign(nlmda + 1, 0.0);
+   buildMetaIndex();
+   for (int ihist = 1; ihist <= nmetahist; ++ihist)
+      addMetaGrid(ihist);
+   lmdadeltag = dlmda::lmdadeltag;
+}
+
 void eostData(RcOp op)
 {
    if (!(use_ost || use_meta))
@@ -780,6 +852,13 @@ void eostData(RcOp op)
          vmetagrid.assign(nlmda + 1, 0.0);
          dvmetagrid.assign(nlmda + 1, 0.0);
       }
+
+      // A history that the dynamic program continues is copied in here, so the
+      // bias is in place for the initial forces that mdData computes next.
+      if (use_ost and dlmda::nlmdahist > 0)
+         ostFromFortran();
+      if (use_meta and ost::nmetahist > 0)
+         metaFromFortran();
    }
 }
 

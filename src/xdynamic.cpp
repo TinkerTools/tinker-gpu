@@ -164,10 +164,14 @@ void xDynamic(int, char**)
       }
    }
 
-   // Monte Carlo lambda moves and water hops are accepted at a set temperature
+   // lambda bias dynamics and water hops work at a set temperature
 
-   lmdaMonteCheck();
+   lmdaDynCheck();
    waterMcCheck();
+
+   // open the file holding the adaptive bias history, continuing an earlier
+   // one before the initial forces are computed
+   lmdaBiasOpen();
 
    // perform the setup functions needed to run dynamics
 
@@ -182,16 +186,6 @@ void xDynamic(int, char**)
 
    rc_flag = flags;
    initialize();
-
-   // open the file holding the adaptive bias history
-   if (dlmda::use_ostdyn)
-      tinker_f_initostfile();
-   if (dlmda::use_metadyn)
-      tinker_f_initmetafile();
-   if (dlmda::use_abfdyn) {
-      tinker_f_initabffile();
-      abfFromFortran();
-   }
 
    // lay out the thermodynamic integration lambda windows
    if (use_ti)

@@ -24,6 +24,8 @@
 #include <tinker/detail/bath.hh>
 #include <tinker/detail/dlmda.hh>
 #include <tinker/detail/inform.hh>
+#include <tinker/detail/mutant.hh>
+#include <tinker/routines.h>
 
 #include <cmath>
 #include <cstring>
@@ -1059,15 +1061,24 @@ TEST_CASE("LMDAMC-predictor-phases", "[ff][lmdamc]")
 
 TEST_CASE("LMDAMC-thermostat", "[ff][lmdamc]")
 {
-   // Monte Carlo lambda moves are accepted at a set temperature, so a run
-   // without a thermostat is refused (dynamic.f).
+   // Lambda bias dynamics works at a set temperature, with Monte Carlo lambda
+   // moves or without, so a run without a thermostat or at zero temperature is
+   // refused (dynamic.f).
    Setup s(kIonwat, "abf", kRc);
    REQUIRE(dlmda::use_lmdamc);
-   REQUIRE_NOTHROW(lmdaMonteCheck());
+   REQUIRE_NOTHROW(lmdaDynCheck());
    bath::isothermal = 0;
-   REQUIRE_THROWS(lmdaMonteCheck());
+   REQUIRE_THROWS(lmdaDynCheck());
    dlmda::use_lmdamc = 0;
-   REQUIRE_NOTHROW(lmdaMonteCheck());
+   REQUIRE_THROWS(lmdaDynCheck());
+   bath::isothermal = 1;
+   bath::kelvin = 0;
+   REQUIRE_THROWS(lmdaDynCheck());
+   bath::kelvin = 298;
+   REQUIRE_NOTHROW(lmdaDynCheck());
+   dlmda::use_abfdyn = 0;
+   bath::isothermal = 0;
+   REQUIRE_NOTHROW(lmdaDynCheck());
    s.session.end();
 }
 
@@ -1188,6 +1199,80 @@ TEST_CASE("LMDAMC-stale-table", "[ff][lmdamc]")
       bath::voltrial = oldvoltrial;
       session.end();
    }
+}
+
+// A continued OST history puts back its lambda and its bias before the system
+// is set up, so the integrator starts from the forces at the restored lambda
+// with the bias of the history, rather than at the lambda of the key or with
+// no bias (xdynamic.cpp, lmdaBiasOpen, eostData).
+TEST_CASE("LMDAMC-restart-kickoff", "[ff][lmdamc]")
+{
+   BathReset bathReset;
+   TestLmdaFlagReset lmdaReset;
+   TestLmdaFlagGuard guard;
+   const std::string xyz = "ionwat.xyz", key = "ionwat.key";
+   TestFile fxyz(TINKER9_DIRSTR "/test/file/mutate/ionwat.xyz", xyz);
+   TestFile fkey(std::string(TINKER9_DIRSTR "/test/file/") + kIonwat, key, "\nlambda-mode ost\nintegrator verlet\n");
+   TestFile fprm(TINKER9_DIRSTR "/test/file/commit_ebe3611e/amoeba09.prm");
+   fileExistsAndDelete("ionwat.ost");
+   TestRemoveFileOnExit fost("ionwat.ost");
+   const char* argv[] = {"dummy", xyz.c_str(), "-k", key.c_str()};
+
+   // a history whose lambda particle sits at 0.3, away from the 0.5 of the
+   // key, and whose gaussian sits one width off the dU/dlambda of the
+   // structure, where the bias is steepest and so pushes on the atoms
+   {
+      TestSession session(4, argv);
+      bath::kelvin = 298.;
+      bath::isothermal = 1;
+      REQUIRE(mutant::lambda == 0.5);
+      mutant::lambda = 0.3;
+      dlmda::lmdatheta = std::asin(std::sqrt(0.3));
+      lmdaBiasOpen();
+      testMdInit(298.);
+      rc_flag = kMd;
+      session.init();
+      energy(calc::v4);
+      hbias = 5.0;
+      lmdaavg = lambda;
+      dedlavg = dedl + wfhist;
+      ostDeposit(10);
+      lmdastep = 10;
+      mdsaveLmdaFinal(10);
+      session.end();
+   }
+
+   // the dynamic program continues it before the initial forces
+   TestSession session(4, argv);
+   bath::kelvin = 298.;
+   bath::isothermal = 1;
+   lmdaBiasOpen();
+   REQUIRE(lambda == 0.3);
+   testMdInit(298.);
+   rc_flag = kMd;
+   session.init();
+   REQUIRE(lambda == 0.3);
+   COMPARE_INTS(nlmdahist, 1);
+   const auto g0 = gradient();
+
+   // the forces at the restored lambda with the bias, without it, and at the
+   // lambda of the key, from the energy and gradient call of a dynamics step,
+   // which includes the bias force
+   energy(calc::v4);
+   const auto g1 = gradient();
+   const double h1 = osthhist[1];
+   osthhist[1] = 0.0;
+   energy(calc::v4);
+   const auto g2 = gradient();
+   osthhist[1] = h1;
+   lambda = 0.5;
+   energy(calc::v4);
+   const auto g3 = gradient();
+   lambda = 0.3;
+   REQUIRE(maxDiff(g1, g2) > 1.0e-1);
+   REQUIRE(maxDiff(g0, g1) < 1.0e-3);
+   REQUIRE(maxDiff(g0, g3) > 1.0e-1);
+   session.end();
 }
 
 #endif

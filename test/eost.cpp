@@ -2,16 +2,23 @@
 #include "ff/eost.h"
 #include "ff/ost.h"
 #include "math/const.h"
+#include "md/misc.h"
 #include "test.h"
 #include "testrt.h"
+#include "tinker9.h"
+#include "tool/iofortstr.h"
 #include <tinker/detail/bath.hh>
 #include <tinker/detail/dlmda.hh>
+#include <tinker/detail/files.hh>
+#include <tinker/detail/mutant.hh>
 #include <tinker/detail/ost.hh>
 #include <tinker/detail/units.hh>
 #include <tinker/routines.h>
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -1819,4 +1826,230 @@ TEST_CASE("EOST-meta-matches-fortran", "[ff][eost]")
    }
    REQUIRE(metaDeltaG() != 0.0);
    REQUIRE(std::fabs(metaDeltaG() - tinker_f_metadeltag()) <= 1.0e-13);
+}
+
+namespace {
+// Starts the Fortran runtime for a case that writes a bias history file under
+// a temporary base name, and puts back the base name and the Fortran method
+// flags, removing the file, as the case leaves scope however it leaves.
+struct HistoryFileScope
+{
+   char savedname[240];
+   int savedleng;
+   std::string histfile;
+
+   explicit HistoryFileScope(const char* base)
+   {
+      const char* argv[] = {"dummy"};
+      tinkerFortranRuntimeBegin(1, (char**)argv);
+      initial();
+      std::memcpy(savedname, files::filename, 240);
+      savedleng = files::leng;
+      FstrView fname = files::filename;
+      fname = base;
+      files::leng = std::strlen(base);
+   }
+
+   ~HistoryFileScope()
+   {
+      try {
+         if (histfile.size()) {
+            fileExistsAndDelete(histfile);
+            fileExistsAndDelete(histfile + "_2");
+         }
+         std::memcpy(files::filename, savedname, 240);
+         files::leng = savedleng;
+         dlmda::use_ost = 0;
+         dlmda::use_ostdyn = 0;
+         dlmda::use_meta = 0;
+         dlmda::use_metadyn = 0;
+         dlmda::use_abf = 0;
+         dlmda::use_abfdyn = 0;
+         testEnd();
+      } catch (...) {
+      }
+   }
+};
+
+// the Fortran settings mutate.f would have read, stored in the history header
+void setBiasSettings()
+{
+   bath::kelvin = 300.0;
+   dlmda::nlmda = 5;
+   dlmda::wlmda = 0.25;
+   dlmda::wlmda2 = 0.125;
+   dlmda::lmdaintv = 10;
+   dlmda::lmdamass = 2.0;
+   dlmda::lmdafric = 0.5;
+   dlmda::lmdadt = 0.002;
+}
+
+// the lambda particle and step count of a run that has not started
+void setFreshParticle()
+{
+   dlmda::lmdastep = 0;
+   mutant::lambda = 0.5;
+   dlmda::lmdatheta = 0.0;
+   dlmda::lmdavtheta = 0.0;
+}
+
+// the number of records after the fixed-size header of a history file
+int historyRecords(const std::string& file)
+{
+   std::ifstream f(file);
+   int nline = 0;
+   for (std::string line; std::getline(f, line);)
+      ++nline;
+   return nline - 8;
+}
+}
+
+// A fresh run continues an OST history in place, restoring the gaussians, the
+// kernels, the flambda grid and the lambda particle on an interval boundary,
+// through the calls of the dynamic program (test_eost.f:test_eost_restart).
+TEST_CASE("EOST-restart", "[ff][eost]")
+{
+   HistoryFileScope scope("ostrst_tmp");
+   TestLmdaFlagGuard guard;
+
+   dlmda::use_ost = 1;
+   dlmda::use_ostdyn = 1;
+   setBiasSettings();
+   setFreshParticle();
+   tinker_f_mutate_ost();
+   lmdaBiasOpen();
+   scope.histfile = FstrView(dlmda::lmdasavefile).trim();
+   eostData(RcOp::INIT);
+   REQUIRE(nlmdahist == 0);
+
+   // a small history, saved partway into the next interval
+   sethist(1, 0.1, 1.0, 2.0, 0.1, 1.0);
+   sethist(2, 0.5, 2.0, 3.0, 0.1, 1.0);
+   sethist(3, 0.8, -1.0, 4.0, 0.1, 1.0);
+   for (int k = 1; k <= 3; ++k)
+      lmdaihist[k] = 10 * k;
+   nlmdahist = 3;
+   buildOstIndex();
+   buildKernels();
+   lmdadeltag = efreeTot();
+   const std::vector<double> gk0 = gkernel, fm0 = lmdafmean;
+   const double dg0 = lmdadeltag;
+   const int nflmda0 = nflmda, fli00 = fli0;
+   REQUIRE(*std::max_element(gk0.begin(), gk0.end()) > 0.0);
+   lmdastep = 37;
+   lambda = 0.4;
+   mutant::lambda = 0.4;
+   lmdatheta = 0.6;
+   lmdavtheta = 0.2;
+   mdsaveLmdaFinal(0);
+
+   // a fresh run, set up with another flambda grid, continues the file
+   setFreshParticle();
+   tinker_f_mutate_ost();
+   ost::nflmda = 1201;
+   ost::fli0 = (1201 + 1) / 2 + (1201 - 1) / 4;
+   lmdaBiasOpen();
+   REQUIRE(FstrView(dlmda::lmdasavefile).trim() == scope.histfile);
+   eostData(RcOp::INIT);
+   COMPARE_INTS(nlmdahist, 3);
+   COMPARE_INTS(dlmda::nlmdasave, 3);
+   COMPARE_INTS(lmdastep, 30);
+   COMPARE_INTS(nflmda, nflmda0);
+   COMPARE_INTS(fli0, fli00);
+   REQUIRE(lambda == 0.4);
+   REQUIRE(lmdatheta == 0.6);
+   REQUIRE(lmdavtheta == 0.2);
+   for (int k = 1; k <= 3; ++k)
+      COMPARE_INTS(lmdaihist[k], 10 * k);
+   REQUIRE(gkernel.size() == gk0.size());
+   double gdiff = 0.0;
+   for (size_t i = 0; i < gk0.size(); ++i)
+      gdiff = std::max(gdiff, std::fabs(gkernel[i] - gk0[i]));
+   REQUIRE(gdiff <= 1.0e-12);
+   for (int i = 1; i <= nlmda; ++i)
+      REQUIRE(std::fabs(lmdafmean[i] - fm0[i]) <= 1.0e-12);
+   REQUIRE(std::fabs(lmdadeltag - dg0) <= 1.0e-12);
+
+   // a new gaussian is appended to the same file
+   sethist(4, 0.3, 0.0, 1.0, 0.1, 1.0);
+   lmdaihist[4] = 40;
+   nlmdahist = 4;
+   mdsaveLmdaFinal(0);
+   REQUIRE(not fileExistsAndDelete(scope.histfile + "_2"));
+   COMPARE_INTS(historyRecords(scope.histfile), 4);
+}
+
+// A fresh run continues a metadynamics history in place, restoring the
+// gaussians, the bias grid and the lambda particle on an interval boundary
+// (test_eost.f:test_eost_metarestart).
+TEST_CASE("EOST-metarestart", "[ff][eost]")
+{
+   HistoryFileScope scope("metarst_tmp");
+   TestLmdaFlagGuard guard;
+
+   dlmda::use_meta = 1;
+   dlmda::use_metadyn = 1;
+   setBiasSettings();
+   setFreshParticle();
+   tinker_f_mutate_ost();
+   tinker_f_mutate_meta();
+   lmdaBiasOpen();
+   scope.histfile = FstrView(ost::metasavefile).trim();
+   eostData(RcOp::INIT);
+   REQUIRE(nmetahist == 0);
+
+   // a small history, saved partway into the next interval
+   const double lam[4] = {0.0, 0.1, 0.5, 0.8};
+   for (int k = 1; k <= 3; ++k) {
+      metaihist[k] = 10 * k;
+      metalhist[k] = lam[k];
+      metahhist[k] = (double)(k + 1);
+      metawhist[k] = 0.1;
+   }
+   nmetahist = 3;
+   maxwlhist = 0.1;
+   buildMetaIndex();
+   for (int k = 1; k <= nmetahist; ++k)
+      addMetaGrid(k);
+   lmdadeltag = metaDeltaG();
+   const std::vector<double> vg0 = vmetagrid, dvg0 = dvmetagrid;
+   const double dg0 = lmdadeltag;
+   REQUIRE(*std::max_element(vg0.begin(), vg0.end()) > 0.0);
+   lmdastep = 37;
+   lambda = 0.4;
+   mutant::lambda = 0.4;
+   lmdatheta = 0.6;
+   lmdavtheta = 0.2;
+   mdsaveLmdaFinal(0);
+
+   // a fresh run continues the file
+   setFreshParticle();
+   tinker_f_mutate_ost();
+   tinker_f_mutate_meta();
+   lmdaBiasOpen();
+   REQUIRE(FstrView(ost::metasavefile).trim() == scope.histfile);
+   eostData(RcOp::INIT);
+   COMPARE_INTS(nmetahist, 3);
+   COMPARE_INTS(ost::nmethistsave, 3);
+   COMPARE_INTS(lmdastep, 30);
+   REQUIRE(lambda == 0.4);
+   REQUIRE(lmdatheta == 0.6);
+   REQUIRE(lmdavtheta == 0.2);
+   for (int k = 1; k <= 3; ++k)
+      COMPARE_INTS(metaihist[k], 10 * k);
+   for (int i = 1; i <= nlmda; ++i) {
+      REQUIRE(std::fabs(vmetagrid[i] - vg0[i]) <= 1.0e-12);
+      REQUIRE(std::fabs(dvmetagrid[i] - dvg0[i]) <= 1.0e-12);
+   }
+   REQUIRE(std::fabs(lmdadeltag - dg0) <= 1.0e-12);
+
+   // a new gaussian is appended to the same file
+   metaihist[4] = 40;
+   metalhist[4] = 0.3;
+   metahhist[4] = 1.0;
+   metawhist[4] = 0.1;
+   nmetahist = 4;
+   mdsaveLmdaFinal(0);
+   REQUIRE(not fileExistsAndDelete(scope.histfile + "_2"));
+   COMPARE_INTS(historyRecords(scope.histfile), 4);
 }

@@ -190,13 +190,19 @@ void BasicIntegrator::dynamic(int istep, time_prec dt)
    m_baro->control2(dt);
 }
 
-void BasicIntegrator::refreshForces()
+// The versions of a force call between steps, which keep the energy under
+// lambda dynamics: the bias of OST adds its force only to an energy call.
+static int forceVers()
 {
-   // The versions of a step, which keep the energy under lambda dynamics: the
-   // bias of OST adds its force only to an energy call.
    int vers = (calc::grad | calc::virial) & rc_flag;
    if (use_dlmda)
       vers |= calc::energy & rc_flag;
+   return vers;
+}
+
+void BasicIntegrator::refreshForces()
+{
+   const int vers = forceVers();
    if (nrespa == 1) {
       energy(vers);
    } else {
@@ -231,7 +237,7 @@ VerletIntegrator::VerletIntegrator(ThermostatEnum te, BarostatEnum be)
 
 void VerletIntegrator::KickOff()
 {
-   energy((calc::grad | calc::virial) & rc_flag);
+   energy(forceVers());
 }
 }
 
@@ -254,15 +260,18 @@ RespaIntegrator::RespaIntegrator(ThermostatEnum te, BarostatEnum be)
 
 void RespaIntegrator::KickOff()
 {
+   const int vers = forceVers();
+   const int vg = vers & ~calc::virial;
+
    // save fast gradients to gx1 etc.
-   energy(calc::grad, RESPA_FAST, respaTSConfig());
+   energy(vg, RESPA_FAST, respaTSConfig());
    copyGradient(gx1, gy1, gz1, gx, gy, gz);
 
    // save slow gradients to gx2 etc.
-   energy(calc::grad, RESPA_SLOW, respaTSConfig());
+   energy(vg, RESPA_SLOW, respaTSConfig());
    copyGradient(gx2, gy2, gz2, gx, gy, gz);
 
-   energy((calc::grad | calc::virial) & rc_flag);
+   energy(vers);
 }
 }
 
@@ -439,7 +448,7 @@ void Nhc96Integrator::kickoff()
       gnh[i] = 0;
    }
    qnh[0] *= mdstuf::nfree;
-   energy(calc::grad | calc::virial);
+   energy(calc::grad | calc::virial | (forceVers() & calc::energy));
 }
 
 Nhc96Integrator::Nhc96Integrator()

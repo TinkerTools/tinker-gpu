@@ -37,6 +37,11 @@ void eabfData(RcOp op)
       lmdafmean.assign(nlmda + 1, 0.0);
       lmdafsum.assign(nlmda + 1, 0.0);
       lmdafwt.assign(nlmda + 1, 0.0);
+
+      // a history that the dynamic program continues is copied in here, as
+      // eostData does
+      if (dlmda::nlmdahist > 0)
+         abfFromFortran();
    }
 }
 
@@ -125,8 +130,9 @@ void abfFromFortran()
       lmdafwt[i] = dlmda::lmdafwt[i - 1];
    }
 
-   // energy() maps the sub-lambdas from the main lambda on every call, so the
-   // restored lambda takes effect at the first step.
+   // The dynamic program has already copied the lambda particle in
+   // lmdaBiasOpen, before the initial forces; energy() maps the sub-lambdas
+   // from the main lambda on every call.
    lmdadeltag = dlmda::lmdadeltag;
    lmdatheta = dlmda::lmdatheta;
    lmdavtheta = dlmda::lmdavtheta;
