@@ -721,9 +721,9 @@ void lmdaThetaInv(double lmda, double& theta)
    }
 }
 
-// BAOAB Langevin propagation of the auxiliary lambda particle in theta space,
-// where lambda follows the theta map lmdathmap; it draws the random kick and
-// has lmdaLangStep take the step (dlambda.f:lmdalangevin).
+// Langevin propagation of the auxiliary lambda particle in theta space, where
+// lambda follows the theta map lmdathmap; it draws the random kick and has
+// lmdaLangStep take the step (dlambda.f:lmdalangevin).
 void lmdaLangevin()
 {
    if (lmdadt <= 0.0)
@@ -742,26 +742,40 @@ void lmdaLangevin()
 // normal deviate gauss as its random kick. The force on theta is in kcal/mole,
 // so the mass is in kcal/mole*ps**2 and the size of the kick follows from the
 // thermal energy in kcal/mole (dlambda.f:lmdalangstep).
+//
+// With friction the step is the leapfrog middle scheme, a full force kick, a
+// half drift, the exact friction and noise update and a second half drift,
+// which samples a harmonic well in theta at the bath temperature for any
+// friction times the time step; above about two over the time step, larger
+// friction no longer slows the motion of theta. Without friction the step
+// reduces to plain leapfrog.
 void lmdaLangStep(double gauss)
 {
    // force on theta from dU/dlambda and the theta map derivative
    double lmda, dldth;
    lmdaThetaMap(lmdatheta, lmda, dldth);
    double force = -deffdl * dldth;
+
+   // kick the theta velocity with the force over the full step
+   lmdavtheta = lmdavtheta + lmdadt * force / lmdamass;
+
+   // drift theta around the exact friction and noise update of its velocity,
+   // or over the full step without friction
    double gamma = std::max(0.0, lmdafric);
    if (gamma > 0.0) {
       double c = std::exp(-gamma * lmdadt);
       double ktm = units::gasconst * bath::kelvin / lmdamass;
       double sigma = std::sqrt(ktm * (1.0 - c * c));
-      lmdavtheta = c * lmdavtheta + (1.0 - c) * force / (gamma * lmdamass) + sigma * gauss;
+      lmdatheta = lmdatheta + 0.5 * lmdadt * lmdavtheta;
+      lmdavtheta = c * lmdavtheta + sigma * gauss;
+      lmdatheta = lmdatheta + 0.5 * lmdadt * lmdavtheta;
    } else {
-      lmdavtheta = lmdavtheta + lmdadt * force / lmdamass;
+      lmdatheta = lmdatheta + lmdadt * lmdavtheta;
    }
 
-   // update theta and wrap it into the periodic interval [0,pi). The period is
-   // M_PI and not tinker::pi, which is only a float in a mixed precision build.
+   // wrap theta into the periodic interval [0,pi). The period is M_PI and not
+   // tinker::pi, which is only a float in a mixed precision build.
    constexpr double dpi = M_PI;
-   lmdatheta = lmdatheta + lmdadt * lmdavtheta;
    lmdatheta = lmdatheta - dpi * std::floor(lmdatheta / dpi);
    if (lmdatheta >= dpi)
       lmdatheta = 0.0;

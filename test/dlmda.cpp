@@ -1246,8 +1246,9 @@ TEST_CASE("DLMDA-theta-langevin-friction", "[ff][dlmda]")
       alpha * std::sin(2.0 * th0) / (asina * std::sqrt(1.0 - std::pow(alpha * std::cos(2.0 * th0), 2)));
    double decay = std::exp(-lmdafric * lmdadt);
    double sigma = std::sqrt(units::gasconst * bath::kelvin * (1.0 - decay * decay) / lmdamass);
-   double vref = decay * v0 - (1.0 - decay) * deffdl * dldth / (lmdafric * lmdamass) + sigma * gauss;
-   double thref = th0 + lmdadt * vref;
+   double vkick = v0 - lmdadt * deffdl * dldth / lmdamass;
+   double vref = decay * vkick + sigma * gauss;
+   double thref = th0 + 0.5 * lmdadt * vkick + 0.5 * lmdadt * vref;
    COMPARE_REALS(lmdavtheta, vref, 1.0e-14);
    COMPARE_REALS(lmdatheta, thref, 1.0e-14);
 
@@ -1258,6 +1259,66 @@ TEST_CASE("DLMDA-theta-langevin-friction", "[ff][dlmda]")
    lmdavtheta = 0.0;
    lmdaLangStep(1.0);
    COMPARE_REALS(lmdamass * lmdavtheta * lmdavtheta / (1.0 - decay * decay), 0.59616127758, 1.0e-12);
+}
+
+TEST_CASE("DLMDA-theta-langevin-sampling", "[ff][dlmda]")
+{
+   // A step with friction samples a harmonic well in theta at the bath
+   // temperature for small and large friction times the time step. The step is
+   // linear in the well, so the stationary covariance of theta and its velocity
+   // follows exactly from the step matrix (test_eostmap.f:test_eostmap_lfmid).
+   ThetaScope scope;
+
+   // a well centered where the sine squared map has unit slope and as stiff as
+   // omega times the time step equal to one
+   bath::kelvin = 300.0;
+   lmdathmap = LmdaThMap::SIN;
+   lmdadt = 0.01;
+   lmdamass = 2.0;
+   const double kspr = lmdamass / (lmdadt * lmdadt);
+   const double kt = units::gasconst * bath::kelvin;
+   const double th0 = 0.25 * dpi, h = 0.01;
+
+   // one step from theta offset d and velocity v with kick g, the effective
+   // lambda derivative giving a force -kspr*d on theta
+   auto step = [&](double d, double v, double g, double& dout, double& vout) {
+      double lmda, dldth;
+      lmdatheta = th0 + d;
+      lmdavtheta = v;
+      lmdaThetaMap(lmdatheta, lmda, dldth);
+      deffdl = kspr * d / dldth;
+      lmdaLangStep(g);
+      dout = lmdatheta - th0;
+      vout = lmdavtheta;
+   };
+
+   for (double gdt : {0.5, 5.0, 20.0}) {
+      lmdafric = gdt / lmdadt;
+
+      // unit theta offset, velocity and kick give the step matrix and the kick
+      // vector
+      double q1, q2;
+      step(h, 0.0, 0.0, q1, q2);
+      const double a11 = q1 / h, a21 = q2 / h;
+      step(0.0, h, 0.0, q1, q2);
+      const double a12 = q1 / h, a22 = q2 / h;
+      step(0.0, 0.0, h, q1, q2);
+      const double b1 = q1 / h, b2 = q2 / h;
+
+      // iterate the covariance under unit normal kicks to its stationary value
+      double pdd = 0.0, pdv = 0.0, pvv = 0.0;
+      for (int i = 0; i < 2000; ++i) {
+         double cdd = a11 * a11 * pdd + 2.0 * a11 * a12 * pdv + a12 * a12 * pvv + b1 * b1;
+         double cdv = a11 * a21 * pdd + (a11 * a22 + a12 * a21) * pdv + a12 * a22 * pvv + b1 * b2;
+         double cvv = a21 * a21 * pdd + 2.0 * a21 * a22 * pdv + a22 * a22 * pvv + b2 * b2;
+         pdd = cdd;
+         pdv = cdv;
+         pvv = cvv;
+      }
+      CAPTURE(gdt);
+      COMPARE_REALS(kspr * pdd / kt, 1.0, 1.0e-8);
+      COMPARE_REALS(lmdamass * pvv / kt, 1.0, 1.0e-8);
+   }
 }
 
 TEST_CASE("DLMDA-theta-langevin-wrap", "[ff][dlmda]")
