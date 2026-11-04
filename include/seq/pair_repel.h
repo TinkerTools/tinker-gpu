@@ -84,7 +84,8 @@ void pair_repel(real r2,
 
    real cut2 = cut * cut;
    real r = REAL_SQRT(r2);
-   real rInv = REAL_RECIP(r);
+   // one inverse root for every kernel version (see REAL_RSQRT_V2)
+   real rInv = REAL_RSQRT_V2(r2);
    real rr2 = rInv * rInv;
    real rr1 = rInv;
    real rr3 = rr1 * rr2;
@@ -147,7 +148,7 @@ void pair_repel(real r2,
    real e0 = e;
    real soft = 1, dsoft = 0, dsdl = 0, d2sdl2 = 0, d2sdldr = 0;
    if (mutik) {
-      real q = REAL_RSQRT(rs.sc + r2);
+      real q = REAL_RSQRT_V2(rs.sc + r2);
       real q2 = q * q;
       real q3 = q2 * q;
       soft = rs.p0 * r * q;
