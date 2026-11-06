@@ -208,9 +208,9 @@ static void torque_acc1(VirialBuffer gpu_vir, grad_prec* gx, grad_prec* gy, grad
          real urcos = torqueDot(u, r);
          real ursin1 = REAL_RSQRT(1 - urcos * urcos);
          real vscos = torqueDot(v, s);
-         real vssin = REAL_SQRT(1 - vscos * vscos);
+         real vssin = REAL_SQRT(REAL_MAX((real)0, 1 - vscos * vscos));
          real wscos = torqueDot(w, s);
-         real wssin = REAL_SQRT(1 - wscos * wscos);
+         real wssin = REAL_SQRT(REAL_MAX((real)0, 1 - wscos * wscos));
 
          // compute the projection of v and w onto the ru-plane
          real t1siz1;
@@ -228,9 +228,9 @@ static void torque_acc1(VirialBuffer gpu_vir, grad_prec* gx, grad_prec* gy, grad
          torqueNormal(t2, t2siz1);
 
          real ut1cos = torqueDot(u, t1);
-         real ut1sin = REAL_SQRT(1 - ut1cos * ut1cos);
+         real ut1sin = REAL_SQRT(REAL_MAX((real)0, 1 - ut1cos * ut1cos));
          real ut2cos = torqueDot(u, t2);
-         real ut2sin = REAL_SQRT(1 - ut2cos * ut2cos);
+         real ut2sin = REAL_SQRT(REAL_MAX((real)0, 1 - ut2cos * ut2cos));
          real _1_ut1sin_ut2sin = REAL_RECIP(ut1sin + ut2sin);
 
          // negative of dot product of torque with unit vectors gives result of
