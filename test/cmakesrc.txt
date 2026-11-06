@@ -33,6 +33,7 @@ lmdamc.cpp
 localframe.cpp
 localframe2.cpp
 localframe3.cpp
+localframe4.cpp
 localtiles.cpp
 main.cpp
 matexp.cpp
