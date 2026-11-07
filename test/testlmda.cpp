@@ -34,6 +34,10 @@ struct Fixture
    /// steep staged map squares its slope into d2E/dL2, and large terms that
    /// cancel leave it 1e-3 to 2e-3 off there; a double build reproduces it.
    double d2tol = 1.0e-3;
+   /// Finite difference stepsize of the numerical second derivative, when it
+   /// differs from \c eps: a staged map whose dE/dL needs a small step can
+   /// leave d2E/dL2 to mixed precision round-off there.
+   double eps2 = 0;
 };
 
 const Fixture kFixtures[] = {
@@ -259,6 +263,22 @@ const Fixture kFixtures[] = {
    {"165_tip3_rels3_l015", 6.0e-3, 4.0, 1.0e-4, "testlmda/tip3box.xyz", "commit_350df099/amber99sb.prm", 3.0e-3},
    {"166_tip3_rels3_lights_l085", 6.0e-3, 4.0, 1.0e-4, "testlmda/tip3box.xyz", "commit_350df099/amber99sb.prm", 3.0e-3},
    {"167_trp_chg_ewald_l05", 1.0e-2, 1.0, 1.0e-4, "trpcage/trp_charmm.xyz", "commit_11e84c69/charmm19.prm"},
+   // the AMOEBA water box in its truncated octahedron, both ligands near a
+   // hexagonal face (test_testlmda.f cases 168 to 173)
+   {"168_octwat_pol_ewald_st_l05", 1.0e-2, 1.0, 1.0e-4, "trunc8/octwater.xyz", "commit_6fe8e913/water03.prm"},
+   // the 777 atom box leaves the mixed precision finite difference d2E/dL2
+   // +3.5 off at a step of 4e-3, +0.75 at 1e-2 and +0.22 +/- 0.03 at 2e-2,
+   // where the gentle maps keep truncation under 0.06 (0.007 here, 0.06 in 172)
+   {"169_octwat_all_vcorr_nlist_dt_l04", 2.0e-2, 2.0, 1.0e-4, "trunc8/octwater.xyz", "commit_6fe8e913/water03.prm"},
+   // mid-way through the 0.3 wide quintic ligand legs a step of 4e-3 leaves 0.08
+   // of truncation in dE/dL and 0.14 in dF/dL, but mixed precision round-off
+   // takes d2E/dL2 3 to 4 off there; at 2e-2 it is 0.2 off and the double
+   // precision truncation of d2E/dL2 is 0.03, so it takes that step
+   {"170_octwat_rels3_l085", 4.0e-3, 3.0, 1.0e-4, "trunc8/octwater.xyz", "commit_6fe8e913/water03.prm", 1.0e-3, 2.0e-2},
+   {"171_octwat_rels3_l015", 4.0e-3, 3.0, 1.0e-4, "trunc8/octwater.xyz", "commit_6fe8e913/water03.prm", 1.0e-3, 2.0e-2},
+   {"172_octwat_rels_vdwm_vcorr_nlist_l05", 2.0e-2, 2.0, 1.0e-4, "trunc8/octwater.xyz",
+      "commit_6fe8e913/water03.prm"},
+   {"173_octwat_rels_lig1_st_l085", 4.0e-3, 3.0, 1.0e-4, "trunc8/octwater.xyz", "commit_6fe8e913/water03.prm"},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
@@ -334,6 +354,15 @@ void runFixture(const Fixture& fx, bool analyz = true)
    const int nterm = analyz ? 4 : 1;
 
    auto r = testlmdaEvaluate(opts);
+   // A fixture with its own second derivative step takes the numerical d2E/dL2
+   // from a second pass at that step; the first derivatives keep the first.
+   if (fx.eps2 > 0) {
+      FdTestOptions opts2 = opts;
+      opts2.eps = fx.eps2;
+      auto r2 = testlmdaEvaluate(opts2);
+      for (int k = 0; k < 4; ++k)
+         r.nd2edl2[k] = r2.nd2edl2[k];
+   }
    TestReference reffile(std::string(TINKER9_DIRSTR "/test/ref/testlmda/") + fx.name + ".txt");
    const TestLmdaReference& ref = reffile.getLmda();
    REQUIRE((int)ref.lgrad.size() >= n);
@@ -810,6 +839,15 @@ TEST_CASE("TESTLMDA-160_trp_both_cut_neutral_l05", "[ff][testlmda][charge]") { r
 // (test_testlmda.f case 167).
 TEST_CASE("TESTLMDA-167_trp_chg_ewald_l05", "[ff][testlmda][charge]") { runFixture(fx("167_trp_chg_ewald_l05")); }
 
+// The AMOEBA water box in its truncated octahedron, whose reciprocal space keeps
+// only the wavevectors with h+k+l even: absolute legs, then relative legs.
+TEST_CASE("TESTLMDA-168_octwat_pol_ewald_st_l05", "[ff][testlmda][octahedron]") { runFixture(fx("168_octwat_pol_ewald_st_l05")); }
+TEST_CASE("TESTLMDA-169_octwat_all_vcorr_nlist_dt_l04", "[ff][testlmda][octahedron]") { runFixture(fx("169_octwat_all_vcorr_nlist_dt_l04")); }
+TEST_CASE("TESTLMDA-170_octwat_rels3_l085", "[ff][testlmda][octahedron][rdt]") { runFixture(fx("170_octwat_rels3_l085")); }
+TEST_CASE("TESTLMDA-171_octwat_rels3_l015", "[ff][testlmda][octahedron][rdt]") { runFixture(fx("171_octwat_rels3_l015")); }
+TEST_CASE("TESTLMDA-172_octwat_rels_vdwm_vcorr_nlist_l05", "[ff][testlmda][octahedron][rdt]") { runFixture(fx("172_octwat_rels_vdwm_vcorr_nlist_l05")); }
+TEST_CASE("TESTLMDA-173_octwat_rels_lig1_st_l085", "[ff][testlmda][octahedron][rdt]") { runFixture(fx("173_octwat_rels_lig1_st_l085")); }
+
 // Every fixture once more without analysis, as dynamics runs it.
 TEST_CASE("TESTLMDA-DYN-01_water_adt_l05", "[ff][testlmda][dyn]") { runFixture(fx("01_water_adt_l05"), false); }
 TEST_CASE("TESTLMDA-DYN-02_water_ast_l05", "[ff][testlmda][dyn]") { runFixture(fx("02_water_ast_l05"), false); }
@@ -967,4 +1005,10 @@ TEST_CASE("TESTLMDA-DYN-164_tip3_rels_vdwm_nlist_l04", "[ff][testlmda][dyn][char
 TEST_CASE("TESTLMDA-DYN-165_tip3_rels3_l015", "[ff][testlmda][dyn][charge]") { runFixture(fx("165_tip3_rels3_l015"), false); }
 TEST_CASE("TESTLMDA-DYN-166_tip3_rels3_lights_l085", "[ff][testlmda][dyn][charge]") { runFixture(fx("166_tip3_rels3_lights_l085"), false); }
 TEST_CASE("TESTLMDA-DYN-167_trp_chg_ewald_l05", "[ff][testlmda][dyn][charge]") { runFixture(fx("167_trp_chg_ewald_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-168_octwat_pol_ewald_st_l05", "[ff][testlmda][dyn][octahedron]") { runFixture(fx("168_octwat_pol_ewald_st_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-169_octwat_all_vcorr_nlist_dt_l04", "[ff][testlmda][dyn][octahedron]") { runFixture(fx("169_octwat_all_vcorr_nlist_dt_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-170_octwat_rels3_l085", "[ff][testlmda][dyn][octahedron][rdt]") { runFixture(fx("170_octwat_rels3_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-171_octwat_rels3_l015", "[ff][testlmda][dyn][octahedron][rdt]") { runFixture(fx("171_octwat_rels3_l015"), false); }
+TEST_CASE("TESTLMDA-DYN-172_octwat_rels_vdwm_vcorr_nlist_l05", "[ff][testlmda][dyn][octahedron][rdt]") { runFixture(fx("172_octwat_rels_vdwm_vcorr_nlist_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-173_octwat_rels_lig1_st_l085", "[ff][testlmda][dyn][octahedron][rdt]") { runFixture(fx("173_octwat_rels_lig1_st_l085"), false); }
 #endif
