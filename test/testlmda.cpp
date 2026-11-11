@@ -258,10 +258,12 @@ const Fixture kFixtures[] = {
    // a larger box: a step of 1e-2 leaves 0.3 of truncation in dE/dL, while at
    // 4e-3 the float atomics of the charge grid move d2E/dL2 by up to 0.9; at
    // 6e-3 they leave 0.13 and 0.22 of truncation in dE/dL and dF/dL and up to
-   // 0.55 of round-off in d2E/dL2, and the squared slope of the map takes the
-   // mixed precision analytical d2E/dL2 2.7e-3 off
-   {"165_tip3_rels3_l015", 6.0e-3, 4.0, 1.0e-4, "testlmda/tip3box.xyz", "commit_350df099/amber99sb.prm", 3.0e-3},
-   {"166_tip3_rels3_lights_l085", 6.0e-3, 4.0, 1.0e-4, "testlmda/tip3box.xyz", "commit_350df099/amber99sb.prm", 3.0e-3},
+   // 0.55 of round-off in d2E/dL2 here and 0.80 on a GTX 1070, and the squared
+   // slope of the map takes the mixed precision analytical d2E/dL2 2.7e-3 off;
+   // d2E/dL2 takes a step of 1.2e-2, where its truncation is only 0.07 (0.02
+   // at 6e-3) and the round-off is quartered
+   {"165_tip3_rels3_l015", 6.0e-3, 4.0, 1.0e-4, "testlmda/tip3box.xyz", "commit_350df099/amber99sb.prm", 3.0e-3, 1.2e-2},
+   {"166_tip3_rels3_lights_l085", 6.0e-3, 4.0, 1.0e-4, "testlmda/tip3box.xyz", "commit_350df099/amber99sb.prm", 3.0e-3, 1.2e-2},
    {"167_trp_chg_ewald_l05", 1.0e-2, 1.0, 1.0e-4, "trpcage/trp_charmm.xyz", "commit_11e84c69/charmm19.prm"},
    // the AMOEBA water box in its truncated octahedron, both ligands near a
    // hexagonal face (test_testlmda.f cases 168 to 173)
