@@ -69,9 +69,13 @@ inline void rotG2QIMat_v2(const real (&restrict r)[3][3],                   //
 
 #define rotG2QIMatrix rotG2QIMat_v2
 
+// Declared inline: the ck3 LOCAL_TILES/IMAGE_TEMPLATE kernels call this from
+// two tile loops, and without the hint nvcc 13.3 (sm_120) keeps it out of
+// line, which costs emplarast 254 registers plus a ~400-byte stack frame and
+// made the dual-topology polarization kernels ~3.5x slower.
 template <class Ver, class ETYP, bool DO_AST = false>
 __device__
-void pairMplar(real r2, real3 dR, real mscale, real dscale, real pscale, real uscale,   //
+inline void pairMplar(real r2, real3 dR, real mscale, real dscale, real pscale, real uscale,   //
    real ci, real3 Id, real Iqxx, real Iqxy, real Iqxz, real Iqyy, real Iqyz, real Iqzz, //
    real3 Iud, real3 Iup, real pdi, real pga,                                            //
    real ck, real3 Kd, real Kqxx, real Kqxy, real Kqxz, real Kqyy, real Kqyz, real Kqzz, //

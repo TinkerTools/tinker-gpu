@@ -62,7 +62,7 @@ inline void zero(PairMPoleGrad& pgrad)
 #pragma acc routine seq
 template <bool do_e, bool do_g, class ETYP>
 SEQ_CUDA
-void pair_mpole( //
+inline void pair_mpole( //
    real r2,
    real xr,
    real yr,
@@ -236,52 +236,52 @@ void pair_mpole( //
 #pragma acc routine seq
 template <class Ver, class ETYP>
 SEQ_CUDA
-void pair_mpole_v2(real r2,
-                   real xr,
-                   real yr,
-                   real zr,
-                   real mscale, //
-                   real ci,
-                   real dix,
-                   real diy,
-                   real diz,
-                   real qixx,
-                   real qixy,
-                   real qixz,
-                   real qiyy,
-                   real qiyz,
-                   real qizz, //
-                   real ck,
-                   real dkx,
-                   real dky,
-                   real dkz,
-                   real qkxx,
-                   real qkxy,
-                   real qkxz,
-                   real qkyy,
-                   real qkyz,
-                   real qkzz, //
-                   real f,
-                   real aewald, //
-                   real& restrict frcxi,
-                   real& restrict frcyi,
-                   real& restrict frczi,
-                   real& restrict frcxk,
-                   real& restrict frcyk,
-                   real& restrict frczk,
-                   real& restrict trqxi,
-                   real& restrict trqyi,
-                   real& restrict trqzi,
-                   real& restrict trqxk,
-                   real& restrict trqyk,
-                   real& restrict trqzk, //
-                   real& restrict e,     //
-                   real& restrict vxx,
-                   real& restrict vxy,
-                   real& restrict vxz,
-                   real& restrict vyy,
-                   real& restrict vyz,
-                   real& restrict vzz)
+inline void pair_mpole_v2(real r2,
+                          real xr,
+                          real yr,
+                          real zr,
+                          real mscale, //
+                          real ci,
+                          real dix,
+                          real diy,
+                          real diz,
+                          real qixx,
+                          real qixy,
+                          real qixz,
+                          real qiyy,
+                          real qiyz,
+                          real qizz, //
+                          real ck,
+                          real dkx,
+                          real dky,
+                          real dkz,
+                          real qkxx,
+                          real qkxy,
+                          real qkxz,
+                          real qkyy,
+                          real qkyz,
+                          real qkzz, //
+                          real f,
+                          real aewald, //
+                          real& restrict frcxi,
+                          real& restrict frcyi,
+                          real& restrict frczi,
+                          real& restrict frcxk,
+                          real& restrict frcyk,
+                          real& restrict frczk,
+                          real& restrict trqxi,
+                          real& restrict trqyi,
+                          real& restrict trqzi,
+                          real& restrict trqxk,
+                          real& restrict trqyk,
+                          real& restrict trqzk, //
+                          real& restrict e,     //
+                          real& restrict vxx,
+                          real& restrict vxy,
+                          real& restrict vxz,
+                          real& restrict vyy,
+                          real& restrict vyz,
+                          real& restrict vzz)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_g = Ver::g;

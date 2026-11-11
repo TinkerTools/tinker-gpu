@@ -38,7 +38,7 @@ inline void zero(PairPolarGrad& pgrad)
 #pragma acc routine seq
 template <bool do_e, bool do_a, bool do_g, class ETYP>
 SEQ_CUDA
-void pair_polar( //
+inline void pair_polar( //
    real r2,
    real xr,
    real yr,
@@ -371,7 +371,7 @@ void pair_polar( //
 #pragma acc routine seq
 template <class Ver, class ETYP>
 SEQ_CUDA
-void pair_polar_v2( //
+inline void pair_polar_v2( //
    real r2,
    real xr,
    real yr,

@@ -27,7 +27,7 @@ inline DispSoft pair_dispsoft(bool two, const DispSoft& s1, const DispSoft& s2)
 #pragma acc routine seq
 template <bool DL1, bool DL2, bool GDL>
 SEQ_CUDA
-void pair_dspsc(real r, real r2, const DispSoft& ds, real& restrict soft, real& restrict dsoft, real& restrict dsdl,
+inline void pair_dspsc(real r, real r2, const DispSoft& ds, real& restrict soft, real& restrict dsoft, real& restrict dsdl,
    real& restrict d2sdl2, real& restrict d2sdldr)
 {
    soft = ds.dlsc;
@@ -67,26 +67,26 @@ void pair_dspsc(real r, real r2, const DispSoft& ds, real& restrict soft, real& 
 #pragma acc routine seq
 template <bool DO_G, class DTYP, int SCALE, bool DL1, bool DL2, bool GDL, bool DHAL = false>
 SEQ_CUDA
-void pair_disp(real r,
-               real r2,
-               real rr1,
-               real dspscale,
-               real aewald,
-               real ci,
-               real ai,
-               real ck,
-               real ak,
-               int mc,
-               const DispSoft& ds1,
-               const DispSoft& ds2,
-               real edcut,
-               real edoff,
-               const DispHal& dh,
-               real& restrict e,
-               real& restrict de,
-               real& restrict dle,
-               real& restrict dle2,
-               real& restrict dlde)
+inline void pair_disp(real r,
+                      real r2,
+                      real rr1,
+                      real dspscale,
+                      real aewald,
+                      real ci,
+                      real ai,
+                      real ck,
+                      real ak,
+                      int mc,
+                      const DispSoft& ds1,
+                      const DispSoft& ds2,
+                      real edcut,
+                      real edoff,
+                      const DispHal& dh,
+                      real& restrict e,
+                      real& restrict de,
+                      real& restrict dle,
+                      real& restrict dle2,
+                      real& restrict dlde)
 {
    static_assert(not DHAL or eq<DTYP, DEWALD>(), "");
    if CONSTEXPR (DL1)
@@ -201,22 +201,22 @@ void pair_disp(real r,
 #pragma acc routine seq
 template <bool DO_G, class DTYP, int SCALE, bool DHAL = false>
 SEQ_CUDA
-void pair_disp(real r,
-               real r2,
-               real rr1,
-               real dspscale,
-               real aewald,
-               real ci,
-               real ai,
-               real ck,
-               real ak,
-               bool mutik,
-               const DispSoft& ds,
-               real edcut,
-               real edoff,
-               const DispHal& dh,
-               real& restrict e,
-               real& restrict de)
+inline void pair_disp(real r,
+                      real r2,
+                      real rr1,
+                      real dspscale,
+                      real aewald,
+                      real ci,
+                      real ai,
+                      real ck,
+                      real ak,
+                      bool mutik,
+                      const DispSoft& ds,
+                      real edcut,
+                      real edoff,
+                      const DispHal& dh,
+                      real& restrict e,
+                      real& restrict de)
 {
    real dle, dle2, dlde;
    pair_disp<DO_G, DTYP, SCALE, false, false, false, DHAL>(

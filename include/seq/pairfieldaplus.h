@@ -9,41 +9,41 @@ namespace tinker {
 #pragma acc routine seq
 template <class ETYP>
 SEQ_CUDA
-void pair_dfield_aplus(real r2,
-                       real xr,
-                       real yr,
-                       real zr,
-                       real dscale,
-                       real ci,
-                       real dix,
-                       real diy,
-                       real diz,
-                       real pdi,
-                       real pgd,
-                       real qixx,
-                       real qixy,
-                       real qixz,
-                       real qiyy,
-                       real qiyz,
-                       real qizz,
-                       real ck,
-                       real dkx,
-                       real dky,
-                       real dkz,
-                       real pdk,
-                       real qkxx,
-                       real qkxy,
-                       real qkxz,
-                       real qkyy,
-                       real qkyz,
-                       real qkzz,
-                       real aewald,
-                       real& restrict fidx,
-                       real& restrict fidy,
-                       real& restrict fidz,
-                       real& restrict fkdx,
-                       real& restrict fkdy,
-                       real& restrict fkdz)
+inline void pair_dfield_aplus(real r2,
+                              real xr,
+                              real yr,
+                              real zr,
+                              real dscale,
+                              real ci,
+                              real dix,
+                              real diy,
+                              real diz,
+                              real pdi,
+                              real pgd,
+                              real qixx,
+                              real qixy,
+                              real qixz,
+                              real qiyy,
+                              real qiyz,
+                              real qizz,
+                              real ck,
+                              real dkx,
+                              real dky,
+                              real dkz,
+                              real pdk,
+                              real qkxx,
+                              real qkxy,
+                              real qkxz,
+                              real qkyy,
+                              real qkyz,
+                              real qkzz,
+                              real aewald,
+                              real& restrict fidx,
+                              real& restrict fidy,
+                              real& restrict fidz,
+                              real& restrict fkdx,
+                              real& restrict fkdy,
+                              real& restrict fkdz)
 {
    real r = REAL_SQRT(r2);
    real invr1 = REAL_RECIP(r);
@@ -107,41 +107,41 @@ void pair_dfield_aplus(real r2,
 #pragma acc routine seq
 template <class ETYP>
 SEQ_CUDA
-void pair_dfield_aplus_v2(real r2,
-                          real xr,
-                          real yr,
-                          real zr,
-                          real dscale,
-                          real ci,
-                          real dix,
-                          real diy,
-                          real diz,
-                          real pdi,
-                          real pgd,
-                          real qixx,
-                          real qixy,
-                          real qixz,
-                          real qiyy,
-                          real qiyz,
-                          real qizz,
-                          real ck,
-                          real dkx,
-                          real dky,
-                          real dkz,
-                          real pdk,
-                          real qkxx,
-                          real qkxy,
-                          real qkxz,
-                          real qkyy,
-                          real qkyz,
-                          real qkzz,
-                          real aewald,
-                          real& restrict fidx,
-                          real& restrict fidy,
-                          real& restrict fidz,
-                          real& restrict fkdx,
-                          real& restrict fkdy,
-                          real& restrict fkdz)
+inline void pair_dfield_aplus_v2(real r2,
+                                 real xr,
+                                 real yr,
+                                 real zr,
+                                 real dscale,
+                                 real ci,
+                                 real dix,
+                                 real diy,
+                                 real diz,
+                                 real pdi,
+                                 real pgd,
+                                 real qixx,
+                                 real qixy,
+                                 real qixz,
+                                 real qiyy,
+                                 real qiyz,
+                                 real qizz,
+                                 real ck,
+                                 real dkx,
+                                 real dky,
+                                 real dkz,
+                                 real pdk,
+                                 real qkxx,
+                                 real qkxy,
+                                 real qkxz,
+                                 real qkyy,
+                                 real qkyz,
+                                 real qkzz,
+                                 real aewald,
+                                 real& restrict fidx,
+                                 real& restrict fidy,
+                                 real& restrict fidz,
+                                 real& restrict fkdx,
+                                 real& restrict fkdy,
+                                 real& restrict fkdz)
 {
    real r = REAL_SQRT(r2);
    real invr1 = REAL_RECIP(r);
@@ -204,27 +204,27 @@ void pair_dfield_aplus_v2(real r2,
 #pragma acc routine seq
 template <class ETYP>
 SEQ_CUDA
-void pair_ufield_aplus(real r2,
-                       real xr,
-                       real yr,
-                       real zr,
-                       real uscale, //
-                       real uindi0,
-                       real uindi1,
-                       real uindi2, //
-                       real pdi,
-                       real pga, //
-                       real uindk0,
-                       real uindk1,
-                       real uindk2, //
-                       real pdk, //
-                       real aewald,
-                       real& restrict fidx,
-                       real& restrict fidy,
-                       real& restrict fidz,
-                       real& restrict fkdx,
-                       real& restrict fkdy,
-                       real& restrict fkdz)
+inline void pair_ufield_aplus(real r2,
+                              real xr,
+                              real yr,
+                              real zr,
+                              real uscale, //
+                              real uindi0,
+                              real uindi1,
+                              real uindi2, //
+                              real pdi,
+                              real pga, //
+                              real uindk0,
+                              real uindk1,
+                              real uindk2, //
+                              real pdk, //
+                              real aewald,
+                              real& restrict fidx,
+                              real& restrict fidy,
+                              real& restrict fidz,
+                              real& restrict fkdx,
+                              real& restrict fkdy,
+                              real& restrict fkdz)
 {
    real r = REAL_SQRT(r2);
    real invr1 = REAL_RECIP(r);
@@ -270,27 +270,27 @@ void pair_ufield_aplus(real r2,
 #pragma acc routine seq
 template <class ETYP>
 SEQ_CUDA
-void pair_ufield_aplus_v2(real r2,
-                          real xr,
-                          real yr,
-                          real zr,
-                          real uscale, //
-                          real uindi0,
-                          real uindi1,
-                          real uindi2, //
-                          real pdi,
-                          real pga, //
-                          real uindk0,
-                          real uindk1,
-                          real uindk2, //
-                          real pdk, //
-                          real aewald,
-                          real& restrict fidx,
-                          real& restrict fidy,
-                          real& restrict fidz,
-                          real& restrict fkdx,
-                          real& restrict fkdy,
-                          real& restrict fkdz)
+inline void pair_ufield_aplus_v2(real r2,
+                                 real xr,
+                                 real yr,
+                                 real zr,
+                                 real uscale, //
+                                 real uindi0,
+                                 real uindi1,
+                                 real uindi2, //
+                                 real pdi,
+                                 real pga, //
+                                 real uindk0,
+                                 real uindk1,
+                                 real uindk2, //
+                                 real pdk, //
+                                 real aewald,
+                                 real& restrict fidx,
+                                 real& restrict fidy,
+                                 real& restrict fidz,
+                                 real& restrict fkdx,
+                                 real& restrict fkdy,
+                                 real& restrict fkdz)
 {
    real r = REAL_SQRT(r2);
    real invr1 = REAL_RECIP(r);

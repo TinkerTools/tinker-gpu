@@ -10,29 +10,29 @@ namespace tinker {
 #pragma acc routine seq
 template <class Ver, class ETYP>
 SEQ_CUDA
-void pair_charge(real r,
-                 real xr,
-                 real yr,
-                 real zr,
-                 real cscale,
-                 real chgi,
-                 real chgk,
-                 real ebuffer,
-                 real f,
-                 real aewald,
-                 real cut,
-                 real off,
-                 real& restrict grdx,
-                 real& restrict grdy,
-                 real& restrict grdz,
-                 int& restrict ctl,
-                 real& restrict etl,
-                 real& restrict vtlxx,
-                 real& restrict vtlxy,
-                 real& restrict vtlxz,
-                 real& restrict vtlyy,
-                 real& restrict vtlyz,
-                 real& restrict vtlzz)
+inline void pair_charge(real r,
+                        real xr,
+                        real yr,
+                        real zr,
+                        real cscale,
+                        real chgi,
+                        real chgk,
+                        real ebuffer,
+                        real f,
+                        real aewald,
+                        real cut,
+                        real off,
+                        real& restrict grdx,
+                        real& restrict grdy,
+                        real& restrict grdz,
+                        int& restrict ctl,
+                        real& restrict etl,
+                        real& restrict vtlxx,
+                        real& restrict vtlxy,
+                        real& restrict vtlxz,
+                        real& restrict vtlyy,
+                        real& restrict vtlyz,
+                        real& restrict vtlzz)
 {
    constexpr bool do_e = Ver::e;
    constexpr bool do_a = Ver::a;
@@ -171,7 +171,7 @@ void pair_charge(real r,
 #pragma acc routine seq
 template <bool DO_G, class ETYP, int SCALE>
 SEQ_CUDA
-void pair_chg_v1(real r, real invrb, real cscale, real chgi, real chgk, real f, real aewald, real eccut, real ecoff,
+inline void pair_chg_v1(real r, real invrb, real cscale, real chgi, real chgk, real f, real aewald, real eccut, real ecoff,
    real& restrict ec, real& restrict dec)
 {
    real fik = f * chgi * chgk;
@@ -224,7 +224,7 @@ void pair_chg_v1(real r, real invrb, real cscale, real chgi, real chgk, real f, 
 #pragma acc routine seq
 template <bool DO_G, class ETYP, int SCALE>
 SEQ_CUDA
-void pair_chg_v2(real r, real invr, real cscale, real chgi, real chgk, real f, real aewald, real eccut, real ecoff,
+inline void pair_chg_v2(real r, real invr, real cscale, real chgi, real chgk, real f, real aewald, real eccut, real ecoff,
    real& restrict ec, real& restrict dec)
 {
    if (r > ecoff) {
@@ -244,7 +244,7 @@ void pair_chg_v2(real r, real invr, real cscale, real chgi, real chgk, real f, r
 #pragma acc routine seq
 template <bool DO_G, class ETYP, int SCALE>
 SEQ_CUDA
-void pair_chg_v3(real r, real cscale, real chgi, real chgk, real ebuffer, real f, real aewald, real eccut, real ecoff,
+inline void pair_chg_v3(real r, real cscale, real chgi, real chgk, real ebuffer, real f, real aewald, real eccut, real ecoff,
    real& restrict ec, real& restrict dec)
 {
    pair_chg_v1<DO_G, ETYP, SCALE>(r, REAL_RECIP(r + ebuffer), cscale, chgi, chgk, f, aewald, eccut, ecoff, ec, dec);
@@ -270,7 +270,7 @@ inline void pair_dlprod(real si, real sk, real dsi, real dsk, real& restrict d1,
 #pragma acc routine seq
 template <bool DL2, bool DLDE>
 SEQ_CUDA
-void pair_chg_dlmda(real dqik, real d2qik, real del, real d2el, real e1, real de1, real& restrict dl1,
+inline void pair_chg_dlmda(real dqik, real d2qik, real del, real d2el, real e1, real de1, real& restrict dl1,
    real& restrict dl2, real& restrict dlde)
 {
    dl1 = dqik * del * e1;
@@ -291,7 +291,7 @@ void pair_chg_dlmda(real dqik, real d2qik, real del, real d2el, real e1, real de
 #pragma acc routine seq
 template <bool DO_G, bool DL2, bool DLDE, class ETYP, int SCALE>
 SEQ_CUDA
-void pair_chg_lmda(real r, real invrb, real cscale, real chgi, real chgk, real dqi, real dqk, real f, real aewald,
+inline void pair_chg_lmda(real r, real invrb, real cscale, real chgi, real chgk, real dqi, real dqk, real f, real aewald,
    real eccut, real ecoff, real del, real d2el, real& restrict ec, real& restrict dec, real& restrict dl1,
    real& restrict dl2, real& restrict dlde)
 {

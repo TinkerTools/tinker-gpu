@@ -13,22 +13,22 @@ namespace tinker {
 #pragma acc routine seq
 template <bool DO_G, bool DO_V, class V>
 SEQ_CUDA
-void pair_dlforce(real dldr,
-                  real xr,
-                  real yr,
-                  real zr,
-                  real& fix,
-                  real& fiy,
-                  real& fiz,
-                  real& fkx,
-                  real& fky,
-                  real& fkz,
-                  V& vxx,
-                  V& vyx,
-                  V& vzx,
-                  V& vyy,
-                  V& vzy,
-                  V& vzz)
+inline void pair_dlforce(real dldr,
+                         real xr,
+                         real yr,
+                         real zr,
+                         real& fix,
+                         real& fiy,
+                         real& fiz,
+                         real& fkx,
+                         real& fky,
+                         real& fkz,
+                         V& vxx,
+                         V& vyx,
+                         V& vzx,
+                         V& vyy,
+                         V& vzy,
+                         V& vzz)
 {
    real dldx = dldr * xr;
    real dldy = dldr * yr;
@@ -86,7 +86,7 @@ inline bool grpPairLmdaActive(const GrpPairLmda& w)
 #pragma acc routine seq
 template <bool DL1, bool DL2, class E>
 SEQ_CUDA
-void pair_grpscale_dl(const GrpPairLmda& w, const real& e, E& dl1, E& dl2)
+inline void pair_grpscale_dl(const GrpPairLmda& w, const real& e, E& dl1, E& dl2)
 {
    if CONSTEXPR (DL1)
       dl1 += floatTo<E>(w.dl * e);

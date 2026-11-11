@@ -56,7 +56,7 @@ inline SoftCoreLmda pair_softcore(bool two, const SoftCoreLmda& s1, const SoftCo
 #pragma acc routine seq
 template <bool REL>
 SEQ_CUDA
-SoftCoreLmda pair_vdw_softcore(int mc, const SoftCoreLmda& s1, const SoftCoreLmda& s2)
+inline SoftCoreLmda pair_vdw_softcore(int mc, const SoftCoreLmda& s1, const SoftCoreLmda& s2)
 {
    SoftCoreLmda lp = {1, 0, 0, 0, 0, 0, 0};
    if (mc > 0)
@@ -76,7 +76,7 @@ SoftCoreLmda pair_vdw_softcore(int mc, const SoftCoreLmda& s1, const SoftCoreLmd
 #pragma acc routine seq
 template <bool DL1, bool DL2, bool DLDE>
 SEQ_CUDA
-void pair_softcore_dl(const SoftCoreLmda& lp, real pref, real tt, real ts, real tss, real tr, real trs, real rfac, PairVdwLambda* restrict dl)
+inline void pair_softcore_dl(const SoftCoreLmda& lp, real pref, real tt, real ts, real tss, real tr, real trs, real rfac, PairVdwLambda* restrict dl)
 {
    if CONSTEXPR (DL1 or DLDE)
       dl->dedl = pref * (lp.a1 * tt + lp.b1 * ts);
@@ -94,7 +94,7 @@ void pair_softcore_dl(const SoftCoreLmda& lp, real pref, real tt, real ts, real 
 #pragma acc routine seq
 template <bool DO_G, bool DL1, bool DL2, bool DLDE>
 SEQ_CUDA
-void pair_vdw_taper(real r, real evcut, real evoff, real& restrict ev, real& restrict dev, PairVdwLambda* restrict dl)
+inline void pair_vdw_taper(real r, real evcut, real evoff, real& restrict ev, real& restrict dev, PairVdwLambda* restrict dl)
 {
    if (r > evcut) {
       real taper, dtaper;

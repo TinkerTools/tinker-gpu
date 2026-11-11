@@ -6,7 +6,7 @@ namespace tinker {
 #pragma acc routine seq
 template <bool do_e, bool do_g, class ETYP, int CFLX>
 SEQ_CUDA
-void pair_mpole_chgpen_aplus( //
+inline void pair_mpole_chgpen_aplus( //
    real r2,
    real xr,
    real yr,

@@ -28,7 +28,7 @@ inline real pair_lj_rinv(real invr)
 #pragma acc routine seq
 template <bool DO_G, bool SOFTCORE, bool DL1 = false, bool DL2 = false, bool DLDE = false>
 SEQ_CUDA
-void pair_lj_v0(real r, real invr, const SoftCoreLmda& lp, real rad, real eps, real& restrict ev,
+inline void pair_lj_v0(real r, real invr, const SoftCoreLmda& lp, real rad, real eps, real& restrict ev,
    real& restrict dev, PairVdwLambda* restrict dl = nullptr, bool dlon = true)
 {
    static_assert(SOFTCORE or not(DL1 or DL2 or DLDE), "");
@@ -93,20 +93,20 @@ void pair_lj_v0(real r, real invr, const SoftCoreLmda& lp, real rad, real eps, r
 template <bool DO_G, bool SOFTCORE, class RADRULE, class EPSRULE, int SCALE, bool DL1 = false, bool DL2 = false,
    bool DLDE = false>
 SEQ_CUDA
-void pair_lj_v2(real r,
-                real invr,
-                const SoftCoreLmda& lp, //
-                real vscale,
-                real radi,
-                real epsi,
-                real radk,
-                real epsk,
-                real evcut,
-                real evoff,
-                real& restrict ev,
-                real& restrict dev,
-                PairVdwLambda* restrict dl = nullptr,
-                bool dlon = true)
+inline void pair_lj_v2(real r,
+                       real invr,
+                       const SoftCoreLmda& lp, //
+                       real vscale,
+                       real radi,
+                       real epsi,
+                       real radk,
+                       real epsk,
+                       real evcut,
+                       real evoff,
+                       real& restrict ev,
+                       real& restrict dev,
+                       PairVdwLambda* restrict dl = nullptr,
+                       bool dlon = true)
 {
    if (r > evoff) {
       ev = 0;
@@ -131,18 +131,18 @@ void pair_lj_v2(real r,
 #pragma acc routine seq
 template <bool DO_G, bool SOFTCORE, int SCALE, bool DL1 = false, bool DL2 = false, bool DLDE = false>
 SEQ_CUDA
-void pair_lj_v3(real r,
-                real invr,
-                const SoftCoreLmda& lp, //
-                real vscale,
-                real rad,
-                real eps,
-                real evcut,
-                real evoff,
-                real& restrict ev,
-                real& restrict dev,
-                PairVdwLambda* restrict dl = nullptr,
-                bool dlon = true)
+inline void pair_lj_v3(real r,
+                       real invr,
+                       const SoftCoreLmda& lp, //
+                       real vscale,
+                       real rad,
+                       real eps,
+                       real evcut,
+                       real evoff,
+                       real& restrict ev,
+                       real& restrict dev,
+                       PairVdwLambda* restrict dl = nullptr,
+                       bool dlon = true)
 {
    if CONSTEXPR (SCALE != 1) {
       eps *= vscale;

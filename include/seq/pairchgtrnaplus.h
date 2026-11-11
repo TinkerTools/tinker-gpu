@@ -7,18 +7,18 @@ namespace tinker {
 #pragma acc routine seq
 template <bool DO_G>
 SEQ_CUDA
-void pair_chgtrn_aplus(real r,
-                       real cut,
-                       real off,
-                       real mscale,
-                       real f,
-                       real alphai,
-                       real chgi,
-                       real alphak,
-                       real chgk,
-                       real elambda,
-                       e_prec& restrict e,
-                       e_prec& restrict de)
+inline void pair_chgtrn_aplus(real r,
+                              real cut,
+                              real off,
+                              real mscale,
+                              real f,
+                              real alphai,
+                              real chgi,
+                              real alphak,
+                              real chgk,
+                              real elambda,
+                              e_prec& restrict e,
+                              e_prec& restrict de)
 {
    f *= mscale;
    real alphaik = (real)0.5 * (alphai + alphak);

@@ -932,7 +932,9 @@ TEST_CASE("TinkerNIST-END-FILE", "[ff][tinkerNIST]")
 // have no thermostat are refused and leave the history as it was. A run that
 // does not end on a save step writes its restart file at its last step, as
 // the history is. The refusals end the program, so it runs apart from this
-// one (test_eost.f:eostrstrun).
+// one (test_eost.f:eostrstrun). Lambda dynamics needs the CUDA platform
+// (dlmdaData2).
+#if TINKER_GPULANG_CUDA
 TEST_CASE("TinkerNIST-LMDA-RESTART", "[ff][tinkerNIST]")
 {
    const std::string files = TINKER9_DIRSTR "/test/file/";
@@ -1002,3 +1004,4 @@ TEST_CASE("TinkerNIST-LMDA-RESTART", "[ff][tinkerNIST]")
    REQUIRE(has(r6.second, "Restarting Molecular Dynamics"));
    REQUIRE(historyStep() == 60);
 }
+#endif

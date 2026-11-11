@@ -19,19 +19,19 @@ namespace tinker {
 #pragma acc routine seq
 template <bool DO_G, int SCALE, bool DL1, bool DL2, bool DLDE>
 SEQ_CUDA
-void pair_hal(real r,
-              real vscale,
-              real rv,
-              real eps,
-              real evcut,
-              real evoff,
-              const SoftCoreLmda& lp,
-              real ghal,
-              real dhal,
-              real& restrict e,
-              real& restrict de,
-              PairVdwLambda* dl,
-              bool dlon)
+inline void pair_hal(real r,
+                     real vscale,
+                     real rv,
+                     real eps,
+                     real evcut,
+                     real evoff,
+                     const SoftCoreLmda& lp,
+                     real ghal,
+                     real dhal,
+                     real& restrict e,
+                     real& restrict de,
+                     PairVdwLambda* dl,
+                     bool dlon)
 {
    if CONSTEXPR (SCALE != 1)
       eps *= vscale;
@@ -86,17 +86,17 @@ void pair_hal(real r,
 #pragma acc routine seq
 template <bool DO_G, int SCALE>
 SEQ_CUDA
-void pair_hal_v2(real r,
-                 real vscale,
-                 real rv,
-                 real eps,
-                 real evcut,
-                 real evoff,
-                 const SoftCoreLmda& lp,
-                 real ghal,
-                 real dhal,
-                 real& restrict e,
-                 real& restrict de)
+inline void pair_hal_v2(real r,
+                        real vscale,
+                        real rv,
+                        real eps,
+                        real evcut,
+                        real evoff,
+                        const SoftCoreLmda& lp,
+                        real ghal,
+                        real dhal,
+                        real& restrict e,
+                        real& restrict de)
 {
    pair_hal<DO_G, SCALE, false, false, false>(r, vscale, rv, eps, evcut, evoff, lp, ghal, dhal, e, de, nullptr, false);
 }
