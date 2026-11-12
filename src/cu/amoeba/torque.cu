@@ -107,8 +107,9 @@ void torque_cu1(int n, VirialBuffer restrict gpu_vir, //
          torqueNormal(uw, uwsiz1);
 
          // get sine and cosine of angles between the rotation axes
-         real uvcos = torqueDot(u, v);
-         real uvsin1 = REAL_RSQRT(1 - uvcos * uvcos);
+         // 1/sin(u,v) from |v x u| rather than 1 - cos^2, which cancels in single
+         // precision and reaches zero or below as the two axes approach alignment
+         real uvsin1 = uvsiz1;
 
          if (axetyp == LFRM_Z_ONLY) {
             for (int j = 0; j < 3; ++j) {
@@ -187,8 +188,8 @@ void torque_cu1(int n, VirialBuffer restrict gpu_vir, //
          torqueNormal(ws, wssiz1);
 
          // get sine and cosine of angles between the rotation axes
-         real urcos = torqueDot(u, r);
-         real ursin1 = REAL_RSQRT(1 - urcos * urcos);
+         // 1/sin(u,r) from |r x u|, as for uvsin1
+         real ursin1 = ursiz1;
          real vscos = torqueDot(v, s);
          real vssin = REAL_SQRT(REAL_MAX((real)0, 1 - vscos * vscos));
          real wscos = torqueDot(w, s);
@@ -255,11 +256,11 @@ void torque_cu1(int n, VirialBuffer restrict gpu_vir, //
          r[2] = u[2] + v[2];
          rsiz1 = REAL_RSQRT(torqueDot(r, r));
          torqueNormal(r, rsiz1);
-         real rwcos = torqueDot(r, w);
-         real rwsin1 = REAL_RSQRT(1 - rwcos * rwcos);
          dphidr = -torqueDot(trq, r);
          torqueCross(del, r, w);
          delsiz1 = REAL_RSQRT(torqueDot(del, del));
+         // 1/sin(r,w) from |r x w|, as for uvsin1
+         real rwsin1 = delsiz1;
          torqueNormal(del, delsiz1);
          dphiddel = -torqueDot(trq, del);
          torqueCross(eps, del, w);
@@ -277,11 +278,11 @@ void torque_cu1(int n, VirialBuffer restrict gpu_vir, //
          r[2] = v[2] + w[2];
          rsiz1 = REAL_RSQRT(torqueDot(r, r));
          torqueNormal(r, rsiz1);
-         real rucos = torqueDot(r, u);
-         real rusin1 = REAL_RSQRT(1 - rucos * rucos);
          dphidr = -torqueDot(trq, r);
          torqueCross(del, r, u);
          delsiz1 = REAL_RSQRT(torqueDot(del, del));
+         // 1/sin(r,u) from |r x u|, as for uvsin1
+         real rusin1 = delsiz1;
          torqueNormal(del, delsiz1);
          dphiddel = -torqueDot(trq, del);
          torqueCross(eps, del, u);
@@ -299,11 +300,11 @@ void torque_cu1(int n, VirialBuffer restrict gpu_vir, //
          r[2] = u[2] + w[2];
          rsiz1 = REAL_RSQRT(torqueDot(r, r));
          torqueNormal(r, rsiz1);
-         real rvcos = torqueDot(r, v);
-         real rvsin1 = REAL_RSQRT(1 - rvcos * rvcos);
          dphidr = -torqueDot(trq, r);
          torqueCross(del, r, v);
          delsiz1 = REAL_RSQRT(torqueDot(del, del));
+         // 1/sin(r,v) from |r x v|, as for uvsin1
+         real rvsin1 = delsiz1;
          torqueNormal(del, delsiz1);
          dphiddel = -torqueDot(trq, del);
          torqueCross(eps, del, v);
