@@ -250,8 +250,8 @@ struct GrpSelfScale
 GrpSelfScale grpSelfScale(const GrpPairScale& ps);
 
 /// The charge transfer pair scale at the polarization lambda
-/// (dlambda.f:ctlmdasc): grpPairScale in single topology; dual topology
-/// interpolates between the endpoint pair scales.
+/// (dlambda.f:ctlmdasc): the single topology grpPairScale, whatever the
+/// polarization topology, since charge transfer is pairwise additive.
 GrpPairScale ctScale();
 
 /// \ingroup ff

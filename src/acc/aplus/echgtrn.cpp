@@ -24,9 +24,9 @@ static void echgtrnAplus_acc1()
 
    const real f = electric / dielec;
    // Each pair takes the scale of its group pair (dlambda.f:ctlmdasc). Lambda
-   // derivatives, dual topology and relative legs are CUDA only, so the 0/1
-   // mutation flags pick the scale here: environment, environment-ligand, and
-   // ligand-ligand pairs, as scalars so the loops take them firstprivate.
+   // derivatives and relative legs are CUDA only, so the 0/1 mutation flags
+   // pick the scale here: environment, environment-ligand, and ligand-ligand
+   // pairs, as scalars so the loops take them firstprivate.
    const GrpPairScale cs = ctScale();
    const real sc0 = cs.sc[0][0], sc1 = cs.sc[0][1], sc2 = cs.sc[1][1];
    real cut = switchCut(Switch::CHGTRN);

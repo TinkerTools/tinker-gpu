@@ -195,30 +195,9 @@ GrpPairScale elecPairScale()
    return grpPairScale(elecChain());
 }
 
-// The dual topology weight of the polarization end states, w = plam^epdtexp
-// (epolar4.f:epolar4dt).
-static LmdaFn dtWeight()
-{
-   return lmdaPwrChain(polarChain(), epdtexp, true);
-}
-
 GrpPairScale ctScale()
 {
-   if (not use_epdt)
-      return grpPairScale(polarChain());
-
-   const LmdaFn w = dtWeight();
-   const GrpScale g0 = grpScale(0), g1 = grpScale(1);
-   GrpPairScale c;
-   c.live = 0;
-   for (int i = 0; i < 3; ++i) {
-      for (int k = 0; k < 3; ++k) {
-         double s0 = g0.s[i] * g0.s[k];
-         double s1 = g1.s[i] * g1.s[k];
-         setPairScale(c, i, k, {s0 + w.f * (s1 - s0), w.d1 * (s1 - s0), w.d2 * (s1 - s0)});
-      }
-   }
-   return c;
+   return grpPairScale(polarChain());
 }
 
 const int* emGroup()
@@ -496,13 +475,14 @@ void lmdaChannelsData(RcOp op)
          .manage(op, rc_flag, use_vdlmda, vdlmdaActive, &devdl_buf, &d2evdl2_buf, &devdl, &d2evdl2);
 }
 
-// E = w*E1 + (1-w)*E0, so dE/dL = w'*(E1-E0) and d2E/dL2 = w''*(E1-E0), with
-// w' and w'' carried to the main lambda. Both terms of the second derivative
-// chain rule are proportional to E1-E0, so the whole of it collapses onto one
-// scalar per endpoint (epolar4.f:epolar4dt).
+// E = w*E1 + (1-w)*E0 with the endpoint weight w = plam^epdtexp, so
+// dE/dL = w'*(E1-E0) and d2E/dL2 = w''*(E1-E0), with w' and w'' carried to the
+// main lambda. Both terms of the second derivative chain rule are proportional
+// to E1-E0, so the whole of it collapses onto one scalar per endpoint
+// (epolar4.f:epolar4dt).
 int dtPasses(DtPass out[2])
 {
-   const LmdaFn w = dtWeight();
+   const LmdaFn w = lmdaPwrChain(polarChain(), epdtexp, true);
    bool need0, need1;
    dtNeed(w, need0, need1);
 

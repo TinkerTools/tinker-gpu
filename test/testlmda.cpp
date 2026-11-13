@@ -137,7 +137,8 @@ const Fixture kFixtures[] = {
    {"70_expbox_ewald_st_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/expbox.xyz", "commit_dd1761ac/expol.prm"},
    {"71_expnaclus_na_lin_st_l00", 1.0e-2, 1.0, 1.0e-4, "testlmda/expnaclus.xyz", "commit_dd1761ac/expol.prm"},
    {"72_expbox_ewald_nlist_st_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/expbox.xyz", "commit_dd1761ac/expol.prm"},
-   // charge transfer follows the polarization lambda
+   // charge transfer follows the polarization lambda in single topology whatever
+   // the polarization topology, so 75's squared dual topology weight matches 74
    {"73_hipwat_ct_only_st_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/hipwat.xyz", "commit_aad9340c/water21.prm"},
    {"74_hipwat_ct_only_dt_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/hipwat.xyz", "commit_aad9340c/water21.prm"},
    {"75_hipwat_ct_only_dtexp_l04", 1.0e-2, 1.0, 1.0e-4, "testlmda/hipwat.xyz", "commit_aad9340c/water21.prm"},

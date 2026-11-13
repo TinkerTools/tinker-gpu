@@ -1726,18 +1726,21 @@ TEST_CASE("MUTATE-208_apgas_pol_ewald_dt_l04", "[ff][mutate][cflux][adtpol]") { 
 TEST_CASE("MUTATE-210_hipwat_rel_lig1_ewald_l085", "[ff][mutate][cflux][rels]") { runFixture(fx("210_hipwat_rel_lig1_ewald_l085")); }
 TEST_CASE("MUTATE-211_aptetra_rel_lig2_l015", "[ff][mutate][cflux][rels]") { runFixture(fx("211_aptetra_rel_lig2_l015")); }
 
-// Charge transfer alone under OST, in dual topology with a squared endpoint weight.
+// Charge transfer alone under OST, with a squared dual topology weight that
+// charge transfer ignores.
 TEST_CASE("MUTATE-214_hipwat_ct_dtexp_l04", "[ff][mutate][ct]") { runFixture(fx("214_hipwat_ct_dtexp_l04")); }
-// Dual topology gives half of the coupled energy of a pair within the ligand,
-// from the linear endpoint weight (test_mutate.f: test_mutate_ctscale).
-TEST_CASE("MUTATE-215-217-ctscale-dt", "[ff][mutate][ct]")
+// Dual topology polarization leaves charge transfer in single topology, so a
+// pair within the ligand gets the same energy as without it (test_mutate.f:
+// test_mutate_ctscale).
+TEST_CASE("MUTATE-216-217-ctscale-dt", "[ff][mutate][ct]")
 {
-   const double e1 = ctEnergy("215_apgas_ct_all_st_p10");
-   const double e05 = ctEnergy("217_apgas_ct_all_dt_p05");
-   REQUIRE(e1 != 0);
-   REQUIRE(std::fabs(e05 - 0.5 * e1) < testGetEps(1.0e-5, 1.0e-10));
+   const double est = ctEnergy("216_apgas_ct_all_st_p05");
+   const double edt = ctEnergy("217_apgas_ct_all_dt_p05");
+   REQUIRE(est != 0);
+   REQUIRE(std::fabs(edt - est) < testGetEps(1.0e-5, 1.0e-10));
 }
-// Single and dual topology share both end states of the annihilated ethanol.
+// The keys with second lambda derivatives, which turn on dual topology
+// polarization, keep both end states of the annihilated ethanol.
 TEST_CASE("MUTATE-218_aptetra_ct_st_l00", "[ff][mutate][ct]") { runFixture(fx("218_aptetra_ct_st_l00")); }
 TEST_CASE("MUTATE-219_aptetra_ct_dt_l00", "[ff][mutate][ct]") { runFixture(fx("219_aptetra_ct_dt_l00")); }
 TEST_CASE("MUTATE-220_aptetra_ct_st_l10", "[ff][mutate][ct]") { runFixture(fx("220_aptetra_ct_st_l10")); }
@@ -1755,8 +1758,8 @@ TEST_CASE("MUTATE-230_aptetra_ct_rel_vdwm_l030", "[ff][mutate][ct][rels]") { run
 TEST_CASE("MUTATE-231_aptetra_ct_rel_vdwm_l070", "[ff][mutate][ct][rels]") { runFixture(fx("231_aptetra_ct_rel_vdwm_l070")); }
 TEST_CASE("MUTATE-232_aptetra_ct_rel_lig1_l070", "[ff][mutate][ct][rels]") { runFixture(fx("232_aptetra_ct_rel_lig1_l070")); }
 // Inside the ligand 1 leg ligand 2 contributes nothing, so the tetramer matches
-// the one with its ethanol deleted at the same polarization lambda, in single
-// and dual topology.
+// the one with its ethanol deleted at the same polarization lambda, under
+// single and dual topology polarization.
 TEST_CASE("MUTATE-233-234-222-235-ctrel", "[ff][mutate][ct][rels]")
 {
    double plmda;
