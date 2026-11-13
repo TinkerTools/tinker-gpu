@@ -136,12 +136,12 @@ void runBar(const std::string& basea, const std::string& baseb)
 }
 }
 
-TEST_CASE("BAR-water-00-0000-0950", "[ff][bar]") { runBar("water-00-0000-0950", "water-00-0000-0900"); }
-TEST_CASE("BAR-water-00-0950-1000", "[ff][bar]") { runBar("water-00-0950-1000", "water-00-0900-1000"); }
+TEST_CASE("BAR-water-00-0000-0950", "[ff][bar][L5]") { runBar("water-00-0000-0950", "water-00-0000-0900"); }
+TEST_CASE("BAR-water-00-0950-1000", "[ff][bar][L5]") { runBar("water-00-0950-1000", "water-00-0900-1000"); }
 
 // A system with no periodic box, whose BAR file must have no volumes, run with
 // the energies of each trajectory in its own state taken from its log.
-TEST_CASE("BAR-mode1-logs-nonperiodic", "[ff][bar]")
+TEST_CASE("BAR-mode1-logs-nonperiodic", "[ff][bar][L5]")
 {
    TestLmdaFlagReset lmdaReset;
 
@@ -344,7 +344,7 @@ const char* const tsBar = " BAR Estimate -T*dS Value";
 // The two BAR files "bar" mode 1 writes in the cases above, with each value
 // computed once from all frames, so only the errors and the BAR bootstrap line
 // depend on the bootstrap. The values are those of Tinker's bar.x mode 2.
-TEST_CASE("BAR-mode2-ref", "[bar]")
+TEST_CASE("BAR-mode2-ref", "[bar][L5]")
 {
    const struct
    {
@@ -389,7 +389,7 @@ TEST_CASE("BAR-mode2-ref", "[bar]")
 // Every frame has dU = 0.5 in both directions, so BAR gives 0.5 exactly, with
 // a zero error. Rows with no volume and rows with an explicit zero volume must
 // both mean NVT.
-TEST_CASE("BAR-mode2-zero-volume", "[bar]")
+TEST_CASE("BAR-mode2-zero-volume", "[bar][L5]")
 {
    const int n = 10;
    std::vector<double> ua0, ua1, ub0, ub1;
@@ -417,7 +417,7 @@ TEST_CASE("BAR-mode2-zero-volume", "[bar]")
 // State 1 lies 0.8 kcal/mol above state 0 in every frame while the volumes
 // vary by 20 percent, so every free energy is 0.8 with a zero bootstrap error
 // only if the volumes stay out of the FEP and BAR sums.
-TEST_CASE("BAR-mode2-volume", "[bar]")
+TEST_CASE("BAR-mode2-volume", "[bar][L5]")
 {
    const int n = 20;
    std::vector<double> ua0(n, 0.0), ua1(n, 0.8), ub0(n, -0.8), ub1(n, 0.0), vola, volb;
@@ -444,7 +444,7 @@ TEST_CASE("BAR-mode2-volume", "[bar]")
 // is 0.8 in every bootstrap resample, and each error is zero only if the
 // resampled values come from the same frames. A blank line at the pressure
 // prompt gives 1 atm, and a typed pressure is used.
-TEST_CASE("BAR-mode2-err", "[bar]")
+TEST_CASE("BAR-mode2-err", "[bar][L5]")
 {
    TestFile fbar(std::string(fileBar) + "err.bar");
    for (double p : {1.0, 250.0}) {
@@ -476,7 +476,7 @@ TEST_CASE("BAR-mode2-err", "[bar]")
 // Kronecker sequence, and the references are full-sample values found for
 // these frames. Enthalpies without the PV term, or with it at the wrong
 // pressure, are about 0.76 kcal/mol.
-TEST_CASE("BAR-mode2-pv", "[bar]")
+TEST_CASE("BAR-mode2-pv", "[bar][L5]")
 {
    const int n = 2000;
    const double temp = 298.0;
@@ -524,7 +524,7 @@ TEST_CASE("BAR-mode2-pv", "[bar]")
 // dU = -1000 kcal/mol in every frame, so exp(-beta dU) overflows a double in
 // the forward FEP sum and underflows to zero in the backward one unless the
 // exponents are shifted. Every free energy and enthalpy is -1000.
-TEST_CASE("BAR-mode2-overflow", "[bar]")
+TEST_CASE("BAR-mode2-overflow", "[bar][L5]")
 {
    const int n = 10;
    std::vector<double> ua0, ua1, ub0, ub1;
@@ -551,7 +551,7 @@ TEST_CASE("BAR-mode2-overflow", "[bar]")
 // Each state lies 2000 kcal/mol above the other in its own frames (Tinker's
 // overlap.bar). The FEP sums still give the exact differences, and then mode 2
 // stops because the BAR iteration cannot converge.
-TEST_CASE("BAR-mode2-overlap", "[bar]")
+TEST_CASE("BAR-mode2-overlap", "[bar][L5]")
 {
    TestFile fbar(std::string(fileBar) + "overlap.bar");
    auto r = runBarCalc({"overlap.bar", "0", "0", "0", "0", "0", "0"});
@@ -567,7 +567,7 @@ TEST_CASE("BAR-mode2-overlap", "[bar]")
 
 // Frames 1 to 10 by 3 and 2 to 10 by 4 of ten (Tinker's frames.bar) include the
 // last frame of each range: four and three frames.
-TEST_CASE("BAR-mode2-frames", "[bar]")
+TEST_CASE("BAR-mode2-frames", "[bar][L5]")
 {
    TestFile fbar(std::string(fileBar) + "frames.bar");
    auto r = runBarCalc({"frames.bar", "1", "10", "3", "2", "10", "4"});
@@ -586,7 +586,7 @@ TEST_CASE("BAR-mode2-frames", "[bar]")
 
 // Negative frame values on the command line select the defaults, as zero does,
 // without a prompt: all ten frames of each trajectory.
-TEST_CASE("BAR-mode2-frames-negative", "[bar]")
+TEST_CASE("BAR-mode2-frames-negative", "[bar][L5]")
 {
    TestFile fbar(std::string(fileBar) + "frames.bar");
    auto r = runBarCalc({"frames.bar", "-5", "-1", "-2", "0", "0", "0"}, "\n\n\n");
@@ -603,7 +603,7 @@ TEST_CASE("BAR-mode2-frames-negative", "[bar]")
 // BAR free energy and enthalpy must equal the exact values (tinkerDev's
 // test_bar_hbar). Sums over frames that are not averaged per trajectory give an
 // enthalpy of -0.25 instead of 0.19 Kcal/mol.
-TEST_CASE("BAR-mode2-hbar-unequal", "[bar]")
+TEST_CASE("BAR-mode2-hbar-unequal", "[bar][L5]")
 {
    const double rt = units::gasconst * 298.0, c = 0.5;
    const double u0[2] = {-rt * std::log(3.0), 0.0}, u1[2] = {c, -rt * std::log(5.0) + c};
@@ -634,7 +634,7 @@ TEST_CASE("BAR-mode2-hbar-unequal", "[bar]")
 // ln(nb/na) for trajectories of 5 and 15 frames (tinkerDev's test_bar_bennett).
 // The root is found here by bisection, and differs by 0.1 Kcal/mol from the
 // solution without the shift.
-TEST_CASE("BAR-mode2-bennett", "[bar]")
+TEST_CASE("BAR-mode2-bennett", "[bar][L5]")
 {
    const double rt = units::gasconst * 298.0, s = 1.2;
    const double xa[5] = {-0.9, -0.4, 0.0, 0.3, 0.8};
@@ -676,7 +676,7 @@ TEST_CASE("BAR-mode2-bennett", "[bar]")
 
 // As in Tinker's bar, which leaves FEP files to analyzelmda, mode 3 is not a
 // choice: the menu offers modes 1 and 2 and asks again until one is given.
-TEST_CASE("BAR-mode3-rejected", "[bar]")
+TEST_CASE("BAR-mode3-rejected", "[bar][L5]")
 {
    const int n = 4;
    std::vector<double> ua0, ua1, ub0, ub1;
@@ -726,7 +726,7 @@ TEST_CASE("BAR-mode3-rejected", "[bar]")
 // first frame past the end of the file, when the two trajectories are at
 // different temperatures, when a header has no temperature, and when a row
 // cannot be read.
-TEST_CASE("BAR-mode2-input", "[bar]")
+TEST_CASE("BAR-mode2-input", "[bar][L5]")
 {
    TestFile fframes(std::string(fileBar) + "frames.bar");
    TestFile ftemps(std::string(fileBar) + "temps.bar");
@@ -774,7 +774,7 @@ TEST_CASE("BAR-mode2-input", "[bar]")
 
 // The BAR file name typed at the prompt takes the "bar" extension if it has
 // none, and a name typed after one that was not found is read on its own.
-TEST_CASE("BAR-mode2-prompt-name", "[bar]")
+TEST_CASE("BAR-mode2-prompt-name", "[bar][L5]")
 {
    TestFile fbar("", "bm2.bar",
       "       2    298.00\n       1  -10.0  -9.5\n       2  -10.1  -9.6\n"
@@ -789,7 +789,7 @@ TEST_CASE("BAR-mode2-prompt-name", "[bar]")
 
 // Headers with no title are read and print no title line, and a file that ends
 // before the frame count of its last block keeps only the frames it has.
-TEST_CASE("BAR-mode2-header", "[bar]")
+TEST_CASE("BAR-mode2-header", "[bar][L5]")
 {
    const std::string text = "       3    298.00\n"
                             "       1  -10.0  -9.5\n"
@@ -820,7 +820,7 @@ TEST_CASE("BAR-mode2-header", "[bar]")
 // Mode 2 stops when only one trajectory has volumes, and when a trajectory has
 // volumes for only some of its frames, since a missing volume would enter the
 // PdV term and the enthalpies as zero.
-TEST_CASE("BAR-mode2-volume-missing", "[bar]")
+TEST_CASE("BAR-mode2-volume-missing", "[bar][L5]")
 {
    const std::vector<double> ua0 = {-10.0, -10.1}, ua1 = {-9.5, -9.6}, vol = {1000.0, 1010.0};
    const std::vector<double> ub0 = {-10.5, -10.6}, ub1 = {-10.0, -10.1};
@@ -846,7 +846,7 @@ TEST_CASE("BAR-mode2-volume-missing", "[bar]")
 // Nine of the ten frames of A have no overlap with B, so a resample of A that
 // misses the remaining frame drives the BAR iteration to inf and then NaN.
 // About a third of the trials do, and they must be skipped, not loop forever.
-TEST_CASE("BAR-mode2-bootstrap-nonconverged", "[bar]")
+TEST_CASE("BAR-mode2-bootstrap-nonconverged", "[bar][L5]")
 {
    const int n = 10;
    std::vector<double> ua0, ua1, ub0, ub1;
@@ -924,7 +924,7 @@ BarCalcRun runBarMakeLogs(const std::string& loga, const std::string& logb, bool
 
 // The logs of archives whose base names contain a dot are found, and their
 // energies go to "<A>.bar".
-TEST_CASE("BAR-mode1-log-dotted", "[ff][bar]")
+TEST_CASE("BAR-mode1-log-dotted", "[ff][bar][L5]")
 {
    TestLmdaFlagReset lmdaReset;
    TestRemoveFileOnExit rmbar("bar.np-a.bar");
@@ -939,7 +939,7 @@ TEST_CASE("BAR-mode1-log-dotted", "[ff][bar]")
 
 // A log with no energies gives energies recomputed in state 0, the same as those
 // of the same frames in state 1.
-TEST_CASE("BAR-mode1-log-empty", "[ff][bar]")
+TEST_CASE("BAR-mode1-log-empty", "[ff][bar][L5]")
 {
    TestLmdaFlagReset lmdaReset;
    TestRemoveFileOnExit rmbar("bar.np-a.bar");
@@ -960,7 +960,7 @@ TEST_CASE("BAR-mode1-log-empty", "[ff][bar]")
 
 // An archive with no title gives BAR file headers with no title and no
 // trailing blanks, as in Tinker.
-TEST_CASE("BAR-mode1-no-title", "[ff][bar]")
+TEST_CASE("BAR-mode1-no-title", "[ff][bar][L5]")
 {
    TestLmdaFlagReset lmdaReset;
    TestRemoveFileOnExit rmbar("bar.np-a.bar");
@@ -975,7 +975,7 @@ TEST_CASE("BAR-mode1-no-title", "[ff][bar]")
 
 // A log with fewer energies than the archive has frames stops mode 1, and the
 // BAR file begun for trajectory A is removed.
-TEST_CASE("BAR-mode1-log-mismatch", "[ff][bar]")
+TEST_CASE("BAR-mode1-log-mismatch", "[ff][bar][L5]")
 {
    TestLmdaFlagReset lmdaReset;
    TestRemoveFileOnExit rmbar("bar.np-a.bar");
@@ -991,7 +991,7 @@ TEST_CASE("BAR-mode1-log-mismatch", "[ff][bar]")
 // the exponentials found once by BootTerms, match the direct ones on a selection
 // of frames with repeats, at a reference free energy away from the solution
 // (tinkerDev's test_bar_boot).
-TEST_CASE("BAR-boot-kernels", "[bar]")
+TEST_CASE("BAR-boot-kernels", "[bar][L5]")
 {
    using namespace tinker::bar;
    const double rt = units::gasconst * 298.0, pres = 1.0 / units::prescon, s = 1.2, eps = 1.0e-8;
@@ -1037,7 +1037,7 @@ TEST_CASE("BAR-boot-kernels", "[bar]")
 
 // The default number of bootstrap trials is about 1e8 frame evaluations, but at
 // least 2000 trials for errors to about 1.5 percent (tinkerDev's test_bar_boot).
-TEST_CASE("BAR-trials", "[bar]")
+TEST_CASE("BAR-trials", "[bar][L5]")
 {
    REQUIRE(tinker::bar::barTrials(1000) == 10000);
    REQUIRE(tinker::bar::barTrials(40000) == 2500);

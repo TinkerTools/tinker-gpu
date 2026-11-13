@@ -44,7 +44,7 @@ double dtaperAt(double x, double cut, double off)
 }
 }
 
-TEST_CASE("DLMDA-one-main-lambda", "[ff][dlmda]")
+TEST_CASE("DLMDA-one-main-lambda", "[ff][dlmda][L2]")
 {
    // Without a sampling method the main lambda is the one from the key file.
    bool oldUseOst = use_ost, oldUseMeta = use_meta, oldUseTi = use_ti;
@@ -88,7 +88,7 @@ TEST_CASE("DLMDA-one-main-lambda", "[ff][dlmda]")
    lambda = oldLambda;
 }
 
-TEST_CASE("DLMDA-taper-shape", "[ff][dlmda]")
+TEST_CASE("DLMDA-taper-shape", "[ff][dlmda][L2]")
 {
    const double cut = 0.3, off = 0.7;
 
@@ -127,7 +127,7 @@ TEST_CASE("DLMDA-taper-shape", "[ff][dlmda]")
    COMPARE_REALS(d2t, 0.0, 1.0e-6);
 }
 
-TEST_CASE("DLMDA-taper-derivatives", "[ff][dlmda]")
+TEST_CASE("DLMDA-taper-derivatives", "[ff][dlmda][L2]")
 {
    const double cut = 0.3, off = 0.7;
    const double h = 1.0e-6;
@@ -151,7 +151,7 @@ TEST_CASE("DLMDA-taper-derivatives", "[ff][dlmda]")
 // h = alpha v^m (1-v)^p and v = x + 0.3 x^2 of the main lambda x, including the
 // endpoints v = 0 and 1, where n or m below 2 used to lose b2 (one-sided
 // differences there).
-TEST_CASE("DLMDA-softcore-coefficients", "[ff][dlmda]")
+TEST_CASE("DLMDA-softcore-coefficients", "[ff][dlmda][L2]")
 {
    // turns the lambda flags back off however the case ends
    TestLmdaFlagReset lmdaReset;
@@ -192,7 +192,7 @@ TEST_CASE("DLMDA-softcore-coefficients", "[ff][dlmda]")
             }
 }
 
-TEST_CASE("DLMDA-taper-matches-switch", "[ff][dlmda]")
+TEST_CASE("DLMDA-taper-matches-switch", "[ff][dlmda][L2]")
 {
    // quinticTaper evaluates in a normalized variable; switch.f:128-136 builds
    // the same polynomial as c0..c5 in powers of x. Check they agree away from
@@ -224,7 +224,7 @@ TEST_CASE("DLMDA-taper-matches-switch", "[ff][dlmda]")
    }
 }
 
-TEST_CASE("DLMDA-taper-degenerate", "[ff][dlmda]")
+TEST_CASE("DLMDA-taper-degenerate", "[ff][dlmda][L2]")
 {
    // A zero-width or inverted window collapses to a step at cut, with no
    // division by zero.
@@ -239,7 +239,7 @@ TEST_CASE("DLMDA-taper-degenerate", "[ff][dlmda]")
 
 // Two maps are the same only with the same type and the parameters that type
 // reads; the fused single topology kernel relies on it (polTracksEle).
-TEST_CASE("DLMDA-same-map", "[ff][dlmda]")
+TEST_CASE("DLMDA-same-map", "[ff][dlmda][L2]")
 {
    const LmdaMap exp2 = {Lmdamap::EXP, true, 2, 1, 0.1, 2, 1.5, 0.0, 1.0};
    LmdaMap m = exp2;
@@ -267,7 +267,7 @@ TEST_CASE("DLMDA-same-map", "[ff][dlmda]")
    REQUIRE_FALSE(sameLmdaMap(m, q));
 }
 
-TEST_CASE("DLMDA-dtneed", "[ff][dlmda]")
+TEST_CASE("DLMDA-dtneed", "[ff][dlmda][L2]")
 {
    bool need0, need1;
 
@@ -337,7 +337,7 @@ TEST_CASE("DLMDA-dtneed", "[ff][dlmda]")
 // and no slope, so without second derivatives the coupled polarization
 // endpoint and the ligand-ligand charge transfer pairs carry nothing and are
 // left out; with them, both come back.
-TEST_CASE("DLMDA-curvature-gate", "[ff][dlmda]")
+TEST_CASE("DLMDA-curvature-gate", "[ff][dlmda][L2]")
 {
    const bool saved_d2 = use_d2lmda, saved_pdl = use_pdlmda, saved_epdt = use_epdt, saved_rel = use_rel;
    const double saved_plam = plam;
@@ -470,7 +470,7 @@ void setStagedLeg(RelStage leg)
 }
 }
 
-TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
+TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda][L2]")
 {
    StagedScope scope;
    // Each leg run as its own simulation, declared alone over its range.
@@ -518,7 +518,7 @@ TEST_CASE("DLMDA-relstage-schedule", "[ff][dlmda]")
    COMPARE_REALS(deldlmda, 0.0, 1.0e-14);
 }
 
-TEST_CASE("DLMDA-relstage-pinned-endpoints", "[ff][dlmda]")
+TEST_CASE("DLMDA-relstage-pinned-endpoints", "[ff][dlmda][L2]")
 {
    StagedScope scope;
    // A leg pins the sub-lambdas it is not walking, and a pinned sub-lambda has
@@ -534,7 +534,7 @@ TEST_CASE("DLMDA-relstage-pinned-endpoints", "[ff][dlmda]")
    REQUIRE_FALSE(need1);
 }
 
-TEST_CASE("DLMDA-relstage-continuity", "[ff][dlmda]")
+TEST_CASE("DLMDA-relstage-continuity", "[ff][dlmda][L2]")
 {
    StagedScope scope;
    // Polarization stages with the multipoles exactly, on the leg and off it.
@@ -599,7 +599,7 @@ TEST_CASE("DLMDA-relstage-continuity", "[ff][dlmda]")
       legMatchesTaper(RelStage::LIG2, lambda, 0.0, 0.3, -1.0);
 }
 
-TEST_CASE("DLMDA-relstage-active-leg", "[ff][dlmda]")
+TEST_CASE("DLMDA-relstage-active-leg", "[ff][dlmda][L2]")
 {
    // All three legs declared, so one main lambda walks them in turn: ligand 2
    // discharging over the lower range, van der Waals morphing over the middle
@@ -644,7 +644,7 @@ TEST_CASE("DLMDA-relstage-active-leg", "[ff][dlmda]")
    COMPARE_REALS(elam, 1.0, 1.0e-7);
 }
 
-TEST_CASE("DLMDA-relstage-pol-carries-ele", "[ff][dlmda]")
+TEST_CASE("DLMDA-relstage-pol-carries-ele", "[ff][dlmda][L2]")
 {
    // Polarization carries the electrostatic weight on every leg, and neither a
    // map of its own nor the sub-lambda windows of the unstaged maps can move a
@@ -668,7 +668,7 @@ TEST_CASE("DLMDA-relstage-pol-carries-ele", "[ff][dlmda]")
    COMPARE_REALS(vlam, 0.5, 1.0e-6);
 }
 
-TEST_CASE("DLMDA-relstage-leg-width", "[ff][dlmda]")
+TEST_CASE("DLMDA-relstage-leg-width", "[ff][dlmda][L2]")
 {
    // Legs of unequal width carry the slope of their own local coordinate, here
    // twice the quintic slope of 15/8 on a leg of half width (test_eostmap.f).
@@ -688,7 +688,7 @@ TEST_CASE("DLMDA-relstage-leg-width", "[ff][dlmda]")
    REQUIRE(elam == 0.0);
 }
 
-TEST_CASE("DLMDA-relstage-gap-and-ends", "[ff][dlmda]")
+TEST_CASE("DLMDA-relstage-gap-and-ends", "[ff][dlmda][L2]")
 {
    StagedScope scope;
 
@@ -775,7 +775,7 @@ void setApm(int nn, double rho)
 // The values and chain rule derivatives of each map type at one main lambda,
 // each sub-lambda on its own parameters so that a crossed argument would land
 // on the wrong one (test_eostmap.f:test_eostmap_mapsub).
-TEST_CASE("DLMDA-map-values", "[ff][dlmda]")
+TEST_CASE("DLMDA-map-values", "[ff][dlmda][L2]")
 {
    ApmScope scope;
    auto setType = [](Lmdamap t) { elmdamap.type = plmdamap.type = vlmdamap.type = t; };
@@ -840,7 +840,7 @@ TEST_CASE("DLMDA-map-values", "[ff][dlmda]")
 // at zero for exponents of one and two, and the inverse power map, the
 // identity for an exponent of one or less and with a shift of 0.1 for a
 // nonpositive one (test_eostmap.f:test_eostmap_sublmda).
-TEST_CASE("DLMDA-power-endpoints", "[ff][dlmda]")
+TEST_CASE("DLMDA-power-endpoints", "[ff][dlmda][L2]")
 {
    struct Case
    {
@@ -878,7 +878,7 @@ TEST_CASE("DLMDA-power-endpoints", "[ff][dlmda]")
    }
 }
 
-TEST_CASE("DLMDA-apm-endpoints", "[ff][dlmda]")
+TEST_CASE("DLMDA-apm-endpoints", "[ff][dlmda][L2]")
 {
    // The map pins both endpoint values and carries the slope ratio at the
    // decoupled end against a unit slope at the coupled end, which is what the
@@ -905,7 +905,7 @@ TEST_CASE("DLMDA-apm-endpoints", "[ff][dlmda]")
    COMPARE_REALS(d2vldlmda2, -0.017578125, 1.0e-12);
 }
 
-TEST_CASE("DLMDA-apm-exact-ends", "[ff][dlmda]")
+TEST_CASE("DLMDA-apm-exact-ends", "[ff][dlmda][L2]")
 {
    // The end states map exactly onto themselves: at a power of two and a slope
    // ratio of 1.0325 the normalized sum rounds an ulp past one, where a soft
@@ -922,7 +922,7 @@ TEST_CASE("DLMDA-apm-exact-ends", "[ff][dlmda]")
    REQUIRE(plam == 0);
 }
 
-TEST_CASE("DLMDA-apm-degenerate", "[ff][dlmda]")
+TEST_CASE("DLMDA-apm-degenerate", "[ff][dlmda][L2]")
 {
    // A power below two or a slope ratio of one or less leaves no asymmetry to
    // impose, and a slope ratio at or above the power sits on the pole of the
@@ -940,7 +940,7 @@ TEST_CASE("DLMDA-apm-degenerate", "[ff][dlmda]")
    }
 }
 
-TEST_CASE("DLMDA-apm-per-term-shape", "[ff][dlmda]")
+TEST_CASE("DLMDA-apm-per-term-shape", "[ff][dlmda][L2]")
 {
    // Three terms on three different powers and slope ratios, so a crossed
    // argument at a mapOne() call site would land the wrong shape on the wrong
@@ -965,7 +965,7 @@ TEST_CASE("DLMDA-apm-per-term-shape", "[ff][dlmda]")
    COMPARE_REALS(d2vldlmda2, -3.34375, 1.0e-12);
 }
 
-TEST_CASE("DLMDA-apm-pol-tracks-ele", "[ff][dlmda]")
+TEST_CASE("DLMDA-apm-pol-tracks-ele", "[ff][dlmda][L2]")
 {
    // Polarization rides the multipole weight only while both maps carry the
    // same shape; either half of the shape parting company parts the weights.
@@ -1100,7 +1100,7 @@ void selectMap(int j)
 }
 }
 
-TEST_CASE("DLMDA-theta-map-sin", "[ff][dlmda]")
+TEST_CASE("DLMDA-theta-map-sin", "[ff][dlmda][L2]")
 {
    // the sine squared map is lambda = sin(theta)^2
    ThetaScope scope;
@@ -1110,7 +1110,7 @@ TEST_CASE("DLMDA-theta-map-sin", "[ff][dlmda]")
    COMPARE_REALS(mapDldth(0.3), std::sin(0.6), 1.0e-15);
 }
 
-TEST_CASE("DLMDA-theta-map-tri", "[ff][dlmda]")
+TEST_CASE("DLMDA-theta-map-tri", "[ff][dlmda][L2]")
 {
    // the smoothed triangle reaches both endpoints and the midpoint, and it
    // comes into the lambda endpoints flat, which is the point of the map
@@ -1125,7 +1125,7 @@ TEST_CASE("DLMDA-theta-map-tri", "[ff][dlmda]")
    COMPARE_REALS(mapLmda(-0.25 * dpi), 0.5, 1.0e-12);
 }
 
-TEST_CASE("DLMDA-theta-map-periodic", "[ff][dlmda]")
+TEST_CASE("DLMDA-theta-map-periodic", "[ff][dlmda][L2]")
 {
    // both maps close on themselves over a period of pi in theta, which is what
    // lets lmdaLangevin() wrap theta into [0,pi) without moving lambda
@@ -1142,7 +1142,7 @@ TEST_CASE("DLMDA-theta-map-periodic", "[ff][dlmda]")
    }
 }
 
-TEST_CASE("DLMDA-theta-map-small-alpha", "[ff][dlmda]")
+TEST_CASE("DLMDA-theta-map-small-alpha", "[ff][dlmda][L2]")
 {
    // a vanishing sharpness recovers the sine squared map
    ThetaScope scope;
@@ -1161,7 +1161,7 @@ TEST_CASE("DLMDA-theta-map-small-alpha", "[ff][dlmda]")
    }
 }
 
-TEST_CASE("DLMDA-theta-map-derivative", "[ff][dlmda]")
+TEST_CASE("DLMDA-theta-map-derivative", "[ff][dlmda][L2]")
 {
    // theta derivatives match central differences over a full period
    ThetaScope scope;
@@ -1178,7 +1178,7 @@ TEST_CASE("DLMDA-theta-map-derivative", "[ff][dlmda]")
    }
 }
 
-TEST_CASE("DLMDA-theta-inverse", "[ff][dlmda]")
+TEST_CASE("DLMDA-theta-inverse", "[ff][dlmda][L2]")
 {
    // the inverse maps round trip lambda through theta, on the principal branch
    ThetaScope scope;
@@ -1198,7 +1198,7 @@ TEST_CASE("DLMDA-theta-inverse", "[ff][dlmda]")
    }
 }
 
-TEST_CASE("DLMDA-theta-langevin-tri", "[ff][dlmda]")
+TEST_CASE("DLMDA-theta-langevin-tri", "[ff][dlmda][L2]")
 {
    // a frictionless step with the smoothed triangle map takes its theta force
    // from the map derivative, not from sin(2*theta)
@@ -1226,7 +1226,7 @@ TEST_CASE("DLMDA-theta-langevin-tri", "[ff][dlmda]")
    COMPARE_REALS(lambda, 0.5 - std::asin(alpha * std::cos(2.0 * thref)) / (2.0 * asina), 1.0e-14);
 }
 
-TEST_CASE("DLMDA-theta-langevin-friction", "[ff][dlmda]")
+TEST_CASE("DLMDA-theta-langevin-friction", "[ff][dlmda][L2]")
 {
    // a step with friction and a given random kick; the kick is sized by the
    // thermal energy in kcal/mole, as is the force
@@ -1274,7 +1274,7 @@ TEST_CASE("DLMDA-theta-langevin-friction", "[ff][dlmda]")
    COMPARE_REALS(lmdamass * lmdavtheta * lmdavtheta / (1.0 - decay * decay), 3.0 * 0.59616127758, 1.0e-12);
 }
 
-TEST_CASE("DLMDA-theta-langevin-sampling", "[ff][dlmda]")
+TEST_CASE("DLMDA-theta-langevin-sampling", "[ff][dlmda][L2]")
 {
    // A step with friction samples a harmonic well in theta at the bath
    // temperature, or at its own once LAMBDA-TEMPERATURE sets one, for small and
@@ -1338,7 +1338,7 @@ TEST_CASE("DLMDA-theta-langevin-sampling", "[ff][dlmda]")
    }
 }
 
-TEST_CASE("DLMDA-theta-langevin-wrap", "[ff][dlmda]")
+TEST_CASE("DLMDA-theta-langevin-wrap", "[ff][dlmda][L2]")
 {
    // a step past the end of the period wraps theta into [0,pi), and the period
    // of the map leaves lambda where the unwrapped theta would have put it
@@ -1371,7 +1371,7 @@ TEST_CASE("DLMDA-theta-langevin-wrap", "[ff][dlmda]")
    }
 }
 
-TEST_CASE("DLMDA-theta-matches-fortran", "[ff][dlmda]")
+TEST_CASE("DLMDA-theta-matches-fortran", "[ff][dlmda][L2]")
 {
    // The whole point of the port is that a tinker9 run and a Tinker run reading
    // the same key file propagate the same lambda particle. Both engines are
@@ -1481,7 +1481,7 @@ struct ConvGateScope
 };
 }
 
-TEST_CASE("DLMDA-depcriteria-matches-fortran", "[ff][dlmda]")
+TEST_CASE("DLMDA-depcriteria-matches-fortran", "[ff][dlmda][L2]")
 {
    // tinker9 and Tinker must accept or reject the same interval samples, so hold
    // the C++ convergence gate against dlambda.f:depcriteria with the gate both

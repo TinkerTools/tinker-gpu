@@ -599,152 +599,152 @@ void runLrcChainFixture(const Fixture& fx, bool dsp)
 }
 }
 
-TEST_CASE("TESTLMDA-01_water_adt_l05", "[ff][testlmda]") { runFixture(fx("01_water_adt_l05")); }
-TEST_CASE("TESTLMDA-02_water_ast_l05", "[ff][testlmda]") { runFixture(fx("02_water_ast_l05")); }
-TEST_CASE("TESTLMDA-03_water_adt_l06exp", "[ff][testlmda]") { runFixture(fx("03_water_adt_l06exp")); }
-TEST_CASE("TESTLMDA-04_water_ast_l06exp", "[ff][testlmda]") { runFixture(fx("04_water_ast_l06exp")); }
-TEST_CASE("TESTLMDA-05_water_ast_nodl_l05", "[ff][testlmda]") { runFixture(fx("05_water_ast_nodl_l05")); }
-TEST_CASE("TESTLMDA-06_water_ast_vonly_l05", "[ff][testlmda]") { runFixture(fx("06_water_ast_vonly_l05")); }
-TEST_CASE("TESTLMDA-07_water_ast_vcorr_l05", "[ff][testlmda]") { runFixture(fx("07_water_ast_vcorr_l05")); }
-TEST_CASE("TESTLMDA-08_water_ast_vcorr_annih_l05", "[ff][testlmda]") { runFixture(fx("08_water_ast_vcorr_annih_l05")); }
-TEST_CASE("TESTLMDA-09_water_ast_vcorr_l06exp", "[ff][testlmda]") { runFixture(fx("09_water_ast_vcorr_l06exp")); }
-TEST_CASE("TESTLMDA-10_water_rels_vdwm_vcorr_annih_l05", "[ff][testlmda][rdt]") { runFixture(fx("10_water_rels_vdwm_vcorr_annih_l05")); }
-TEST_CASE("TESTLMDA-11_water_rels_vdwm_vcorr_l050", "[ff][testlmda][rdt]") { runFixture(fx("11_water_rels_vdwm_vcorr_l050")); }
-TEST_CASE("TESTLMDA-12_water_rels_lig1_l085", "[ff][testlmda][rdt]") { runFixture(fx("12_water_rels_lig1_l085")); }
-TEST_CASE("TESTLMDA-13_water_rels_lig2_l015", "[ff][testlmda][rdt]") { runFixture(fx("13_water_rels_lig2_l015")); }
-TEST_CASE("TESTLMDA-14_water_rels_lig1_ne_l085", "[ff][testlmda][rdt]") { runFixture(fx("14_water_rels_lig1_ne_l085")); }
-TEST_CASE("TESTLMDA-15_water_rels_lig1_nlist_exf_l085", "[ff][testlmda][rdt]") { runFixture(fx("15_water_rels_lig1_nlist_exf_l085")); }
-TEST_CASE("TESTLMDA-16_water_rels_lig1_st_l085", "[ff][testlmda][rdt]") { runFixture(fx("16_water_rels_lig1_st_l085")); }
-TEST_CASE("TESTLMDA-17_water_rels_lig2_st_l015", "[ff][testlmda][rdt]") { runFixture(fx("17_water_rels_lig2_st_l015")); }
-TEST_CASE("TESTLMDA-18_water_rels_lig1_st_ne_l085", "[ff][testlmda][rdt]") { runFixture(fx("18_water_rels_lig1_st_ne_l085")); }
-TEST_CASE("TESTLMDA-19_water_rels_lig1_st_polonly_l085", "[ff][testlmda][rdt]") { runFixture(fx("19_water_rels_lig1_st_polonly_l085")); }
-TEST_CASE("TESTLMDA-20_water_rels_lig1_dt_polonly_l078", "[ff][testlmda][rdt]") { runFixture(fx("20_water_rels_lig1_dt_polonly_l078")); }
-TEST_CASE("TESTLMDA-21_water_rels_lig1_st_l088", "[ff][testlmda][rdt]") { runFixture(fx("21_water_rels_lig1_st_l088")); }
-TEST_CASE("TESTLMDA-22_water_rels_lig1_dt_l088", "[ff][testlmda][rdt]") { runFixture(fx("22_water_rels_lig1_dt_l088")); }
-TEST_CASE("TESTLMDA-23_water_rels_3stg_l085", "[ff][testlmda][rdt]") { runFixture(fx("23_water_rels_3stg_l085")); }
-TEST_CASE("TESTLMDA-24_ionwat_ewald_l05", "[ff][testlmda]") { runFixture(fx("24_ionwat_ewald_l05")); }
-TEST_CASE("TESTLMDA-25_ionwat_ewald_nlist_l05", "[ff][testlmda]") { runFixture(fx("25_ionwat_ewald_nlist_l05")); }
-TEST_CASE("TESTLMDA-26_ionwat_pol_ewald_l05", "[ff][testlmda]") { runFixture(fx("26_ionwat_pol_ewald_l05")); }
-TEST_CASE("TESTLMDA-27_water_rels_2stg_l075", "[ff][testlmda][rdt]") { runFixture(fx("27_water_rels_2stg_l075")); }
-TEST_CASE("TESTLMDA-28_hipwat_flux_l04", "[ff][testlmda][cflux]") { runFixture(fx("28_hipwat_flux_l04")); }
-TEST_CASE("TESTLMDA-29_hipwat_flux_ewald_l04", "[ff][testlmda][cflux]") { runFixture(fx("29_hipwat_flux_ewald_l04")); }
-TEST_CASE("TESTLMDA-30_hipwat_flux_ewald_nlist_l04", "[ff][testlmda][cflux]") { runFixture(fx("30_hipwat_flux_ewald_nlist_l04")); }
-TEST_CASE("TESTLMDA-31_hipwat_flux_ewald_lin_l00", "[ff][testlmda][cflux]") { runFixture(fx("31_hipwat_flux_ewald_lin_l00")); }
-TEST_CASE("TESTLMDA-32_aptetra_flux_l04", "[ff][testlmda][cflux]") { runFixture(fx("32_aptetra_flux_l04")); }
-TEST_CASE("TESTLMDA-33_aptetra_flux_ewald_l04", "[ff][testlmda][cflux]") { runFixture(fx("33_aptetra_flux_ewald_l04")); }
-TEST_CASE("TESTLMDA-34_aptetra_flux_ewald_nlist_l04", "[ff][testlmda][cflux]") { runFixture(fx("34_aptetra_flux_ewald_nlist_l04")); }
-TEST_CASE("TESTLMDA-35_aptetra_flux_ewald_lin_l00", "[ff][testlmda][cflux]") { runFixture(fx("35_aptetra_flux_ewald_lin_l00")); }
-TEST_CASE("TESTLMDA-36_apgas_flux_l04", "[ff][testlmda][cflux]") { runFixture(fx("36_apgas_flux_l04")); }
-TEST_CASE("TESTLMDA-37_apgas_cross_l04", "[ff][testlmda][cflux]") { runFixture(fx("37_apgas_cross_l04")); }
-TEST_CASE("TESTLMDA-38_apgas_cross_lin_l00", "[ff][testlmda][cflux]") { runFixture(fx("38_apgas_cross_lin_l00")); }
-TEST_CASE("TESTLMDA-39_apgas_cross_ewald_l04", "[ff][testlmda][cflux]") { runFixture(fx("39_apgas_cross_ewald_l04")); }
-TEST_CASE("TESTLMDA-40_hipmix_ewald_l04", "[ff][testlmda][cflux]") { runFixture(fx("40_hipmix_ewald_l04")); }
-TEST_CASE("TESTLMDA-58_hipwat_flux_mlist_l04", "[ff][testlmda][cflux]") { runFixture(fx("58_hipwat_flux_mlist_l04")); }
-TEST_CASE("TESTLMDA-41_hipwat_pol_st_l04", "[ff][testlmda][cflux][astpol]") { runFixture(fx("41_hipwat_pol_st_l04")); }
-TEST_CASE("TESTLMDA-42_hipwat_pol_ewald_st_l04", "[ff][testlmda][cflux][astpol]") { runFixture(fx("42_hipwat_pol_ewald_st_l04")); }
-TEST_CASE("TESTLMDA-43_hipwat_pol_ewald_nlist_st_l04", "[ff][testlmda][cflux][astpol]") { runFixture(fx("43_hipwat_pol_ewald_nlist_st_l04")); }
-TEST_CASE("TESTLMDA-44_hipwat_pol_ewald_lin_st_l00", "[ff][testlmda][cflux][astpol]") { runFixture(fx("44_hipwat_pol_ewald_lin_st_l00")); }
-TEST_CASE("TESTLMDA-46_aptetra_pol_st_l04", "[ff][testlmda][cflux][astpol]") { runFixture(fx("46_aptetra_pol_st_l04")); }
-TEST_CASE("TESTLMDA-47_aptetra_pol_ewald_st_l04", "[ff][testlmda][cflux][astpol]") { runFixture(fx("47_aptetra_pol_ewald_st_l04")); }
-TEST_CASE("TESTLMDA-48_aptetra_pol_ewald_nlist_st_l04", "[ff][testlmda][cflux][astpol]") { runFixture(fx("48_aptetra_pol_ewald_nlist_st_l04")); }
-TEST_CASE("TESTLMDA-49_aptetra_pol_ewald_lin_st_l00", "[ff][testlmda][cflux][astpol]") { runFixture(fx("49_aptetra_pol_ewald_lin_st_l00")); }
-TEST_CASE("TESTLMDA-51_apgas_pol_st_l04", "[ff][testlmda][cflux][astpol]") { runFixture(fx("51_apgas_pol_st_l04")); }
-TEST_CASE("TESTLMDA-53_hipmix_pol_ewald_st_l04", "[ff][testlmda][cflux][astpol]") { runFixture(fx("53_hipmix_pol_ewald_st_l04")); }
-TEST_CASE("TESTLMDA-57_hipwat_pol_split_st_l04", "[ff][testlmda][cflux][astpol]") { runFixture(fx("57_hipwat_pol_split_st_l04")); }
-TEST_CASE("TESTLMDA-45_hipwat_pol_ewald_dt_l04", "[ff][testlmda][cflux][adtpol]") { runFixture(fx("45_hipwat_pol_ewald_dt_l04")); }
-TEST_CASE("TESTLMDA-50_aptetra_pol_ewald_dt_l04", "[ff][testlmda][cflux][adtpol]") { runFixture(fx("50_aptetra_pol_ewald_dt_l04")); }
-TEST_CASE("TESTLMDA-52_apgas_pol_ewald_dt_l04", "[ff][testlmda][cflux][adtpol]") { runFixture(fx("52_apgas_pol_ewald_dt_l04")); }
-TEST_CASE("TESTLMDA-54_hipmix_pol_ewald_dt_l04", "[ff][testlmda][cflux][adtpol]") { runFixture(fx("54_hipmix_pol_ewald_dt_l04")); }
+TEST_CASE("TESTLMDA-01_water_adt_l05", "[ff][testlmda][L3]") { runFixture(fx("01_water_adt_l05")); }
+TEST_CASE("TESTLMDA-02_water_ast_l05", "[ff][testlmda][L3]") { runFixture(fx("02_water_ast_l05")); }
+TEST_CASE("TESTLMDA-03_water_adt_l06exp", "[ff][testlmda][L3]") { runFixture(fx("03_water_adt_l06exp")); }
+TEST_CASE("TESTLMDA-04_water_ast_l06exp", "[ff][testlmda][L3]") { runFixture(fx("04_water_ast_l06exp")); }
+TEST_CASE("TESTLMDA-05_water_ast_nodl_l05", "[ff][testlmda][L3]") { runFixture(fx("05_water_ast_nodl_l05")); }
+TEST_CASE("TESTLMDA-06_water_ast_vonly_l05", "[ff][testlmda][L3]") { runFixture(fx("06_water_ast_vonly_l05")); }
+TEST_CASE("TESTLMDA-07_water_ast_vcorr_l05", "[ff][testlmda][L3]") { runFixture(fx("07_water_ast_vcorr_l05")); }
+TEST_CASE("TESTLMDA-08_water_ast_vcorr_annih_l05", "[ff][testlmda][L3]") { runFixture(fx("08_water_ast_vcorr_annih_l05")); }
+TEST_CASE("TESTLMDA-09_water_ast_vcorr_l06exp", "[ff][testlmda][L3]") { runFixture(fx("09_water_ast_vcorr_l06exp")); }
+TEST_CASE("TESTLMDA-10_water_rels_vdwm_vcorr_annih_l05", "[ff][testlmda][rdt][L3]") { runFixture(fx("10_water_rels_vdwm_vcorr_annih_l05")); }
+TEST_CASE("TESTLMDA-11_water_rels_vdwm_vcorr_l050", "[ff][testlmda][rdt][L3]") { runFixture(fx("11_water_rels_vdwm_vcorr_l050")); }
+TEST_CASE("TESTLMDA-12_water_rels_lig1_l085", "[ff][testlmda][rdt][L3]") { runFixture(fx("12_water_rels_lig1_l085")); }
+TEST_CASE("TESTLMDA-13_water_rels_lig2_l015", "[ff][testlmda][rdt][L3]") { runFixture(fx("13_water_rels_lig2_l015")); }
+TEST_CASE("TESTLMDA-14_water_rels_lig1_ne_l085", "[ff][testlmda][rdt][L3]") { runFixture(fx("14_water_rels_lig1_ne_l085")); }
+TEST_CASE("TESTLMDA-15_water_rels_lig1_nlist_exf_l085", "[ff][testlmda][rdt][L3]") { runFixture(fx("15_water_rels_lig1_nlist_exf_l085")); }
+TEST_CASE("TESTLMDA-16_water_rels_lig1_st_l085", "[ff][testlmda][rdt][L3]") { runFixture(fx("16_water_rels_lig1_st_l085")); }
+TEST_CASE("TESTLMDA-17_water_rels_lig2_st_l015", "[ff][testlmda][rdt][L3]") { runFixture(fx("17_water_rels_lig2_st_l015")); }
+TEST_CASE("TESTLMDA-18_water_rels_lig1_st_ne_l085", "[ff][testlmda][rdt][L3]") { runFixture(fx("18_water_rels_lig1_st_ne_l085")); }
+TEST_CASE("TESTLMDA-19_water_rels_lig1_st_polonly_l085", "[ff][testlmda][rdt][L3]") { runFixture(fx("19_water_rels_lig1_st_polonly_l085")); }
+TEST_CASE("TESTLMDA-20_water_rels_lig1_dt_polonly_l078", "[ff][testlmda][rdt][L3]") { runFixture(fx("20_water_rels_lig1_dt_polonly_l078")); }
+TEST_CASE("TESTLMDA-21_water_rels_lig1_st_l088", "[ff][testlmda][rdt][L3]") { runFixture(fx("21_water_rels_lig1_st_l088")); }
+TEST_CASE("TESTLMDA-22_water_rels_lig1_dt_l088", "[ff][testlmda][rdt][L3]") { runFixture(fx("22_water_rels_lig1_dt_l088")); }
+TEST_CASE("TESTLMDA-23_water_rels_3stg_l085", "[ff][testlmda][rdt][L3]") { runFixture(fx("23_water_rels_3stg_l085")); }
+TEST_CASE("TESTLMDA-24_ionwat_ewald_l05", "[ff][testlmda][L3]") { runFixture(fx("24_ionwat_ewald_l05")); }
+TEST_CASE("TESTLMDA-25_ionwat_ewald_nlist_l05", "[ff][testlmda][L3]") { runFixture(fx("25_ionwat_ewald_nlist_l05")); }
+TEST_CASE("TESTLMDA-26_ionwat_pol_ewald_l05", "[ff][testlmda][L3]") { runFixture(fx("26_ionwat_pol_ewald_l05")); }
+TEST_CASE("TESTLMDA-27_water_rels_2stg_l075", "[ff][testlmda][rdt][L3]") { runFixture(fx("27_water_rels_2stg_l075")); }
+TEST_CASE("TESTLMDA-28_hipwat_flux_l04", "[ff][testlmda][cflux][L3]") { runFixture(fx("28_hipwat_flux_l04")); }
+TEST_CASE("TESTLMDA-29_hipwat_flux_ewald_l04", "[ff][testlmda][cflux][L3]") { runFixture(fx("29_hipwat_flux_ewald_l04")); }
+TEST_CASE("TESTLMDA-30_hipwat_flux_ewald_nlist_l04", "[ff][testlmda][cflux][L3]") { runFixture(fx("30_hipwat_flux_ewald_nlist_l04")); }
+TEST_CASE("TESTLMDA-31_hipwat_flux_ewald_lin_l00", "[ff][testlmda][cflux][L3]") { runFixture(fx("31_hipwat_flux_ewald_lin_l00")); }
+TEST_CASE("TESTLMDA-32_aptetra_flux_l04", "[ff][testlmda][cflux][L3]") { runFixture(fx("32_aptetra_flux_l04")); }
+TEST_CASE("TESTLMDA-33_aptetra_flux_ewald_l04", "[ff][testlmda][cflux][L3]") { runFixture(fx("33_aptetra_flux_ewald_l04")); }
+TEST_CASE("TESTLMDA-34_aptetra_flux_ewald_nlist_l04", "[ff][testlmda][cflux][L3]") { runFixture(fx("34_aptetra_flux_ewald_nlist_l04")); }
+TEST_CASE("TESTLMDA-35_aptetra_flux_ewald_lin_l00", "[ff][testlmda][cflux][L3]") { runFixture(fx("35_aptetra_flux_ewald_lin_l00")); }
+TEST_CASE("TESTLMDA-36_apgas_flux_l04", "[ff][testlmda][cflux][L3]") { runFixture(fx("36_apgas_flux_l04")); }
+TEST_CASE("TESTLMDA-37_apgas_cross_l04", "[ff][testlmda][cflux][L3]") { runFixture(fx("37_apgas_cross_l04")); }
+TEST_CASE("TESTLMDA-38_apgas_cross_lin_l00", "[ff][testlmda][cflux][L3]") { runFixture(fx("38_apgas_cross_lin_l00")); }
+TEST_CASE("TESTLMDA-39_apgas_cross_ewald_l04", "[ff][testlmda][cflux][L3]") { runFixture(fx("39_apgas_cross_ewald_l04")); }
+TEST_CASE("TESTLMDA-40_hipmix_ewald_l04", "[ff][testlmda][cflux][L3]") { runFixture(fx("40_hipmix_ewald_l04")); }
+TEST_CASE("TESTLMDA-58_hipwat_flux_mlist_l04", "[ff][testlmda][cflux][L3]") { runFixture(fx("58_hipwat_flux_mlist_l04")); }
+TEST_CASE("TESTLMDA-41_hipwat_pol_st_l04", "[ff][testlmda][cflux][astpol][L3]") { runFixture(fx("41_hipwat_pol_st_l04")); }
+TEST_CASE("TESTLMDA-42_hipwat_pol_ewald_st_l04", "[ff][testlmda][cflux][astpol][L3]") { runFixture(fx("42_hipwat_pol_ewald_st_l04")); }
+TEST_CASE("TESTLMDA-43_hipwat_pol_ewald_nlist_st_l04", "[ff][testlmda][cflux][astpol][L3]") { runFixture(fx("43_hipwat_pol_ewald_nlist_st_l04")); }
+TEST_CASE("TESTLMDA-44_hipwat_pol_ewald_lin_st_l00", "[ff][testlmda][cflux][astpol][L3]") { runFixture(fx("44_hipwat_pol_ewald_lin_st_l00")); }
+TEST_CASE("TESTLMDA-46_aptetra_pol_st_l04", "[ff][testlmda][cflux][astpol][L3]") { runFixture(fx("46_aptetra_pol_st_l04")); }
+TEST_CASE("TESTLMDA-47_aptetra_pol_ewald_st_l04", "[ff][testlmda][cflux][astpol][L3]") { runFixture(fx("47_aptetra_pol_ewald_st_l04")); }
+TEST_CASE("TESTLMDA-48_aptetra_pol_ewald_nlist_st_l04", "[ff][testlmda][cflux][astpol][L3]") { runFixture(fx("48_aptetra_pol_ewald_nlist_st_l04")); }
+TEST_CASE("TESTLMDA-49_aptetra_pol_ewald_lin_st_l00", "[ff][testlmda][cflux][astpol][L3]") { runFixture(fx("49_aptetra_pol_ewald_lin_st_l00")); }
+TEST_CASE("TESTLMDA-51_apgas_pol_st_l04", "[ff][testlmda][cflux][astpol][L3]") { runFixture(fx("51_apgas_pol_st_l04")); }
+TEST_CASE("TESTLMDA-53_hipmix_pol_ewald_st_l04", "[ff][testlmda][cflux][astpol][L3]") { runFixture(fx("53_hipmix_pol_ewald_st_l04")); }
+TEST_CASE("TESTLMDA-57_hipwat_pol_split_st_l04", "[ff][testlmda][cflux][astpol][L3]") { runFixture(fx("57_hipwat_pol_split_st_l04")); }
+TEST_CASE("TESTLMDA-45_hipwat_pol_ewald_dt_l04", "[ff][testlmda][cflux][adtpol][L3]") { runFixture(fx("45_hipwat_pol_ewald_dt_l04")); }
+TEST_CASE("TESTLMDA-50_aptetra_pol_ewald_dt_l04", "[ff][testlmda][cflux][adtpol][L3]") { runFixture(fx("50_aptetra_pol_ewald_dt_l04")); }
+TEST_CASE("TESTLMDA-52_apgas_pol_ewald_dt_l04", "[ff][testlmda][cflux][adtpol][L3]") { runFixture(fx("52_apgas_pol_ewald_dt_l04")); }
+TEST_CASE("TESTLMDA-54_hipmix_pol_ewald_dt_l04", "[ff][testlmda][cflux][adtpol][L3]") { runFixture(fx("54_hipmix_pol_ewald_dt_l04")); }
 // Atom group weights on HIPPO water with charge flux, which tinker9 refuses
 // (test_testlmda.f case 55).
-TEST_CASE("TESTLMDA-55_hipwat_group_ost_l04", "[ff][testlmda][cflux]") { runRefusedFixture(fx("55_hipwat_group_ost_l04"), testGroupWeightsRefusal); }
-TEST_CASE("TESTLMDA-56_hipwat_pol_split_dt_l04", "[ff][testlmda][cflux][adtpol]") { runFixture(fx("56_hipwat_pol_split_dt_l04")); }
-TEST_CASE("TESTLMDA-59_aptetra_pol_mlist_dt_l04", "[ff][testlmda][cflux][adtpol]") { runFixture(fx("59_aptetra_pol_mlist_dt_l04")); }
-TEST_CASE("TESTLMDA-60_aptetra_rel_lig1_l085", "[ff][testlmda][cflux][rdt]") { runFixture(fx("60_aptetra_rel_lig1_l085")); }
-TEST_CASE("TESTLMDA-61_aptetra_rel_lig2_l015", "[ff][testlmda][cflux][rdt]") { runFixture(fx("61_aptetra_rel_lig2_l015")); }
-TEST_CASE("TESTLMDA-62_aptetra_rel_cross_l085", "[ff][testlmda][cflux][rdt]") { runFixture(fx("62_aptetra_rel_cross_l085")); }
-TEST_CASE("TESTLMDA-63_hipwat_rel_lig1_ewald_l085", "[ff][testlmda][cflux][rdt]") { runFixture(fx("63_hipwat_rel_lig1_ewald_l085")); }
+TEST_CASE("TESTLMDA-55_hipwat_group_ost_l04", "[ff][testlmda][cflux][L3]") { runRefusedFixture(fx("55_hipwat_group_ost_l04"), testGroupWeightsRefusal); }
+TEST_CASE("TESTLMDA-56_hipwat_pol_split_dt_l04", "[ff][testlmda][cflux][adtpol][L3]") { runFixture(fx("56_hipwat_pol_split_dt_l04")); }
+TEST_CASE("TESTLMDA-59_aptetra_pol_mlist_dt_l04", "[ff][testlmda][cflux][adtpol][L3]") { runFixture(fx("59_aptetra_pol_mlist_dt_l04")); }
+TEST_CASE("TESTLMDA-60_aptetra_rel_lig1_l085", "[ff][testlmda][cflux][rdt][L3]") { runFixture(fx("60_aptetra_rel_lig1_l085")); }
+TEST_CASE("TESTLMDA-61_aptetra_rel_lig2_l015", "[ff][testlmda][cflux][rdt][L3]") { runFixture(fx("61_aptetra_rel_lig2_l015")); }
+TEST_CASE("TESTLMDA-62_aptetra_rel_cross_l085", "[ff][testlmda][cflux][rdt][L3]") { runFixture(fx("62_aptetra_rel_cross_l085")); }
+TEST_CASE("TESTLMDA-63_hipwat_rel_lig1_ewald_l085", "[ff][testlmda][cflux][rdt][L3]") { runFixture(fx("63_hipwat_rel_lig1_ewald_l085")); }
 // HIPPO water polarization driven alone (test_testlmda.f cases 64, 65).
-TEST_CASE("TESTLMDA-64_hipwat_pol_only_st_l04", "[ff][testlmda][cflux][astpol]") { runFixture(fx("64_hipwat_pol_only_st_l04")); }
-TEST_CASE("TESTLMDA-65_hipwat_pol_only_dt_l04", "[ff][testlmda][cflux][adtpol]") { runFixture(fx("65_hipwat_pol_only_dt_l04")); }
+TEST_CASE("TESTLMDA-64_hipwat_pol_only_st_l04", "[ff][testlmda][cflux][astpol][L3]") { runFixture(fx("64_hipwat_pol_only_st_l04")); }
+TEST_CASE("TESTLMDA-65_hipwat_pol_only_dt_l04", "[ff][testlmda][cflux][adtpol][L3]") { runFixture(fx("65_hipwat_pol_only_dt_l04")); }
 // Exchange polarization of an Na+ water cluster and an ion box, the ion or a
 // water mutated, in dual and single topology (test_testlmda.f cases 66 to 72).
-TEST_CASE("TESTLMDA-66_expnaclus_na_dt_l04", "[ff][testlmda][expol][adtpol]") { runFixture(fx("66_expnaclus_na_dt_l04")); }
-TEST_CASE("TESTLMDA-67_expnaclus_wat_dt_l04", "[ff][testlmda][expol][adtpol]") { runFixture(fx("67_expnaclus_wat_dt_l04")); }
-TEST_CASE("TESTLMDA-68_expbox_ewald_dt_l04", "[ff][testlmda][expol][adtpol]") { runFixture(fx("68_expbox_ewald_dt_l04")); }
-TEST_CASE("TESTLMDA-69_expnaclus_wat_st_l04", "[ff][testlmda][expol][astpol]") { runFixture(fx("69_expnaclus_wat_st_l04")); }
-TEST_CASE("TESTLMDA-70_expbox_ewald_st_l04", "[ff][testlmda][expol][astpol]") { runFixture(fx("70_expbox_ewald_st_l04")); }
-TEST_CASE("TESTLMDA-71_expnaclus_na_lin_st_l00", "[ff][testlmda][expol][astpol]") { runFixture(fx("71_expnaclus_na_lin_st_l00")); }
-TEST_CASE("TESTLMDA-72_expbox_ewald_nlist_st_l04", "[ff][testlmda][expol][astpol]") { runFixture(fx("72_expbox_ewald_nlist_st_l04")); }
+TEST_CASE("TESTLMDA-66_expnaclus_na_dt_l04", "[ff][testlmda][expol][adtpol][L3]") { runFixture(fx("66_expnaclus_na_dt_l04")); }
+TEST_CASE("TESTLMDA-67_expnaclus_wat_dt_l04", "[ff][testlmda][expol][adtpol][L3]") { runFixture(fx("67_expnaclus_wat_dt_l04")); }
+TEST_CASE("TESTLMDA-68_expbox_ewald_dt_l04", "[ff][testlmda][expol][adtpol][L3]") { runFixture(fx("68_expbox_ewald_dt_l04")); }
+TEST_CASE("TESTLMDA-69_expnaclus_wat_st_l04", "[ff][testlmda][expol][astpol][L3]") { runFixture(fx("69_expnaclus_wat_st_l04")); }
+TEST_CASE("TESTLMDA-70_expbox_ewald_st_l04", "[ff][testlmda][expol][astpol][L3]") { runFixture(fx("70_expbox_ewald_st_l04")); }
+TEST_CASE("TESTLMDA-71_expnaclus_na_lin_st_l00", "[ff][testlmda][expol][astpol][L3]") { runFixture(fx("71_expnaclus_na_lin_st_l00")); }
+TEST_CASE("TESTLMDA-72_expbox_ewald_nlist_st_l04", "[ff][testlmda][expol][astpol][L3]") { runFixture(fx("72_expbox_ewald_nlist_st_l04")); }
 // The exchange polarization overlap that single topology gathers with each
 // solve starts from zero every time.
-TEST_CASE("TESTLMDA-repeat-70_expbox_ewald_st_l04", "[ff][testlmda][expol][astpol]") { runRepeatedFixture(fx("70_expbox_ewald_st_l04")); }
+TEST_CASE("TESTLMDA-repeat-70_expbox_ewald_st_l04", "[ff][testlmda][expol][astpol][L3]") { runRepeatedFixture(fx("70_expbox_ewald_st_l04")); }
 // Charge transfer follows the polarization lambda (test_testlmda.f cases 73 to
 // 90). Case 81 needs replica images, which tinker9 does not have, and 82 weights
 // atom groups, which tinker9 refuses for every term.
-TEST_CASE("TESTLMDA-73_hipwat_ct_only_st_l04", "[ff][testlmda][ct]") { runFixture(fx("73_hipwat_ct_only_st_l04")); }
-TEST_CASE("TESTLMDA-74_hipwat_ct_only_dt_l04", "[ff][testlmda][ct]") { runFixture(fx("74_hipwat_ct_only_dt_l04")); }
-TEST_CASE("TESTLMDA-75_hipwat_ct_only_dtexp_l04", "[ff][testlmda][ct]") { runFixture(fx("75_hipwat_ct_only_dtexp_l04")); }
-TEST_CASE("TESTLMDA-76_hipwat_ct_mlist_dt_l04", "[ff][testlmda][ct]") { runFixture(fx("76_hipwat_ct_mlist_dt_l04")); }
-TEST_CASE("TESTLMDA-77_hipwat_ct_lin_dt_l00", "[ff][testlmda][ct]") { runFixture(fx("77_hipwat_ct_lin_dt_l00")); }
-TEST_CASE("TESTLMDA-78_hipwat_pol_ct_split_st_l04", "[ff][testlmda][ct]") { runFixture(fx("78_hipwat_pol_ct_split_st_l04")); }
-TEST_CASE("TESTLMDA-79_hipwat_pol_ct_ewald_dt_l04", "[ff][testlmda][ct]") { runFixture(fx("79_hipwat_pol_ct_ewald_dt_l04")); }
-TEST_CASE("TESTLMDA-80_aptetra_ct_st_l04", "[ff][testlmda][ct]") { runFixture(fx("80_aptetra_ct_st_l04")); }
-TEST_CASE("TESTLMDA-82_hipwat_ct_group_ost_l04", "[ff][testlmda][ct]") { runRefusedFixture(fx("82_hipwat_ct_group_ost_l04"), testGroupWeightsRefusal); }
-TEST_CASE("TESTLMDA-83_hipwat_ct_off_st_l04", "[ff][testlmda][ct]") { runFixture(fx("83_hipwat_ct_off_st_l04")); }
-TEST_CASE("TESTLMDA-84_aptetra_ct_rel_lig1_st_l085", "[ff][testlmda][ct][rdt]") { runFixture(fx("84_aptetra_ct_rel_lig1_st_l085")); }
-TEST_CASE("TESTLMDA-85_aptetra_ct_rel_lig2_st_l015", "[ff][testlmda][ct][rdt]") { runFixture(fx("85_aptetra_ct_rel_lig2_st_l015")); }
-TEST_CASE("TESTLMDA-86_aptetra_ct_rel_lig1_dt_l080", "[ff][testlmda][ct][rdt]") { runFixture(fx("86_aptetra_ct_rel_lig1_dt_l080")); }
-TEST_CASE("TESTLMDA-87_aptetra_ct_rel_lig2_dt_l020", "[ff][testlmda][ct][rdt]") { runFixture(fx("87_aptetra_ct_rel_lig2_dt_l020")); }
-TEST_CASE("TESTLMDA-88_aptetra_ct_rel_vdwm_l050", "[ff][testlmda][ct][rdt]") { runFixture(fx("88_aptetra_ct_rel_vdwm_l050")); }
-TEST_CASE("TESTLMDA-89_aptetra_pol_ct_rel_lig1_ewald_l080", "[ff][testlmda][ct][rdt]") { runFixture(fx("89_aptetra_pol_ct_rel_lig1_ewald_l080")); }
-TEST_CASE("TESTLMDA-90_hipwat_pol_ct_rel_lig1_ewald_l080", "[ff][testlmda][ct][rdt]") { runFixture(fx("90_hipwat_pol_ct_rel_lig1_ewald_l080")); }
+TEST_CASE("TESTLMDA-73_hipwat_ct_only_st_l04", "[ff][testlmda][ct][L3]") { runFixture(fx("73_hipwat_ct_only_st_l04")); }
+TEST_CASE("TESTLMDA-74_hipwat_ct_only_dt_l04", "[ff][testlmda][ct][L3]") { runFixture(fx("74_hipwat_ct_only_dt_l04")); }
+TEST_CASE("TESTLMDA-75_hipwat_ct_only_dtexp_l04", "[ff][testlmda][ct][L3]") { runFixture(fx("75_hipwat_ct_only_dtexp_l04")); }
+TEST_CASE("TESTLMDA-76_hipwat_ct_mlist_dt_l04", "[ff][testlmda][ct][L3]") { runFixture(fx("76_hipwat_ct_mlist_dt_l04")); }
+TEST_CASE("TESTLMDA-77_hipwat_ct_lin_dt_l00", "[ff][testlmda][ct][L3]") { runFixture(fx("77_hipwat_ct_lin_dt_l00")); }
+TEST_CASE("TESTLMDA-78_hipwat_pol_ct_split_st_l04", "[ff][testlmda][ct][L3]") { runFixture(fx("78_hipwat_pol_ct_split_st_l04")); }
+TEST_CASE("TESTLMDA-79_hipwat_pol_ct_ewald_dt_l04", "[ff][testlmda][ct][L3]") { runFixture(fx("79_hipwat_pol_ct_ewald_dt_l04")); }
+TEST_CASE("TESTLMDA-80_aptetra_ct_st_l04", "[ff][testlmda][ct][L3]") { runFixture(fx("80_aptetra_ct_st_l04")); }
+TEST_CASE("TESTLMDA-82_hipwat_ct_group_ost_l04", "[ff][testlmda][ct][L3]") { runRefusedFixture(fx("82_hipwat_ct_group_ost_l04"), testGroupWeightsRefusal); }
+TEST_CASE("TESTLMDA-83_hipwat_ct_off_st_l04", "[ff][testlmda][ct][L3]") { runFixture(fx("83_hipwat_ct_off_st_l04")); }
+TEST_CASE("TESTLMDA-84_aptetra_ct_rel_lig1_st_l085", "[ff][testlmda][ct][rdt][L3]") { runFixture(fx("84_aptetra_ct_rel_lig1_st_l085")); }
+TEST_CASE("TESTLMDA-85_aptetra_ct_rel_lig2_st_l015", "[ff][testlmda][ct][rdt][L3]") { runFixture(fx("85_aptetra_ct_rel_lig2_st_l015")); }
+TEST_CASE("TESTLMDA-86_aptetra_ct_rel_lig1_dt_l080", "[ff][testlmda][ct][rdt][L3]") { runFixture(fx("86_aptetra_ct_rel_lig1_dt_l080")); }
+TEST_CASE("TESTLMDA-87_aptetra_ct_rel_lig2_dt_l020", "[ff][testlmda][ct][rdt][L3]") { runFixture(fx("87_aptetra_ct_rel_lig2_dt_l020")); }
+TEST_CASE("TESTLMDA-88_aptetra_ct_rel_vdwm_l050", "[ff][testlmda][ct][rdt][L3]") { runFixture(fx("88_aptetra_ct_rel_vdwm_l050")); }
+TEST_CASE("TESTLMDA-89_aptetra_pol_ct_rel_lig1_ewald_l080", "[ff][testlmda][ct][rdt][L3]") { runFixture(fx("89_aptetra_pol_ct_rel_lig1_ewald_l080")); }
+TEST_CASE("TESTLMDA-90_hipwat_pol_ct_rel_lig1_ewald_l080", "[ff][testlmda][ct][rdt][L3]") { runFixture(fx("90_hipwat_pol_ct_rel_lig1_ewald_l080")); }
 // HIPPO Pauli repulsion follows the van der Waals lambda (test_testlmda.f cases 91 to 100).
-TEST_CASE("TESTLMDA-91_hipmix_rep_l04", "[ff][testlmda][repel]") { runFixture(fx("91_hipmix_rep_l04")); }
-TEST_CASE("TESTLMDA-92_hipmix_rep_nlist_l04", "[ff][testlmda][repel]") { runFixture(fx("92_hipmix_rep_nlist_l04")); }
-TEST_CASE("TESTLMDA-93_hipmix_rep_annih_l04", "[ff][testlmda][repel]") { runFixture(fx("93_hipmix_rep_annih_l04")); }
-TEST_CASE("TESTLMDA-94_hipmix_rep_taper_l04", "[ff][testlmda][repel]") { runFixture(fx("94_hipmix_rep_taper_l04")); }
-TEST_CASE("TESTLMDA-95_hipmix_rep_sc_m0p2_l04", "[ff][testlmda][repel]") { runFixture(fx("95_hipmix_rep_sc_m0p2_l04")); }
-TEST_CASE("TESTLMDA-96_hipmix_rep_sc_real_l04", "[ff][testlmda][repel]") { runFixture(fx("96_hipmix_rep_sc_real_l04")); }
-TEST_CASE("TESTLMDA-97_hipmix_rep_l00", "[ff][testlmda][repel]") { runFixture(fx("97_hipmix_rep_l00")); }
-TEST_CASE("TESTLMDA-98_hipmix_rep_l10", "[ff][testlmda][repel]") { runFixture(fx("98_hipmix_rep_l10")); }
-TEST_CASE("TESTLMDA-99_hipmix_rep_sc_m0p2_l10", "[ff][testlmda][repel]") { runFixture(fx("99_hipmix_rep_sc_m0p2_l10")); }
-TEST_CASE("TESTLMDA-100_hipmix_rep_d1_n12_l04", "[ff][testlmda][repel]") { runFixture(fx("100_hipmix_rep_d1_n12_l04")); }
+TEST_CASE("TESTLMDA-91_hipmix_rep_l04", "[ff][testlmda][repel][L3]") { runFixture(fx("91_hipmix_rep_l04")); }
+TEST_CASE("TESTLMDA-92_hipmix_rep_nlist_l04", "[ff][testlmda][repel][L3]") { runFixture(fx("92_hipmix_rep_nlist_l04")); }
+TEST_CASE("TESTLMDA-93_hipmix_rep_annih_l04", "[ff][testlmda][repel][L3]") { runFixture(fx("93_hipmix_rep_annih_l04")); }
+TEST_CASE("TESTLMDA-94_hipmix_rep_taper_l04", "[ff][testlmda][repel][L3]") { runFixture(fx("94_hipmix_rep_taper_l04")); }
+TEST_CASE("TESTLMDA-95_hipmix_rep_sc_m0p2_l04", "[ff][testlmda][repel][L3]") { runFixture(fx("95_hipmix_rep_sc_m0p2_l04")); }
+TEST_CASE("TESTLMDA-96_hipmix_rep_sc_real_l04", "[ff][testlmda][repel][L3]") { runFixture(fx("96_hipmix_rep_sc_real_l04")); }
+TEST_CASE("TESTLMDA-97_hipmix_rep_l00", "[ff][testlmda][repel][L3]") { runFixture(fx("97_hipmix_rep_l00")); }
+TEST_CASE("TESTLMDA-98_hipmix_rep_l10", "[ff][testlmda][repel][L3]") { runFixture(fx("98_hipmix_rep_l10")); }
+TEST_CASE("TESTLMDA-99_hipmix_rep_sc_m0p2_l10", "[ff][testlmda][repel][L3]") { runFixture(fx("99_hipmix_rep_sc_m0p2_l10")); }
+TEST_CASE("TESTLMDA-100_hipmix_rep_d1_n12_l04", "[ff][testlmda][repel][L3]") { runFixture(fx("100_hipmix_rep_d1_n12_l04")); }
 // A cubic van der Waals lambda map, so the in-kernel chain rule factors dv/dL
 // and d2v/dL2 are neither one nor zero (test_testlmda.f case 117); the map is
 // steep at lambda 0.8, so the step is halved to keep numerical d2E/dL2 close.
-TEST_CASE("TESTLMDA-117_hipmix_rep_exp3_l08", "[ff][testlmda][repel]") { runFixture(fx("117_hipmix_rep_exp3_l08")); }
-TEST_CASE("TESTLMDA-repeat-94_hipmix_rep_taper_l04", "[ff][testlmda][repel]") { runRepeatedFixture(fx("94_hipmix_rep_taper_l04")); }
+TEST_CASE("TESTLMDA-117_hipmix_rep_exp3_l08", "[ff][testlmda][repel][L3]") { runFixture(fx("117_hipmix_rep_exp3_l08")); }
+TEST_CASE("TESTLMDA-repeat-94_hipmix_rep_taper_l04", "[ff][testlmda][repel][L3]") { runRepeatedFixture(fx("94_hipmix_rep_taper_l04")); }
 // HIPPO damped dispersion follows the van der Waals lambda (test_testlmda.f
 // cases 101 to 112). Case 111 needs replica images, which tinker9 does not
 // have, and 112 weights atom groups, which tinker9 refuses.
-TEST_CASE("TESTLMDA-101_hipmix_dsp_l04", "[ff][testlmda][disp]") { runFixture(fx("101_hipmix_dsp_l04")); }
-TEST_CASE("TESTLMDA-102_hipmix_dsp_nlist_l04", "[ff][testlmda][disp]") { runFixture(fx("102_hipmix_dsp_nlist_l04")); }
-TEST_CASE("TESTLMDA-103_hipmix_dsp_annih_l04", "[ff][testlmda][disp]") { runFixture(fx("103_hipmix_dsp_annih_l04")); }
-TEST_CASE("TESTLMDA-104_hipmix_dsp_taper_l04", "[ff][testlmda][disp]") { runFixture(fx("104_hipmix_dsp_taper_l04")); }
-TEST_CASE("TESTLMDA-105_hipmix_dsp_ewald_l04", "[ff][testlmda][disp]") { runFixture(fx("105_hipmix_dsp_ewald_l04")); }
-TEST_CASE("TESTLMDA-106_hipmix_dsp_ewald_nlist_annih_l04", "[ff][testlmda][disp]") { runFixture(fx("106_hipmix_dsp_ewald_nlist_annih_l04")); }
-TEST_CASE("TESTLMDA-107_hipmix_dsp_sc_real_l04", "[ff][testlmda][disp]") { runFixture(fx("107_hipmix_dsp_sc_real_l04")); }
-TEST_CASE("TESTLMDA-108_hipmix_dsp_ewald_n2_l00", "[ff][testlmda][disp]") { runFixture(fx("108_hipmix_dsp_ewald_n2_l00")); }
-TEST_CASE("TESTLMDA-109_hipmix_dsp_ewald_l10", "[ff][testlmda][disp]") { runFixture(fx("109_hipmix_dsp_ewald_l10")); }
-TEST_CASE("TESTLMDA-110_hipmix_dsp_d1_n1_l04", "[ff][testlmda][disp]") { runFixture(fx("110_hipmix_dsp_d1_n1_l04")); }
+TEST_CASE("TESTLMDA-101_hipmix_dsp_l04", "[ff][testlmda][disp][L3]") { runFixture(fx("101_hipmix_dsp_l04")); }
+TEST_CASE("TESTLMDA-102_hipmix_dsp_nlist_l04", "[ff][testlmda][disp][L3]") { runFixture(fx("102_hipmix_dsp_nlist_l04")); }
+TEST_CASE("TESTLMDA-103_hipmix_dsp_annih_l04", "[ff][testlmda][disp][L3]") { runFixture(fx("103_hipmix_dsp_annih_l04")); }
+TEST_CASE("TESTLMDA-104_hipmix_dsp_taper_l04", "[ff][testlmda][disp][L3]") { runFixture(fx("104_hipmix_dsp_taper_l04")); }
+TEST_CASE("TESTLMDA-105_hipmix_dsp_ewald_l04", "[ff][testlmda][disp][L3]") { runFixture(fx("105_hipmix_dsp_ewald_l04")); }
+TEST_CASE("TESTLMDA-106_hipmix_dsp_ewald_nlist_annih_l04", "[ff][testlmda][disp][L3]") { runFixture(fx("106_hipmix_dsp_ewald_nlist_annih_l04")); }
+TEST_CASE("TESTLMDA-107_hipmix_dsp_sc_real_l04", "[ff][testlmda][disp][L3]") { runFixture(fx("107_hipmix_dsp_sc_real_l04")); }
+TEST_CASE("TESTLMDA-108_hipmix_dsp_ewald_n2_l00", "[ff][testlmda][disp][L3]") { runFixture(fx("108_hipmix_dsp_ewald_n2_l00")); }
+TEST_CASE("TESTLMDA-109_hipmix_dsp_ewald_l10", "[ff][testlmda][disp][L3]") { runFixture(fx("109_hipmix_dsp_ewald_l10")); }
+TEST_CASE("TESTLMDA-110_hipmix_dsp_d1_n1_l04", "[ff][testlmda][disp][L3]") { runFixture(fx("110_hipmix_dsp_d1_n1_l04")); }
 // The reciprocal space lambda derivative of the force reuses the PME grid.
-TEST_CASE("TESTLMDA-repeat-105_hipmix_dsp_ewald_l04", "[ff][testlmda][disp]") { runRepeatedFixture(fx("105_hipmix_dsp_ewald_l04")); }
-TEST_CASE("TESTLMDA-112_hipmix_dsp_ewald_group_l04", "[ff][testlmda][disp]") { runRefusedFixture(fx("112_hipmix_dsp_ewald_group_l04"), testGroupWeightsRefusal); }
+TEST_CASE("TESTLMDA-repeat-105_hipmix_dsp_ewald_l04", "[ff][testlmda][disp][L3]") { runRepeatedFixture(fx("105_hipmix_dsp_ewald_l04")); }
+TEST_CASE("TESTLMDA-112_hipmix_dsp_ewald_group_l04", "[ff][testlmda][disp][L3]") { runRefusedFixture(fx("112_hipmix_dsp_ewald_group_l04"), testGroupWeightsRefusal); }
 // The long range dispersion correction follows the lambda power of the soft
 // core, alone, under annihilation, with an exponent of one, and with an
 // exponent of two at lambda 0 (test_testlmda.f cases 113 to 116).
-TEST_CASE("TESTLMDA-113_hipmix_dsp_corr_l04", "[ff][testlmda][disp]") { runFixture(fx("113_hipmix_dsp_corr_l04")); }
-TEST_CASE("TESTLMDA-114_hipmix_dsp_corr_annih_l04", "[ff][testlmda][disp]") { runFixture(fx("114_hipmix_dsp_corr_annih_l04")); }
-TEST_CASE("TESTLMDA-115_hipmix_dsp_corr_n1_l04", "[ff][testlmda][disp]") { runFixture(fx("115_hipmix_dsp_corr_n1_l04")); }
-TEST_CASE("TESTLMDA-116_hipmix_dsp_corr_n2_l00", "[ff][testlmda][disp]") { runFixture(fx("116_hipmix_dsp_corr_n2_l00")); }
+TEST_CASE("TESTLMDA-113_hipmix_dsp_corr_l04", "[ff][testlmda][disp][L3]") { runFixture(fx("113_hipmix_dsp_corr_l04")); }
+TEST_CASE("TESTLMDA-114_hipmix_dsp_corr_annih_l04", "[ff][testlmda][disp][L3]") { runFixture(fx("114_hipmix_dsp_corr_annih_l04")); }
+TEST_CASE("TESTLMDA-115_hipmix_dsp_corr_n1_l04", "[ff][testlmda][disp][L3]") { runFixture(fx("115_hipmix_dsp_corr_n1_l04")); }
+TEST_CASE("TESTLMDA-116_hipmix_dsp_corr_n2_l00", "[ff][testlmda][disp][L3]") { runFixture(fx("116_hipmix_dsp_corr_n2_l00")); }
 // Ewald dispersion through a cubic van der Waals lambda map, so the soft core
 // powers of the real space, reciprocal space and self terms all carry both map
 // derivatives (test_testlmda.f case 120); the step is halved as for 117.
 // The class sums of the long range correction give Fortran's correction at any
 // lambda: buffered 14-7 with ligand 1 decoupled or annihilated and with both
 // ligands of a relative leg, and dispersion decoupled or annihilated.
-TEST_CASE("TESTLMDA-lrc-evcorr1", "[ff][testlmda]")
+TEST_CASE("TESTLMDA-lrc-evcorr1", "[ff][testlmda][L3]")
 {
    runLrcFixture(fx("07_water_ast_vcorr_l05"), false);
    runLrcFixture(fx("08_water_ast_vcorr_annih_l05"), false);
@@ -755,263 +755,263 @@ TEST_CASE("TESTLMDA-lrc-evcorr1", "[ff][testlmda]")
 }
 // The long range correction's own lambda derivatives and virial through a cubic
 // van der Waals map, buffered 14-7 and dispersion at lambda 0.6.
-TEST_CASE("TESTLMDA-lrc-chain", "[ff][testlmda]")
+TEST_CASE("TESTLMDA-lrc-chain", "[ff][testlmda][L3]")
 {
    runLrcChainFixture(fx("09_water_ast_vcorr_l06exp"), false);
    runLrcChainFixture(fx("121_hipmix_dsp_corr_exp3_l06"), true);
 }
-TEST_CASE("TESTLMDA-120_hipmix_dsp_ewald_exp3_l08", "[ff][testlmda][disp]") { runFixture(fx("120_hipmix_dsp_ewald_exp3_l08")); }
+TEST_CASE("TESTLMDA-120_hipmix_dsp_ewald_exp3_l08", "[ff][testlmda][disp][L3]") { runFixture(fx("120_hipmix_dsp_ewald_exp3_l08")); }
 // The long range dispersion correction through the cubic map (test_testlmda.f
 // case 121), whose curvature puts d2vl into the chain rule.
-TEST_CASE("TESTLMDA-121_hipmix_dsp_corr_exp3_l06", "[ff][testlmda][disp]") { runFixture(fx("121_hipmix_dsp_corr_exp3_l06")); }
+TEST_CASE("TESTLMDA-121_hipmix_dsp_corr_exp3_l06", "[ff][testlmda][disp][L3]") { runFixture(fx("121_hipmix_dsp_corr_exp3_l06")); }
 // The other van der Waals map shapes, a quintic taper and an inverse power,
 // through repulsion and dispersion (test_testlmda.f cases 122 to 125).
-TEST_CASE("TESTLMDA-122_hipmix_rep_qnt_l045", "[ff][testlmda][repel]") { runFixture(fx("122_hipmix_rep_qnt_l045")); }
-TEST_CASE("TESTLMDA-123_hipmix_rep_inv_l03", "[ff][testlmda][repel]") { runFixture(fx("123_hipmix_rep_inv_l03")); }
-TEST_CASE("TESTLMDA-124_hipmix_dsp_corr_qnt_l06", "[ff][testlmda][disp]") { runFixture(fx("124_hipmix_dsp_corr_qnt_l06")); }
-TEST_CASE("TESTLMDA-125_hipmix_dsp_ewald_inv_l04", "[ff][testlmda][disp]") { runFixture(fx("125_hipmix_dsp_ewald_inv_l04")); }
+TEST_CASE("TESTLMDA-122_hipmix_rep_qnt_l045", "[ff][testlmda][repel][L3]") { runFixture(fx("122_hipmix_rep_qnt_l045")); }
+TEST_CASE("TESTLMDA-123_hipmix_rep_inv_l03", "[ff][testlmda][repel][L3]") { runFixture(fx("123_hipmix_rep_inv_l03")); }
+TEST_CASE("TESTLMDA-124_hipmix_dsp_corr_qnt_l06", "[ff][testlmda][disp][L3]") { runFixture(fx("124_hipmix_dsp_corr_qnt_l06")); }
+TEST_CASE("TESTLMDA-125_hipmix_dsp_ewald_inv_l04", "[ff][testlmda][disp][L3]") { runFixture(fx("125_hipmix_dsp_ewald_inv_l04")); }
 // The buffered 14-7 soft core with a softening of alpha*lambda^m*(1-lambda)^p,
 // m 1.5 and p 3, then a non-integer m of 0.5 and p of one (test_testlmda.f
 // cases 118 and 119).
-TEST_CASE("TESTLMDA-118_water_vsoft_m15_p3_l05", "[ff][testlmda]") { runFixture(fx("118_water_vsoft_m15_p3_l05")); }
-TEST_CASE("TESTLMDA-119_water_vsoft_m05_p1_l03", "[ff][testlmda]") { runFixture(fx("119_water_vsoft_m05_p1_l03")); }
+TEST_CASE("TESTLMDA-118_water_vsoft_m15_p3_l05", "[ff][testlmda][L3]") { runFixture(fx("118_water_vsoft_m15_p3_l05")); }
+TEST_CASE("TESTLMDA-119_water_vsoft_m05_p1_l03", "[ff][testlmda][L3]") { runFixture(fx("119_water_vsoft_m05_p1_l03")); }
 // HIPPO Pauli repulsion and damped dispersion on the staged relative legs: the
 // van der Waals leg by double loop and neighbor list, under annihilation, with
 // a quintic map, and the three legs of one schedule (test_testlmda.f cases 126
 // to 137; 133 needs replica images).
-TEST_CASE("TESTLMDA-126_water_rep_rels_vdwm_l05", "[ff][testlmda][rdt][repel]") { runFixture(fx("126_water_rep_rels_vdwm_l05")); }
-TEST_CASE("TESTLMDA-127_water_rep_rels_vdwm_nlist_l05", "[ff][testlmda][rdt][repel]") { runFixture(fx("127_water_rep_rels_vdwm_nlist_l05")); }
-TEST_CASE("TESTLMDA-128_water_rep_rels_vdwm_annih_l05", "[ff][testlmda][rdt][repel]") { runFixture(fx("128_water_rep_rels_vdwm_annih_l05")); }
-TEST_CASE("TESTLMDA-129_water_rep_rels_vdwm_qnt_l035", "[ff][testlmda][rdt][repel]") { runFixture(fx("129_water_rep_rels_vdwm_qnt_l035")); }
-TEST_CASE("TESTLMDA-130_water_rep_rels3_l050", "[ff][testlmda][rdt][repel]") { runFixture(fx("130_water_rep_rels3_l050")); }
-TEST_CASE("TESTLMDA-131_water_rep_rels3_l085", "[ff][testlmda][rdt][repel]") { runFixture(fx("131_water_rep_rels3_l085")); }
-TEST_CASE("TESTLMDA-132_water_rep_rels3_l015", "[ff][testlmda][rdt][repel]") { runFixture(fx("132_water_rep_rels3_l015")); }
-TEST_CASE("TESTLMDA-134_water_dsp_rels_vdwm_l05", "[ff][testlmda][rdt][disp]") { runFixture(fx("134_water_dsp_rels_vdwm_l05")); }
-TEST_CASE("TESTLMDA-135_water_dsp_rels_vdwm_nlist_l05", "[ff][testlmda][rdt][disp]") { runFixture(fx("135_water_dsp_rels_vdwm_nlist_l05")); }
-TEST_CASE("TESTLMDA-136_water_dsp_rels_vdwm_annih_l05", "[ff][testlmda][rdt][disp]") { runFixture(fx("136_water_dsp_rels_vdwm_annih_l05")); }
-TEST_CASE("TESTLMDA-137_water_dsp_rels_vdwm_corr_l03", "[ff][testlmda][rdt][disp]") { runFixture(fx("137_water_dsp_rels_vdwm_corr_l03")); }
+TEST_CASE("TESTLMDA-126_water_rep_rels_vdwm_l05", "[ff][testlmda][rdt][repel][L3]") { runFixture(fx("126_water_rep_rels_vdwm_l05")); }
+TEST_CASE("TESTLMDA-127_water_rep_rels_vdwm_nlist_l05", "[ff][testlmda][rdt][repel][L3]") { runFixture(fx("127_water_rep_rels_vdwm_nlist_l05")); }
+TEST_CASE("TESTLMDA-128_water_rep_rels_vdwm_annih_l05", "[ff][testlmda][rdt][repel][L3]") { runFixture(fx("128_water_rep_rels_vdwm_annih_l05")); }
+TEST_CASE("TESTLMDA-129_water_rep_rels_vdwm_qnt_l035", "[ff][testlmda][rdt][repel][L3]") { runFixture(fx("129_water_rep_rels_vdwm_qnt_l035")); }
+TEST_CASE("TESTLMDA-130_water_rep_rels3_l050", "[ff][testlmda][rdt][repel][L3]") { runFixture(fx("130_water_rep_rels3_l050")); }
+TEST_CASE("TESTLMDA-131_water_rep_rels3_l085", "[ff][testlmda][rdt][repel][L3]") { runFixture(fx("131_water_rep_rels3_l085")); }
+TEST_CASE("TESTLMDA-132_water_rep_rels3_l015", "[ff][testlmda][rdt][repel][L3]") { runFixture(fx("132_water_rep_rels3_l015")); }
+TEST_CASE("TESTLMDA-134_water_dsp_rels_vdwm_l05", "[ff][testlmda][rdt][disp][L3]") { runFixture(fx("134_water_dsp_rels_vdwm_l05")); }
+TEST_CASE("TESTLMDA-135_water_dsp_rels_vdwm_nlist_l05", "[ff][testlmda][rdt][disp][L3]") { runFixture(fx("135_water_dsp_rels_vdwm_nlist_l05")); }
+TEST_CASE("TESTLMDA-136_water_dsp_rels_vdwm_annih_l05", "[ff][testlmda][rdt][disp][L3]") { runFixture(fx("136_water_dsp_rels_vdwm_annih_l05")); }
+TEST_CASE("TESTLMDA-137_water_dsp_rels_vdwm_corr_l03", "[ff][testlmda][rdt][disp][L3]") { runFixture(fx("137_water_dsp_rels_vdwm_corr_l03")); }
 // HIPPO Ewald dispersion on the staged relative legs, whose reciprocal space
 // carries the environment and the two ligands in slots of their own: the van
 // der Waals leg by double loop and neighbor list, under annihilation, with a
 // quintic map, and the three legs of one schedule, where the slots merge or
 // drop (test_testlmda.f cases 138 to 144; 145 needs replica images).
-TEST_CASE("TESTLMDA-138_water_dsp_ewald_rels_vdwm_l04", "[ff][testlmda][rdt][disp]") { runFixture(fx("138_water_dsp_ewald_rels_vdwm_l04")); }
-TEST_CASE("TESTLMDA-139_water_dsp_ewald_rels_vdwm_nlist_l04", "[ff][testlmda][rdt][disp]") { runFixture(fx("139_water_dsp_ewald_rels_vdwm_nlist_l04")); }
-TEST_CASE("TESTLMDA-140_water_dsp_ewald_rels_vdwm_annih_l04", "[ff][testlmda][rdt][disp]") { runFixture(fx("140_water_dsp_ewald_rels_vdwm_annih_l04")); }
-TEST_CASE("TESTLMDA-141_water_dsp_ewald_rels_vdwm_qnt_l035", "[ff][testlmda][rdt][disp]") { runFixture(fx("141_water_dsp_ewald_rels_vdwm_qnt_l035")); }
-TEST_CASE("TESTLMDA-142_water_dsp_ewald_rels3_l050", "[ff][testlmda][rdt][disp]") { runFixture(fx("142_water_dsp_ewald_rels3_l050")); }
-TEST_CASE("TESTLMDA-143_water_dsp_ewald_rels3_l085", "[ff][testlmda][rdt][disp]") { runFixture(fx("143_water_dsp_ewald_rels3_l085")); }
-TEST_CASE("TESTLMDA-144_water_dsp_ewald_rels3_l015", "[ff][testlmda][rdt][disp]") { runFixture(fx("144_water_dsp_ewald_rels3_l015")); }
+TEST_CASE("TESTLMDA-138_water_dsp_ewald_rels_vdwm_l04", "[ff][testlmda][rdt][disp][L3]") { runFixture(fx("138_water_dsp_ewald_rels_vdwm_l04")); }
+TEST_CASE("TESTLMDA-139_water_dsp_ewald_rels_vdwm_nlist_l04", "[ff][testlmda][rdt][disp][L3]") { runFixture(fx("139_water_dsp_ewald_rels_vdwm_nlist_l04")); }
+TEST_CASE("TESTLMDA-140_water_dsp_ewald_rels_vdwm_annih_l04", "[ff][testlmda][rdt][disp][L3]") { runFixture(fx("140_water_dsp_ewald_rels_vdwm_annih_l04")); }
+TEST_CASE("TESTLMDA-141_water_dsp_ewald_rels_vdwm_qnt_l035", "[ff][testlmda][rdt][disp][L3]") { runFixture(fx("141_water_dsp_ewald_rels_vdwm_qnt_l035")); }
+TEST_CASE("TESTLMDA-142_water_dsp_ewald_rels3_l050", "[ff][testlmda][rdt][disp][L3]") { runFixture(fx("142_water_dsp_ewald_rels3_l050")); }
+TEST_CASE("TESTLMDA-143_water_dsp_ewald_rels3_l085", "[ff][testlmda][rdt][disp][L3]") { runFixture(fx("143_water_dsp_ewald_rels3_l085")); }
+TEST_CASE("TESTLMDA-144_water_dsp_ewald_rels3_l015", "[ff][testlmda][rdt][disp][L3]") { runFixture(fx("144_water_dsp_ewald_rels3_l015")); }
 // Single topology Ewald dispersion with every atom annihilated, at lambda 0
 // (test_testlmda.f case 146), where every derivative vanishes; its energy and
 // gradient are those of mutate 281.
-TEST_CASE("TESTLMDA-146_water_dsp_ewald_annih_all_l00", "[ff][testlmda][disp]") { runFixture(fx("146_water_dsp_ewald_annih_all_l00")); }
+TEST_CASE("TESTLMDA-146_water_dsp_ewald_annih_all_l00", "[ff][testlmda][disp][L3]") { runFixture(fx("146_water_dsp_ewald_annih_all_l00")); }
 // The Ewald dispersion tail of the buffered 14-7 vdW of AMOEBA water, whose
 // lambda power follows that of the vdW: decoupled, on the relative legs, and
 // with damped sites (test_testlmda.f cases 147 to 151; 152 needs replica
 // images).
-TEST_CASE("TESTLMDA-147_water_dhal_l05", "[ff][testlmda][disp][dhal]") { runFixture(fx("147_water_dhal_l05")); }
-TEST_CASE("TESTLMDA-148_water_dhal_rels_vdwm_l04", "[ff][testlmda][disp][dhal]") { runFixture(fx("148_water_dhal_rels_vdwm_l04")); }
-TEST_CASE("TESTLMDA-149_water_dhal_rels3_l015", "[ff][testlmda][disp][dhal]") { runFixture(fx("149_water_dhal_rels3_l015")); }
-TEST_CASE("TESTLMDA-150_water_dhal_rels3_l085", "[ff][testlmda][disp][dhal]") { runFixture(fx("150_water_dhal_rels3_l085")); }
-TEST_CASE("TESTLMDA-151_water_dhal_rels_vdwm_damp_l04", "[ff][testlmda][disp][dhal]") { runFixture(fx("151_water_dhal_rels_vdwm_damp_l04")); }
+TEST_CASE("TESTLMDA-147_water_dhal_l05", "[ff][testlmda][disp][dhal][L3]") { runFixture(fx("147_water_dhal_l05")); }
+TEST_CASE("TESTLMDA-148_water_dhal_rels_vdwm_l04", "[ff][testlmda][disp][dhal][L3]") { runFixture(fx("148_water_dhal_rels_vdwm_l04")); }
+TEST_CASE("TESTLMDA-149_water_dhal_rels3_l015", "[ff][testlmda][disp][dhal][L3]") { runFixture(fx("149_water_dhal_rels3_l015")); }
+TEST_CASE("TESTLMDA-150_water_dhal_rels3_l085", "[ff][testlmda][disp][dhal][L3]") { runFixture(fx("150_water_dhal_rels3_l085")); }
+TEST_CASE("TESTLMDA-151_water_dhal_rels_vdwm_damp_l04", "[ff][testlmda][disp][dhal][L3]") { runFixture(fx("151_water_dhal_rels_vdwm_damp_l04")); }
 // Lennard-Jones TIP3P water ligand: the double loop, a neighbor list with an
 // LJ-SOFTCORE of m 1 and p 2, and annihilation by the method of lights
 // (test_testlmda.f cases 153 to 155).
-TEST_CASE("TESTLMDA-153_tip3_lj_l04", "[ff][testlmda][lj]") { runFixture(fx("153_tip3_lj_l04")); }
-TEST_CASE("TESTLMDA-154_tip3_lj_nlist_soft_l03", "[ff][testlmda][lj]") { runFixture(fx("154_tip3_lj_nlist_soft_l03")); }
-TEST_CASE("TESTLMDA-155_tip3_lj_lights_annih_l03", "[ff][testlmda][lj]") { runFixture(fx("155_tip3_lj_lights_annih_l03")); }
+TEST_CASE("TESTLMDA-153_tip3_lj_l04", "[ff][testlmda][lj][L3]") { runFixture(fx("153_tip3_lj_l04")); }
+TEST_CASE("TESTLMDA-154_tip3_lj_nlist_soft_l03", "[ff][testlmda][lj][L3]") { runFixture(fx("154_tip3_lj_nlist_soft_l03")); }
+TEST_CASE("TESTLMDA-155_tip3_lj_lights_annih_l03", "[ff][testlmda][lj][L3]") { runFixture(fx("155_tip3_lj_lights_annih_l03")); }
 // Partial charges of a TIP3P water ligand: under Ewald alone, both terms by
 // neighbor list and by the method of lights with the inverse power map, the
 // Trp-cage in an external field, and the staged relative legs, where the
 // charges of the other ligand vanish, by double loop, by neighbor list and by
 // the method of lights (test_testlmda.f cases 156 to 166).
-TEST_CASE("TESTLMDA-156_tip3_chg_l04", "[ff][testlmda][charge]") { runFixture(fx("156_tip3_chg_l04")); }
-TEST_CASE("TESTLMDA-157_tip3_both_nlist_l06", "[ff][testlmda][charge]") { runFixture(fx("157_tip3_both_nlist_l06")); }
-TEST_CASE("TESTLMDA-158_tip3_both_lights_inv_l05", "[ff][testlmda][charge]") { runFixture(fx("158_tip3_both_lights_inv_l05")); }
-TEST_CASE("TESTLMDA-162_trp_chg_exfield_l05", "[ff][testlmda][charge]") { runFixture(fx("162_trp_chg_exfield_l05")); }
-TEST_CASE("TESTLMDA-163_tip3_rels_lig2_l04", "[ff][testlmda][charge]") { runFixture(fx("163_tip3_rels_lig2_l04")); }
-TEST_CASE("TESTLMDA-164_tip3_rels_vdwm_nlist_l04", "[ff][testlmda][charge]") { runFixture(fx("164_tip3_rels_vdwm_nlist_l04")); }
-TEST_CASE("TESTLMDA-165_tip3_rels3_l015", "[ff][testlmda][charge]") { runFixture(fx("165_tip3_rels3_l015")); }
-TEST_CASE("TESTLMDA-166_tip3_rels3_lights_l085", "[ff][testlmda][charge]") { runFixture(fx("166_tip3_rels3_lights_l085")); }
+TEST_CASE("TESTLMDA-156_tip3_chg_l04", "[ff][testlmda][charge][L3]") { runFixture(fx("156_tip3_chg_l04")); }
+TEST_CASE("TESTLMDA-157_tip3_both_nlist_l06", "[ff][testlmda][charge][L3]") { runFixture(fx("157_tip3_both_nlist_l06")); }
+TEST_CASE("TESTLMDA-158_tip3_both_lights_inv_l05", "[ff][testlmda][charge][L3]") { runFixture(fx("158_tip3_both_lights_inv_l05")); }
+TEST_CASE("TESTLMDA-162_trp_chg_exfield_l05", "[ff][testlmda][charge][L3]") { runFixture(fx("162_trp_chg_exfield_l05")); }
+TEST_CASE("TESTLMDA-163_tip3_rels_lig2_l04", "[ff][testlmda][charge][L3]") { runFixture(fx("163_tip3_rels_lig2_l04")); }
+TEST_CASE("TESTLMDA-164_tip3_rels_vdwm_nlist_l04", "[ff][testlmda][charge][L3]") { runFixture(fx("164_tip3_rels_vdwm_nlist_l04")); }
+TEST_CASE("TESTLMDA-165_tip3_rels3_l015", "[ff][testlmda][charge][L3]") { runFixture(fx("165_tip3_rels3_l015")); }
+TEST_CASE("TESTLMDA-166_tip3_rels3_lights_l085", "[ff][testlmda][charge][L3]") { runFixture(fx("166_tip3_rels3_lights_l085")); }
 // Neutral group cutoffs, which tinker9 does not have, refused as they set up.
-TEST_CASE("TESTLMDA-160_trp_both_cut_neutral_l05", "[ff][testlmda][charge]") { runRefusedFixture(fx("160_trp_both_cut_neutral_l05"), "NEUTRAL-GROUPS"); }
+TEST_CASE("TESTLMDA-160_trp_both_cut_neutral_l05", "[ff][testlmda][charge][L3]") { runRefusedFixture(fx("160_trp_both_cut_neutral_l05"), "NEUTRAL-GROUPS"); }
 
 // The Trp-cage of 162 under Ewald summation with its net charged first residue
 // as the ligand, so the uniform background charge follows lambda
 // (test_testlmda.f case 167).
-TEST_CASE("TESTLMDA-167_trp_chg_ewald_l05", "[ff][testlmda][charge]") { runFixture(fx("167_trp_chg_ewald_l05")); }
+TEST_CASE("TESTLMDA-167_trp_chg_ewald_l05", "[ff][testlmda][charge][L3]") { runFixture(fx("167_trp_chg_ewald_l05")); }
 
 // The AMOEBA water box in its truncated octahedron, whose reciprocal space keeps
 // only the wavevectors with h+k+l even: absolute legs, then relative legs.
-TEST_CASE("TESTLMDA-168_octwat_pol_ewald_st_l05", "[ff][testlmda][octahedron]") { runFixture(fx("168_octwat_pol_ewald_st_l05")); }
-TEST_CASE("TESTLMDA-169_octwat_all_vcorr_nlist_dt_l04", "[ff][testlmda][octahedron]") { runFixture(fx("169_octwat_all_vcorr_nlist_dt_l04")); }
-TEST_CASE("TESTLMDA-170_octwat_rels3_l085", "[ff][testlmda][octahedron][rdt]") { runFixture(fx("170_octwat_rels3_l085")); }
-TEST_CASE("TESTLMDA-171_octwat_rels3_l015", "[ff][testlmda][octahedron][rdt]") { runFixture(fx("171_octwat_rels3_l015")); }
-TEST_CASE("TESTLMDA-172_octwat_rels_vdwm_vcorr_nlist_l05", "[ff][testlmda][octahedron][rdt]") { runFixture(fx("172_octwat_rels_vdwm_vcorr_nlist_l05")); }
-TEST_CASE("TESTLMDA-173_octwat_rels_lig1_st_l085", "[ff][testlmda][octahedron][rdt]") { runFixture(fx("173_octwat_rels_lig1_st_l085")); }
+TEST_CASE("TESTLMDA-168_octwat_pol_ewald_st_l05", "[ff][testlmda][octahedron][L3]") { runFixture(fx("168_octwat_pol_ewald_st_l05")); }
+TEST_CASE("TESTLMDA-169_octwat_all_vcorr_nlist_dt_l04", "[ff][testlmda][octahedron][L3]") { runFixture(fx("169_octwat_all_vcorr_nlist_dt_l04")); }
+TEST_CASE("TESTLMDA-170_octwat_rels3_l085", "[ff][testlmda][octahedron][rdt][L3]") { runFixture(fx("170_octwat_rels3_l085")); }
+TEST_CASE("TESTLMDA-171_octwat_rels3_l015", "[ff][testlmda][octahedron][rdt][L3]") { runFixture(fx("171_octwat_rels3_l015")); }
+TEST_CASE("TESTLMDA-172_octwat_rels_vdwm_vcorr_nlist_l05", "[ff][testlmda][octahedron][rdt][L3]") { runFixture(fx("172_octwat_rels_vdwm_vcorr_nlist_l05")); }
+TEST_CASE("TESTLMDA-173_octwat_rels_lig1_st_l085", "[ff][testlmda][octahedron][rdt][L3]") { runFixture(fx("173_octwat_rels_lig1_st_l085")); }
 
 // Every fixture once more without analysis, as dynamics runs it.
-TEST_CASE("TESTLMDA-DYN-01_water_adt_l05", "[ff][testlmda][dyn]") { runFixture(fx("01_water_adt_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-02_water_ast_l05", "[ff][testlmda][dyn]") { runFixture(fx("02_water_ast_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-03_water_adt_l06exp", "[ff][testlmda][dyn]") { runFixture(fx("03_water_adt_l06exp"), false); }
-TEST_CASE("TESTLMDA-DYN-04_water_ast_l06exp", "[ff][testlmda][dyn]") { runFixture(fx("04_water_ast_l06exp"), false); }
-TEST_CASE("TESTLMDA-DYN-05_water_ast_nodl_l05", "[ff][testlmda][dyn]") { runFixture(fx("05_water_ast_nodl_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-06_water_ast_vonly_l05", "[ff][testlmda][dyn]") { runFixture(fx("06_water_ast_vonly_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-07_water_ast_vcorr_l05", "[ff][testlmda][dyn]") { runFixture(fx("07_water_ast_vcorr_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-08_water_ast_vcorr_annih_l05", "[ff][testlmda][dyn]") { runFixture(fx("08_water_ast_vcorr_annih_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-09_water_ast_vcorr_l06exp", "[ff][testlmda][dyn]") { runFixture(fx("09_water_ast_vcorr_l06exp"), false); }
-TEST_CASE("TESTLMDA-DYN-10_water_rels_vdwm_vcorr_annih_l05", "[ff][testlmda][dyn][rdt]") { runFixture(fx("10_water_rels_vdwm_vcorr_annih_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-11_water_rels_vdwm_vcorr_l050", "[ff][testlmda][dyn][rdt]") { runFixture(fx("11_water_rels_vdwm_vcorr_l050"), false); }
-TEST_CASE("TESTLMDA-DYN-12_water_rels_lig1_l085", "[ff][testlmda][dyn][rdt]") { runFixture(fx("12_water_rels_lig1_l085"), false); }
-TEST_CASE("TESTLMDA-DYN-13_water_rels_lig2_l015", "[ff][testlmda][dyn][rdt]") { runFixture(fx("13_water_rels_lig2_l015"), false); }
-TEST_CASE("TESTLMDA-DYN-14_water_rels_lig1_ne_l085", "[ff][testlmda][dyn][rdt]") { runFixture(fx("14_water_rels_lig1_ne_l085"), false); }
-TEST_CASE("TESTLMDA-DYN-15_water_rels_lig1_nlist_exf_l085", "[ff][testlmda][dyn][rdt]") { runFixture(fx("15_water_rels_lig1_nlist_exf_l085"), false); }
-TEST_CASE("TESTLMDA-DYN-16_water_rels_lig1_st_l085", "[ff][testlmda][dyn][rdt]") { runFixture(fx("16_water_rels_lig1_st_l085"), false); }
-TEST_CASE("TESTLMDA-DYN-17_water_rels_lig2_st_l015", "[ff][testlmda][dyn][rdt]") { runFixture(fx("17_water_rels_lig2_st_l015"), false); }
-TEST_CASE("TESTLMDA-DYN-18_water_rels_lig1_st_ne_l085", "[ff][testlmda][dyn][rdt]") { runFixture(fx("18_water_rels_lig1_st_ne_l085"), false); }
-TEST_CASE("TESTLMDA-DYN-19_water_rels_lig1_st_polonly_l085", "[ff][testlmda][dyn][rdt]") { runFixture(fx("19_water_rels_lig1_st_polonly_l085"), false); }
-TEST_CASE("TESTLMDA-DYN-20_water_rels_lig1_dt_polonly_l078", "[ff][testlmda][dyn][rdt]") { runFixture(fx("20_water_rels_lig1_dt_polonly_l078"), false); }
-TEST_CASE("TESTLMDA-DYN-21_water_rels_lig1_st_l088", "[ff][testlmda][dyn][rdt]") { runFixture(fx("21_water_rels_lig1_st_l088"), false); }
-TEST_CASE("TESTLMDA-DYN-22_water_rels_lig1_dt_l088", "[ff][testlmda][dyn][rdt]") { runFixture(fx("22_water_rels_lig1_dt_l088"), false); }
-TEST_CASE("TESTLMDA-DYN-23_water_rels_3stg_l085", "[ff][testlmda][dyn][rdt]") { runFixture(fx("23_water_rels_3stg_l085"), false); }
-TEST_CASE("TESTLMDA-DYN-24_ionwat_ewald_l05", "[ff][testlmda][dyn]") { runFixture(fx("24_ionwat_ewald_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-25_ionwat_ewald_nlist_l05", "[ff][testlmda][dyn]") { runFixture(fx("25_ionwat_ewald_nlist_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-26_ionwat_pol_ewald_l05", "[ff][testlmda][dyn]") { runFixture(fx("26_ionwat_pol_ewald_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-27_water_rels_2stg_l075", "[ff][testlmda][dyn][rdt]") { runFixture(fx("27_water_rels_2stg_l075"), false); }
-TEST_CASE("TESTLMDA-DYN-28_hipwat_flux_l04", "[ff][testlmda][dyn][cflux]") { runFixture(fx("28_hipwat_flux_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-29_hipwat_flux_ewald_l04", "[ff][testlmda][dyn][cflux]") { runFixture(fx("29_hipwat_flux_ewald_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-30_hipwat_flux_ewald_nlist_l04", "[ff][testlmda][dyn][cflux]") { runFixture(fx("30_hipwat_flux_ewald_nlist_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-31_hipwat_flux_ewald_lin_l00", "[ff][testlmda][dyn][cflux]") { runFixture(fx("31_hipwat_flux_ewald_lin_l00"), false); }
-TEST_CASE("TESTLMDA-DYN-32_aptetra_flux_l04", "[ff][testlmda][dyn][cflux]") { runFixture(fx("32_aptetra_flux_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-33_aptetra_flux_ewald_l04", "[ff][testlmda][dyn][cflux]") { runFixture(fx("33_aptetra_flux_ewald_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-34_aptetra_flux_ewald_nlist_l04", "[ff][testlmda][dyn][cflux]") { runFixture(fx("34_aptetra_flux_ewald_nlist_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-35_aptetra_flux_ewald_lin_l00", "[ff][testlmda][dyn][cflux]") { runFixture(fx("35_aptetra_flux_ewald_lin_l00"), false); }
-TEST_CASE("TESTLMDA-DYN-36_apgas_flux_l04", "[ff][testlmda][dyn][cflux]") { runFixture(fx("36_apgas_flux_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-37_apgas_cross_l04", "[ff][testlmda][dyn][cflux]") { runFixture(fx("37_apgas_cross_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-38_apgas_cross_lin_l00", "[ff][testlmda][dyn][cflux]") { runFixture(fx("38_apgas_cross_lin_l00"), false); }
-TEST_CASE("TESTLMDA-DYN-39_apgas_cross_ewald_l04", "[ff][testlmda][dyn][cflux]") { runFixture(fx("39_apgas_cross_ewald_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-40_hipmix_ewald_l04", "[ff][testlmda][dyn][cflux]") { runFixture(fx("40_hipmix_ewald_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-58_hipwat_flux_mlist_l04", "[ff][testlmda][dyn][cflux]") { runFixture(fx("58_hipwat_flux_mlist_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-41_hipwat_pol_st_l04", "[ff][testlmda][dyn][cflux][astpol]") { runFixture(fx("41_hipwat_pol_st_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-42_hipwat_pol_ewald_st_l04", "[ff][testlmda][dyn][cflux][astpol]") { runFixture(fx("42_hipwat_pol_ewald_st_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-43_hipwat_pol_ewald_nlist_st_l04", "[ff][testlmda][dyn][cflux][astpol]") { runFixture(fx("43_hipwat_pol_ewald_nlist_st_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-44_hipwat_pol_ewald_lin_st_l00", "[ff][testlmda][dyn][cflux][astpol]") { runFixture(fx("44_hipwat_pol_ewald_lin_st_l00"), false); }
-TEST_CASE("TESTLMDA-DYN-46_aptetra_pol_st_l04", "[ff][testlmda][dyn][cflux][astpol]") { runFixture(fx("46_aptetra_pol_st_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-47_aptetra_pol_ewald_st_l04", "[ff][testlmda][dyn][cflux][astpol]") { runFixture(fx("47_aptetra_pol_ewald_st_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-48_aptetra_pol_ewald_nlist_st_l04", "[ff][testlmda][dyn][cflux][astpol]") { runFixture(fx("48_aptetra_pol_ewald_nlist_st_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-49_aptetra_pol_ewald_lin_st_l00", "[ff][testlmda][dyn][cflux][astpol]") { runFixture(fx("49_aptetra_pol_ewald_lin_st_l00"), false); }
-TEST_CASE("TESTLMDA-DYN-51_apgas_pol_st_l04", "[ff][testlmda][dyn][cflux][astpol]") { runFixture(fx("51_apgas_pol_st_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-53_hipmix_pol_ewald_st_l04", "[ff][testlmda][dyn][cflux][astpol]") { runFixture(fx("53_hipmix_pol_ewald_st_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-57_hipwat_pol_split_st_l04", "[ff][testlmda][dyn][cflux][astpol]") { runFixture(fx("57_hipwat_pol_split_st_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-64_hipwat_pol_only_st_l04", "[ff][testlmda][dyn][cflux][astpol]") { runFixture(fx("64_hipwat_pol_only_st_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-65_hipwat_pol_only_dt_l04", "[ff][testlmda][dyn][cflux][adtpol]") { runFixture(fx("65_hipwat_pol_only_dt_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-45_hipwat_pol_ewald_dt_l04", "[ff][testlmda][dyn][cflux][adtpol]") { runFixture(fx("45_hipwat_pol_ewald_dt_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-50_aptetra_pol_ewald_dt_l04", "[ff][testlmda][dyn][cflux][adtpol]") { runFixture(fx("50_aptetra_pol_ewald_dt_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-52_apgas_pol_ewald_dt_l04", "[ff][testlmda][dyn][cflux][adtpol]") { runFixture(fx("52_apgas_pol_ewald_dt_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-54_hipmix_pol_ewald_dt_l04", "[ff][testlmda][dyn][cflux][adtpol]") { runFixture(fx("54_hipmix_pol_ewald_dt_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-56_hipwat_pol_split_dt_l04", "[ff][testlmda][dyn][cflux][adtpol]") { runFixture(fx("56_hipwat_pol_split_dt_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-59_aptetra_pol_mlist_dt_l04", "[ff][testlmda][dyn][cflux][adtpol]") { runFixture(fx("59_aptetra_pol_mlist_dt_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-60_aptetra_rel_lig1_l085", "[ff][testlmda][dyn][cflux][rdt]") { runFixture(fx("60_aptetra_rel_lig1_l085"), false); }
-TEST_CASE("TESTLMDA-DYN-61_aptetra_rel_lig2_l015", "[ff][testlmda][dyn][cflux][rdt]") { runFixture(fx("61_aptetra_rel_lig2_l015"), false); }
-TEST_CASE("TESTLMDA-DYN-62_aptetra_rel_cross_l085", "[ff][testlmda][dyn][cflux][rdt]") { runFixture(fx("62_aptetra_rel_cross_l085"), false); }
-TEST_CASE("TESTLMDA-DYN-63_hipwat_rel_lig1_ewald_l085", "[ff][testlmda][dyn][cflux][rdt]") { runFixture(fx("63_hipwat_rel_lig1_ewald_l085"), false); }
-TEST_CASE("TESTLMDA-DYN-66_expnaclus_na_dt_l04", "[ff][testlmda][dyn][expol][adtpol]") { runFixture(fx("66_expnaclus_na_dt_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-67_expnaclus_wat_dt_l04", "[ff][testlmda][dyn][expol][adtpol]") { runFixture(fx("67_expnaclus_wat_dt_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-68_expbox_ewald_dt_l04", "[ff][testlmda][dyn][expol][adtpol]") { runFixture(fx("68_expbox_ewald_dt_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-69_expnaclus_wat_st_l04", "[ff][testlmda][dyn][expol][astpol]") { runFixture(fx("69_expnaclus_wat_st_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-70_expbox_ewald_st_l04", "[ff][testlmda][dyn][expol][astpol]") { runFixture(fx("70_expbox_ewald_st_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-71_expnaclus_na_lin_st_l00", "[ff][testlmda][dyn][expol][astpol]") { runFixture(fx("71_expnaclus_na_lin_st_l00"), false); }
-TEST_CASE("TESTLMDA-DYN-72_expbox_ewald_nlist_st_l04", "[ff][testlmda][dyn][expol][astpol]") { runFixture(fx("72_expbox_ewald_nlist_st_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-73_hipwat_ct_only_st_l04", "[ff][testlmda][dyn][ct]") { runFixture(fx("73_hipwat_ct_only_st_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-74_hipwat_ct_only_dt_l04", "[ff][testlmda][dyn][ct]") { runFixture(fx("74_hipwat_ct_only_dt_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-75_hipwat_ct_only_dtexp_l04", "[ff][testlmda][dyn][ct]") { runFixture(fx("75_hipwat_ct_only_dtexp_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-76_hipwat_ct_mlist_dt_l04", "[ff][testlmda][dyn][ct]") { runFixture(fx("76_hipwat_ct_mlist_dt_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-77_hipwat_ct_lin_dt_l00", "[ff][testlmda][dyn][ct]") { runFixture(fx("77_hipwat_ct_lin_dt_l00"), false); }
-TEST_CASE("TESTLMDA-DYN-78_hipwat_pol_ct_split_st_l04", "[ff][testlmda][dyn][ct]") { runFixture(fx("78_hipwat_pol_ct_split_st_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-79_hipwat_pol_ct_ewald_dt_l04", "[ff][testlmda][dyn][ct]") { runFixture(fx("79_hipwat_pol_ct_ewald_dt_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-80_aptetra_ct_st_l04", "[ff][testlmda][dyn][ct]") { runFixture(fx("80_aptetra_ct_st_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-83_hipwat_ct_off_st_l04", "[ff][testlmda][dyn][ct]") { runFixture(fx("83_hipwat_ct_off_st_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-84_aptetra_ct_rel_lig1_st_l085", "[ff][testlmda][dyn][ct][rdt]") { runFixture(fx("84_aptetra_ct_rel_lig1_st_l085"), false); }
-TEST_CASE("TESTLMDA-DYN-85_aptetra_ct_rel_lig2_st_l015", "[ff][testlmda][dyn][ct][rdt]") { runFixture(fx("85_aptetra_ct_rel_lig2_st_l015"), false); }
-TEST_CASE("TESTLMDA-DYN-86_aptetra_ct_rel_lig1_dt_l080", "[ff][testlmda][dyn][ct][rdt]") { runFixture(fx("86_aptetra_ct_rel_lig1_dt_l080"), false); }
-TEST_CASE("TESTLMDA-DYN-87_aptetra_ct_rel_lig2_dt_l020", "[ff][testlmda][dyn][ct][rdt]") { runFixture(fx("87_aptetra_ct_rel_lig2_dt_l020"), false); }
-TEST_CASE("TESTLMDA-DYN-88_aptetra_ct_rel_vdwm_l050", "[ff][testlmda][dyn][ct][rdt]") { runFixture(fx("88_aptetra_ct_rel_vdwm_l050"), false); }
-TEST_CASE("TESTLMDA-DYN-89_aptetra_pol_ct_rel_lig1_ewald_l080", "[ff][testlmda][dyn][ct][rdt]") { runFixture(fx("89_aptetra_pol_ct_rel_lig1_ewald_l080"), false); }
-TEST_CASE("TESTLMDA-DYN-90_hipwat_pol_ct_rel_lig1_ewald_l080", "[ff][testlmda][dyn][ct][rdt]") { runFixture(fx("90_hipwat_pol_ct_rel_lig1_ewald_l080"), false); }
-TEST_CASE("TESTLMDA-DYN-91_hipmix_rep_l04", "[ff][testlmda][dyn][repel]") { runFixture(fx("91_hipmix_rep_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-92_hipmix_rep_nlist_l04", "[ff][testlmda][dyn][repel]") { runFixture(fx("92_hipmix_rep_nlist_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-93_hipmix_rep_annih_l04", "[ff][testlmda][dyn][repel]") { runFixture(fx("93_hipmix_rep_annih_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-94_hipmix_rep_taper_l04", "[ff][testlmda][dyn][repel]") { runFixture(fx("94_hipmix_rep_taper_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-95_hipmix_rep_sc_m0p2_l04", "[ff][testlmda][dyn][repel]") { runFixture(fx("95_hipmix_rep_sc_m0p2_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-96_hipmix_rep_sc_real_l04", "[ff][testlmda][dyn][repel]") { runFixture(fx("96_hipmix_rep_sc_real_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-97_hipmix_rep_l00", "[ff][testlmda][dyn][repel]") { runFixture(fx("97_hipmix_rep_l00"), false); }
-TEST_CASE("TESTLMDA-DYN-98_hipmix_rep_l10", "[ff][testlmda][dyn][repel]") { runFixture(fx("98_hipmix_rep_l10"), false); }
-TEST_CASE("TESTLMDA-DYN-99_hipmix_rep_sc_m0p2_l10", "[ff][testlmda][dyn][repel]") { runFixture(fx("99_hipmix_rep_sc_m0p2_l10"), false); }
-TEST_CASE("TESTLMDA-DYN-100_hipmix_rep_d1_n12_l04", "[ff][testlmda][dyn][repel]") { runFixture(fx("100_hipmix_rep_d1_n12_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-117_hipmix_rep_exp3_l08", "[ff][testlmda][dyn][repel]") { runFixture(fx("117_hipmix_rep_exp3_l08"), false); }
-TEST_CASE("TESTLMDA-DYN-101_hipmix_dsp_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("101_hipmix_dsp_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-102_hipmix_dsp_nlist_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("102_hipmix_dsp_nlist_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-103_hipmix_dsp_annih_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("103_hipmix_dsp_annih_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-104_hipmix_dsp_taper_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("104_hipmix_dsp_taper_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-105_hipmix_dsp_ewald_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("105_hipmix_dsp_ewald_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-106_hipmix_dsp_ewald_nlist_annih_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("106_hipmix_dsp_ewald_nlist_annih_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-107_hipmix_dsp_sc_real_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("107_hipmix_dsp_sc_real_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-108_hipmix_dsp_ewald_n2_l00", "[ff][testlmda][dyn][disp]") { runFixture(fx("108_hipmix_dsp_ewald_n2_l00"), false); }
-TEST_CASE("TESTLMDA-DYN-109_hipmix_dsp_ewald_l10", "[ff][testlmda][dyn][disp]") { runFixture(fx("109_hipmix_dsp_ewald_l10"), false); }
-TEST_CASE("TESTLMDA-DYN-110_hipmix_dsp_d1_n1_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("110_hipmix_dsp_d1_n1_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-113_hipmix_dsp_corr_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("113_hipmix_dsp_corr_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-114_hipmix_dsp_corr_annih_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("114_hipmix_dsp_corr_annih_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-115_hipmix_dsp_corr_n1_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("115_hipmix_dsp_corr_n1_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-116_hipmix_dsp_corr_n2_l00", "[ff][testlmda][dyn][disp]") { runFixture(fx("116_hipmix_dsp_corr_n2_l00"), false); }
-TEST_CASE("TESTLMDA-DYN-120_hipmix_dsp_ewald_exp3_l08", "[ff][testlmda][dyn][disp]") { runFixture(fx("120_hipmix_dsp_ewald_exp3_l08"), false); }
-TEST_CASE("TESTLMDA-DYN-121_hipmix_dsp_corr_exp3_l06", "[ff][testlmda][dyn][disp]") { runFixture(fx("121_hipmix_dsp_corr_exp3_l06"), false); }
-TEST_CASE("TESTLMDA-DYN-122_hipmix_rep_qnt_l045", "[ff][testlmda][dyn][repel]") { runFixture(fx("122_hipmix_rep_qnt_l045"), false); }
-TEST_CASE("TESTLMDA-DYN-123_hipmix_rep_inv_l03", "[ff][testlmda][dyn][repel]") { runFixture(fx("123_hipmix_rep_inv_l03"), false); }
-TEST_CASE("TESTLMDA-DYN-124_hipmix_dsp_corr_qnt_l06", "[ff][testlmda][dyn][disp]") { runFixture(fx("124_hipmix_dsp_corr_qnt_l06"), false); }
-TEST_CASE("TESTLMDA-DYN-125_hipmix_dsp_ewald_inv_l04", "[ff][testlmda][dyn][disp]") { runFixture(fx("125_hipmix_dsp_ewald_inv_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-118_water_vsoft_m15_p3_l05", "[ff][testlmda][dyn]") { runFixture(fx("118_water_vsoft_m15_p3_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-119_water_vsoft_m05_p1_l03", "[ff][testlmda][dyn]") { runFixture(fx("119_water_vsoft_m05_p1_l03"), false); }
-TEST_CASE("TESTLMDA-DYN-126_water_rep_rels_vdwm_l05", "[ff][testlmda][dyn][rdt][repel]") { runFixture(fx("126_water_rep_rels_vdwm_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-127_water_rep_rels_vdwm_nlist_l05", "[ff][testlmda][dyn][rdt][repel]") { runFixture(fx("127_water_rep_rels_vdwm_nlist_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-128_water_rep_rels_vdwm_annih_l05", "[ff][testlmda][dyn][rdt][repel]") { runFixture(fx("128_water_rep_rels_vdwm_annih_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-129_water_rep_rels_vdwm_qnt_l035", "[ff][testlmda][dyn][rdt][repel]") { runFixture(fx("129_water_rep_rels_vdwm_qnt_l035"), false); }
-TEST_CASE("TESTLMDA-DYN-130_water_rep_rels3_l050", "[ff][testlmda][dyn][rdt][repel]") { runFixture(fx("130_water_rep_rels3_l050"), false); }
-TEST_CASE("TESTLMDA-DYN-131_water_rep_rels3_l085", "[ff][testlmda][dyn][rdt][repel]") { runFixture(fx("131_water_rep_rels3_l085"), false); }
-TEST_CASE("TESTLMDA-DYN-132_water_rep_rels3_l015", "[ff][testlmda][dyn][rdt][repel]") { runFixture(fx("132_water_rep_rels3_l015"), false); }
-TEST_CASE("TESTLMDA-DYN-134_water_dsp_rels_vdwm_l05", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("134_water_dsp_rels_vdwm_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-135_water_dsp_rels_vdwm_nlist_l05", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("135_water_dsp_rels_vdwm_nlist_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-136_water_dsp_rels_vdwm_annih_l05", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("136_water_dsp_rels_vdwm_annih_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-137_water_dsp_rels_vdwm_corr_l03", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("137_water_dsp_rels_vdwm_corr_l03"), false); }
-TEST_CASE("TESTLMDA-DYN-138_water_dsp_ewald_rels_vdwm_l04", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("138_water_dsp_ewald_rels_vdwm_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-139_water_dsp_ewald_rels_vdwm_nlist_l04", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("139_water_dsp_ewald_rels_vdwm_nlist_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-140_water_dsp_ewald_rels_vdwm_annih_l04", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("140_water_dsp_ewald_rels_vdwm_annih_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-141_water_dsp_ewald_rels_vdwm_qnt_l035", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("141_water_dsp_ewald_rels_vdwm_qnt_l035"), false); }
-TEST_CASE("TESTLMDA-DYN-142_water_dsp_ewald_rels3_l050", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("142_water_dsp_ewald_rels3_l050"), false); }
-TEST_CASE("TESTLMDA-DYN-143_water_dsp_ewald_rels3_l085", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("143_water_dsp_ewald_rels3_l085"), false); }
-TEST_CASE("TESTLMDA-DYN-144_water_dsp_ewald_rels3_l015", "[ff][testlmda][dyn][rdt][disp]") { runFixture(fx("144_water_dsp_ewald_rels3_l015"), false); }
-TEST_CASE("TESTLMDA-DYN-146_water_dsp_ewald_annih_all_l00", "[ff][testlmda][dyn][disp]") { runFixture(fx("146_water_dsp_ewald_annih_all_l00"), false); }
-TEST_CASE("TESTLMDA-DYN-147_water_dhal_l05", "[ff][testlmda][dyn][dhal][disp]") { runFixture(fx("147_water_dhal_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-148_water_dhal_rels_vdwm_l04", "[ff][testlmda][dyn][dhal][disp]") { runFixture(fx("148_water_dhal_rels_vdwm_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-149_water_dhal_rels3_l015", "[ff][testlmda][dyn][dhal][disp]") { runFixture(fx("149_water_dhal_rels3_l015"), false); }
-TEST_CASE("TESTLMDA-DYN-150_water_dhal_rels3_l085", "[ff][testlmda][dyn][dhal][disp]") { runFixture(fx("150_water_dhal_rels3_l085"), false); }
-TEST_CASE("TESTLMDA-DYN-151_water_dhal_rels_vdwm_damp_l04", "[ff][testlmda][dyn][dhal][disp]") { runFixture(fx("151_water_dhal_rels_vdwm_damp_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-153_tip3_lj_l04", "[ff][testlmda][dyn][lj]") { runFixture(fx("153_tip3_lj_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-154_tip3_lj_nlist_soft_l03", "[ff][testlmda][dyn][lj]") { runFixture(fx("154_tip3_lj_nlist_soft_l03"), false); }
-TEST_CASE("TESTLMDA-DYN-155_tip3_lj_lights_annih_l03", "[ff][testlmda][dyn][lj]") { runFixture(fx("155_tip3_lj_lights_annih_l03"), false); }
-TEST_CASE("TESTLMDA-DYN-156_tip3_chg_l04", "[ff][testlmda][dyn][charge]") { runFixture(fx("156_tip3_chg_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-157_tip3_both_nlist_l06", "[ff][testlmda][dyn][charge]") { runFixture(fx("157_tip3_both_nlist_l06"), false); }
-TEST_CASE("TESTLMDA-DYN-158_tip3_both_lights_inv_l05", "[ff][testlmda][dyn][charge]") { runFixture(fx("158_tip3_both_lights_inv_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-162_trp_chg_exfield_l05", "[ff][testlmda][dyn][charge]") { runFixture(fx("162_trp_chg_exfield_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-163_tip3_rels_lig2_l04", "[ff][testlmda][dyn][charge]") { runFixture(fx("163_tip3_rels_lig2_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-164_tip3_rels_vdwm_nlist_l04", "[ff][testlmda][dyn][charge]") { runFixture(fx("164_tip3_rels_vdwm_nlist_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-165_tip3_rels3_l015", "[ff][testlmda][dyn][charge]") { runFixture(fx("165_tip3_rels3_l015"), false); }
-TEST_CASE("TESTLMDA-DYN-166_tip3_rels3_lights_l085", "[ff][testlmda][dyn][charge]") { runFixture(fx("166_tip3_rels3_lights_l085"), false); }
-TEST_CASE("TESTLMDA-DYN-167_trp_chg_ewald_l05", "[ff][testlmda][dyn][charge]") { runFixture(fx("167_trp_chg_ewald_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-168_octwat_pol_ewald_st_l05", "[ff][testlmda][dyn][octahedron]") { runFixture(fx("168_octwat_pol_ewald_st_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-169_octwat_all_vcorr_nlist_dt_l04", "[ff][testlmda][dyn][octahedron]") { runFixture(fx("169_octwat_all_vcorr_nlist_dt_l04"), false); }
-TEST_CASE("TESTLMDA-DYN-170_octwat_rels3_l085", "[ff][testlmda][dyn][octahedron][rdt]") { runFixture(fx("170_octwat_rels3_l085"), false); }
-TEST_CASE("TESTLMDA-DYN-171_octwat_rels3_l015", "[ff][testlmda][dyn][octahedron][rdt]") { runFixture(fx("171_octwat_rels3_l015"), false); }
-TEST_CASE("TESTLMDA-DYN-172_octwat_rels_vdwm_vcorr_nlist_l05", "[ff][testlmda][dyn][octahedron][rdt]") { runFixture(fx("172_octwat_rels_vdwm_vcorr_nlist_l05"), false); }
-TEST_CASE("TESTLMDA-DYN-173_octwat_rels_lig1_st_l085", "[ff][testlmda][dyn][octahedron][rdt]") { runFixture(fx("173_octwat_rels_lig1_st_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-01_water_adt_l05", "[ff][testlmda][dyn][L3]") { runFixture(fx("01_water_adt_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-02_water_ast_l05", "[ff][testlmda][dyn][L3]") { runFixture(fx("02_water_ast_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-03_water_adt_l06exp", "[ff][testlmda][dyn][L3]") { runFixture(fx("03_water_adt_l06exp"), false); }
+TEST_CASE("TESTLMDA-DYN-04_water_ast_l06exp", "[ff][testlmda][dyn][L3]") { runFixture(fx("04_water_ast_l06exp"), false); }
+TEST_CASE("TESTLMDA-DYN-05_water_ast_nodl_l05", "[ff][testlmda][dyn][L3]") { runFixture(fx("05_water_ast_nodl_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-06_water_ast_vonly_l05", "[ff][testlmda][dyn][L3]") { runFixture(fx("06_water_ast_vonly_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-07_water_ast_vcorr_l05", "[ff][testlmda][dyn][L3]") { runFixture(fx("07_water_ast_vcorr_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-08_water_ast_vcorr_annih_l05", "[ff][testlmda][dyn][L3]") { runFixture(fx("08_water_ast_vcorr_annih_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-09_water_ast_vcorr_l06exp", "[ff][testlmda][dyn][L3]") { runFixture(fx("09_water_ast_vcorr_l06exp"), false); }
+TEST_CASE("TESTLMDA-DYN-10_water_rels_vdwm_vcorr_annih_l05", "[ff][testlmda][dyn][rdt][L3]") { runFixture(fx("10_water_rels_vdwm_vcorr_annih_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-11_water_rels_vdwm_vcorr_l050", "[ff][testlmda][dyn][rdt][L3]") { runFixture(fx("11_water_rels_vdwm_vcorr_l050"), false); }
+TEST_CASE("TESTLMDA-DYN-12_water_rels_lig1_l085", "[ff][testlmda][dyn][rdt][L3]") { runFixture(fx("12_water_rels_lig1_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-13_water_rels_lig2_l015", "[ff][testlmda][dyn][rdt][L3]") { runFixture(fx("13_water_rels_lig2_l015"), false); }
+TEST_CASE("TESTLMDA-DYN-14_water_rels_lig1_ne_l085", "[ff][testlmda][dyn][rdt][L3]") { runFixture(fx("14_water_rels_lig1_ne_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-15_water_rels_lig1_nlist_exf_l085", "[ff][testlmda][dyn][rdt][L3]") { runFixture(fx("15_water_rels_lig1_nlist_exf_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-16_water_rels_lig1_st_l085", "[ff][testlmda][dyn][rdt][L3]") { runFixture(fx("16_water_rels_lig1_st_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-17_water_rels_lig2_st_l015", "[ff][testlmda][dyn][rdt][L3]") { runFixture(fx("17_water_rels_lig2_st_l015"), false); }
+TEST_CASE("TESTLMDA-DYN-18_water_rels_lig1_st_ne_l085", "[ff][testlmda][dyn][rdt][L3]") { runFixture(fx("18_water_rels_lig1_st_ne_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-19_water_rels_lig1_st_polonly_l085", "[ff][testlmda][dyn][rdt][L3]") { runFixture(fx("19_water_rels_lig1_st_polonly_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-20_water_rels_lig1_dt_polonly_l078", "[ff][testlmda][dyn][rdt][L3]") { runFixture(fx("20_water_rels_lig1_dt_polonly_l078"), false); }
+TEST_CASE("TESTLMDA-DYN-21_water_rels_lig1_st_l088", "[ff][testlmda][dyn][rdt][L3]") { runFixture(fx("21_water_rels_lig1_st_l088"), false); }
+TEST_CASE("TESTLMDA-DYN-22_water_rels_lig1_dt_l088", "[ff][testlmda][dyn][rdt][L3]") { runFixture(fx("22_water_rels_lig1_dt_l088"), false); }
+TEST_CASE("TESTLMDA-DYN-23_water_rels_3stg_l085", "[ff][testlmda][dyn][rdt][L3]") { runFixture(fx("23_water_rels_3stg_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-24_ionwat_ewald_l05", "[ff][testlmda][dyn][L3]") { runFixture(fx("24_ionwat_ewald_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-25_ionwat_ewald_nlist_l05", "[ff][testlmda][dyn][L3]") { runFixture(fx("25_ionwat_ewald_nlist_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-26_ionwat_pol_ewald_l05", "[ff][testlmda][dyn][L3]") { runFixture(fx("26_ionwat_pol_ewald_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-27_water_rels_2stg_l075", "[ff][testlmda][dyn][rdt][L3]") { runFixture(fx("27_water_rels_2stg_l075"), false); }
+TEST_CASE("TESTLMDA-DYN-28_hipwat_flux_l04", "[ff][testlmda][dyn][cflux][L3]") { runFixture(fx("28_hipwat_flux_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-29_hipwat_flux_ewald_l04", "[ff][testlmda][dyn][cflux][L3]") { runFixture(fx("29_hipwat_flux_ewald_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-30_hipwat_flux_ewald_nlist_l04", "[ff][testlmda][dyn][cflux][L3]") { runFixture(fx("30_hipwat_flux_ewald_nlist_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-31_hipwat_flux_ewald_lin_l00", "[ff][testlmda][dyn][cflux][L3]") { runFixture(fx("31_hipwat_flux_ewald_lin_l00"), false); }
+TEST_CASE("TESTLMDA-DYN-32_aptetra_flux_l04", "[ff][testlmda][dyn][cflux][L3]") { runFixture(fx("32_aptetra_flux_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-33_aptetra_flux_ewald_l04", "[ff][testlmda][dyn][cflux][L3]") { runFixture(fx("33_aptetra_flux_ewald_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-34_aptetra_flux_ewald_nlist_l04", "[ff][testlmda][dyn][cflux][L3]") { runFixture(fx("34_aptetra_flux_ewald_nlist_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-35_aptetra_flux_ewald_lin_l00", "[ff][testlmda][dyn][cflux][L3]") { runFixture(fx("35_aptetra_flux_ewald_lin_l00"), false); }
+TEST_CASE("TESTLMDA-DYN-36_apgas_flux_l04", "[ff][testlmda][dyn][cflux][L3]") { runFixture(fx("36_apgas_flux_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-37_apgas_cross_l04", "[ff][testlmda][dyn][cflux][L3]") { runFixture(fx("37_apgas_cross_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-38_apgas_cross_lin_l00", "[ff][testlmda][dyn][cflux][L3]") { runFixture(fx("38_apgas_cross_lin_l00"), false); }
+TEST_CASE("TESTLMDA-DYN-39_apgas_cross_ewald_l04", "[ff][testlmda][dyn][cflux][L3]") { runFixture(fx("39_apgas_cross_ewald_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-40_hipmix_ewald_l04", "[ff][testlmda][dyn][cflux][L3]") { runFixture(fx("40_hipmix_ewald_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-58_hipwat_flux_mlist_l04", "[ff][testlmda][dyn][cflux][L3]") { runFixture(fx("58_hipwat_flux_mlist_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-41_hipwat_pol_st_l04", "[ff][testlmda][dyn][cflux][astpol][L3]") { runFixture(fx("41_hipwat_pol_st_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-42_hipwat_pol_ewald_st_l04", "[ff][testlmda][dyn][cflux][astpol][L3]") { runFixture(fx("42_hipwat_pol_ewald_st_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-43_hipwat_pol_ewald_nlist_st_l04", "[ff][testlmda][dyn][cflux][astpol][L3]") { runFixture(fx("43_hipwat_pol_ewald_nlist_st_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-44_hipwat_pol_ewald_lin_st_l00", "[ff][testlmda][dyn][cflux][astpol][L3]") { runFixture(fx("44_hipwat_pol_ewald_lin_st_l00"), false); }
+TEST_CASE("TESTLMDA-DYN-46_aptetra_pol_st_l04", "[ff][testlmda][dyn][cflux][astpol][L3]") { runFixture(fx("46_aptetra_pol_st_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-47_aptetra_pol_ewald_st_l04", "[ff][testlmda][dyn][cflux][astpol][L3]") { runFixture(fx("47_aptetra_pol_ewald_st_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-48_aptetra_pol_ewald_nlist_st_l04", "[ff][testlmda][dyn][cflux][astpol][L3]") { runFixture(fx("48_aptetra_pol_ewald_nlist_st_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-49_aptetra_pol_ewald_lin_st_l00", "[ff][testlmda][dyn][cflux][astpol][L3]") { runFixture(fx("49_aptetra_pol_ewald_lin_st_l00"), false); }
+TEST_CASE("TESTLMDA-DYN-51_apgas_pol_st_l04", "[ff][testlmda][dyn][cflux][astpol][L3]") { runFixture(fx("51_apgas_pol_st_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-53_hipmix_pol_ewald_st_l04", "[ff][testlmda][dyn][cflux][astpol][L3]") { runFixture(fx("53_hipmix_pol_ewald_st_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-57_hipwat_pol_split_st_l04", "[ff][testlmda][dyn][cflux][astpol][L3]") { runFixture(fx("57_hipwat_pol_split_st_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-64_hipwat_pol_only_st_l04", "[ff][testlmda][dyn][cflux][astpol][L3]") { runFixture(fx("64_hipwat_pol_only_st_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-65_hipwat_pol_only_dt_l04", "[ff][testlmda][dyn][cflux][adtpol][L3]") { runFixture(fx("65_hipwat_pol_only_dt_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-45_hipwat_pol_ewald_dt_l04", "[ff][testlmda][dyn][cflux][adtpol][L3]") { runFixture(fx("45_hipwat_pol_ewald_dt_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-50_aptetra_pol_ewald_dt_l04", "[ff][testlmda][dyn][cflux][adtpol][L3]") { runFixture(fx("50_aptetra_pol_ewald_dt_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-52_apgas_pol_ewald_dt_l04", "[ff][testlmda][dyn][cflux][adtpol][L3]") { runFixture(fx("52_apgas_pol_ewald_dt_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-54_hipmix_pol_ewald_dt_l04", "[ff][testlmda][dyn][cflux][adtpol][L3]") { runFixture(fx("54_hipmix_pol_ewald_dt_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-56_hipwat_pol_split_dt_l04", "[ff][testlmda][dyn][cflux][adtpol][L3]") { runFixture(fx("56_hipwat_pol_split_dt_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-59_aptetra_pol_mlist_dt_l04", "[ff][testlmda][dyn][cflux][adtpol][L3]") { runFixture(fx("59_aptetra_pol_mlist_dt_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-60_aptetra_rel_lig1_l085", "[ff][testlmda][dyn][cflux][rdt][L3]") { runFixture(fx("60_aptetra_rel_lig1_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-61_aptetra_rel_lig2_l015", "[ff][testlmda][dyn][cflux][rdt][L3]") { runFixture(fx("61_aptetra_rel_lig2_l015"), false); }
+TEST_CASE("TESTLMDA-DYN-62_aptetra_rel_cross_l085", "[ff][testlmda][dyn][cflux][rdt][L3]") { runFixture(fx("62_aptetra_rel_cross_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-63_hipwat_rel_lig1_ewald_l085", "[ff][testlmda][dyn][cflux][rdt][L3]") { runFixture(fx("63_hipwat_rel_lig1_ewald_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-66_expnaclus_na_dt_l04", "[ff][testlmda][dyn][expol][adtpol][L3]") { runFixture(fx("66_expnaclus_na_dt_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-67_expnaclus_wat_dt_l04", "[ff][testlmda][dyn][expol][adtpol][L3]") { runFixture(fx("67_expnaclus_wat_dt_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-68_expbox_ewald_dt_l04", "[ff][testlmda][dyn][expol][adtpol][L3]") { runFixture(fx("68_expbox_ewald_dt_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-69_expnaclus_wat_st_l04", "[ff][testlmda][dyn][expol][astpol][L3]") { runFixture(fx("69_expnaclus_wat_st_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-70_expbox_ewald_st_l04", "[ff][testlmda][dyn][expol][astpol][L3]") { runFixture(fx("70_expbox_ewald_st_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-71_expnaclus_na_lin_st_l00", "[ff][testlmda][dyn][expol][astpol][L3]") { runFixture(fx("71_expnaclus_na_lin_st_l00"), false); }
+TEST_CASE("TESTLMDA-DYN-72_expbox_ewald_nlist_st_l04", "[ff][testlmda][dyn][expol][astpol][L3]") { runFixture(fx("72_expbox_ewald_nlist_st_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-73_hipwat_ct_only_st_l04", "[ff][testlmda][dyn][ct][L3]") { runFixture(fx("73_hipwat_ct_only_st_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-74_hipwat_ct_only_dt_l04", "[ff][testlmda][dyn][ct][L3]") { runFixture(fx("74_hipwat_ct_only_dt_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-75_hipwat_ct_only_dtexp_l04", "[ff][testlmda][dyn][ct][L3]") { runFixture(fx("75_hipwat_ct_only_dtexp_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-76_hipwat_ct_mlist_dt_l04", "[ff][testlmda][dyn][ct][L3]") { runFixture(fx("76_hipwat_ct_mlist_dt_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-77_hipwat_ct_lin_dt_l00", "[ff][testlmda][dyn][ct][L3]") { runFixture(fx("77_hipwat_ct_lin_dt_l00"), false); }
+TEST_CASE("TESTLMDA-DYN-78_hipwat_pol_ct_split_st_l04", "[ff][testlmda][dyn][ct][L3]") { runFixture(fx("78_hipwat_pol_ct_split_st_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-79_hipwat_pol_ct_ewald_dt_l04", "[ff][testlmda][dyn][ct][L3]") { runFixture(fx("79_hipwat_pol_ct_ewald_dt_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-80_aptetra_ct_st_l04", "[ff][testlmda][dyn][ct][L3]") { runFixture(fx("80_aptetra_ct_st_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-83_hipwat_ct_off_st_l04", "[ff][testlmda][dyn][ct][L3]") { runFixture(fx("83_hipwat_ct_off_st_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-84_aptetra_ct_rel_lig1_st_l085", "[ff][testlmda][dyn][ct][rdt][L3]") { runFixture(fx("84_aptetra_ct_rel_lig1_st_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-85_aptetra_ct_rel_lig2_st_l015", "[ff][testlmda][dyn][ct][rdt][L3]") { runFixture(fx("85_aptetra_ct_rel_lig2_st_l015"), false); }
+TEST_CASE("TESTLMDA-DYN-86_aptetra_ct_rel_lig1_dt_l080", "[ff][testlmda][dyn][ct][rdt][L3]") { runFixture(fx("86_aptetra_ct_rel_lig1_dt_l080"), false); }
+TEST_CASE("TESTLMDA-DYN-87_aptetra_ct_rel_lig2_dt_l020", "[ff][testlmda][dyn][ct][rdt][L3]") { runFixture(fx("87_aptetra_ct_rel_lig2_dt_l020"), false); }
+TEST_CASE("TESTLMDA-DYN-88_aptetra_ct_rel_vdwm_l050", "[ff][testlmda][dyn][ct][rdt][L3]") { runFixture(fx("88_aptetra_ct_rel_vdwm_l050"), false); }
+TEST_CASE("TESTLMDA-DYN-89_aptetra_pol_ct_rel_lig1_ewald_l080", "[ff][testlmda][dyn][ct][rdt][L3]") { runFixture(fx("89_aptetra_pol_ct_rel_lig1_ewald_l080"), false); }
+TEST_CASE("TESTLMDA-DYN-90_hipwat_pol_ct_rel_lig1_ewald_l080", "[ff][testlmda][dyn][ct][rdt][L3]") { runFixture(fx("90_hipwat_pol_ct_rel_lig1_ewald_l080"), false); }
+TEST_CASE("TESTLMDA-DYN-91_hipmix_rep_l04", "[ff][testlmda][dyn][repel][L3]") { runFixture(fx("91_hipmix_rep_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-92_hipmix_rep_nlist_l04", "[ff][testlmda][dyn][repel][L3]") { runFixture(fx("92_hipmix_rep_nlist_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-93_hipmix_rep_annih_l04", "[ff][testlmda][dyn][repel][L3]") { runFixture(fx("93_hipmix_rep_annih_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-94_hipmix_rep_taper_l04", "[ff][testlmda][dyn][repel][L3]") { runFixture(fx("94_hipmix_rep_taper_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-95_hipmix_rep_sc_m0p2_l04", "[ff][testlmda][dyn][repel][L3]") { runFixture(fx("95_hipmix_rep_sc_m0p2_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-96_hipmix_rep_sc_real_l04", "[ff][testlmda][dyn][repel][L3]") { runFixture(fx("96_hipmix_rep_sc_real_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-97_hipmix_rep_l00", "[ff][testlmda][dyn][repel][L3]") { runFixture(fx("97_hipmix_rep_l00"), false); }
+TEST_CASE("TESTLMDA-DYN-98_hipmix_rep_l10", "[ff][testlmda][dyn][repel][L3]") { runFixture(fx("98_hipmix_rep_l10"), false); }
+TEST_CASE("TESTLMDA-DYN-99_hipmix_rep_sc_m0p2_l10", "[ff][testlmda][dyn][repel][L3]") { runFixture(fx("99_hipmix_rep_sc_m0p2_l10"), false); }
+TEST_CASE("TESTLMDA-DYN-100_hipmix_rep_d1_n12_l04", "[ff][testlmda][dyn][repel][L3]") { runFixture(fx("100_hipmix_rep_d1_n12_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-117_hipmix_rep_exp3_l08", "[ff][testlmda][dyn][repel][L3]") { runFixture(fx("117_hipmix_rep_exp3_l08"), false); }
+TEST_CASE("TESTLMDA-DYN-101_hipmix_dsp_l04", "[ff][testlmda][dyn][disp][L3]") { runFixture(fx("101_hipmix_dsp_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-102_hipmix_dsp_nlist_l04", "[ff][testlmda][dyn][disp][L3]") { runFixture(fx("102_hipmix_dsp_nlist_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-103_hipmix_dsp_annih_l04", "[ff][testlmda][dyn][disp][L3]") { runFixture(fx("103_hipmix_dsp_annih_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-104_hipmix_dsp_taper_l04", "[ff][testlmda][dyn][disp][L3]") { runFixture(fx("104_hipmix_dsp_taper_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-105_hipmix_dsp_ewald_l04", "[ff][testlmda][dyn][disp][L3]") { runFixture(fx("105_hipmix_dsp_ewald_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-106_hipmix_dsp_ewald_nlist_annih_l04", "[ff][testlmda][dyn][disp][L3]") { runFixture(fx("106_hipmix_dsp_ewald_nlist_annih_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-107_hipmix_dsp_sc_real_l04", "[ff][testlmda][dyn][disp][L3]") { runFixture(fx("107_hipmix_dsp_sc_real_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-108_hipmix_dsp_ewald_n2_l00", "[ff][testlmda][dyn][disp][L3]") { runFixture(fx("108_hipmix_dsp_ewald_n2_l00"), false); }
+TEST_CASE("TESTLMDA-DYN-109_hipmix_dsp_ewald_l10", "[ff][testlmda][dyn][disp][L3]") { runFixture(fx("109_hipmix_dsp_ewald_l10"), false); }
+TEST_CASE("TESTLMDA-DYN-110_hipmix_dsp_d1_n1_l04", "[ff][testlmda][dyn][disp][L3]") { runFixture(fx("110_hipmix_dsp_d1_n1_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-113_hipmix_dsp_corr_l04", "[ff][testlmda][dyn][disp][L3]") { runFixture(fx("113_hipmix_dsp_corr_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-114_hipmix_dsp_corr_annih_l04", "[ff][testlmda][dyn][disp][L3]") { runFixture(fx("114_hipmix_dsp_corr_annih_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-115_hipmix_dsp_corr_n1_l04", "[ff][testlmda][dyn][disp][L3]") { runFixture(fx("115_hipmix_dsp_corr_n1_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-116_hipmix_dsp_corr_n2_l00", "[ff][testlmda][dyn][disp][L3]") { runFixture(fx("116_hipmix_dsp_corr_n2_l00"), false); }
+TEST_CASE("TESTLMDA-DYN-120_hipmix_dsp_ewald_exp3_l08", "[ff][testlmda][dyn][disp][L3]") { runFixture(fx("120_hipmix_dsp_ewald_exp3_l08"), false); }
+TEST_CASE("TESTLMDA-DYN-121_hipmix_dsp_corr_exp3_l06", "[ff][testlmda][dyn][disp][L3]") { runFixture(fx("121_hipmix_dsp_corr_exp3_l06"), false); }
+TEST_CASE("TESTLMDA-DYN-122_hipmix_rep_qnt_l045", "[ff][testlmda][dyn][repel][L3]") { runFixture(fx("122_hipmix_rep_qnt_l045"), false); }
+TEST_CASE("TESTLMDA-DYN-123_hipmix_rep_inv_l03", "[ff][testlmda][dyn][repel][L3]") { runFixture(fx("123_hipmix_rep_inv_l03"), false); }
+TEST_CASE("TESTLMDA-DYN-124_hipmix_dsp_corr_qnt_l06", "[ff][testlmda][dyn][disp][L3]") { runFixture(fx("124_hipmix_dsp_corr_qnt_l06"), false); }
+TEST_CASE("TESTLMDA-DYN-125_hipmix_dsp_ewald_inv_l04", "[ff][testlmda][dyn][disp][L3]") { runFixture(fx("125_hipmix_dsp_ewald_inv_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-118_water_vsoft_m15_p3_l05", "[ff][testlmda][dyn][L3]") { runFixture(fx("118_water_vsoft_m15_p3_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-119_water_vsoft_m05_p1_l03", "[ff][testlmda][dyn][L3]") { runFixture(fx("119_water_vsoft_m05_p1_l03"), false); }
+TEST_CASE("TESTLMDA-DYN-126_water_rep_rels_vdwm_l05", "[ff][testlmda][dyn][rdt][repel][L3]") { runFixture(fx("126_water_rep_rels_vdwm_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-127_water_rep_rels_vdwm_nlist_l05", "[ff][testlmda][dyn][rdt][repel][L3]") { runFixture(fx("127_water_rep_rels_vdwm_nlist_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-128_water_rep_rels_vdwm_annih_l05", "[ff][testlmda][dyn][rdt][repel][L3]") { runFixture(fx("128_water_rep_rels_vdwm_annih_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-129_water_rep_rels_vdwm_qnt_l035", "[ff][testlmda][dyn][rdt][repel][L3]") { runFixture(fx("129_water_rep_rels_vdwm_qnt_l035"), false); }
+TEST_CASE("TESTLMDA-DYN-130_water_rep_rels3_l050", "[ff][testlmda][dyn][rdt][repel][L3]") { runFixture(fx("130_water_rep_rels3_l050"), false); }
+TEST_CASE("TESTLMDA-DYN-131_water_rep_rels3_l085", "[ff][testlmda][dyn][rdt][repel][L3]") { runFixture(fx("131_water_rep_rels3_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-132_water_rep_rels3_l015", "[ff][testlmda][dyn][rdt][repel][L3]") { runFixture(fx("132_water_rep_rels3_l015"), false); }
+TEST_CASE("TESTLMDA-DYN-134_water_dsp_rels_vdwm_l05", "[ff][testlmda][dyn][rdt][disp][L3]") { runFixture(fx("134_water_dsp_rels_vdwm_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-135_water_dsp_rels_vdwm_nlist_l05", "[ff][testlmda][dyn][rdt][disp][L3]") { runFixture(fx("135_water_dsp_rels_vdwm_nlist_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-136_water_dsp_rels_vdwm_annih_l05", "[ff][testlmda][dyn][rdt][disp][L3]") { runFixture(fx("136_water_dsp_rels_vdwm_annih_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-137_water_dsp_rels_vdwm_corr_l03", "[ff][testlmda][dyn][rdt][disp][L3]") { runFixture(fx("137_water_dsp_rels_vdwm_corr_l03"), false); }
+TEST_CASE("TESTLMDA-DYN-138_water_dsp_ewald_rels_vdwm_l04", "[ff][testlmda][dyn][rdt][disp][L3]") { runFixture(fx("138_water_dsp_ewald_rels_vdwm_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-139_water_dsp_ewald_rels_vdwm_nlist_l04", "[ff][testlmda][dyn][rdt][disp][L3]") { runFixture(fx("139_water_dsp_ewald_rels_vdwm_nlist_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-140_water_dsp_ewald_rels_vdwm_annih_l04", "[ff][testlmda][dyn][rdt][disp][L3]") { runFixture(fx("140_water_dsp_ewald_rels_vdwm_annih_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-141_water_dsp_ewald_rels_vdwm_qnt_l035", "[ff][testlmda][dyn][rdt][disp][L3]") { runFixture(fx("141_water_dsp_ewald_rels_vdwm_qnt_l035"), false); }
+TEST_CASE("TESTLMDA-DYN-142_water_dsp_ewald_rels3_l050", "[ff][testlmda][dyn][rdt][disp][L3]") { runFixture(fx("142_water_dsp_ewald_rels3_l050"), false); }
+TEST_CASE("TESTLMDA-DYN-143_water_dsp_ewald_rels3_l085", "[ff][testlmda][dyn][rdt][disp][L3]") { runFixture(fx("143_water_dsp_ewald_rels3_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-144_water_dsp_ewald_rels3_l015", "[ff][testlmda][dyn][rdt][disp][L3]") { runFixture(fx("144_water_dsp_ewald_rels3_l015"), false); }
+TEST_CASE("TESTLMDA-DYN-146_water_dsp_ewald_annih_all_l00", "[ff][testlmda][dyn][disp][L3]") { runFixture(fx("146_water_dsp_ewald_annih_all_l00"), false); }
+TEST_CASE("TESTLMDA-DYN-147_water_dhal_l05", "[ff][testlmda][dyn][dhal][disp][L3]") { runFixture(fx("147_water_dhal_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-148_water_dhal_rels_vdwm_l04", "[ff][testlmda][dyn][dhal][disp][L3]") { runFixture(fx("148_water_dhal_rels_vdwm_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-149_water_dhal_rels3_l015", "[ff][testlmda][dyn][dhal][disp][L3]") { runFixture(fx("149_water_dhal_rels3_l015"), false); }
+TEST_CASE("TESTLMDA-DYN-150_water_dhal_rels3_l085", "[ff][testlmda][dyn][dhal][disp][L3]") { runFixture(fx("150_water_dhal_rels3_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-151_water_dhal_rels_vdwm_damp_l04", "[ff][testlmda][dyn][dhal][disp][L3]") { runFixture(fx("151_water_dhal_rels_vdwm_damp_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-153_tip3_lj_l04", "[ff][testlmda][dyn][lj][L3]") { runFixture(fx("153_tip3_lj_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-154_tip3_lj_nlist_soft_l03", "[ff][testlmda][dyn][lj][L3]") { runFixture(fx("154_tip3_lj_nlist_soft_l03"), false); }
+TEST_CASE("TESTLMDA-DYN-155_tip3_lj_lights_annih_l03", "[ff][testlmda][dyn][lj][L3]") { runFixture(fx("155_tip3_lj_lights_annih_l03"), false); }
+TEST_CASE("TESTLMDA-DYN-156_tip3_chg_l04", "[ff][testlmda][dyn][charge][L3]") { runFixture(fx("156_tip3_chg_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-157_tip3_both_nlist_l06", "[ff][testlmda][dyn][charge][L3]") { runFixture(fx("157_tip3_both_nlist_l06"), false); }
+TEST_CASE("TESTLMDA-DYN-158_tip3_both_lights_inv_l05", "[ff][testlmda][dyn][charge][L3]") { runFixture(fx("158_tip3_both_lights_inv_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-162_trp_chg_exfield_l05", "[ff][testlmda][dyn][charge][L3]") { runFixture(fx("162_trp_chg_exfield_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-163_tip3_rels_lig2_l04", "[ff][testlmda][dyn][charge][L3]") { runFixture(fx("163_tip3_rels_lig2_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-164_tip3_rels_vdwm_nlist_l04", "[ff][testlmda][dyn][charge][L3]") { runFixture(fx("164_tip3_rels_vdwm_nlist_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-165_tip3_rels3_l015", "[ff][testlmda][dyn][charge][L3]") { runFixture(fx("165_tip3_rels3_l015"), false); }
+TEST_CASE("TESTLMDA-DYN-166_tip3_rels3_lights_l085", "[ff][testlmda][dyn][charge][L3]") { runFixture(fx("166_tip3_rels3_lights_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-167_trp_chg_ewald_l05", "[ff][testlmda][dyn][charge][L3]") { runFixture(fx("167_trp_chg_ewald_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-168_octwat_pol_ewald_st_l05", "[ff][testlmda][dyn][octahedron][L3]") { runFixture(fx("168_octwat_pol_ewald_st_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-169_octwat_all_vcorr_nlist_dt_l04", "[ff][testlmda][dyn][octahedron][L3]") { runFixture(fx("169_octwat_all_vcorr_nlist_dt_l04"), false); }
+TEST_CASE("TESTLMDA-DYN-170_octwat_rels3_l085", "[ff][testlmda][dyn][octahedron][rdt][L3]") { runFixture(fx("170_octwat_rels3_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-171_octwat_rels3_l015", "[ff][testlmda][dyn][octahedron][rdt][L3]") { runFixture(fx("171_octwat_rels3_l015"), false); }
+TEST_CASE("TESTLMDA-DYN-172_octwat_rels_vdwm_vcorr_nlist_l05", "[ff][testlmda][dyn][octahedron][rdt][L3]") { runFixture(fx("172_octwat_rels_vdwm_vcorr_nlist_l05"), false); }
+TEST_CASE("TESTLMDA-DYN-173_octwat_rels_lig1_st_l085", "[ff][testlmda][dyn][octahedron][rdt][L3]") { runFixture(fx("173_octwat_rels_lig1_st_l085"), false); }
 #endif

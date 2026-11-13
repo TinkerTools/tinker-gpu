@@ -5,7 +5,7 @@
 
 using namespace tinker;
 
-TEST_CASE("Geom-Group-Local-Frame2", "[ff][egeom][local-frame2]")
+TEST_CASE("Geom-Group-Local-Frame2", "[ff][egeom][local-frame2][L1]")
 {
    const char* k = "test_local_frame2.key";
    const char* k0 = R"**(
@@ -70,7 +70,7 @@ restrainterm        only
    session.end();
 }
 
-TEST_CASE("Geom-Distance-Local-Frame2", "[ff][egeom][local-frame2]")
+TEST_CASE("Geom-Distance-Local-Frame2", "[ff][egeom][local-frame2][L1]")
 {
    const char* k = "test_local_frame2.key";
    const char* k0 = R"**(
@@ -129,7 +129,7 @@ restrainterm        only
    session.end();
 }
 
-TEST_CASE("Geom-Angle-Local-Frame2", "[ff][egeom][local-frame2]")
+TEST_CASE("Geom-Angle-Local-Frame2", "[ff][egeom][local-frame2][L1]")
 {
    const char* k = "test_local_frame2.key";
    const char* k0 = R"**(
@@ -188,7 +188,7 @@ restrainterm        only
    session.end();
 }
 
-TEST_CASE("Geom-Torsion-Local-Frame2", "[ff][egeom][local-frame2]")
+TEST_CASE("Geom-Torsion-Local-Frame2", "[ff][egeom][local-frame2][L1]")
 {
    const char* k = "test_local_frame2.key";
    const char* k0 = R"**(
@@ -247,7 +247,7 @@ restrainterm        only
    session.end();
 }
 
-TEST_CASE("Geom-Position-Local-Frame2", "[ff][egeom][local-frame2]")
+TEST_CASE("Geom-Position-Local-Frame2", "[ff][egeom][local-frame2][L1]")
 {
    const char* k = "test_local_frame2.key";
    const char* k0 = R"**(

@@ -5,7 +5,7 @@
 
 using namespace tinker;
 
-TEST_CASE("Urey-Ten-Water", "[ff][eurey][h2o10]")
+TEST_CASE("Urey-Ten-Water", "[ff][eurey][h2o10][L1]")
 {
    const char* k = "test_h2o10.key";
    const char* k0 = "ureybradterm  only\n";

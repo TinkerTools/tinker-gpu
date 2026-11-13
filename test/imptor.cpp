@@ -5,7 +5,7 @@
 
 using namespace tinker;
 
-TEST_CASE("ALA-1", "[ff][eimptor][ala]")
+TEST_CASE("ALA-1", "[ff][eimptor][ala][L1]")
 {
    const char* k = "test_ala.key";
    const char* k0 = "imptorterm   only\n"

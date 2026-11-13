@@ -4,7 +4,7 @@
 
 using namespace tinker;
 
-TEST_CASE("TriMatExp", "[util][math][trimatexp]")
+TEST_CASE("TriMatExp", "[util][math][trimatexp][L1]")
 {
    unsigned long long c = 0x04000000ull; // 67108864
 

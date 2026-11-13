@@ -41,7 +41,7 @@ static const char* x1 = "test_local_frame2.xyz";
 static const char* argv[] = {"dummy", x1};
 static int argc = 2;
 
-TEST_CASE("Local-Frame2-1", "[ff][triclinic][evdw][hal][local-frame2]")
+TEST_CASE("Local-Frame2-1", "[ff][triclinic][evdw][hal][local-frame2][L1]")
 {
    std::string k0 = triclinic_box;
    k0 += "vdwterm  only\n";
@@ -69,7 +69,7 @@ TEST_CASE("Local-Frame2-1", "[ff][triclinic][evdw][hal][local-frame2]")
    session.end();
 }
 
-TEST_CASE("Local-Frame2-2", "[ff][monoclinic][evdw][hal][local-frame2]")
+TEST_CASE("Local-Frame2-2", "[ff][monoclinic][evdw][hal][local-frame2][L1]")
 {
    std::string k0 = monoclinic_box;
    k0 += "vdwterm  only\n";

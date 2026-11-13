@@ -3,7 +3,7 @@
 
 using namespace tinker;
 
-TEST_CASE("Info", "[noassert]")
+TEST_CASE("Info", "[.][noassert]")
 {
    xInfo(0, nullptr);
 }

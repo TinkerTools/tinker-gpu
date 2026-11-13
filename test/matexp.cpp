@@ -6,7 +6,7 @@
 
 using namespace tinker;
 
-TEST_CASE("MatExp", "[util][math][matexp]")
+TEST_CASE("MatExp", "[util][math][matexp][L1]")
 {
    SECTION("diagonal")
    {

@@ -12,7 +12,7 @@ static const std::string externalField = "external-field  150  -300  450\n";
 static const std::string mpoleOnly = "multipoleterm only\n";
 static const std::string polarOnly = "polarizeterm only\n";
 
-TEST_CASE("External-Fields-MPole-Analyze", "[ff][extfield]")
+TEST_CASE("External-Fields-MPole-Analyze", "[ff][extfield][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/extfield/water4_Na_shifted.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/extfield/water4_Na_shifted.key", "", externalField + mpoleOnly);
@@ -65,7 +65,7 @@ TEST_CASE("External-Fields-MPole-Analyze", "[ff][extfield]")
    session.end();
 }
 
-TEST_CASE("External-Fields-Polarize-Analyze", "[ff][extfield]")
+TEST_CASE("External-Fields-Polarize-Analyze", "[ff][extfield][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/extfield/water4_Na_shifted.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/extfield/water4_Na_shifted.key", "", externalField + polarOnly);
@@ -118,7 +118,7 @@ TEST_CASE("External-Fields-Polarize-Analyze", "[ff][extfield]")
    session.end();
 }
 
-TEST_CASE("External-Fields-MPolar-Analyze", "[ff][extfield]")
+TEST_CASE("External-Fields-MPolar-Analyze", "[ff][extfield][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/extfield/water4_Na_shifted.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/extfield/water4_Na_shifted.key", "", externalField);
@@ -169,7 +169,7 @@ TEST_CASE("External-Fields-MPolar-Analyze", "[ff][extfield]")
    session.end();
 }
 
-TEST_CASE("External-Fields-VdwPchg-Analyze", "[ff][extfield]")
+TEST_CASE("External-Fields-VdwPchg-Analyze", "[ff][extfield][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/extfield/amber.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/extfield/amber.key");
@@ -220,7 +220,7 @@ TEST_CASE("External-Fields-VdwPchg-Analyze", "[ff][extfield]")
    session.end();
 }
 
-TEST_CASE("External-Fields-MPole", "[ff][extfield]")
+TEST_CASE("External-Fields-MPole", "[ff][extfield][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/extfield/water4_Na_shifted.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/extfield/water4_Na_shifted.key", "", externalField + mpoleOnly);
@@ -268,7 +268,7 @@ TEST_CASE("External-Fields-MPole", "[ff][extfield]")
    session.end();
 }
 
-TEST_CASE("External-Fields-Polarize", "[ff][extfield]")
+TEST_CASE("External-Fields-Polarize", "[ff][extfield][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/extfield/water4_Na_shifted.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/extfield/water4_Na_shifted.key", "", externalField + polarOnly);
@@ -316,7 +316,7 @@ TEST_CASE("External-Fields-Polarize", "[ff][extfield]")
    session.end();
 }
 
-TEST_CASE("External-Fields-MPolar", "[ff][extfield]")
+TEST_CASE("External-Fields-MPolar", "[ff][extfield][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/extfield/water4_Na_shifted.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/extfield/water4_Na_shifted.key", "", externalField);
@@ -364,7 +364,7 @@ TEST_CASE("External-Fields-MPolar", "[ff][extfield]")
    session.end();
 }
 
-TEST_CASE("External-Fields-VdwPchg", "[ff][extfield]")
+TEST_CASE("External-Fields-VdwPchg", "[ff][extfield][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/extfield/amber.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/extfield/amber.key");
@@ -415,7 +415,7 @@ TEST_CASE("External-Fields-VdwPchg", "[ff][extfield]")
 static const std::string externalFieldFreq = "exfld-freq  20.5\n";
 static const std::string integrator = "integrator verlet\n";
 
-TEST_CASE("External-Fields-Dynamic-Freq", "[ff][extfield]")
+TEST_CASE("External-Fields-Dynamic-Freq", "[ff][extfield][L4]")
 {
    int mask = calc::xyz | calc::vel | calc::mass | calc::energy | calc::grad | calc::md | calc::virial;
 

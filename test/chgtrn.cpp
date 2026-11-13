@@ -5,7 +5,7 @@
 
 using namespace tinker;
 
-TEST_CASE("ECHGTRN-1", "[ff][hippo][echgtrn][dmso]")
+TEST_CASE("ECHGTRN-1", "[ff][hippo][echgtrn][dmso][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/dmso/dmso.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/hippo/chgtrn/chgtrn.key");

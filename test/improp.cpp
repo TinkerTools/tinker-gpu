@@ -5,7 +5,7 @@
 
 using namespace tinker;
 
-TEST_CASE("Improp-Trpcage-Charmm19", "[ff][eimprop][trpcage]")
+TEST_CASE("Improp-Trpcage-Charmm19", "[ff][eimprop][trpcage][L1]")
 {
    const char* k1 = "test_trpcage.key";
    const char* k2 = "impropterm only\n";
@@ -58,7 +58,7 @@ TEST_CASE("Improp-Trpcage-Charmm19", "[ff][eimprop][trpcage]")
    session.end();
 }
 
-TEST_CASE("Improp-BDNA3-Charmm36", "[ff][eimprop][bdna3]")
+TEST_CASE("Improp-BDNA3-Charmm36", "[ff][eimprop][bdna3][L1]")
 {
    const char* k1 = "test_bdna3.key";
    const char* k2 = "impropterm only\n";

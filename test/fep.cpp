@@ -782,86 +782,86 @@ DynEnd runDyn(const DynOpts& o)
 }
 }
 
-TEST_CASE("FEP-trial-ast", "[ff][fep]") { runTrial(fx("ast")); }
-TEST_CASE("FEP-trial-ast-ewald-ion", "[ff][fep]") { runTrial(fx("ast-ewald-ion")); }
-TEST_CASE("FEP-trial-ast-vcorr", "[ff][fep]") { runTrial(fx("ast-vcorr")); }
-TEST_CASE("FEP-trial-ast-qnt", "[ff][fep]") { runTrial(fx("ast-qnt")); }
-TEST_CASE("FEP-trial-adt-ewald", "[ff][fep]") { runTrial(fx("adt-ewald")); }
-TEST_CASE("FEP-trial-adt", "[ff][fep]") { runTrial(fx("adt")); }
-TEST_CASE("FEP-trial-rels-dt", "[ff][fep]") { runTrial(fx("rels-dt")); }
-TEST_CASE("FEP-trial-rels-st", "[ff][fep]") { runTrial(fx("rels-st")); }
-TEST_CASE("FEP-trial-window", "[ff][fep]") { runTrial(fx("window")); }
-TEST_CASE("FEP-trial-window-mpole", "[ff][fep]") { runTrial(fx("window-mpole")); }
-TEST_CASE("FEP-trial-charge", "[ff][fep]") { runTrial(fx("charge")); }
-TEST_CASE("FEP-trial-hippo", "[ff][fep]") { runTrial(fx("hippo")); }
-TEST_CASE("FEP-trial-aplus", "[ff][fep]") { runTrial(fx("aplus")); }
-TEST_CASE("FEP-trial-aplus-cross", "[ff][fep][cflux]") { runTrial(fx("aplus-cross")); }
-TEST_CASE("FEP-trial-dispann", "[ff][fep][disp]") { runTrial(fx("dispann")); }
-TEST_CASE("FEP-trial-expol", "[ff][fep][expol]") { runTrial(fx("expol")); }
-TEST_CASE("FEP-trial-expol-dt", "[ff][fep][expol]") { runTrial(fx("expol-dt")); }
-TEST_CASE("FEP-trial-expol-box", "[ff][fep][expol]") { runTrial(fx("expol-box")); }
-TEST_CASE("FEP-trial-dispdec", "[ff][fep][disp]") { runTrial(fx("dispdec")); }
-TEST_CASE("FEP-trial-dispcorr", "[ff][fep][disp]") { runTrial(fx("dispcorr")); }
+TEST_CASE("FEP-trial-ast", "[ff][fep][L4]") { runTrial(fx("ast")); }
+TEST_CASE("FEP-trial-ast-ewald-ion", "[ff][fep][L4]") { runTrial(fx("ast-ewald-ion")); }
+TEST_CASE("FEP-trial-ast-vcorr", "[ff][fep][L4]") { runTrial(fx("ast-vcorr")); }
+TEST_CASE("FEP-trial-ast-qnt", "[ff][fep][L4]") { runTrial(fx("ast-qnt")); }
+TEST_CASE("FEP-trial-adt-ewald", "[ff][fep][L4]") { runTrial(fx("adt-ewald")); }
+TEST_CASE("FEP-trial-adt", "[ff][fep][L4]") { runTrial(fx("adt")); }
+TEST_CASE("FEP-trial-rels-dt", "[ff][fep][L4]") { runTrial(fx("rels-dt")); }
+TEST_CASE("FEP-trial-rels-st", "[ff][fep][L4]") { runTrial(fx("rels-st")); }
+TEST_CASE("FEP-trial-window", "[ff][fep][L4]") { runTrial(fx("window")); }
+TEST_CASE("FEP-trial-window-mpole", "[ff][fep][L4]") { runTrial(fx("window-mpole")); }
+TEST_CASE("FEP-trial-charge", "[ff][fep][L4]") { runTrial(fx("charge")); }
+TEST_CASE("FEP-trial-hippo", "[ff][fep][L4]") { runTrial(fx("hippo")); }
+TEST_CASE("FEP-trial-aplus", "[ff][fep][L4]") { runTrial(fx("aplus")); }
+TEST_CASE("FEP-trial-aplus-cross", "[ff][fep][cflux][L4]") { runTrial(fx("aplus-cross")); }
+TEST_CASE("FEP-trial-dispann", "[ff][fep][disp][L4]") { runTrial(fx("dispann")); }
+TEST_CASE("FEP-trial-expol", "[ff][fep][expol][L4]") { runTrial(fx("expol")); }
+TEST_CASE("FEP-trial-expol-dt", "[ff][fep][expol][L4]") { runTrial(fx("expol-dt")); }
+TEST_CASE("FEP-trial-expol-box", "[ff][fep][expol][L4]") { runTrial(fx("expol-box")); }
+TEST_CASE("FEP-trial-dispdec", "[ff][fep][disp][L4]") { runTrial(fx("dispdec")); }
+TEST_CASE("FEP-trial-dispcorr", "[ff][fep][disp][L4]") { runTrial(fx("dispcorr")); }
 
-TEST_CASE("FEP-trial-dyn-ast", "[ff][fep]") { runTrial(fx("ast"), kRcDyn); }
-TEST_CASE("FEP-trial-dyn-ast-ewald-ion", "[ff][fep]") { runTrial(fx("ast-ewald-ion"), kRcDyn); }
-TEST_CASE("FEP-trial-dyn-ast-vcorr", "[ff][fep]") { runTrial(fx("ast-vcorr"), kRcDyn); }
-TEST_CASE("FEP-trial-dyn-ast-qnt", "[ff][fep]") { runTrial(fx("ast-qnt"), kRcDyn); }
-TEST_CASE("FEP-trial-dyn-adt-ewald", "[ff][fep]") { runTrial(fx("adt-ewald"), kRcDyn); }
-TEST_CASE("FEP-trial-dyn-adt", "[ff][fep]") { runTrial(fx("adt"), kRcDyn); }
-TEST_CASE("FEP-trial-dyn-rels-dt", "[ff][fep]") { runTrial(fx("rels-dt"), kRcDyn); }
-TEST_CASE("FEP-trial-dyn-rels-st", "[ff][fep]") { runTrial(fx("rels-st"), kRcDyn); }
-TEST_CASE("FEP-trial-dyn-window", "[ff][fep]") { runTrial(fx("window"), kRcDyn); }
-TEST_CASE("FEP-trial-dyn-window-mpole", "[ff][fep]") { runTrial(fx("window-mpole"), kRcDyn); }
-TEST_CASE("FEP-trial-dyn-charge", "[ff][fep]") { runTrial(fx("charge"), kRcDyn); }
-TEST_CASE("FEP-trial-dyn-hippo", "[ff][fep]") { runTrial(fx("hippo"), kRcDyn); }
-TEST_CASE("FEP-trial-dyn-aplus", "[ff][fep]") { runTrial(fx("aplus"), kRcDyn); }
-TEST_CASE("FEP-trial-dyn-aplus-cross", "[ff][fep][cflux]") { runTrial(fx("aplus-cross"), kRcDyn); }
-TEST_CASE("FEP-trial-dyn-dispann", "[ff][fep][disp]") { runTrial(fx("dispann"), kRcDyn); }
-TEST_CASE("FEP-trial-dyn-dispcorr", "[ff][fep][disp]") { runTrial(fx("dispcorr"), kRcDyn); }
-TEST_CASE("FEP-trial-dyn-expol", "[ff][fep][expol]") { runTrial(fx("expol"), kRcDyn); }
-TEST_CASE("FEP-trial-dyn-expol-dt", "[ff][fep][expol]") { runTrial(fx("expol-dt"), kRcDyn); }
-TEST_CASE("FEP-trial-dyn-expol-box", "[ff][fep][expol]") { runTrial(fx("expol-box"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-ast", "[ff][fep][L4]") { runTrial(fx("ast"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-ast-ewald-ion", "[ff][fep][L4]") { runTrial(fx("ast-ewald-ion"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-ast-vcorr", "[ff][fep][L4]") { runTrial(fx("ast-vcorr"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-ast-qnt", "[ff][fep][L4]") { runTrial(fx("ast-qnt"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-adt-ewald", "[ff][fep][L4]") { runTrial(fx("adt-ewald"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-adt", "[ff][fep][L4]") { runTrial(fx("adt"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-rels-dt", "[ff][fep][L4]") { runTrial(fx("rels-dt"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-rels-st", "[ff][fep][L4]") { runTrial(fx("rels-st"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-window", "[ff][fep][L4]") { runTrial(fx("window"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-window-mpole", "[ff][fep][L4]") { runTrial(fx("window-mpole"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-charge", "[ff][fep][L4]") { runTrial(fx("charge"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-hippo", "[ff][fep][L4]") { runTrial(fx("hippo"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-aplus", "[ff][fep][L4]") { runTrial(fx("aplus"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-aplus-cross", "[ff][fep][cflux][L4]") { runTrial(fx("aplus-cross"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-dispann", "[ff][fep][disp][L4]") { runTrial(fx("dispann"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-dispcorr", "[ff][fep][disp][L4]") { runTrial(fx("dispcorr"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-expol", "[ff][fep][expol][L4]") { runTrial(fx("expol"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-expol-dt", "[ff][fep][expol][L4]") { runTrial(fx("expol-dt"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-expol-box", "[ff][fep][expol][L4]") { runTrial(fx("expol-box"), kRcDyn); }
 
 // An annihilated ion leaves no exchange polarization behind, in single and dual
 // topology: the four waters alone.
-TEST_CASE("FEP-end-expol", "[ff][fep][expol]")
+TEST_CASE("FEP-end-expol", "[ff][fep][expol][L4]")
 {
    runEnd(fx("expol"), {{"fep/expolenv.key", "fep/expwat4.xyz"}}, testGetEps(1.0e-4, 1.0e-6));
 }
-TEST_CASE("FEP-end-expol-dt", "[ff][fep][expol]")
+TEST_CASE("FEP-end-expol-dt", "[ff][fep][expol][L4]")
 {
    runEnd(fx("expol-dt"), {{"fep/expolenv.key", "fep/expwat4.xyz"}}, testGetEps(1.0e-4, 1.0e-6));
 }
-TEST_CASE("FEP-trial-dyn-dispdec", "[ff][fep][disp]") { runTrial(fx("dispdec"), kRcDyn); }
+TEST_CASE("FEP-trial-dyn-dispdec", "[ff][fep][disp][L4]") { runTrial(fx("dispdec"), kRcDyn); }
 
 // An annihilated ligand leaves the environment alone, and a decoupled one the
 // environment and the ligand each alone, Ewald dispersion included.
-TEST_CASE("FEP-end-dispann", "[ff][fep][disp]")
+TEST_CASE("FEP-end-dispann", "[ff][fep][disp][L4]")
 {
    runEnd(fx("dispann"), {{"fep/dispenv.key", "fep/dmso_env.xyz"}}, testGetEps(1.0e-4, 1.0e-6));
 }
-TEST_CASE("FEP-end-dispdec", "[ff][fep][disp]")
+TEST_CASE("FEP-end-dispdec", "[ff][fep][disp][L4]")
 {
    runEnd(fx("dispdec"), {{"fep/dispenv.key", "fep/dmso_env.xyz"}, {"fep/dispenv.key", "fep/dmso_lig.xyz"}},
       testGetEps(1.0e-4, 1.0e-6));
 }
-TEST_CASE("FEP-linear-dispann", "[ff][fep][disp]") { runLinear("fep/displin_ann.key", 0.5, testGetEps(1.0e-4, 1.0e-6)); }
-TEST_CASE("FEP-linear-dispdec", "[ff][fep][disp]") { runLinear("fep/displin_dec.key", 0.5, testGetEps(1.0e-4, 1.0e-6)); }
+TEST_CASE("FEP-linear-dispann", "[ff][fep][disp][L4]") { runLinear("fep/displin_ann.key", 0.5, testGetEps(1.0e-4, 1.0e-6)); }
+TEST_CASE("FEP-linear-dispdec", "[ff][fep][disp][L4]") { runLinear("fep/displin_dec.key", 0.5, testGetEps(1.0e-4, 1.0e-6)); }
 
-TEST_CASE("FEP-state-ast-ewald-ion", "[ff][fep]") { runState(fx("ast-ewald-ion")); }
-TEST_CASE("FEP-state-adt-ewald", "[ff][fep]") { runState(fx("adt-ewald")); }
-TEST_CASE("FEP-state-rels-dt", "[ff][fep]") { runState(fx("rels-dt")); }
-TEST_CASE("FEP-state-rels-st", "[ff][fep]") { runState(fx("rels-st")); }
-TEST_CASE("FEP-state-window", "[ff][fep]") { runState(fx("window")); }
-TEST_CASE("FEP-state-charge", "[ff][fep]") { runState(fx("charge")); }
-TEST_CASE("FEP-state-hippo", "[ff][fep]") { runState(fx("hippo")); }
-TEST_CASE("FEP-state-aplus", "[ff][fep]") { runState(fx("aplus")); }
-TEST_CASE("FEP-state-expol", "[ff][fep][expol]") { runState(fx("expol")); }
-TEST_CASE("FEP-state-expol-dt", "[ff][fep][expol]") { runState(fx("expol-dt")); }
-TEST_CASE("FEP-state-expol-box", "[ff][fep][expol]") { runState(fx("expol-box")); }
+TEST_CASE("FEP-state-ast-ewald-ion", "[ff][fep][L4]") { runState(fx("ast-ewald-ion")); }
+TEST_CASE("FEP-state-adt-ewald", "[ff][fep][L4]") { runState(fx("adt-ewald")); }
+TEST_CASE("FEP-state-rels-dt", "[ff][fep][L4]") { runState(fx("rels-dt")); }
+TEST_CASE("FEP-state-rels-st", "[ff][fep][L4]") { runState(fx("rels-st")); }
+TEST_CASE("FEP-state-window", "[ff][fep][L4]") { runState(fx("window")); }
+TEST_CASE("FEP-state-charge", "[ff][fep][L4]") { runState(fx("charge")); }
+TEST_CASE("FEP-state-hippo", "[ff][fep][L4]") { runState(fx("hippo")); }
+TEST_CASE("FEP-state-aplus", "[ff][fep][L4]") { runState(fx("aplus")); }
+TEST_CASE("FEP-state-expol", "[ff][fep][expol][L4]") { runState(fx("expol")); }
+TEST_CASE("FEP-state-expol-dt", "[ff][fep][expol][L4]") { runState(fx("expol-dt")); }
+TEST_CASE("FEP-state-expol-box", "[ff][fep][expol][L4]") { runState(fx("expol-box")); }
 
-TEST_CASE("FEP-predict", "[ff][fep]")
+TEST_CASE("FEP-predict", "[ff][fep][L4]")
 {
    const Fixture& f = fx("window");
    const double trial[] = {0.5, 0.0};
@@ -967,7 +967,7 @@ TEST_CASE("FEP-predict", "[ff][fep]")
    }
 }
 
-TEST_CASE("FEP-sample", "[ff][fep]")
+TEST_CASE("FEP-sample", "[ff][fep][L4]")
 {
    const Fixture& f = fx("window");
    const double eps = testGetEps(f.eps, 1.0e-6);
@@ -1081,7 +1081,7 @@ TEST_CASE("FEP-sample", "[ff][fep]")
    s.session.end();
 }
 
-TEST_CASE("FEP-dyn", "[ff][fep]")
+TEST_CASE("FEP-dyn", "[ff][fep][L4]")
 {
    // The trajectory is the one that the same run takes when no trial energy
    // is found at all.
@@ -1095,7 +1095,7 @@ TEST_CASE("FEP-dyn", "[ff][fep]")
    REQUIRE(sameEnd(on, off));
 }
 
-TEST_CASE("FEP-dyn-midwindow", "[ff][fep]")
+TEST_CASE("FEP-dyn-midwindow", "[ff][fep][L4]")
 {
    // The same, with steps left to take in a window once it has been sampled.
    DynOpts o;
@@ -1110,7 +1110,7 @@ TEST_CASE("FEP-dyn-midwindow", "[ff][fep]")
    REQUIRE(sameEnd(on, off));
 }
 
-TEST_CASE("FEP-dyn-rescaled", "[ff][fep]")
+TEST_CASE("FEP-dyn-rescaled", "[ff][fep][L4]")
 {
    // A barostat that rescales the coordinates after the force call of a step
    // leaves the neighbor lists behind the structure. The energies recorded are
@@ -1126,7 +1126,7 @@ TEST_CASE("FEP-dyn-rescaled", "[ff][fep]")
    REQUIRE(on.fepvol.front() != on.fepvol.back());
 }
 
-TEST_CASE("FEP-dyn-propagate", "[ff][fep]")
+TEST_CASE("FEP-dyn-propagate", "[ff][fep][L4]")
 {
    // The integrators leave the sampling of the window to mdPropagate(). Its
    // run finds the trial energies at the steps the loop of the other cases
@@ -1144,7 +1144,7 @@ TEST_CASE("FEP-dyn-propagate", "[ff][fep]")
    REQUIRE(sameEnd(prop, loop));
 }
 
-TEST_CASE("FEP-dyn-save-lambda", "[ff][fep]")
+TEST_CASE("FEP-dyn-save-lambda", "[ff][fep][L4]")
 {
    // A saved frame prints the Fortran main lambda, which the save takes from
    // the lambda of the window the frame is in. Saves on the last step of each
@@ -1158,7 +1158,7 @@ TEST_CASE("FEP-dyn-save-lambda", "[ff][fep]")
    REQUIRE(end.lmdasaved == end.lmdalast);
 }
 
-TEST_CASE("FEP-dyn-dual", "[ff][fep]")
+TEST_CASE("FEP-dyn-dual", "[ff][fep][L4]")
 {
    // Dual topology polarization, whose trial energies weigh two solves apiece,
    // leaves the trajectory alone as the single topology does, predictor
@@ -1179,7 +1179,7 @@ TEST_CASE("FEP-dyn-dual", "[ff][fep]")
    REQUIRE(sameEnd(on, off));
 }
 
-TEST_CASE("FEP-dyn-staged", "[ff][fep]")
+TEST_CASE("FEP-dyn-staged", "[ff][fep][L4]")
 {
    // A window in each leg of the staged relative schedule, sampled twice, so
    // that the run steps from leg to leg and each sample has a trial lambda in
@@ -1215,7 +1215,7 @@ TEST_CASE("FEP-dyn-staged", "[ff][fep]")
    REQUIRE(on.box.lvec1.x != on.box0.lvec1.x);
 }
 
-TEST_CASE("FEP-dyn-montecarlo", "[ff][fep]")
+TEST_CASE("FEP-dyn-montecarlo", "[ff][fep][L4]")
 {
    // A Monte Carlo volume trial uses the predictor history and keeps what it
    // solved when the move is accepted; the trial energies of the same step
@@ -1252,7 +1252,7 @@ TEST_CASE("FEP-dyn-montecarlo", "[ff][fep]")
 // tinker9 solves the induced dipoles to self-consistency only, so it refuses
 // the perturbation and truncated conjugate gradient models of test_fep_terms
 // rather than run them as MUTUAL.
-TEST_CASE("FEP-polarization-models-refused", "[ff][fep][polar]")
+TEST_CASE("FEP-polarization-models-refused", "[ff][fep][polar][L4]")
 {
    const std::string files = TINKER9_DIRSTR "/test/file/";
    const char* xn = "water2.xyz";

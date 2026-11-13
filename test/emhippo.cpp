@@ -5,7 +5,7 @@
 
 using namespace tinker;
 
-TEST_CASE("EMPOLE-1-EWALD-HIPPO", "[ff][hippo][emhippo][ewald]")
+TEST_CASE("EMPOLE-1-EWALD-HIPPO", "[ff][hippo][emhippo][ewald][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/c5h12acnh2/c5h12acnh2.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/hippo/mpole/ewald.key");
@@ -59,7 +59,7 @@ TEST_CASE("EMPOLE-1-EWALD-HIPPO", "[ff][hippo][emhippo][ewald]")
    session.end();
 }
 
-TEST_CASE("EMPOLE-2-NONEWALD-HIPPO", "[ff][hippo][emhippo][nonewald]")
+TEST_CASE("EMPOLE-2-NONEWALD-HIPPO", "[ff][hippo][emhippo][nonewald][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/c5h12acnh2/c5h12acnh2.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/hippo/mpole/newald.key");

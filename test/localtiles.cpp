@@ -223,7 +223,7 @@ LocalCase aplusCase(const char* xyz)
 // 31 A at a 7 A cutoff, plain and with the lambda derivatives of a water to
 // the second and, as dynamics takes them, the first order, and the TIP3P
 // truncated octahedron of 26 A at 5 A, whose criterion is stricter.
-TEST_CASE("LocalTiles-ChargeLJ", "[ff][localtiles][echglj][echarge][lj][water4]")
+TEST_CASE("LocalTiles-ChargeLJ", "[ff][localtiles][echglj][echarge][lj][water4][L2]")
 {
    const std::string cut7 = "\newald-cutoff 7.0\nvdw-cutoff 7.0\nneighbor-list\n";
    const std::string lmda = "\nligand -1 4\nele-lmda-map exp\nele-lmda-exp 1\n";
@@ -245,7 +245,7 @@ TEST_CASE("LocalTiles-ChargeLJ", "[ff][localtiles][echglj][echarge][lj][water4]"
 // The buffered 14-7 van der Waals of the AMOEBA water box of 30 A at a 6 A
 // cutoff, plain and with the lambda derivatives of a water to the second and,
 // as dynamics takes them, the first order, with and without analysis.
-TEST_CASE("LocalTiles-Hal", "[ff][localtiles][ehal][vdw]")
+TEST_CASE("LocalTiles-Hal", "[ff][localtiles][ehal][vdw][L2]")
 {
    const std::string cut6 = "\nvdwterm only\nvdw-cutoff 6.0\nneighbor-list\n";
    const char* prm = "commit_6fe8e913/water03.prm";
@@ -262,28 +262,28 @@ TEST_CASE("LocalTiles-Hal", "[ff][localtiles][ehal][vdw]")
 
 // The AMOEBA water box of 30 A at a 6 A cutoff: multipoles, polarization and
 // its preconditioner, fused and apart, plain and with lambda derivatives.
-TEST_CASE("LocalTiles-Amoeba", "[ff][localtiles][amoeba][emplar][mpole][polar]")
+TEST_CASE("LocalTiles-Amoeba", "[ff][localtiles][amoeba][emplar][mpole][polar][L2]")
 {
    polCompare(amoebaCase(kWater));
 }
 
 // The HIPPO water box: charge penetration multipoles and polarization,
 // repulsion, Ewald dispersion and charge transfer.
-TEST_CASE("LocalTiles-Hippo", "[ff][localtiles][hippo][mpole][polar][repuls][disp][chgtrn]")
+TEST_CASE("LocalTiles-Hippo", "[ff][localtiles][hippo][mpole][polar][repuls][disp][chgtrn][L2]")
 {
    polCompare(hippoCase(kWater));
 }
 
 // The AMOEBA+ water box: Thole damped polarization, charge penetration
 // multipoles with charge flux, and charge transfer.
-TEST_CASE("LocalTiles-AmoebaPlus", "[ff][localtiles][aplus][mpole][polar][chgtrn]")
+TEST_CASE("LocalTiles-AmoebaPlus", "[ff][localtiles][aplus][mpole][polar][chgtrn][L2]")
 {
    polCompare(aplusCase(kWater));
 }
 
 // Exchange polarization of the HIPPO water box: the overlap scaling of the
 // polarizabilities and its gradient.
-TEST_CASE("LocalTiles-Expol", "[ff][localtiles][hippo][expol][polar]")
+TEST_CASE("LocalTiles-Expol", "[ff][localtiles][hippo][expol][polar][L2]")
 {
    const LocalCase c = {kWater, "expol/expolw.key", "expol/expol.prm", kCut6, {&mspatial_v2_unit}, Precond::HIPPO};
    polCompare(c);
@@ -292,7 +292,7 @@ TEST_CASE("LocalTiles-Expol", "[ff][localtiles][hippo][expol][polar]")
 // The triclinic water box of 33 x 28.5 x 37.5 A (92, 101 and 88 degrees) at a
 // 6 A cutoff, where the kernels image by the box shape passed at run time:
 // AMOEBA, HIPPO and AMOEBA+.
-TEST_CASE("LocalTiles-Triclinic", "[ff][localtiles][amoeba][hippo][aplus][mpole][polar]")
+TEST_CASE("LocalTiles-Triclinic", "[ff][localtiles][amoeba][hippo][aplus][mpole][polar][L2]")
 {
    const char* tri = "water30/water30_aniso.xyz";
    polCompare(amoebaCase(tri));

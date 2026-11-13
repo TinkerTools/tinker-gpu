@@ -10,7 +10,7 @@
 
 using namespace tinker;
 
-TEST_CASE("APlus-Liquid-Alyz", "[ff][aplus]")
+TEST_CASE("APlus-Liquid-Alyz", "[ff][aplus][L1]")
 {
    rc_flag = calc::xyz | calc::energy | calc::grad | calc::virial;
    rc_flag |= calc::analyz;
@@ -83,7 +83,7 @@ TEST_CASE("APlus-Liquid-Alyz", "[ff][aplus]")
    session.end();
 }
 
-TEST_CASE("APlus-Liquid", "[ff][aplus]")
+TEST_CASE("APlus-Liquid", "[ff][aplus][L1]")
 {
    rc_flag = calc::xyz | calc::energy | calc::grad | calc::virial;
 
@@ -138,7 +138,7 @@ TEST_CASE("APlus-Liquid", "[ff][aplus]")
    session.end();
 }
 
-TEST_CASE("APlus-Liquid-NonEwald", "[ff][aplus]")
+TEST_CASE("APlus-Liquid-NonEwald", "[ff][aplus][L1]")
 {
    rc_flag = calc::xyz | calc::energy | calc::grad | calc::virial;
    rc_flag |= calc::analyz;
@@ -284,7 +284,7 @@ void runAplusLiquidCase(const char* keyextra, const char* ref)
 // No polarizability on the propanol H (type 17). Its pairs with one another
 // have no polarization energy and must not count as interactions (epolar3.f),
 // and the direct field its zero damping width leaves undamped (damptholed).
-TEST_CASE("APlus-Liquid-ZeroPol", "[ff][aplus]")
+TEST_CASE("APlus-Liquid-ZeroPol", "[ff][aplus][L1]")
 {
    runAplusLiquidCase("polarize  17  0.0  0.3900  0.7000  14\n", "/test/ref/aplusliquid.3.txt");
 }
@@ -294,32 +294,32 @@ TEST_CASE("APlus-Liquid-ZeroPol", "[ff][aplus]")
 // overrides both. A pair value of 0 means "no damping" (damping.f).
 
 // Thole 0 on type 17: its pairs take the partner's Thole.
-TEST_CASE("APlus-Liquid-ZeroThole", "[ff][aplus]")
+TEST_CASE("APlus-Liquid-ZeroThole", "[ff][aplus][L1]")
 {
    runAplusLiquidCase("polarize  17  0.4800  0.0000  0.7000  14\n", "/test/ref/aplusliquid.4.txt");
 }
 
 // Direct damping 0 on type 17: its pairs take the partner's direct damping.
-TEST_CASE("APlus-Liquid-ZeroDirDamp", "[ff][aplus]")
+TEST_CASE("APlus-Liquid-ZeroDirDamp", "[ff][aplus][L1]")
 {
    runAplusLiquidCase("polarize  17  0.4800  0.3900  0.0000  14\n", "/test/ref/aplusliquid.5.txt");
 }
 
 // Pair values that differ from the combining rule.
-TEST_CASE("APlus-Liquid-PolPair", "[ff][aplus]")
+TEST_CASE("APlus-Liquid-PolPair", "[ff][aplus][L1]")
 {
    runAplusLiquidCase("polpair  13  17  0.1000  0.4000\n", "/test/ref/aplusliquid.6.txt");
 }
 
 // Both pair values 0: the 13-17 pairs are undamped.
-TEST_CASE("APlus-Liquid-ZeroPair", "[ff][aplus]")
+TEST_CASE("APlus-Liquid-ZeroPair", "[ff][aplus][L1]")
 {
    runAplusLiquidCase("polpair  13  17  0.0  0.0\n", "/test/ref/aplusliquid.7.txt");
 }
 
 // Both pair values 1e-30: the 13-17 pairs are fully damped, and their nonzero
 // Ewald real-space energy must not count them as interactions (epolar3.f).
-TEST_CASE("APlus-Liquid-TinyPair", "[ff][aplus]")
+TEST_CASE("APlus-Liquid-TinyPair", "[ff][aplus][L1]")
 {
    runAplusLiquidCase("polpair  13  17  1e-30  1e-30\n", "/test/ref/aplusliquid.8.txt");
 }

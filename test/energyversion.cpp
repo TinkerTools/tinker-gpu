@@ -62,7 +62,7 @@ const char* const kWater30Prm = TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeb
 const char* const kMplarOnly = "multipoleterm only\npolarizeterm\n";
 }
 
-TEST_CASE("Energy-Versions-AMOEBA", "[ff][amoeba][versions]")
+TEST_CASE("Energy-Versions-AMOEBA", "[ff][amoeba][versions][L2]")
 {
    // In mixed precision the inlined excluded-pair multipole energies of the
    // fused AMOEBA kernel used to differ by version, E(v0) - E(v4) = +2.8e-3.
@@ -71,7 +71,7 @@ TEST_CASE("Energy-Versions-AMOEBA", "[ff][amoeba][versions]")
 
 // lambda derivatives run on the CUDA platform only
 #if TINKER_GPULANG_CUDA
-TEST_CASE("Energy-Versions-AMOEBA-Lambda", "[ff][amoeba][versions]")
+TEST_CASE("Energy-Versions-AMOEBA-Lambda", "[ff][amoeba][versions][L2]")
 {
    // The same excluded-pair energies in the single topology lambda form of the
    // fused kernel, with the first two waters as the ligand; it differed by
@@ -84,7 +84,7 @@ TEST_CASE("Energy-Versions-AMOEBA-Lambda", "[ff][amoeba][versions]")
 }
 #endif
 
-TEST_CASE("Energy-Versions-HIPPO-Dispersion", "[ff][hippo][versions]")
+TEST_CASE("Energy-Versions-HIPPO-Dispersion", "[ff][hippo][versions][L2]")
 {
    // Under fast math the compiler took 1/sqrt(r2) in the HIPPO dispersion
    // kernel as rsqrt in the gradient versions and as rcp(sqrt) in the
@@ -94,7 +94,7 @@ TEST_CASE("Energy-Versions-HIPPO-Dispersion", "[ff][hippo][versions]")
       Potent::DISP, 1.0e-5, "dispersionterm only\n");
 }
 
-TEST_CASE("Energy-Versions-LJ-Analyze", "[ff][vdw][versions]")
+TEST_CASE("Energy-Versions-LJ-Analyze", "[ff][vdw][versions][L2]")
 {
    // The same rsqrt-or-rcp(sqrt) choice in the Lennard-Jones kernel of an
    // analysis session put E(v0) 1.47e-4 above E(v4); soft core on the ligand.
@@ -118,25 +118,25 @@ const std::string kHippoKeys = "parameters water19.prm\ndewald\ndewald-cutoff 6.
 const char* const kHippoPrm = TINKER9_DIRSTR "/test/file/hippo/water19.prm";
 }
 
-TEST_CASE("Energy-Versions-Hal-Local", "[ff][vdw][versions]")
+TEST_CASE("Energy-Versions-Hal-Local", "[ff][vdw][versions][L2]")
 {
    checkEnergyVersions(kIsoXyz, nullptr, TINKER9_DIRSTR "/test/file/commit_6fe8e913/water03.prm", Potent::VDW, 1.0e-5,
       "parameters water03.prm\nvdwterm only\n" + kLocal6, 0, &vspatial_v2_unit);
 }
 
-TEST_CASE("Energy-Versions-HIPPO-Elec-Local", "[ff][hippo][versions]")
+TEST_CASE("Energy-Versions-HIPPO-Elec-Local", "[ff][hippo][versions][L2]")
 {
    checkEnergyVersions(kIsoXyz, nullptr, kHippoPrm, Potent::MPOLE, 2.0e-4,
       kHippoKeys + "multipoleterm only\npolarizeterm\nchgtrnterm\n", 0, &mspatial_v2_unit);
 }
 
-TEST_CASE("Energy-Versions-HIPPO-Repulsion-Local", "[ff][hippo][versions]")
+TEST_CASE("Energy-Versions-HIPPO-Repulsion-Local", "[ff][hippo][versions][L2]")
 {
    checkEnergyVersions(kIsoXyz, nullptr, kHippoPrm, Potent::REPULS, 1.0e-5, kHippoKeys + "repulsionterm only\n", 0,
       &mspatial_v2_unit);
 }
 
-TEST_CASE("Energy-Versions-AMOEBAplus-Local", "[ff][aplus][versions]")
+TEST_CASE("Energy-Versions-AMOEBAplus-Local", "[ff][aplus][versions][L2]")
 {
    checkEnergyVersions(kIsoXyz, nullptr, TINKER9_DIRSTR "/test/file/commit_152ecec0/AMOEBAplus_Org.prm", Potent::MPOLE,
       2.0e-4,
@@ -144,13 +144,13 @@ TEST_CASE("Energy-Versions-AMOEBAplus-Local", "[ff][aplus][versions]")
       &mspatial_v2_unit);
 }
 
-TEST_CASE("Energy-Versions-Expol-Local", "[ff][hippo][expol][versions]")
+TEST_CASE("Energy-Versions-Expol-Local", "[ff][hippo][expol][versions][L2]")
 {
    checkEnergyVersions(kIsoXyz, TINKER9_DIRSTR "/test/file/expol/expolw.key",
       TINKER9_DIRSTR "/test/file/expol/expol.prm", Potent::POLAR, 1.0e-4, kLocal6, 0, &mspatial_v2_unit);
 }
 
-TEST_CASE("Energy-Versions-ChargeLJ-Local", "[ff][echglj][versions]")
+TEST_CASE("Energy-Versions-ChargeLJ-Local", "[ff][echglj][versions][L2]")
 {
    checkEnergyVersions(TINKER9_DIRSTR "/test/file/tip4p/tip4p.xyz", TINKER9_DIRSTR "/test/file/tip4p/tip4p.key",
       nullptr, Potent::CHARGE, 2.0e-5, "\newald-cutoff 7.0\nvdw-cutoff 7.0\nneighbor-list\nlist-buffer 1.0\n", 0,
@@ -161,7 +161,7 @@ TEST_CASE("Energy-Versions-ChargeLJ-Local", "[ff][echglj][versions]")
 static const std::string kLigandLmda = "ligand -1 6\nlambda 0.5\nlambda-deriv\nele-lmda-map exp\nele-lmda-exp 1\n"
                                        "pol-lmda-map exp\npol-lmda-exp 1\nvdw-lmda-map exp\nvdw-lmda-exp 1\n";
 
-TEST_CASE("Energy-Versions-HIPPO-Lambda-Local", "[ff][hippo][versions]")
+TEST_CASE("Energy-Versions-HIPPO-Lambda-Local", "[ff][hippo][versions][L2]")
 {
    checkEnergyVersions(kIsoXyz, nullptr, kHippoPrm, Potent::MPOLE, 2.0e-4,
       kHippoKeys + "multipoleterm only\npolarizeterm\nchgtrnterm\nrepulsionterm\n" + kLigandLmda, 0, &mspatial_v2_unit);

@@ -46,7 +46,7 @@ double relerr(double a, double b)
 }
 }
 
-TEST_CASE("SD-Coefficients", "[md][stochastic]")
+TEST_CASE("SD-Coefficients", "[md][stochastic][L4]")
 {
    const double dt = 0.001; // ps
 
@@ -149,7 +149,7 @@ TEST_CASE("SD-Coefficients", "[md][stochastic]")
    }
 }
 
-TEST_CASE("SD-Philox", "[md][stochastic]")
+TEST_CASE("SD-Philox", "[md][stochastic][L4]")
 {
    SECTION("KnownAnswerTest")
    {
@@ -820,27 +820,27 @@ void sdCellTests(Cell c)
 }
 }
 
-TEST_CASE("SD-NoPbc-NoRemoveInertia", "[md][stochastic][g3]")
+TEST_CASE("SD-NoPbc-NoRemoveInertia", "[md][stochastic][g3][L4]")
 {
    sdCellTests({false, false});
 }
 
-TEST_CASE("SD-NoPbc-RemoveInertia", "[md][stochastic][g3]")
+TEST_CASE("SD-NoPbc-RemoveInertia", "[md][stochastic][g3][L4]")
 {
    sdCellTests({false, true});
 }
 
-TEST_CASE("SD-Pbc-NoRemoveInertia", "[md][stochastic][g3]")
+TEST_CASE("SD-Pbc-NoRemoveInertia", "[md][stochastic][g3][L4]")
 {
    sdCellTests({true, false});
 }
 
-TEST_CASE("SD-Pbc-RemoveInertia", "[md][stochastic][g3]")
+TEST_CASE("SD-Pbc-RemoveInertia", "[md][stochastic][g3][L4]")
 {
    sdCellTests({true, true});
 }
 
-TEST_CASE("SD-TinkerRandom", "[md][stochastic]")
+TEST_CASE("SD-TinkerRandom", "[md][stochastic][L4]")
 {
    // The SD-NOISE TINKER path reproduces Tinker's own generator rather than
    // calling the Fortran one, so that the stream does not depend on what else

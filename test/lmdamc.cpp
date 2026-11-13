@@ -475,7 +475,7 @@ void runStale(const char* mode)
 }
 }
 
-TEST_CASE("LMDAMC-keys", "[ff][lmdamc]")
+TEST_CASE("LMDAMC-keys", "[ff][lmdamc][L4]")
 {
    // an adaptive bias run moves the lambda particle by default
    {
@@ -547,7 +547,7 @@ TEST_CASE("LMDAMC-keys", "[ff][lmdamc]")
    }
 }
 
-TEST_CASE("LMDAMC-particle", "[ff][lmdamc]")
+TEST_CASE("LMDAMC-particle", "[ff][lmdamc][L4]")
 {
    // The interval sampling no longer propagates the lambda particle once the
    // lambda is moved by Monte Carlo, while the samples are still deposited
@@ -577,14 +577,14 @@ TEST_CASE("LMDAMC-particle", "[ff][lmdamc]")
    s.session.end();
 }
 
-TEST_CASE("LMDAMC-move-abf", "[ff][lmdamc]") { runMove("abf", kRc); }
-TEST_CASE("LMDAMC-move-ost", "[ff][lmdamc]") { runMove("ost", kRc); }
-TEST_CASE("LMDAMC-move-meta", "[ff][lmdamc]") { runMove("meta", kRc); }
-TEST_CASE("LMDAMC-move-dyn-abf", "[ff][lmdamc]") { runMove("abf", kRcDyn); }
-TEST_CASE("LMDAMC-move-dyn-ost", "[ff][lmdamc]") { runMove("ost", kRcDyn); }
-TEST_CASE("LMDAMC-move-dyn-meta", "[ff][lmdamc]") { runMove("meta", kRcDyn); }
+TEST_CASE("LMDAMC-move-abf", "[ff][lmdamc][L4]") { runMove("abf", kRc); }
+TEST_CASE("LMDAMC-move-ost", "[ff][lmdamc][L4]") { runMove("ost", kRc); }
+TEST_CASE("LMDAMC-move-meta", "[ff][lmdamc][L4]") { runMove("meta", kRc); }
+TEST_CASE("LMDAMC-move-dyn-abf", "[ff][lmdamc][L4]") { runMove("abf", kRcDyn); }
+TEST_CASE("LMDAMC-move-dyn-ost", "[ff][lmdamc][L4]") { runMove("ost", kRcDyn); }
+TEST_CASE("LMDAMC-move-dyn-meta", "[ff][lmdamc][L4]") { runMove("meta", kRcDyn); }
 
-TEST_CASE("LMDAMC-trial", "[ff][lmdamc]")
+TEST_CASE("LMDAMC-trial", "[ff][lmdamc][L4]")
 {
    // Orthogonal space tempering and adaptive biasing force try a lambda move
    // only in the propagation phase of the sample interval while metadynamics
@@ -656,7 +656,7 @@ TEST_CASE("LMDAMC-trial", "[ff][lmdamc]")
    }
 }
 
-TEST_CASE("LMDAMC-deposit", "[ff][lmdamc]")
+TEST_CASE("LMDAMC-deposit", "[ff][lmdamc][L4]")
 {
    // A lambda move tried on the step that deposits a metadynamics gaussian
    // takes its old bias from the history with that gaussian in place; the
@@ -683,7 +683,7 @@ TEST_CASE("LMDAMC-deposit", "[ff][lmdamc]")
    s.session.end();
 }
 
-TEST_CASE("LMDAMC-bias-abf", "[ff][lmdamc]")
+TEST_CASE("LMDAMC-bias-abf", "[ff][lmdamc][L4]")
 {
    // The old energy of an adaptive biasing force move is the true energy of the
    // step with the bias of the step taken out and that of the history as it
@@ -765,8 +765,8 @@ void runTemp(const char* mode)
    s.session.end();
 }
 
-TEST_CASE("LMDAMC-temp-abf", "[ff][lmdamc]") { runTemp("abf"); }
-TEST_CASE("LMDAMC-temp-ost", "[ff][lmdamc]") { runTemp("ost"); }
+TEST_CASE("LMDAMC-temp-abf", "[ff][lmdamc][L4]") { runTemp("abf"); }
+TEST_CASE("LMDAMC-temp-ost", "[ff][lmdamc][L4]") { runTemp("ost"); }
 
 // Forces an accepted lambda move inside a region without data for the method
 // mode, and checks that the energy and the slope it keeps come from the filled
@@ -835,13 +835,13 @@ void runFill(const char* mode)
    s.session.end();
 }
 
-TEST_CASE("LMDAMC-fill-abf", "[ff][lmdamc]") { runFill("abf"); }
-TEST_CASE("LMDAMC-fill-ost", "[ff][lmdamc]") { runFill("ost"); }
+TEST_CASE("LMDAMC-fill-abf", "[ff][lmdamc][L4]") { runFill("abf"); }
+TEST_CASE("LMDAMC-fill-ost", "[ff][lmdamc][L4]") { runFill("ost"); }
 
-TEST_CASE("LMDAMC-stale-abf", "[ff][lmdamc]") { runStale("abf"); }
-TEST_CASE("LMDAMC-stale-ost", "[ff][lmdamc]") { runStale("ost"); }
+TEST_CASE("LMDAMC-stale-abf", "[ff][lmdamc][L4]") { runStale("abf"); }
+TEST_CASE("LMDAMC-stale-ost", "[ff][lmdamc][L4]") { runStale("ost"); }
 
-TEST_CASE("LMDAMC-stale-meta", "[ff][lmdamc]")
+TEST_CASE("LMDAMC-stale-meta", "[ff][lmdamc][L4]")
 {
    // The same check for metadynamics, where a tall gaussian centered on the
    // current lambda makes every nearby move downhill once the old energy is
@@ -867,7 +867,7 @@ TEST_CASE("LMDAMC-stale-meta", "[ff][lmdamc]")
    s.session.end();
 }
 
-TEST_CASE("LMDAMC-stale-lists", "[ff][lmdamc]")
+TEST_CASE("LMDAMC-stale-lists", "[ff][lmdamc][L4]")
 {
    // A box that a scaling barostat has shrunk by more than the buffer of the
    // neighbor lists brings pairs inside the cutoffs that the lists of the step
@@ -891,7 +891,7 @@ TEST_CASE("LMDAMC-stale-lists", "[ff][lmdamc]")
    s.session.end();
 }
 
-TEST_CASE("LMDAMC-after-volume-move", "[ff][lmdamc]")
+TEST_CASE("LMDAMC-after-volume-move", "[ff][lmdamc][L4]")
 {
    // A Monte Carlo box change in the step leaves an energy that matches the
    // system it leaves, whether it was accepted or rejected, so the lambda move
@@ -943,7 +943,7 @@ TEST_CASE("LMDAMC-after-volume-move", "[ff][lmdamc]")
    s.session.end();
 }
 
-TEST_CASE("LMDAMC-rpole", "[ff][lmdamc]")
+TEST_CASE("LMDAMC-rpole", "[ff][lmdamc][L4]")
 {
    // The saved output reads the multipoles in the global frame after asking
    // for the physical ones (mdsaveAsync). A rejected lambda move leaves them
@@ -967,7 +967,7 @@ TEST_CASE("LMDAMC-rpole", "[ff][lmdamc]")
    }
 }
 
-TEST_CASE("LMDAMC-predictor", "[ff][lmdamc]")
+TEST_CASE("LMDAMC-predictor", "[ff][lmdamc][L4]")
 {
    // The dynamics of an adaptive bias method keeps the induced dipole
    // predictor that the key file asks for, which the Fortran reader turns off,
@@ -1044,7 +1044,7 @@ int nextNualt(int nu)
 }
 }
 
-TEST_CASE("LMDAMC-predictor-restart", "[ff][lmdamc]")
+TEST_CASE("LMDAMC-predictor-restart", "[ff][lmdamc][L4]")
 {
    // A single topology history holds the dipoles of one polarization lambda.
    // A rejected move leaves the lambda where it was and the predictor carries
@@ -1077,7 +1077,7 @@ TEST_CASE("LMDAMC-predictor-restart", "[ff][lmdamc]")
    }
 }
 
-TEST_CASE("LMDAMC-predictor-phases", "[ff][lmdamc]")
+TEST_CASE("LMDAMC-predictor-phases", "[ff][lmdamc][L4]")
 {
    // ABF moves a single topology lambda only in the propagation phase of each
    // interval and holds it through the equilibration and averaging phases, so
@@ -1105,7 +1105,7 @@ TEST_CASE("LMDAMC-predictor-phases", "[ff][lmdamc]")
    s.session.end();
 }
 
-TEST_CASE("LMDAMC-thermostat", "[ff][lmdamc]")
+TEST_CASE("LMDAMC-thermostat", "[ff][lmdamc][L4]")
 {
    // Lambda bias dynamics works at a set temperature, with Monte Carlo lambda
    // moves or without, so a run without a thermostat or at zero temperature is
@@ -1128,7 +1128,7 @@ TEST_CASE("LMDAMC-thermostat", "[ff][lmdamc]")
    s.session.end();
 }
 
-TEST_CASE("LMDAMC-run", "[ff][lmdamc]")
+TEST_CASE("LMDAMC-run", "[ff][lmdamc][L4]")
 {
    // Short dynamics runs with Monte Carlo lambda moves for each adaptive bias
    // method, at constant volume and under the Monte Carlo and the scaling
@@ -1177,7 +1177,7 @@ TEST_CASE("LMDAMC-run", "[ff][lmdamc]")
    }
 }
 
-TEST_CASE("LMDAMC-stale-table", "[ff][lmdamc]")
+TEST_CASE("LMDAMC-stale-table", "[ff][lmdamc][L4]")
 {
    // Which integrators and barostats leave the energy of the step behind the
    // system: only the barostats that rescale the box and the coordinates after
@@ -1251,7 +1251,7 @@ TEST_CASE("LMDAMC-stale-table", "[ff][lmdamc]")
 // is set up, so the integrator starts from the forces at the restored lambda
 // with the bias of the history, rather than at the lambda of the key or with
 // no bias (xdynamic.cpp, lmdaBiasOpen, eostData).
-TEST_CASE("LMDAMC-restart-kickoff", "[ff][lmdamc]")
+TEST_CASE("LMDAMC-restart-kickoff", "[ff][lmdamc][L4]")
 {
    BathReset bathReset;
    TestLmdaFlagReset lmdaReset;

@@ -32,13 +32,12 @@ if (14 LESS_EQUAL ${T9_CPPSTD})
       )
       target_link_libraries (__t9_all_tests_o
          PUBLIC
-            "${CMAKE_BINARY_DIR}/catch2/lib/libCatch2Main.a"
             "${CMAKE_BINARY_DIR}/catch2/lib/libCatch2.a"
       )
    else ()
       target_link_libraries (__t9_all_tests_o
          PUBLIC
-            Catch2::Catch2WithMain
+            Catch2::Catch2
       )
    endif ()
 else ()

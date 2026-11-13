@@ -183,7 +183,7 @@ void runFixture(const Fixture& fx, int vers)
 // With use_emast the lambda derivative grid is opened as a private unit with
 // the multipole parameters; polarization must still share the multipole unit,
 // which the fused kernels assume, rather than land on the private one.
-TEST_CASE("MPOLESTATE-pme-units", "[ff][mpolestate]")
+TEST_CASE("MPOLESTATE-pme-units", "[ff][mpolestate][L2]")
 {
    const Fixture& f = fx("abs-prng-dl");
    std::string xyzname = "mpolestate.xyz";
@@ -207,7 +207,7 @@ TEST_CASE("MPOLESTATE-pme-units", "[ff][mpolestate]")
    session.end();
 }
 
-TEST_CASE("MPOLESTATE-physical", "[ff][mpolestate]")
+TEST_CASE("MPOLESTATE-physical", "[ff][mpolestate][L2]")
 {
    for (const auto& fx : kFixtures) {
       for (int vers : {calc::v0, calc::v1, calc::v4}) {
@@ -267,7 +267,7 @@ const double kSolveEps = 1.0e-6;
 
 // Single topology: the reported dipoles are the solve at plambda, which is the
 // one epolar() leaves behind.
-TEST_CASE("MPOLESTATE-induced-prst", "[ff][mpolestate]")
+TEST_CASE("MPOLESTATE-induced-prst", "[ff][mpolestate][L2]")
 {
    Setup s(fx("abs-prng-dl"), kEnergyGrad);
    REQUIRE(use_prst);
@@ -283,7 +283,7 @@ TEST_CASE("MPOLESTATE-induced-prst", "[ff][mpolestate]")
 // The active leg of a staged relative schedule picks the ligand that charges,
 // so a sub-lambda reached again on another leg is another state of pole even
 // though the number is the same.
-TEST_CASE("MPOLESTATE-leg-jump", "[ff][mpolestate]")
+TEST_CASE("MPOLESTATE-leg-jump", "[ff][mpolestate][L2]")
 {
    const double eps = testGetEps(1.0e-4, 1.0e-6);
 
@@ -324,7 +324,7 @@ TEST_CASE("MPOLESTATE-leg-jump", "[ff][mpolestate]")
 
 // Dual topology leaves only its last endpoint pass in uind and udir, so it has
 // no dipoles to report.
-TEST_CASE("MPOLESTATE-induced-epdt", "[ff][mpolestate]")
+TEST_CASE("MPOLESTATE-induced-epdt", "[ff][mpolestate][L2]")
 {
    Setup s(fx("epdt"), kEnergyGrad);
    REQUIRE(use_epdt);
@@ -406,7 +406,7 @@ double virDiff(const EpResult& a, const EpResult& b)
 // convolution virial in vir_m, for the polarization direct field to reuse. The
 // reuse must depend on whether this call computes the virial, not on whether
 // vir_m is allocated, and must agree with a rebuild.
-TEST_CASE("MPOLESTATE-recip-reuse", "[ff][mpolestate]")
+TEST_CASE("MPOLESTATE-recip-reuse", "[ff][mpolestate][L2]")
 {
    // Grid spreading adds floats atomically, so a rebuild is not bit identical.
    const double eps = testGetEps(1.0e-4, 1.0e-6);

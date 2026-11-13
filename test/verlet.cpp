@@ -35,7 +35,7 @@ static double arbox_pot[] = {-277.037089, -277.055104, -277.073212, -277.091414,
    -278.651448, -278.655017, -278.658152};
 #endif
 
-TEST_CASE("NVE-Verlet-ArBox", "[ff][nve][verlet][arbox]")
+TEST_CASE("NVE-Verlet-ArBox", "[ff][nve][verlet][arbox][L4]")
 {
 #if TINKER_REAL_SIZE == 8
    const char* k = "test_arbox.key";

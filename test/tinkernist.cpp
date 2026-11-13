@@ -24,7 +24,7 @@ using namespace tinker;
 static const std::string nodyn = "nodyn\n";
 static const std::string nocoord = "nocoord\n";
 
-TEST_CASE("TinkerNIST-NODYN", "[ff][tinkerNIST]")
+TEST_CASE("TinkerNIST-NODYN", "[ff][tinkerNIST][L4]")
 {
    int mask = calc::xyz | calc::vel | calc::mass | calc::energy | calc::grad | calc::md | calc::virial;
 
@@ -75,7 +75,7 @@ TEST_CASE("TinkerNIST-NODYN", "[ff][tinkerNIST]")
    session.end();
 }
 
-TEST_CASE("TinkerNIST-NOCOORD", "[ff][tinkerNIST]")
+TEST_CASE("TinkerNIST-NOCOORD", "[ff][tinkerNIST][L4]")
 {
    int mask = calc::xyz | calc::vel | calc::mass | calc::energy | calc::grad | calc::md | calc::virial;
 
@@ -126,7 +126,7 @@ TEST_CASE("TinkerNIST-NOCOORD", "[ff][tinkerNIST]")
    session.end();
 }
 
-TEST_CASE("TinkerNIST-DCD", "[ff][tinkerNIST]")
+TEST_CASE("TinkerNIST-DCD", "[ff][tinkerNIST][L4]")
 {
    int mask = calc::xyz | calc::vel | calc::mass | calc::energy | calc::grad | calc::md | calc::virial;
 
@@ -198,7 +198,7 @@ TEST_CASE("TinkerNIST-DCD", "[ff][tinkerNIST]")
    session.end();
 }
 
-TEST_CASE("TinkerNIST-SAVE1", "[ff][tinkerNIST]")
+TEST_CASE("TinkerNIST-SAVE1", "[ff][tinkerNIST][L4]")
 {
    int mask = calc::xyz | calc::vel | calc::mass | calc::energy | calc::grad | calc::md | calc::virial;
 
@@ -369,7 +369,7 @@ TEST_CASE("TinkerNIST-SAVE1", "[ff][tinkerNIST]")
    session.end();
 }
 
-TEST_CASE("TinkerNIST-SAVE2", "[ff][tinkerNIST]")
+TEST_CASE("TinkerNIST-SAVE2", "[ff][tinkerNIST][L4]")
 {
    int mask = calc::xyz | calc::vel | calc::mass | calc::energy | calc::grad | calc::md | calc::virial;
 
@@ -540,7 +540,7 @@ TEST_CASE("TinkerNIST-SAVE2", "[ff][tinkerNIST]")
    session.end();
 }
 
-TEST_CASE("TinkerNIST-SAVE-ONLY", "[ff][tinkerNIST]")
+TEST_CASE("TinkerNIST-SAVE-ONLY", "[ff][tinkerNIST][L4]")
 {
    int mask = calc::xyz | calc::vel | calc::mass | calc::energy | calc::grad | calc::md | calc::virial;
 
@@ -672,7 +672,7 @@ std::vector<std::array<double, 3>> read_logfile_2(const std::string& filename, c
    return vectors;
 }
 
-TEST_CASE("TinkerNIST-SAVE-SYSTEM", "[ff][tinkerNIST]")
+TEST_CASE("TinkerNIST-SAVE-SYSTEM", "[ff][tinkerNIST][L4]")
 {
    int mask = calc::xyz | calc::vel | calc::mass | calc::energy | calc::grad | calc::md | calc::virial;
 
@@ -810,7 +810,7 @@ TEST_CASE("TinkerNIST-SAVE-SYSTEM", "[ff][tinkerNIST]")
    }
 }
 
-TEST_CASE("TinkerNIST-EXC-MOMENT", "[ff][tinkerNIST]")
+TEST_CASE("TinkerNIST-EXC-MOMENT", "[ff][tinkerNIST][L4]")
 {
    int mask = calc::xyz | calc::vel | calc::mass | calc::energy | calc::grad | calc::md | calc::virial;
 
@@ -901,7 +901,7 @@ TEST_CASE("TinkerNIST-EXC-MOMENT", "[ff][tinkerNIST]")
 // A run stopped by an end file writes the frame of that step and ends
 // normally. Fortran mdsave ends the program once it finds the file, so the
 // dynamic program runs apart from this one (test_thermint.f:test_thermint_stop).
-TEST_CASE("TinkerNIST-END-FILE", "[ff][tinkerNIST]")
+TEST_CASE("TinkerNIST-END-FILE", "[ff][tinkerNIST][L5]")
 {
    const std::string files = TINKER9_DIRSTR "/test/file/";
    TestFile fx(files + "mutate/water2.xyz", "endstop.xyz");
@@ -940,7 +940,7 @@ TEST_CASE("TinkerNIST-END-FILE", "[ff][tinkerNIST]")
 // (test_eost.f:eostrstrun). Lambda dynamics needs the CUDA platform
 // (dlmdaData2).
 #if TINKER_GPULANG_CUDA
-TEST_CASE("TinkerNIST-LMDA-RESTART", "[ff][tinkerNIST]")
+TEST_CASE("TinkerNIST-LMDA-RESTART", "[ff][tinkerNIST][L5]")
 {
    const std::string files = TINKER9_DIRSTR "/test/file/";
    TestFile fx(files + "mutate/water2.xyz", "lmdarst.xyz");

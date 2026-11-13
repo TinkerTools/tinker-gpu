@@ -211,7 +211,7 @@ double tiRowLambda(const std::string& fname, int nth)
 }
 }
 
-TEST_CASE("THERMINT-avgstd", "[ff][thermint]")
+TEST_CASE("THERMINT-avgstd", "[ff][thermint][L2]")
 {
    const double eps = 1.0e-12;
    // population standard deviation of ten consecutive integers
@@ -261,7 +261,7 @@ TEST_CASE("THERMINT-avgstd", "[ff][thermint]")
    COMPARE_REALS(sd, sd10, 1.0e-9);
 }
 
-TEST_CASE("THERMINT-schedule", "[ff][thermint]")
+TEST_CASE("THERMINT-schedule", "[ff][thermint][L2]")
 {
    const double eps = 1.0e-12;
 
@@ -325,7 +325,7 @@ TEST_CASE("THERMINT-schedule", "[ff][thermint]")
    clearti();
 }
 
-TEST_CASE("THERMINT-phase", "[ff][thermint]")
+TEST_CASE("THERMINT-phase", "[ff][thermint][L2]")
 {
    int iprod;
 
@@ -392,7 +392,7 @@ TEST_CASE("THERMINT-phase", "[ff][thermint]")
    clearti();
 }
 
-TEST_CASE("THERMINT-data", "[ff][thermint]")
+TEST_CASE("THERMINT-data", "[ff][thermint][L2]")
 {
    // thermintData(INIT) and lmdaWinData(INIT) read the Fortran modules, so the
    // adoption they perform is checked in THERMINT-save where the runtime is up.
@@ -428,7 +428,7 @@ TEST_CASE("THERMINT-data", "[ff][thermint]")
    clearti();
 }
 
-TEST_CASE("THERMINT-etidyn", "[ff][thermint]")
+TEST_CASE("THERMINT-etidyn", "[ff][thermint][L2]")
 {
    const double eps = testGetEps(1.0e-4, 1.0e-12);
    const double sd10 = std::sqrt(8.25);
@@ -479,7 +479,7 @@ TEST_CASE("THERMINT-etidyn", "[ff][thermint]")
    clearti();
 }
 
-TEST_CASE("THERMINT-etidyn-partialblock", "[ff][thermint]")
+TEST_CASE("THERMINT-etidyn-partialblock", "[ff][thermint][L2]")
 {
    const double eps = testGetEps(1.0e-4, 1.0e-12);
 
@@ -507,7 +507,7 @@ TEST_CASE("THERMINT-etidyn-partialblock", "[ff][thermint]")
    clearti();
 }
 
-TEST_CASE("THERMINT-etidyn-trailing", "[ff][thermint]")
+TEST_CASE("THERMINT-etidyn-trailing", "[ff][thermint][L2]")
 {
    // 210 steps over 5 windows of 40: the last 10 steps fall past the schedule
    // and must hit the lmdawin > nlmdawin early returns rather than index out
@@ -527,7 +527,7 @@ TEST_CASE("THERMINT-etidyn-trailing", "[ff][thermint]")
    clearti();
 }
 
-TEST_CASE("THERMINT-uneven", "[ff][thermint]")
+TEST_CASE("THERMINT-uneven", "[ff][thermint][L2]")
 {
    const double eps = testGetEps(1.0e-4, 1.0e-12);
 
@@ -585,7 +585,7 @@ TEST_CASE("THERMINT-uneven", "[ff][thermint]")
    clearti();
 }
 
-TEST_CASE("THERMINT-save", "[ff][thermint]")
+TEST_CASE("THERMINT-save", "[ff][thermint][L2]")
 {
    // The one case that needs the Fortran runtime: the schedule comes from
    // setlmdasched and the .ti file is written by prttihead and saveti.
@@ -716,7 +716,7 @@ TEST_CASE("THERMINT-save", "[ff][thermint]")
    COMPARE_REALS(tiRowLambda(tifile, 10), 0.0, 1.0e-8);
 }
 
-TEST_CASE("THERMINT-mapsublambda", "[ff][thermint]")
+TEST_CASE("THERMINT-mapsublambda", "[ff][thermint][L2]")
 {
    const double epsv = testGetEps(1.0e-6, 1.0e-12); // elam/plam/vlam are real
    const double epsd = 1.0e-12;                     // the derivatives are double
@@ -797,7 +797,7 @@ TEST_CASE("THERMINT-mapsublambda", "[ff][thermint]")
 // etidyn samples dU/dlambda once the step is complete, after whatever energy
 // calls a barostat trial made of its own. Those carry no lambda derivative, and
 // are to leave the one of the force call of the step in place.
-TEST_CASE("THERMINT-dedl-survives-trial", "[ff][thermint]")
+TEST_CASE("THERMINT-dedl-survives-trial", "[ff][thermint][L2]")
 {
    // Puts the bath back as the case leaves scope, however it leaves.
    struct BathReset

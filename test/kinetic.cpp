@@ -13,7 +13,7 @@ using namespace tinker;
 static const char* verlet_intg = "integrator  verlet\nbarostat  berendsen\n";
 static int usage_ = calc::xyz | calc::vel | calc::mass | calc::vmask | calc::md;
 
-TEST_CASE("Kinetic-ArBox", "[ff][kinetic][arbox]")
+TEST_CASE("Kinetic-ArBox", "[ff][kinetic][arbox][L1]")
 {
    const char* k = "test_arbox.key";
    const char* d = "test_arbox.dyn";
@@ -47,7 +47,7 @@ TEST_CASE("Kinetic-ArBox", "[ff][kinetic][arbox]")
    session.end();
 }
 
-TEST_CASE("Bussi-OnDevice-ArBox", "[ff][kinetic][arbox]")
+TEST_CASE("Bussi-OnDevice-ArBox", "[ff][kinetic][arbox][L1]")
 {
    const char* k = "test_arbox.key";
    const char* d = "test_arbox.dyn";

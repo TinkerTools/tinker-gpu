@@ -5,7 +5,7 @@
 
 using namespace tinker;
 
-TEST_CASE("Bond-Trpcage", "[ff][ebond][harmonic][trpcage]")
+TEST_CASE("Bond-Trpcage", "[ff][ebond][harmonic][trpcage][L1]")
 {
    const char* k = "test_trpcage.key";
    const char* k0 = "bondterm  only\n";

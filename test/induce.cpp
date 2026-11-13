@@ -68,7 +68,7 @@ void setGuess(UPred pred, bool full, bool epdt, bool pcgguess)
 }
 }
 
-TEST_CASE("INDUCE-guess-table", "[ff][induce]")
+TEST_CASE("INDUCE-guess-table", "[ff][induce][L2]")
 {
    GuessScope scope;
    // No system is loaded, so a trial here must find no dipoles to save.
@@ -263,7 +263,7 @@ bool sameHistory(const Induced& a, const Induced& b)
 
 // A wiggle moves the atoms away from the coordinates the history was built at,
 // so the retry starts from the direct guess; its solve is saved all the same.
-TEST_CASE("INDUCE-retry-guess", "[ff][induce]")
+TEST_CASE("INDUCE-retry-guess", "[ff][induce][L2]")
 {
    Setup s(kMd, "induce-wiggle\n");
    fillHistory();
@@ -298,7 +298,7 @@ TEST_CASE("INDUCE-retry-guess", "[ff][induce]")
    s.session.end();
 }
 
-TEST_CASE("INDUCE-not-converged-throws", "[ff][induce]")
+TEST_CASE("INDUCE-not-converged-throws", "[ff][induce][L2]")
 {
    SECTION("without the keyword")
    {
@@ -337,7 +337,7 @@ TEST_CASE("INDUCE-not-converged-throws", "[ff][induce]")
    }
 }
 
-TEST_CASE("INDUCE-trial-history", "[ff][induce]")
+TEST_CASE("INDUCE-trial-history", "[ff][induce][L2]")
 {
    Setup s(kMd);
    fillHistory();
@@ -478,12 +478,12 @@ void zeroPolarityGuess(const std::string& keyextra, const System& sys)
 }
 }
 
-TEST_CASE("INDUCE-zero-polarity-guess", "[ff][induce]")
+TEST_CASE("INDUCE-zero-polarity-guess", "[ff][induce][L2]")
 {
    zeroPolarityGuess("", kWater);
 }
 
-TEST_CASE("INDUCE-zero-polarity-guess-hippo", "[ff][induce]")
+TEST_CASE("INDUCE-zero-polarity-guess-hippo", "[ff][induce][L2]")
 {
    zeroPolarityGuess("polar-predict aspc\n", kHippo);
 }
@@ -629,13 +629,13 @@ void lambdaJump(const std::string& keyextra, const System& sys, int nlig)
 }
 }
 
-TEST_CASE("INDUCE-lambda-jump", "[ff][induce]")
+TEST_CASE("INDUCE-lambda-jump", "[ff][induce][L2]")
 {
    // the two water molecules of the ligand
    lambdaJump("", kWater, 6);
 }
 
-TEST_CASE("INDUCE-lambda-jump-hippo", "[ff][induce]")
+TEST_CASE("INDUCE-lambda-jump-hippo", "[ff][induce][L2]")
 {
    // the first dimethylsulfoxide molecule
    lambdaJump("polar-predict aspc\n", kHippo, 10);
@@ -644,7 +644,7 @@ TEST_CASE("INDUCE-lambda-jump-hippo", "[ff][induce]")
 // Dual topology keeps a predictor history for each endpoint. A trial that asks
 // to use the history bypasses both instead, since putting a rejected trial back
 // would take a slot from each; accepted or not, it leaves them as they were.
-TEST_CASE("INDUCE-trial-dualtopo", "[ff][induce]")
+TEST_CASE("INDUCE-trial-dualtopo", "[ff][induce][L2]")
 {
    Setup s(kMd, "lambda-deriv2\n");
    REQUIRE(use_epdt);
@@ -719,7 +719,7 @@ struct EndpointStep
 // is full. The legs on either side of the middle one charge different ligands,
 // so a move that jumps over it, as a Monte Carlo lambda move may, empties the
 // coupled history as well. The environment endpoint keeps predicting.
-TEST_CASE("INDUCE-dualtopo-history-gaps", "[ff][induce]")
+TEST_CASE("INDUCE-dualtopo-history-gaps", "[ff][induce][L2]")
 {
    const System rels = {"mutate/083_water_rels_ye_l085.key", "mutate/water2.xyz", "commit_6fe8e913/water03.prm"};
    Setup s(kMd, "polar-predict aspc\nrel-stage lig2 0.0 0.3\nrel-stage vdwm 0.3 0.7\n", rels);
@@ -766,7 +766,7 @@ TEST_CASE("INDUCE-dualtopo-history-gaps", "[ff][induce]")
 // Whether an endpoint is solved also depends on the version: at a weight of
 // zero with a slope, the coupled endpoint is solved for the lambda derivative
 // of a gradient and skipped for an energy alone, which empties its history.
-TEST_CASE("INDUCE-dualtopo-version-skip", "[ff][induce]")
+TEST_CASE("INDUCE-dualtopo-version-skip", "[ff][induce][L2]")
 {
    Setup s(kMd, "lambda-deriv2\n");
    REQUIRE(use_epdt);
@@ -802,7 +802,7 @@ TEST_CASE("INDUCE-dualtopo-version-skip", "[ff][induce]")
 // while it predicts on its own the ligand keeps no dipoles. Each skipped
 // endpoint starts over from the direct guess when both are solved again and
 // predicts once its history is full.
-TEST_CASE("INDUCE-dualtopo-endpoint-return", "[ff][induce]")
+TEST_CASE("INDUCE-dualtopo-endpoint-return", "[ff][induce][L2]")
 {
    Setup s(kMd, "lambda-deriv2\n");
    REQUIRE(use_epdt);
@@ -849,7 +849,7 @@ TEST_CASE("INDUCE-dualtopo-endpoint-return", "[ff][induce]")
 // A trial leaves no trace in either endpoint history, even when its energy
 // alone skips one endpoint, as a Monte Carlo barostat trial at lambda 0 does,
 // and even when the two histories are of different lengths.
-TEST_CASE("INDUCE-dualtopo-trial-skip", "[ff][induce]")
+TEST_CASE("INDUCE-dualtopo-trial-skip", "[ff][induce][L2]")
 {
    Setup s(kMd, "lambda-deriv2\n");
    REQUIRE(use_epdt);
@@ -888,7 +888,7 @@ TEST_CASE("INDUCE-dualtopo-trial-skip", "[ff][induce]")
 // The endpoints of dual topology do not move with lambda, so both histories
 // carry on as lambda leaves zero, and the predicted dipoles at the new lambda
 // are those of a solve from the direct guess.
-TEST_CASE("INDUCE-dualtopo-lambda-move", "[ff][induce]")
+TEST_CASE("INDUCE-dualtopo-lambda-move", "[ff][induce][L2]")
 {
    Setup s(kMd, "lambda-deriv2\n");
    REQUIRE(use_epdt);
@@ -928,7 +928,7 @@ TEST_CASE("INDUCE-dualtopo-lambda-move", "[ff][induce]")
 // not reach for the second. Copying an unallocated slot is an error that only
 // a build that checks the device calls reports, so this case counts in the
 // debug build.
-TEST_CASE("INDUCE-trial-hippo", "[ff][induce]")
+TEST_CASE("INDUCE-trial-hippo", "[ff][induce][L2]")
 {
    Setup s(kMd, "polar-predict aspc\n", kHippo);
    REQUIRE(mplpot::use_chgpen);
@@ -973,7 +973,7 @@ TEST_CASE("INDUCE-trial-hippo", "[ff][induce]")
 // Exchange polarization scales the polarizabilities by matrices found from
 // the structure, which the solve of a trial overwrites. They go back with the
 // induced dipoles they belong to.
-TEST_CASE("INDUCE-trial-expol", "[ff][induce]")
+TEST_CASE("INDUCE-trial-expol", "[ff][induce][L2]")
 {
    Setup s(kMd, "polar-predict aspc\n", kExpol);
    REQUIRE(polpot::use_expol);
@@ -1005,7 +1005,7 @@ TEST_CASE("INDUCE-trial-expol", "[ff][induce]")
 
 // A solver that throws inside a trial must not leave the bypass switched on
 // for whatever the process runs next.
-TEST_CASE("INDUCE-trial-unwinds", "[ff][induce]")
+TEST_CASE("INDUCE-trial-unwinds", "[ff][induce][L2]")
 {
    Setup s(kMd);
    fillHistory();
@@ -1034,7 +1034,7 @@ TEST_CASE("INDUCE-trial-unwinds", "[ff][induce]")
    s.session.end();
 }
 
-TEST_CASE("INDUCE-trial-no-polar", "[ff][induce]")
+TEST_CASE("INDUCE-trial-no-polar", "[ff][induce][L2]")
 {
    Setup s(kMd, "polarizeterm none\n");
    REQUIRE_FALSE(use(Potent::POLAR));
@@ -1060,7 +1060,7 @@ TEST_CASE("INDUCE-trial-no-polar", "[ff][induce]")
 
 // The snapshot a trial keeps: the slot of the history a solve would overwrite
 // is part of it only when the solves to come can write the history.
-TEST_CASE("INDUCE-snapshot-slot", "[ff][induce]")
+TEST_CASE("INDUCE-snapshot-slot", "[ff][induce][L2]")
 {
    Setup s(kMd);
    fillHistory();

@@ -6,7 +6,7 @@
 
 using namespace tinker;
 
-TEST_CASE("EDISP-1-NONDEWALD", "[ff][hippo][edisp][nondewald]")
+TEST_CASE("EDISP-1-NONDEWALD", "[ff][hippo][edisp][nondewald][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/c5h12acnh2/c5h12acnh2.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/disp/ndewald.key");
@@ -60,7 +60,7 @@ TEST_CASE("EDISP-1-NONDEWALD", "[ff][hippo][edisp][nondewald]")
    session.end();
 }
 
-TEST_CASE("EDISP-2-DEWALD", "[ff][hippo][edisp][dewald]")
+TEST_CASE("EDISP-2-DEWALD", "[ff][hippo][edisp][dewald][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/c5h12acnh2/c5h12acnh2.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/disp/dewald.key");
@@ -117,7 +117,7 @@ TEST_CASE("EDISP-2-DEWALD", "[ff][hippo][edisp][dewald]")
 // No dispersion on the methyl H, so its excluded pairs have no energy. The
 // neighbor loop never counts them, so the exclusion loop must not take them
 // away either (edisp3.f).
-TEST_CASE("EDISP-3-DEWALD-ZEROC6", "[ff][hippo][edisp][dewald]")
+TEST_CASE("EDISP-3-DEWALD-ZEROC6", "[ff][hippo][edisp][dewald][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/c5h12acnh2/c5h12acnh2.xyz");
    const char* xn = "c5h12acnh2.xyz";

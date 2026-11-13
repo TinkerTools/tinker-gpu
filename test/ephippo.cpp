@@ -6,7 +6,7 @@
 
 using namespace tinker;
 
-TEST_CASE("EPOLAR-1-EWALD-HIPPO", "[ff][hippo][ephippo][ewald]")
+TEST_CASE("EPOLAR-1-EWALD-HIPPO", "[ff][hippo][ephippo][ewald][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/dmso/dmso.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/hippo/polar/ewald.key");
@@ -65,7 +65,7 @@ TEST_CASE("EPOLAR-1-EWALD-HIPPO", "[ff][hippo][ephippo][ewald]")
    session.end();
 }
 
-TEST_CASE("EPOLAR-2-NONEWALD-HIPPO", "[ff][hippo][ephippo][nonewald]")
+TEST_CASE("EPOLAR-2-NONEWALD-HIPPO", "[ff][hippo][ephippo][nonewald][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/dmso/dmso.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/hippo/polar/newald.key");
@@ -126,7 +126,7 @@ TEST_CASE("EPOLAR-2-NONEWALD-HIPPO", "[ff][hippo][ephippo][nonewald]")
 
 // No polarizability on the methyl H, so every H-H pair has no polarization
 // energy and must not count as an interaction (epolar3.f).
-TEST_CASE("EPOLAR-3-EWALD-HIPPO-ZEROPOL", "[ff][hippo][ephippo][ewald]")
+TEST_CASE("EPOLAR-3-EWALD-HIPPO-ZEROPOL", "[ff][hippo][ephippo][ewald][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/dmso/dmso.xyz");
    const char* xn = "dmso.xyz";

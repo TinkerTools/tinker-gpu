@@ -5,7 +5,7 @@
 
 using namespace tinker;
 
-TEST_CASE("Strbnd-Trpcage", "[ff][estrbnd][trpcage]")
+TEST_CASE("Strbnd-Trpcage", "[ff][estrbnd][trpcage][L1]")
 {
    const char* k = "test_trpcage.key";
    const char* k0 = "strbndterm  only\n";

@@ -26,7 +26,7 @@ static const char* xname = "test_local_frame3.xyz";
 static const char* argv[] = {"dummy", xname};
 static int argc = 2;
 
-TEST_CASE("Local-Frame3-1", "[ff][empole][epolar][emplar][nonewald][local-frame3]")
+TEST_CASE("Local-Frame3-1", "[ff][empole][epolar][emplar][nonewald][local-frame3][L1]")
 {
    std::string key = key0;
 
@@ -95,7 +95,7 @@ TEST_CASE("Local-Frame3-1", "[ff][empole][epolar][emplar][nonewald][local-frame3
    session.end();
 }
 
-TEST_CASE("Local-Frame3-2", "[ff][empole][epolar][emplar][ewald][local-frame3]")
+TEST_CASE("Local-Frame3-2", "[ff][empole][epolar][emplar][ewald][local-frame3][L1]")
 {
    std::string key = key0;
    key += "ewald\n";
@@ -157,7 +157,7 @@ TEST_CASE("Local-Frame3-2", "[ff][empole][epolar][emplar][ewald][local-frame3]")
    session.end();
 }
 
-TEST_CASE("Local-Frame3-3", "[ff][empole][epolar][emplar][ewald][local-frame3]")
+TEST_CASE("Local-Frame3-3", "[ff][empole][epolar][emplar][ewald][local-frame3][L1]")
 {
    std::string key = key0;
    key += "ewald\n";

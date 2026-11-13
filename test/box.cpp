@@ -40,7 +40,7 @@ static void set_box(BoxShape shape, const double* p)
 #define COS(x) std::cos(x* _1radian)
 #define SIN(x) std::sin(x* _1radian)
 
-TEST_CASE("Box-1", "[ff][box][orthogonal]")
+TEST_CASE("Box-1", "[ff][box][orthogonal][L1]")
 {
    const char* argv[] = {"dummy"};
    int argc = 1;
@@ -100,7 +100,7 @@ TEST_CASE("Box-1", "[ff][box][orthogonal]")
    tinkerFortranRuntimeEnd();
 }
 
-TEST_CASE("Box-2", "[ff][box][monoclinic]")
+TEST_CASE("Box-2", "[ff][box][monoclinic][L1]")
 {
    const char* argv[] = {"dummy"};
    int argc = 1;
@@ -184,7 +184,7 @@ TEST_CASE("Box-2", "[ff][box][monoclinic]")
    tinkerFortranRuntimeEnd();
 }
 
-TEST_CASE("Box-3", "[ff][box][triclinic]")
+TEST_CASE("Box-3", "[ff][box][triclinic][L1]")
 {
    const char* argv[] = {"dummy"};
    int argc = 1;
@@ -248,7 +248,7 @@ TEST_CASE("Box-3", "[ff][box][triclinic]")
    tinkerFortranRuntimeEnd();
 }
 
-TEST_CASE("Box-4", "[ff][box][octahedron]")
+TEST_CASE("Box-4", "[ff][box][octahedron][L1]")
 {
    const char* argv[] = {"dummy"};
    int argc = 1;

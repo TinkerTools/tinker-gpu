@@ -19,7 +19,7 @@
 
 using namespace tinker;
 
-TEST_CASE("Truncated-Octahedron", "[ff][pbc][arbox]")
+TEST_CASE("Truncated-Octahedron", "[ff][pbc][arbox][L2]")
 {
    rc_flag = calc::xyz | calc::vmask;
 
@@ -81,7 +81,7 @@ TEST_CASE("Truncated-Octahedron", "[ff][pbc][arbox]")
 }
 
 // tinker9 has no rhombic dodecahedron box, so boxData() refuses DODECAHEDRON.
-TEST_CASE("Dodecahedron-Unsupported", "[ff][pbc]")
+TEST_CASE("Dodecahedron-Unsupported", "[ff][pbc][L2]")
 {
    rc_flag = calc::xyz | calc::vmask;
 
@@ -215,43 +215,43 @@ void runOctTip3p(bool alyz)
 }
 }
 
-TEST_CASE("Octahedron-AMOEBA-Alyz", "[ff][pbc][octahedron]")
+TEST_CASE("Octahedron-AMOEBA-Alyz", "[ff][pbc][octahedron][L2]")
 {
    runOctAmoeba(true);
 }
 
-TEST_CASE("Octahedron-AMOEBA", "[ff][pbc][octahedron]")
+TEST_CASE("Octahedron-AMOEBA", "[ff][pbc][octahedron][L2]")
 {
    runOctAmoeba(false);
 }
 
-TEST_CASE("Octahedron-HIPPO-Alyz", "[ff][pbc][octahedron]")
+TEST_CASE("Octahedron-HIPPO-Alyz", "[ff][pbc][octahedron][L2]")
 {
    runOctHippo(true);
 }
 
-TEST_CASE("Octahedron-HIPPO", "[ff][pbc][octahedron]")
+TEST_CASE("Octahedron-HIPPO", "[ff][pbc][octahedron][L2]")
 {
    runOctHippo(false);
 }
 
-TEST_CASE("Octahedron-AMOEBAplus-Alyz", "[ff][pbc][octahedron]")
+TEST_CASE("Octahedron-AMOEBAplus-Alyz", "[ff][pbc][octahedron][L2]")
 {
    runOctAplus(true);
 }
 
-TEST_CASE("Octahedron-AMOEBAplus", "[ff][pbc][octahedron]")
+TEST_CASE("Octahedron-AMOEBAplus", "[ff][pbc][octahedron][L2]")
 {
    runOctAplus(false);
 }
 
-TEST_CASE("Octahedron-TIP3P-Alyz", "[ff][pbc][octahedron]")
+TEST_CASE("Octahedron-TIP3P-Alyz", "[ff][pbc][octahedron][L2]")
 {
    runOctTip3p(true);
 }
 
 // Without analysis the charge and LJ terms run in the fused echglj kernel.
-TEST_CASE("Octahedron-TIP3P", "[ff][pbc][octahedron]")
+TEST_CASE("Octahedron-TIP3P", "[ff][pbc][octahedron][L2]")
 {
    runOctTip3p(false);
 }

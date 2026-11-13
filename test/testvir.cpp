@@ -100,38 +100,38 @@ void runFixture(const Fixture& fx)
 }
 }
 
-TEST_CASE("TESTVIR-01_charge_ewald", "[ff][testvir]") { runFixture(fx("01_charge_ewald")); }
-TEST_CASE("TESTVIR-02_charge_ewald_lights", "[ff][testvir]") { runFixture(fx("02_charge_ewald_lights")); }
-TEST_CASE("TESTVIR-03_charge_ewald_nlist", "[ff][testvir]") { runFixture(fx("03_charge_ewald_nlist")); }
-TEST_CASE("TESTVIR-04_mpole_ewald", "[ff][testvir]") { runFixture(fx("04_mpole_ewald")); }
-TEST_CASE("TESTVIR-05_mpole_ewald_nlist", "[ff][testvir]") { runFixture(fx("05_mpole_ewald_nlist")); }
+TEST_CASE("TESTVIR-01_charge_ewald", "[ff][testvir][L3]") { runFixture(fx("01_charge_ewald")); }
+TEST_CASE("TESTVIR-02_charge_ewald_lights", "[ff][testvir][L3]") { runFixture(fx("02_charge_ewald_lights")); }
+TEST_CASE("TESTVIR-03_charge_ewald_nlist", "[ff][testvir][L3]") { runFixture(fx("03_charge_ewald_nlist")); }
+TEST_CASE("TESTVIR-04_mpole_ewald", "[ff][testvir][L3]") { runFixture(fx("04_mpole_ewald")); }
+TEST_CASE("TESTVIR-05_mpole_ewald_nlist", "[ff][testvir][L3]") { runFixture(fx("05_mpole_ewald_nlist")); }
 // The flux change of one AMOEBA+ water hydrogen is scaled, so the net charge
 // varies with geometry and the Ewald background term adds a charge flux virial.
-TEST_CASE("TESTVIR-09_mpole_cflux_l04", "[ff][testvir][cflux]") { runFixture(fx("09_mpole_cflux_l04")); }
+TEST_CASE("TESTVIR-09_mpole_cflux_l04", "[ff][testvir][cflux][L3]") { runFixture(fx("09_mpole_cflux_l04")); }
 // Ewald dispersion of an annihilated DMSO, whose reciprocal and self terms
 // follow the van der Waals lambda (test_testvir.f case 10).
-TEST_CASE("TESTVIR-10_disp_dewald_ann_l05", "[ff][testvir][hippo][disp]") { runFixture(fx("10_disp_dewald_ann_l05")); }
+TEST_CASE("TESTVIR-10_disp_dewald_ann_l05", "[ff][testvir][hippo][disp][L3]") { runFixture(fx("10_disp_dewald_ann_l05")); }
 // Case 11 needs replica images, its 7 A charge transfer cutoff reaching past
 // half of its 12 A box, which tinker9 does not have.
-TEST_CASE("TESTVIR-12_disp_corr", "[ff][testvir][hippo][disp]") { runFixture(fx("12_disp_corr")); }
+TEST_CASE("TESTVIR-12_disp_corr", "[ff][testvir][hippo][disp][L3]") { runFixture(fx("12_disp_corr")); }
 
 #if TINKER_GPULANG_CUDA
-TEST_CASE("TESTVIR-06_mpole_lambda_l05", "[ff][testvir][ast]") { runFixture(fx("06_mpole_lambda_l05")); }
-TEST_CASE("TESTVIR-07_mpole_lambda_nlist_l05", "[ff][testvir][ast]") { runFixture(fx("07_mpole_lambda_nlist_l05")); }
+TEST_CASE("TESTVIR-06_mpole_lambda_l05", "[ff][testvir][ast][L3]") { runFixture(fx("06_mpole_lambda_l05")); }
+TEST_CASE("TESTVIR-07_mpole_lambda_nlist_l05", "[ff][testvir][ast][L3]") { runFixture(fx("07_mpole_lambda_nlist_l05")); }
 // 09 through the multipole lambda derivative, where the background term's flux
 // virial comes from the net flux change of each lambda group.
-TEST_CASE("TESTVIR-08_mpole_cflux_lambda_l04", "[ff][testvir][ast][cflux]") { runFixture(fx("08_mpole_cflux_lambda_l04")); }
+TEST_CASE("TESTVIR-08_mpole_cflux_lambda_l04", "[ff][testvir][ast][cflux][L3]") { runFixture(fx("08_mpole_cflux_lambda_l04")); }
 // A TIP3P water decoupled from an AMBER box through the soft core
 // Lennard-Jones and scaled partial charges, with the lambda derivatives on,
 // under Ewald with a neighbor list and the long range correction
 // (test_testvir.f case 15).
-TEST_CASE("TESTVIR-15_tip3_ljchg_lambda_nlist_l05", "[ff][testvir][charge][lj]") { runFixture(fx("15_tip3_ljchg_lambda_nlist_l05")); }
+TEST_CASE("TESTVIR-15_tip3_ljchg_lambda_nlist_l05", "[ff][testvir][charge][lj][L3]") { runFixture(fx("15_tip3_ljchg_lambda_nlist_l05")); }
 #endif
 
 // tinker9 has no vacuum cell dipole term, so pmeData() refuses EWALD-BOUNDARY.
 // The throw comes partway through initialize(): the modules set up before
 // pmeData() stay allocated, and the session's destructor still ends the run.
-TEST_CASE("TESTVIR-EwaldBoundary", "[ff][testvir]")
+TEST_CASE("TESTVIR-EwaldBoundary", "[ff][testvir][L3]")
 {
    const std::string files = TINKER9_DIRSTR "/test/file/";
    const char* xyzname = "ions.xyz";

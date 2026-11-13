@@ -5,7 +5,7 @@
 
 using namespace tinker;
 
-TEST_CASE("Reduce", "[util][math][reduce]")
+TEST_CASE("Reduce", "[util][math][reduce][L1]")
 {
    rc_flag = calc::xyz | calc::vmask;
 

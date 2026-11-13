@@ -25,7 +25,7 @@ static double arbox_pot[] = {-277.037089, -277.055107, -277.073220, -277.091430,
    -277.338042, -277.357822, -277.377719, -277.397732};
 #endif
 
-TEST_CASE("NPT-NoseHoover-ArBox", "[ff][npt][nosehoover][arbox]")
+TEST_CASE("NPT-NoseHoover-ArBox", "[ff][npt][nosehoover][arbox][L4]")
 {
 #if TINKER_REAL_SIZE == 8
    const char* k = "test_arbox.key";

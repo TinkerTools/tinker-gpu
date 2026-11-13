@@ -5,7 +5,7 @@
 
 using namespace tinker;
 
-TEST_CASE("Pitors-Trpcage", "[ff][epitors][trpcage]")
+TEST_CASE("Pitors-Trpcage", "[ff][epitors][trpcage][L1]")
 {
    const char* k = "test_trpcage.key";
    const char* k0 = "pitorsterm  only\n";

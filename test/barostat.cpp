@@ -29,7 +29,7 @@ static int usage_ = calc::xyz | calc::vel | calc::mass | calc::energy | calc::gr
 static BasicIntegrator* intg;
 static Box dup_buf_box;
 
-TEST_CASE("NPT-Berendsen-Iso", "[ff][npt][Berendsen][iso]")
+TEST_CASE("NPT-Berendsen-Iso", "[ff][npt][Berendsen][iso][L4]")
 {
    const char* txt_intg = R"**(
    integrator   respa
@@ -113,7 +113,7 @@ TEST_CASE("NPT-Berendsen-Iso", "[ff][npt][Berendsen][iso]")
    bath::isobaric = 0;
 }
 
-TEST_CASE("NPT-Berendsen-Semiiso", "[ff][npt][Berendsen][semiiso]")
+TEST_CASE("NPT-Berendsen-Semiiso", "[ff][npt][Berendsen][semiiso][L4]")
 {
    const char* txt_intg = R"**(
    integrator   respa
@@ -198,7 +198,7 @@ TEST_CASE("NPT-Berendsen-Semiiso", "[ff][npt][Berendsen][semiiso]")
    bath::isobaric = 0;
 }
 
-TEST_CASE("NPT-Berendsen-Aniso", "[ff][npt][Berendsen][aniso]")
+TEST_CASE("NPT-Berendsen-Aniso", "[ff][npt][Berendsen][aniso][L4]")
 {
    const char* txt_intg = R"**(
    integrator   respa
@@ -283,7 +283,7 @@ TEST_CASE("NPT-Berendsen-Aniso", "[ff][npt][Berendsen][aniso]")
    bath::isobaric = 0;
 }
 
-TEST_CASE("NPT-Bussi-Iso", "[ff][npt][Bussi][iso]")
+TEST_CASE("NPT-Bussi-Iso", "[ff][npt][Bussi][iso][L4]")
 {
    const char* txt_intg = R"**(
    integrator   respa
@@ -368,7 +368,7 @@ TEST_CASE("NPT-Bussi-Iso", "[ff][npt][Bussi][iso]")
    bath::isobaric = 0;
 }
 
-TEST_CASE("NPT-Bussi-Semiiso", "[ff][npt][Bussi][semiiso]")
+TEST_CASE("NPT-Bussi-Semiiso", "[ff][npt][Bussi][semiiso][L4]")
 {
    const char* txt_intg = R"**(
    integrator   respa
@@ -454,7 +454,7 @@ TEST_CASE("NPT-Bussi-Semiiso", "[ff][npt][Bussi][semiiso]")
    bath::isobaric = 0;
 }
 
-TEST_CASE("NPT-Bussi-Aniso", "[ff][npt][Bussi][aniso]")
+TEST_CASE("NPT-Bussi-Aniso", "[ff][npt][Bussi][aniso][L4]")
 {
    const char* txt_intg = R"**(
    integrator   respa
@@ -540,7 +540,7 @@ TEST_CASE("NPT-Bussi-Aniso", "[ff][npt][Bussi][aniso]")
    bath::isobaric = 0;
 }
 
-TEST_CASE("NPT-Monte-Iso", "[ff][npt][Monte][iso]")
+TEST_CASE("NPT-Monte-Iso", "[ff][npt][Monte][iso][L4]")
 {
    const char* txt_intg = R"**(
    integrator   respa
@@ -627,7 +627,7 @@ TEST_CASE("NPT-Monte-Iso", "[ff][npt][Monte][iso]")
    bath::isobaric = 0;
 }
 
-TEST_CASE("NPT-Monte-Semiiso", "[ff][npt][Monte][semiiso]")
+TEST_CASE("NPT-Monte-Semiiso", "[ff][npt][Monte][semiiso][L4]")
 {
    const char* txt_intg = R"**(
    integrator   respa
@@ -715,7 +715,7 @@ TEST_CASE("NPT-Monte-Semiiso", "[ff][npt][Monte][semiiso]")
    bath::isobaric = 0;
 }
 
-TEST_CASE("NPT-Monte-Aniso", "[ff][npt][Monte][aniso]")
+TEST_CASE("NPT-Monte-Aniso", "[ff][npt][Monte][aniso][L4]")
 {
    const char* txt_intg = R"**(
    integrator   respa
@@ -920,14 +920,14 @@ void checkRejectKeepsInduced()
 }
 }
 
-TEST_CASE("NPT-Monte-Reject-Keeps-Induced", "[ff][npt][Monte][reject]")
+TEST_CASE("NPT-Monte-Reject-Keeps-Induced", "[ff][npt][Monte][reject][L4]")
 {
    auto session = loadWater30Predictor();
    checkRejectKeepsInduced();
    session->end();
 }
 
-TEST_CASE("NPT-Monte-Reject-After-Expol", "[ff][npt][Monte][reject]")
+TEST_CASE("NPT-Monte-Reject-After-Expol", "[ff][npt][Monte][reject][L4]")
 {
    // A HIPPO system with exchange polarization first. Its polinv and polscale
    // stay dangling after finish(), so a snapshot that picked its buffers by
@@ -990,7 +990,7 @@ std::vector<T> grab1(const T* dev)
 }
 }
 
-TEST_CASE("NPT-Monte-OST", "[ff][npt][Monte][ost]")
+TEST_CASE("NPT-Monte-OST", "[ff][npt][Monte][ost][L4]")
 {
    // The bias of orthogonal space tempering follows dU/dlambda and so changes
    // with the box: a rejected volume move leaves the lambda derivatives, the
@@ -1078,7 +1078,7 @@ TEST_CASE("NPT-Monte-OST", "[ff][npt][Monte][ost]")
    bath::isobaric = 0;
 }
 
-TEST_CASE("OST-Update-At-Step-End", "[ff][npt][ost]")
+TEST_CASE("OST-Update-At-Step-End", "[ff][npt][ost][L4]")
 {
    // The integrator leaves the adaptive bias and the lambda particle alone;
    // they are advanced by lmdaWinDyn() once the step is complete, so a Monte

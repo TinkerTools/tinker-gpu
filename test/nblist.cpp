@@ -148,7 +148,7 @@ static void copyin_arc_file(const std::string& arcfile, int first1, int last1, i
    }
 }
 
-TEST_CASE("NBList-ArBox", "[ff][nblist][arbox]")
+TEST_CASE("NBList-ArBox", "[ff][nblist][arbox][L2]")
 {
    int usage_ = calc::xyz | calc::mass | calc::traj | calc::energy;
 
@@ -340,7 +340,7 @@ struct TestLattice
 static const TestLattice testLattices[] = {{BoxShape::MONO, 90, 100, 90}, {BoxShape::TRI, 85, 95, 100},
    {BoxShape::TRI, 90, 90, 120}, {BoxShape::TRI, 70, 80, 65}, {BoxShape::OCT, 90, 90, 90}};
 
-TEST_CASE("NBList-Prune-Water30", "[ff][nblist][prune]")
+TEST_CASE("NBList-Prune-Water30", "[ff][nblist][prune][L2]")
 {
    const char* k = "test_water30.key";
    const char* x1 = "test_water30.xyz";
@@ -384,7 +384,7 @@ TEST_CASE("NBList-Prune-Water30", "[ff][nblist][prune]")
 
 // A gas of atoms spread over the box makes blocks too large for the per-axis bound on the image of their centers in a
 // skewed cell, and half of the atoms in a cluster mixes small blocks with large ones.
-TEST_CASE("NBList-Gas", "[ff][nblist]")
+TEST_CASE("NBList-Gas", "[ff][nblist][L2]")
 {
    TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
    for (bool cluster : {false, true}) {
@@ -424,7 +424,7 @@ TEST_CASE("NBList-Gas", "[ff][nblist]")
 // The octahedron's minimum image crosses its hexagonal faces. The list used to drop such pairs where it imaged a
 // block of atoms once around its center, and where it rejected a block pair by the bounding boxes of the minimum
 // image of the two centers.
-TEST_CASE("NBList-Octahedron", "[ff][nblist][octahedron]")
+TEST_CASE("NBList-Octahedron", "[ff][nblist][octahedron][L2]")
 {
    const char* x1 = "test_oct.xyz";
    TestFile fx1(TINKER9_DIRSTR "/test/file/trunc8/octwater.xyz", x1);
@@ -481,7 +481,7 @@ static void scaleBoxAndAtoms(double s)
 // The four force fields of the octahedral water box in every list they use:
 // built, after short and long moves, and after the box and the coordinates
 // are scaled as a barostat scales them (test_nblist.f:test_nblist_key).
-TEST_CASE("NBList-Octwater-Keys", "[ff][nblist][octahedron]")
+TEST_CASE("NBList-Octwater-Keys", "[ff][nblist][octahedron][L2]")
 {
    const std::string f = TINKER9_DIRSTR "/test/file/";
    struct Case
@@ -528,7 +528,7 @@ TEST_CASE("NBList-Octwater-Keys", "[ff][nblist][octahedron]")
    }
 }
 
-TEST_CASE("NBList-Prune-Keyword", "[ff][nblist][prune]")
+TEST_CASE("NBList-Prune-Keyword", "[ff][nblist][prune][L2]")
 {
    const char* x1 = "test_water30.xyz";
    TestFile fx1(TINKER9_DIRSTR "/test/file/water30/water30_iso.xyz", x1);
@@ -559,7 +559,7 @@ TEST_CASE("NBList-Prune-Keyword", "[ff][nblist][prune]")
 // with a fatal error that would end this program (test_nblist_cutoff covers
 // those keys). Without it Fortran loops over all pairs and runs, as the ACC
 // build does, but the CUDA build still uses the list and refuses the key.
-TEST_CASE("NBList-MlistCutoff", "[ff][nblist][hippo]")
+TEST_CASE("NBList-MlistCutoff", "[ff][nblist][hippo][L2]")
 {
    const std::string files = TINKER9_DIRSTR "/test/file/";
    const char* x1 = "water2.xyz";

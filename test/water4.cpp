@@ -84,7 +84,7 @@ struct Water4Frame
 // The extra sites of rigid four-site waters are placed on their O-H-H frames
 // after every step and carry no velocity (watfour in settle.f), and the
 // gradient on them moves to the O-H-H atoms (watfour2).
-TEST_CASE("Water4-Verlet", "[ff][rattle][water4]")
+TEST_CASE("Water4-Verlet", "[ff][rattle][water4][L4]")
 {
    int mask = calc::mass | calc::xyz | calc::vel;
    mask = mask | calc::energy | calc::grad | calc::virial | calc::md;
@@ -133,7 +133,7 @@ TEST_CASE("Water4-Verlet", "[ff][rattle][water4]")
 // As vrespa in respa.f, every inner step is constrained, which also places the
 // extra sites for the fast forces, and the fast forces on the extra sites move
 // to the O-H-H atoms.
-TEST_CASE("Water4-Respa", "[ff][rattle][water4][respa]")
+TEST_CASE("Water4-Respa", "[ff][rattle][water4][respa][L4]")
 {
    int mask = calc::mass | calc::xyz | calc::vel;
    mask = mask | calc::energy | calc::grad | calc::virial | calc::md;
@@ -173,7 +173,7 @@ TEST_CASE("Water4-Respa", "[ff][rattle][water4][respa]")
 
 // The Langevin piston is the integrator that scales the constrained molecules
 // as groups; the extra sites stay one-atom groups at rest.
-TEST_CASE("Water4-LP22-Respa", "[ff][rattle][water4][respa][npt]")
+TEST_CASE("Water4-LP22-Respa", "[ff][rattle][water4][respa][npt][L4]")
 {
    int mask = calc::mass | calc::xyz | calc::vel;
    mask = mask | calc::energy | calc::grad | calc::virial | calc::md;
@@ -226,7 +226,7 @@ TEST_CASE("Water4-LP22-Respa", "[ff][rattle][water4][respa][npt]")
 
 // The anisotropic group scaling of the Langevin piston adds scal times the
 // velocity of the center of mass of each group to its atoms.
-TEST_CASE("Water4-hcVelAn", "[ff][rattle][water4][npt]")
+TEST_CASE("Water4-hcVelAn", "[ff][rattle][water4][npt][L4]")
 {
    int mask = calc::mass | calc::xyz | calc::vel | calc::energy | calc::grad | calc::md;
 
@@ -272,7 +272,7 @@ TEST_CASE("Water4-hcVelAn", "[ff][rattle][water4][npt]")
 // tip4p.xyz are far from rigid; shake moves them onto the constraints first and
 // shakeg projects the gradient off them, as in minimize.f. The references are
 // iteration 0 of tinker/test/testmanual/tip4p.log.
-TEST_CASE("Water4-Minimize", "[ff][rattle][water4]")
+TEST_CASE("Water4-Minimize", "[ff][rattle][water4][L4]")
 {
    const char* k = "test_water4.key";
    const char* x1 = "test_water4.xyz";
@@ -315,7 +315,7 @@ TEST_CASE("Water4-Minimize", "[ff][rattle][water4]")
 // them, which the numerical gradient of testgrad follows by putting the extra
 // sites back on their frames after every displacement (test_water4.f:
 // test_water4_grad); the numerical gradient of an extra site is then zero.
-TEST_CASE("Water4-Grad", "[ff][water4][testgrad]")
+TEST_CASE("Water4-Grad", "[ff][water4][testgrad][L3]")
 {
    const char* k = "test_water4.key";
    const char* x1 = "test_water4.xyz";

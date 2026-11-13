@@ -346,7 +346,7 @@ double dist(const State& s, int i, int j)
 }
 }
 
-TEST_CASE("WaterMC-Proposal-Symmetric", "[ff][watermc]")
+TEST_CASE("WaterMC-Proposal-Symmetric", "[ff][watermc][L4]")
 {
    // The void voxels open to a water and their weights are decided by its
    // environment alone, so they are the same before and after it hops, and the
@@ -406,7 +406,7 @@ TEST_CASE("WaterMC-Proposal-Symmetric", "[ff][watermc]")
    }
 }
 
-TEST_CASE("WaterMC-Proposal-Ratio", "[ff][watermc]")
+TEST_CASE("WaterMC-Proposal-Ratio", "[ff][watermc][L4]")
 {
    // A hop is accepted on the chance of the hop back over that of the hop,
    // found from the structure before it. Here the chance of the hop back is
@@ -462,7 +462,7 @@ TEST_CASE("WaterMC-Proposal-Ratio", "[ff][watermc]")
    }
 }
 
-TEST_CASE("WaterMC-Ligand-Coupling", "[ff][watermc]")
+TEST_CASE("WaterMC-Ligand-Coupling", "[ff][watermc][L4]")
 {
    // The ligand keeps a water away, through its clearance and the overlap of a
    // candidate, only as far as its van der Waals interactions are turned on,
@@ -509,7 +509,7 @@ TEST_CASE("WaterMC-Ligand-Coupling", "[ff][watermc]")
    s.session.end();
 }
 
-TEST_CASE("WaterMC-Box-Fit", "[ff][watermc]")
+TEST_CASE("WaterMC-Box-Fit", "[ff][watermc][L4]")
 {
    // A region wider than the box would reach one place through two voxels.
    const struct
@@ -529,7 +529,7 @@ TEST_CASE("WaterMC-Box-Fit", "[ff][watermc]")
    }
 }
 
-TEST_CASE("WaterMC-Acceptance-Ratio", "[ff][watermc]")
+TEST_CASE("WaterMC-Acceptance-Ratio", "[ff][watermc][L4]")
 {
    // The acceptance ratio of a hop, from energies found apart from it. With one
    // candidate it is exp(-dU/kT) times the ratio of the proposals. With more,
@@ -601,7 +601,7 @@ TEST_CASE("WaterMC-Acceptance-Ratio", "[ff][watermc]")
    }
 }
 
-TEST_CASE("WaterMC-Reject-Restores", "[ff][watermc]")
+TEST_CASE("WaterMC-Reject-Restores", "[ff][watermc][L4]")
 {
    // A rejected hop puts back the coordinates, the velocities, the energy, the
    // forces, the dipoles and the predictor history, after the energies of all
@@ -620,7 +620,7 @@ TEST_CASE("WaterMC-Reject-Restores", "[ff][watermc]")
    REQUIRE_FALSE(waterMcOn());
 }
 
-TEST_CASE("WaterMC-Accept-Consistent", "[ff][watermc]")
+TEST_CASE("WaterMC-Accept-Consistent", "[ff][watermc][L4]")
 {
    // An accepted hop moves one water as a rigid body and turns its velocities
    // with it. The energy is that of the new structure, the forces the
@@ -692,7 +692,7 @@ TEST_CASE("WaterMC-Accept-Consistent", "[ff][watermc]")
    }
 }
 
-TEST_CASE("WaterMC-Integrators", "[ff][watermc]")
+TEST_CASE("WaterMC-Integrators", "[ff][watermc][L4]")
 {
    // Every supported integrator carries on from a hop accepted after each step.
    struct Run
@@ -735,7 +735,7 @@ TEST_CASE("WaterMC-Integrators", "[ff][watermc]")
    }
 }
 
-TEST_CASE("WaterMC-Lambda-Phases", "[ff][watermc]")
+TEST_CASE("WaterMC-Lambda-Phases", "[ff][watermc][L4]")
 {
    // Under OST, ABF and metadynamics the hops are tried in every phase of the
    // sample interval, the one in which lambda moves as well as those in which
@@ -765,7 +765,7 @@ TEST_CASE("WaterMC-Lambda-Phases", "[ff][watermc]")
    }
 }
 
-TEST_CASE("WaterMC-Lambda-Methods", "[ff][watermc]")
+TEST_CASE("WaterMC-Lambda-Methods", "[ff][watermc][L4]")
 {
    // An accepted hop leaves what a step leaves for the next one, under every
    // way the lambda is sampled, with the predictor of the induced dipoles on:
@@ -881,7 +881,7 @@ TEST_CASE("WaterMC-Lambda-Methods", "[ff][watermc]")
    }
 }
 
-TEST_CASE("WaterMC-Lambda-Dynamics", "[ff][watermc]")
+TEST_CASE("WaterMC-Lambda-Dynamics", "[ff][watermc][L4]")
 {
    // Dynamics with the induced dipoles predicted runs on through a hop
    // accepted at every step, under a fixed lambda, ABF, OST and metadynamics,
@@ -947,7 +947,7 @@ TEST_CASE("WaterMC-Lambda-Dynamics", "[ff][watermc]")
    }
 }
 
-TEST_CASE("WaterMC-Keywords", "[ff][watermc]")
+TEST_CASE("WaterMC-Keywords", "[ff][watermc][L4]")
 {
    // The keywords that would break the hops, or that are misspelled, are
    // refused when the run is set up.

@@ -34,7 +34,7 @@ static const char* xname = "test_local_frame4.xyz";
 static const char* argv[] = {"dummy", xname};
 static int argc = 2;
 
-TEST_CASE("Local-Frame4-1", "[ff][empole][nonewald][z-bisect][local-frame4]")
+TEST_CASE("Local-Frame4-1", "[ff][empole][nonewald][z-bisect][local-frame4][L1]")
 {
    TestFile fxy(TINKER9_DIRSTR "/test/file/local_frame/local_frame4.xyz", xname);
    TestFile fke("", kname, key0);

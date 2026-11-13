@@ -229,7 +229,7 @@ void checkkernels(const std::string& label, int nold, int offset)
 }
 }
 
-TEST_CASE("EOST-index", "[ff][eost]")
+TEST_CASE("EOST-index", "[ff][eost][L2]")
 {
    int i, j, k;
    ijToK(3, 4, 7, k);
@@ -239,7 +239,7 @@ TEST_CASE("EOST-index", "[ff][eost]")
    COMPARE_INTS(j, 4);
 }
 
-TEST_CASE("EOST-resize", "[ff][eost]")
+TEST_CASE("EOST-resize", "[ff][eost][L2]")
 {
    TestLmdaFlagGuard guard;
    resetost(5, 5, 2);
@@ -280,7 +280,7 @@ TEST_CASE("EOST-resize", "[ff][eost]")
    }
 }
 
-TEST_CASE("EOST-buildindex", "[ff][eost]")
+TEST_CASE("EOST-buildindex", "[ff][eost][L2]")
 {
    TestLmdaFlagGuard guard;
    resetost(5, 5, 3);
@@ -297,7 +297,7 @@ TEST_CASE("EOST-buildindex", "[ff][eost]")
    COMPARE_INTS(ostnext[1], 0);
 }
 
-TEST_CASE("EOST-ensure", "[ff][eost]")
+TEST_CASE("EOST-ensure", "[ff][eost][L2]")
 {
    TestLmdaFlagGuard guard;
    int k, nold, oldfli0, ilmda, iflmda;
@@ -350,7 +350,7 @@ TEST_CASE("EOST-ensure", "[ff][eost]")
    checkkernels("ensureflambda low", nold, fli0 - oldfli0);
 }
 
-TEST_CASE("EOST-gkernels", "[ff][eost]")
+TEST_CASE("EOST-gkernels", "[ff][eost][L2]")
 {
    TestLmdaFlagGuard guard;
    double egbias, dgdl, dgdfl, expected, height;
@@ -519,7 +519,7 @@ TEST_CASE("EOST-gkernels", "[ff][eost]")
    COMPARE_REALS(dgdfl, 0.0, 1.0e-12);
 }
 
-TEST_CASE("EOST-fkernel", "[ff][eost]")
+TEST_CASE("EOST-fkernel", "[ff][eost][L2]")
 {
    TestLmdaFlagGuard guard;
    bath::kelvin = 300.0;
@@ -579,7 +579,7 @@ TEST_CASE("EOST-fkernel", "[ff][eost]")
    COMPARE_REALS(lmdafmean[3], expected, 1.0e-12);
 }
 
-TEST_CASE("EOST-kernelbuilds", "[ff][eost]")
+TEST_CASE("EOST-kernelbuilds", "[ff][eost][L2]")
 {
    TestLmdaFlagGuard guard;
    bath::kelvin = 300.0;
@@ -699,7 +699,7 @@ TEST_CASE("EOST-kernelbuilds", "[ff][eost]")
    }
 }
 
-TEST_CASE("EOST-depcriteria", "[ff][eost]")
+TEST_CASE("EOST-depcriteria", "[ff][eost][L2]")
 {
    TestLmdaFlagGuard guard;
 
@@ -727,7 +727,7 @@ TEST_CASE("EOST-depcriteria", "[ff][eost]")
    REQUIRE_FALSE(depcriteria(1.0, 0.0));
 }
 
-TEST_CASE("EOST-eginterpolate", "[ff][eost]")
+TEST_CASE("EOST-eginterpolate", "[ff][eost][L2]")
 {
    TestLmdaFlagGuard guard;
    bath::kelvin = 300.0;
@@ -778,7 +778,7 @@ TEST_CASE("EOST-eginterpolate", "[ff][eost]")
    COMPARE_REALS(dgdfl1, dgdfl0, 2.0e-2);
 }
 
-TEST_CASE("EOST-efkernel", "[ff][eost]")
+TEST_CASE("EOST-efkernel", "[ff][eost][L2]")
 {
    TestLmdaFlagGuard guard;
    double eostlmda, dfdl, expected;
@@ -827,7 +827,7 @@ TEST_CASE("EOST-efkernel", "[ff][eost]")
    COMPARE_REALS(efreeTot(), 0.0, 1.0e-12);
 }
 
-TEST_CASE("EOST-fill", "[ff][eost]")
+TEST_CASE("EOST-fill", "[ff][eost][L2]")
 {
    // The OST bias takes its f term from the mean force with the rows lacking g
    // kernel support filled, while the free energy estimate keeps the sampled
@@ -940,7 +940,7 @@ TEST_CASE("EOST-fill", "[ff][eost]")
    }
 }
 
-TEST_CASE("EOST-meta", "[ff][eost]")
+TEST_CASE("EOST-meta", "[ff][eost][L2]")
 {
    TestLmdaFlagGuard guard;
    double vbias, dvdl, pref, expected;
@@ -1003,7 +1003,7 @@ TEST_CASE("EOST-meta", "[ff][eost]")
    COMPARE_INTS((int)metanext.size(), sizemetahist + 1); // the bin links grow too
 }
 
-TEST_CASE("EOST-metadyn", "[ff][eost]")
+TEST_CASE("EOST-metadyn", "[ff][eost][L2]")
 {
    // drive elmdaDyn across two intervals and check the deposited gaussian,
    // and that metadynamics ignores the convergence gate and moves lambda on
@@ -1067,7 +1067,7 @@ TEST_CASE("EOST-metadyn", "[ff][eost]")
    }
 }
 
-TEST_CASE("EOST-vkernelmax", "[ff][eost]")
+TEST_CASE("EOST-vkernelmax", "[ff][eost][L2]")
 {
    TestLmdaFlagGuard guard;
    // vkernelmax must hold max_j gkernel(i,j) for every lambda bin, however the
@@ -1114,7 +1114,7 @@ TEST_CASE("EOST-vkernelmax", "[ff][eost]")
    }
 }
 
-TEST_CASE("EOST-tempering", "[ff][eost]")
+TEST_CASE("EOST-tempering", "[ff][eost][L2]")
 {
    TestLmdaFlagGuard guard;
    bath::kelvin = 300.0;
@@ -1232,7 +1232,7 @@ TEST_CASE("EOST-tempering", "[ff][eost]")
    COMPARE_REALS(temperedHeight(50.0, 500.0), hbias, 1.0e-18);
 }
 
-TEST_CASE("EOST-ostphase", "[ff][eost]")
+TEST_CASE("EOST-ostphase", "[ff][eost][L2]")
 {
    // setLmdaPhase divides the deposit interval into propagation, equilibration
    // and averaging phases; the clamps keep a propagation step and enough
@@ -1277,7 +1277,7 @@ TEST_CASE("EOST-ostphase", "[ff][eost]")
    COMPARE_INTS(lmdanpa + lmdanpb + lmdanpc, lmdaintv);
 }
 
-TEST_CASE("EOST-ostdyn", "[ff][eost]")
+TEST_CASE("EOST-ostdyn", "[ff][eost][L2]")
 {
    // drive elmdaDyn over three deposit intervals and check that a settled
    // interval deposits, an unsettled one is rejected, and only the averaging
@@ -1349,7 +1349,7 @@ TEST_CASE("EOST-ostdyn", "[ff][eost]")
    COMPARE_REALS(lmdafhist[2], 2.0, 1.0e-12);
 }
 
-TEST_CASE("EOST-ostgate", "[ff][eost]")
+TEST_CASE("EOST-ostgate", "[ff][eost][L2]")
 {
    // drive elmdaDyn over one deposit interval and check that the lambda
    // particle moves only during the leading propagation phase, that lambda is
@@ -1406,7 +1406,7 @@ TEST_CASE("EOST-ostgate", "[ff][eost]")
    COMPARE_REALS(lmdafhist[1], 1.0, 1.0e-12);
 }
 
-TEST_CASE("EOST-ostlocal", "[ff][eost]")
+TEST_CASE("EOST-ostlocal", "[ff][eost][L2]")
 {
    // deposit into an unevenly filled kernel with both tempering factors on:
    // elmdaDyn takes the height from the pre-deposit bias levels, the least
@@ -1492,7 +1492,7 @@ TEST_CASE("EOST-ostlocal", "[ff][eost]")
    }
 }
 
-TEST_CASE("EOST-temperkeys", "[ff][eost]")
+TEST_CASE("EOST-temperkeys", "[ff][eost][L2]")
 {
    TestLmdaFlagGuard guard;
    // ost_mech must mirror the tempering settings parsed by the Fortran
@@ -1542,7 +1542,7 @@ TEST_CASE("EOST-temperkeys", "[ff][eost]")
    fastkernel = fast0;
 }
 
-TEST_CASE("EOST-metaimage", "[ff][eost]")
+TEST_CASE("EOST-metaimage", "[ff][eost][L2]")
 {
    TestLmdaFlagGuard guard;
    // eMetaBias sums the same three reflecting lambda images as the g kernel.
@@ -1583,7 +1583,7 @@ TEST_CASE("EOST-metaimage", "[ff][eost]")
    REQUIRE(vbias > single);
 }
 
-TEST_CASE("EOST-metatemper", "[ff][eost]")
+TEST_CASE("EOST-metatemper", "[ff][eost][L2]")
 {
    // drive elmdaDyn across several deposit intervals with tempering on.
    TestLmdaFlagGuard guard;
@@ -1720,7 +1720,7 @@ void brutemeta(double lmda, int upto, double& v, double& d)
 }
 }
 
-TEST_CASE("EOST-metacut", "[ff][eost]")
+TEST_CASE("EOST-metacut", "[ff][eost][L2]")
 {
    // the bias found through the bin lookup, the grid built bin by bin and the
    // bias of a partly replayed history all match a direct sum over every
@@ -1765,7 +1765,7 @@ TEST_CASE("EOST-metacut", "[ff][eost]")
    nmetahist = metacutNg;
 }
 
-TEST_CASE("EOST-meta-matches-fortran", "[ff][eost]")
+TEST_CASE("EOST-meta-matches-fortran", "[ff][eost][L2]")
 {
    // Both engines are linked into this binary, so hold the C++ metadynamics
    // bias, grid and free energy against eost.f on the same history.
@@ -1907,7 +1907,7 @@ int historyRecords(const std::string& file)
 // A fresh run continues an OST history in place, restoring the gaussians, the
 // kernels, the flambda grid and the lambda particle on an interval boundary,
 // through the calls of the dynamic program (test_eost.f:test_eost_restart).
-TEST_CASE("EOST-restart", "[ff][eost]")
+TEST_CASE("EOST-restart", "[ff][eost][L2]")
 {
    HistoryFileScope scope("ostrst_tmp");
    TestLmdaFlagGuard guard;
@@ -1982,7 +1982,7 @@ TEST_CASE("EOST-restart", "[ff][eost]")
 // A fresh run continues a metadynamics history in place, restoring the
 // gaussians, the bias grid and the lambda particle on an interval boundary
 // (test_eost.f:test_eost_metarestart).
-TEST_CASE("EOST-metarestart", "[ff][eost]")
+TEST_CASE("EOST-metarestart", "[ff][eost][L2]")
 {
    HistoryFileScope scope("metarst_tmp");
    TestLmdaFlagGuard guard;

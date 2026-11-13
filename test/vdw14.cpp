@@ -5,7 +5,7 @@
 
 using namespace tinker;
 
-TEST_CASE("Vdw14-Trpcage", "[ff][evdw][vdw14][lj][trpcage]")
+TEST_CASE("Vdw14-Trpcage", "[ff][evdw][vdw14][lj][trpcage][L1]")
 {
    rc_flag = calc::xyz | calc::vmask;
 
@@ -121,7 +121,7 @@ TEST_CASE("Vdw14-Trpcage", "[ff][evdw][vdw14][lj][trpcage]")
 // Buffered 14-7 van der Waals on SAMPL8 guest 3 and its 29 waters, with the
 // artificial vdw14 values of fixture 148 and a 1-4 scale of one half, so every
 // 1-4 pair inside the guest takes a scaled vdw14 radius and well depth.
-TEST_CASE("Vdw14-G3-Hal", "[ff][evdw][vdw14][hal]")
+TEST_CASE("Vdw14-G3-Hal", "[ff][evdw][vdw14][hal][L1]")
 {
    rc_flag = calc::xyz | calc::vmask;
 

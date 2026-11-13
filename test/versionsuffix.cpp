@@ -10,7 +10,7 @@
 
 using namespace tinker;
 
-TEST_CASE("Tinker_RT", "[util]")
+TEST_CASE("Tinker_RT", "[util][L1]")
 {
    SECTION("Version")
    {

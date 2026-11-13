@@ -113,7 +113,7 @@ void checkFill(int nbin, const std::vector<double>& fsamp, const std::vector<boo
 }
 }
 
-TEST_CASE("EABF-bias", "[ff][eabf]")
+TEST_CASE("EABF-bias", "[ff][eabf][L2]")
 {
    // seed a linear mean force f(lambda) = 2 + 4*lambda on the grid, with data
    // in every bin so none is filled
@@ -135,7 +135,7 @@ TEST_CASE("EABF-bias", "[ff][eabf]")
       REQUIRE(vir[k] == 1.0);
 }
 
-TEST_CASE("EABF-dyn", "[ff][eabf]")
+TEST_CASE("EABF-dyn", "[ff][eabf][L2]")
 {
    // a settled interval records its lambda and dU/dlambda average
    TestLmdaFlagGuard guard;
@@ -202,7 +202,7 @@ TEST_CASE("EABF-dyn", "[ff][eabf]")
    COMPARE_REALS(lmdafmean[3], 4.0, 1.0e-12);
 }
 
-TEST_CASE("EABF-mean", "[ff][eabf]")
+TEST_CASE("EABF-mean", "[ff][eabf][L2]")
 {
    // the bias force follows the running mean of the bin samples
    TestLmdaFlagGuard guard;
@@ -223,7 +223,7 @@ TEST_CASE("EABF-mean", "[ff][eabf]")
    REQUIRE(lmdafmean[1] == 0.0);
 }
 
-TEST_CASE("EABF-gate", "[ff][eabf]")
+TEST_CASE("EABF-gate", "[ff][eabf][L2]")
 {
    // drive an interval with a deterministic frictionless lambda particle, so
    // that any lambda motion comes from the gate alone
@@ -261,7 +261,7 @@ TEST_CASE("EABF-gate", "[ff][eabf]")
    COMPARE_REALS(lmdafhist[1], 1.0, 1.0e-12);
 }
 
-TEST_CASE("EABF-resize", "[ff][eabf]")
+TEST_CASE("EABF-resize", "[ff][eabf][L2]")
 {
    // three samples overflow a history sized for two
    TestLmdaFlagGuard guard;
@@ -288,7 +288,7 @@ TEST_CASE("EABF-resize", "[ff][eabf]")
    COMPARE_REALS(lmdafmean[2], 2.0, 1.0e-12);
 }
 
-TEST_CASE("EABF-fill", "[ff][eabf]")
+TEST_CASE("EABF-fill", "[ff][eabf][L2]")
 {
    // A copy of the nearest sampled bin past either end of the data, linear
    // interpolation inside a gap, zero with no data, sampled bins kept exactly,
@@ -341,7 +341,7 @@ TEST_CASE("EABF-fill", "[ff][eabf]")
    checkFill(5, {7., -10., 9., -40., 11.}, {F, T, F, T, F}, 0, {0., -10., 0., -40., 0.}, 0.0);
 }
 
-TEST_CASE("EABF-fillbias", "[ff][eabf]")
+TEST_CASE("EABF-fillbias", "[ff][eabf][L2]")
 {
    // The ABF bias and the slope saved for the lambda particle follow the
    // filled mean force, while the free energy estimate and the bin mean force
@@ -431,7 +431,7 @@ TEST_CASE("EABF-fillbias", "[ff][eabf]")
    REQUIRE(dfill == lmdadfdl);
 }
 
-TEST_CASE("EABF-fillfull", "[ff][eabf]")
+TEST_CASE("EABF-fillfull", "[ff][eabf][L2]")
 {
    // On the default grid of 201 bins a fill reach of one lambda, or more,
    // gives the unlimited fill, where each end copies the nearest sampled bin
@@ -549,7 +549,7 @@ TEST_CASE("EABF-fillfull", "[ff][eabf]")
 // A history saved through the mdsave copies is continued by initabffile and
 // abfFromFortran on an interval boundary, its deposits numbered on from the
 // steps of the first run (test_eabf.f:test_eabf_restart).
-TEST_CASE("EABF-restart", "[ff][eabf]")
+TEST_CASE("EABF-restart", "[ff][eabf][L2]")
 {
    const char* argv[] = {"dummy"};
    tinkerFortranRuntimeBegin(1, (char**)argv);

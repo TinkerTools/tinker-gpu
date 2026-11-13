@@ -15,7 +15,7 @@
 
 using namespace tinker;
 
-TEST_CASE("EREPEL-1", "[ff][hippo][erepel][c5h12-acnh2]")
+TEST_CASE("EREPEL-1", "[ff][hippo][erepel][c5h12-acnh2][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/c5h12acnh2/c5h12acnh2.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/hippo/repuls/rep.key");
@@ -69,7 +69,7 @@ TEST_CASE("EREPEL-1", "[ff][hippo][erepel][c5h12-acnh2]")
    session.end();
 }
 
-TEST_CASE("EREPEL-2", "[ff][hippo][erepel][water]")
+TEST_CASE("EREPEL-2", "[ff][hippo][erepel][water][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/water10/h2o10.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/hippo/repuls/repwater.key");
@@ -127,7 +127,7 @@ TEST_CASE("EREPEL-2", "[ff][hippo][erepel][water]")
 // the distance, so the gradient has a term of its own, one that vanishes at
 // both ends of the vdw lambda. Part way along, the analytic gradient on the
 // ligand atoms is held to central differences of the energy.
-TEST_CASE("EREPEL-3-SOFTCORE", "[ff][hippo][erepel][dmso]")
+TEST_CASE("EREPEL-3-SOFTCORE", "[ff][hippo][erepel][dmso][L1]")
 {
    TestLmdaFlagReset lmdaReset;
    TestFile fx1(TINKER9_DIRSTR "/test/file/dmso/dmso.xyz");

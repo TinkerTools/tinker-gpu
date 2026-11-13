@@ -5,7 +5,7 @@
 
 using namespace tinker;
 
-TEST_CASE("ExchangePolarization-1", "[ff][hippo][expol]")
+TEST_CASE("ExchangePolarization-1", "[ff][hippo][expol][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/expol/NaCl.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/expol/expol.key");
@@ -60,7 +60,7 @@ TEST_CASE("ExchangePolarization-1", "[ff][hippo][expol]")
    session.end();
 }
 
-TEST_CASE("ExchangePolarization-2", "[ff][hippo][expol]")
+TEST_CASE("ExchangePolarization-2", "[ff][hippo][expol][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/expol/Nawater.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/expol/expol.key");
@@ -115,7 +115,7 @@ TEST_CASE("ExchangePolarization-2", "[ff][hippo][expol]")
    session.end();
 }
 
-TEST_CASE("ExchangePolarization-3", "[ff][hippo][expol]")
+TEST_CASE("ExchangePolarization-3", "[ff][hippo][expol][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/expol/Clwater.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/expol/expol.key");
@@ -170,7 +170,7 @@ TEST_CASE("ExchangePolarization-3", "[ff][hippo][expol]")
    session.end();
 }
 
-TEST_CASE("ExchangePolarization-4", "[ff][hippo][expol]")
+TEST_CASE("ExchangePolarization-4", "[ff][hippo][expol][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/expol/water2Na2Clbox.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/expol/expol.key");
@@ -225,7 +225,7 @@ TEST_CASE("ExchangePolarization-4", "[ff][hippo][expol]")
    session.end();
 }
 
-TEST_CASE("ExchangePolarization-5", "[ff][hippo][expol]")
+TEST_CASE("ExchangePolarization-5", "[ff][hippo][expol][L1]")
 {
    const char* xn = "crys.xyz";
    const char* kn = "expols2.key";
@@ -283,7 +283,7 @@ TEST_CASE("ExchangePolarization-5", "[ff][hippo][expol]")
    session.end();
 }
 
-TEST_CASE("ExchangePolarization-6", "[ff][hippo][expol]")
+TEST_CASE("ExchangePolarization-6", "[ff][hippo][expol][L1]")
 {
    const char* xn = "crys.xyz";
    const char* kn = "expolg.key";
@@ -345,7 +345,7 @@ TEST_CASE("ExchangePolarization-6", "[ff][hippo][expol]")
 // H-H pairs go through the scaled-pair path of dexpol, where the spring constant
 // has to be divided by the polarity like everywhere else. In expol.key water is
 // switched off, and those pairs are dropped before that path is reached.
-TEST_CASE("ExchangePolarization-7", "[ff][hippo][expol]")
+TEST_CASE("ExchangePolarization-7", "[ff][hippo][expol][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/expol/water2Na2Clbox.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/expol/expolw.key");

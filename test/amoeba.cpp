@@ -22,7 +22,7 @@ const double eps_g = testGetEps(1.3e-3, 1.0e-4);
 const double eps_v = testGetEps(3.0e-3, 1.0e-3);
 }
 
-TEST_CASE("AMOEBA-Vasopressin-Alyz", "[ff][amoeba][vasopressin]")
+TEST_CASE("AMOEBA-Vasopressin-Alyz", "[ff][amoeba][vasopressin][L1]")
 {
    rc_flag = calc::xyz | calc::vmask;
    rc_flag |= calc::analyz;
@@ -105,7 +105,7 @@ TEST_CASE("AMOEBA-Vasopressin-Alyz", "[ff][amoeba][vasopressin]")
 
 // Without calc::analyz the terms may share buffers or take the fused AMOEBA
 // path, so only the totals are checked.
-TEST_CASE("AMOEBA-Vasopressin", "[ff][amoeba][vasopressin]")
+TEST_CASE("AMOEBA-Vasopressin", "[ff][amoeba][vasopressin][L1]")
 {
    rc_flag = calc::xyz | calc::vmask;
 

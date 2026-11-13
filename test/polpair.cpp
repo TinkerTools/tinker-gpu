@@ -12,7 +12,7 @@ using namespace tinker;
 static const char* xn = "test_polpair.xyz";
 static const char* kn = "test_polpair.key";
 
-TEST_CASE("PolPair-Ewald", "[ff][amoeba][polpair]")
+TEST_CASE("PolPair-Ewald", "[ff][amoeba][polpair][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/polpair/nacl.xyz", xn);
    TestFile fk1(TINKER9_DIRSTR "/test/file/polpair/nacl.key", kn,
@@ -63,7 +63,7 @@ TEST_CASE("PolPair-Ewald", "[ff][amoeba][polpair]")
    session.end();
 }
 
-TEST_CASE("PolPair-NonEwald", "[ff][amoeba][polpair]")
+TEST_CASE("PolPair-NonEwald", "[ff][amoeba][polpair][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/polpair/nacl.xyz", xn);
    TestFile fk1(TINKER9_DIRSTR "/test/file/polpair/nacl.key", kn);
@@ -111,7 +111,7 @@ TEST_CASE("PolPair-NonEwald", "[ff][amoeba][polpair]")
    session.end();
 }
 
-TEST_CASE("PolPair-Ewald-A", "[ff][amoeba][polpair]")
+TEST_CASE("PolPair-Ewald-A", "[ff][amoeba][polpair][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/polpair/nacl.xyz", xn);
    TestFile fk1(TINKER9_DIRSTR "/test/file/polpair/nacl.key", kn,
@@ -165,7 +165,7 @@ TEST_CASE("PolPair-Ewald-A", "[ff][amoeba][polpair]")
    session.end();
 }
 
-TEST_CASE("PolPair-NonEwald-A", "[ff][amoeba][polpair]")
+TEST_CASE("PolPair-NonEwald-A", "[ff][amoeba][polpair][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/polpair/nacl.xyz", xn);
    TestFile fk1(TINKER9_DIRSTR "/test/file/polpair/nacl.key", kn);
@@ -318,35 +318,35 @@ void runTholeCase(const TholeCase& tc, bool analyz)
 }
 }
 
-TEST_CASE("PolPair-ZeroPair", "[ff][amoeba][polpair]")
+TEST_CASE("PolPair-ZeroPair", "[ff][amoeba][polpair][L1]")
 {
    runTholeCase(kWaterZeroPair, false);
 }
-TEST_CASE("PolPair-ZeroPair-A", "[ff][amoeba][polpair]")
+TEST_CASE("PolPair-ZeroPair-A", "[ff][amoeba][polpair][L1]")
 {
    runTholeCase(kWaterZeroPair, true);
 }
-TEST_CASE("PolPair-ZeroThole", "[ff][amoeba][polpair]")
+TEST_CASE("PolPair-ZeroThole", "[ff][amoeba][polpair][L1]")
 {
    runTholeCase(kWaterZeroThole, false);
 }
-TEST_CASE("PolPair-ZeroThole-A", "[ff][amoeba][polpair]")
+TEST_CASE("PolPair-ZeroThole-A", "[ff][amoeba][polpair][L1]")
 {
    runTholeCase(kWaterZeroThole, true);
 }
-TEST_CASE("PolPair-TinyPair", "[ff][amoeba][polpair]")
+TEST_CASE("PolPair-TinyPair", "[ff][amoeba][polpair][L1]")
 {
    runTholeCase(kWaterTinyPair, false);
 }
-TEST_CASE("PolPair-TinyPair-A", "[ff][amoeba][polpair]")
+TEST_CASE("PolPair-TinyPair-A", "[ff][amoeba][polpair][L1]")
 {
    runTholeCase(kWaterTinyPair, true);
 }
-TEST_CASE("PolPair-Dang", "[ff][amoeba][polpair]")
+TEST_CASE("PolPair-Dang", "[ff][amoeba][polpair][L1]")
 {
    runTholeCase(kDang, false);
 }
-TEST_CASE("PolPair-Dang-A", "[ff][amoeba][polpair]")
+TEST_CASE("PolPair-Dang-A", "[ff][amoeba][polpair][L1]")
 {
    runTholeCase(kDang, true);
 }

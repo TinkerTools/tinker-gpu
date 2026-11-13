@@ -15,7 +15,7 @@
 
 using namespace tinker;
 
-TEST_CASE("Chglj-Trpcage", "[ff][echarge][evdw][echglj][lj][trpcage]")
+TEST_CASE("Chglj-Trpcage", "[ff][echarge][evdw][echglj][lj][trpcage][L1]")
 {
    rc_flag = calc::xyz | calc::energy | calc::grad | calc::virial;
 
@@ -344,7 +344,7 @@ vdw-correction
 
 // Neutral group cutoffs and neighbors (kcharge.f) are refused rather than
 // silently left out.
-TEST_CASE("Chglj-NeutralGroups-Refused", "[ff][echarge][trpcage]")
+TEST_CASE("Chglj-NeutralGroups-Refused", "[ff][echarge][trpcage][L1]")
 {
    rc_flag = calc::xyz | calc::energy;
 
@@ -362,7 +362,7 @@ TEST_CASE("Chglj-NeutralGroups-Refused", "[ff][echarge][trpcage]")
 
 // A keyword "CHARGE -i value" gives atom i its own partial charge (kcharge.f),
 // so giving it to every atom of a type is the run of the type keyword.
-TEST_CASE("Chglj-AtomChargeKeyword", "[ff][echarge][trpcage]")
+TEST_CASE("Chglj-AtomChargeKeyword", "[ff][echarge][trpcage][L1]")
 {
    rc_flag = calc::xyz | calc::energy | calc::grad;
 
@@ -456,7 +456,7 @@ TestLmdaSnapshot chgljLmdaEval(const ChgljCase& c, bool analyz)
 // The fused kernel with lambda derivatives against the separate kernels, single
 // topology through a neighbor list, and the second ligand charging on the
 // staged relative leg by double loop (testlmda.cpp cases 157 and 163).
-TEST_CASE("Chglj-Lmda-FusedVsSeparate", "[ff][echglj][charge][lj]")
+TEST_CASE("Chglj-Lmda-FusedVsSeparate", "[ff][echglj][charge][lj][L1]")
 {
    // the fused and separate kernels sum in different orders
    for (const char* name : {"157_tip3_both_nlist_l06", "163_tip3_rels_lig2_l04"}) {
@@ -473,7 +473,7 @@ TEST_CASE("Chglj-Lmda-FusedVsSeparate", "[ff][echglj][charge][lj]")
 // The lambda derivative versions are CUDA only. dlmdaData2 refuses them first,
 // but the OpenACC kernels refuse them as well instead of taking no term at
 // all; without a neighbor list every term here runs on OpenACC.
-TEST_CASE("Chglj-AccRefusesLambdaVersions", "[ff][echarge][evdw][hippo]")
+TEST_CASE("Chglj-AccRefusesLambdaVersions", "[ff][echarge][evdw][hippo][L1]")
 {
    rc_flag = calc::xyz | calc::energy | calc::grad | calc::virial;
    const char* kn = "test_chglj.key";

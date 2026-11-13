@@ -5,7 +5,7 @@
 
 using namespace tinker;
 
-TEST_CASE("Angle-Trpcage", "[ff][eangle][trpcage]")
+TEST_CASE("Angle-Trpcage", "[ff][eangle][trpcage][L1]")
 {
    const char* k = "test_trpcage.key";
    const char* k0 = "angleterm  only\n";
@@ -58,7 +58,7 @@ TEST_CASE("Angle-Trpcage", "[ff][eangle][trpcage]")
    session.end();
 }
 
-TEST_CASE("Angle-2-fourier", "[ff][eangle][fourier][anglef]")
+TEST_CASE("Angle-2-fourier", "[ff][eangle][fourier][anglef][L1]")
 {
    const char* k1 = "test_anglef.key";
    const char* x1 = "test_anglef.xyz";

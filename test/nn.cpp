@@ -8,7 +8,7 @@ using namespace tinker;
 
 #if TINKER_GPULANG_CUDA
 
-TEST_CASE("NNMET-CU-WATER", "[ff][nn][ennmet][cu-water]")
+TEST_CASE("NNMET-CU-WATER", "[ff][nn][ennmet][cu-water][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/nn/nn_6o.xyz", "nn_6o.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/nn/nn_6o.key", "nn_6o.key");
@@ -62,7 +62,7 @@ TEST_CASE("NNMET-CU-WATER", "[ff][nn][ennmet][cu-water]")
    session.end();
 }
 
-TEST_CASE("NNVAL-ALATET", "[ff][nn][ennval][alatet]")
+TEST_CASE("NNVAL-ALATET", "[ff][nn][ennval][alatet][L1]")
 {
    TestFile fx1(TINKER9_DIRSTR "/test/file/nn/alatet_nnval.xyz", "alatet_nnval.xyz");
    TestFile fk1(TINKER9_DIRSTR "/test/file/nn/alatet_nnval.key", "alatet_nnval.key");

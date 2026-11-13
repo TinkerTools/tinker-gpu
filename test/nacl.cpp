@@ -32,7 +32,7 @@ using namespace tinker;
       COMPARE_VIR9(virial_ev, ref_v, eps);    \
    }
 
-TEST_CASE("NaCl-1", "[ff][evdw][evcorr][hal][switch][nacl]")
+TEST_CASE("NaCl-1", "[ff][evdw][evcorr][hal][switch][nacl][L1]")
 {
    TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
 
@@ -203,7 +203,7 @@ TEST_CASE("NaCl-1", "[ff][evdw][evcorr][hal][switch][nacl]")
 // OpenACC build runs a system without a vdW list on OpenACC, which takes the
 // keyword values (Fortran analyze: 47.5289 at gamma 0.13, 49.4061 at delta
 // 0.08), but one with a list under PBC on CUDA if it has the CUDA runtime.
-TEST_CASE("NaCl-HalgrenKeywords", "[ff][evdw][hal][nacl]")
+TEST_CASE("NaCl-HalgrenKeywords", "[ff][evdw][hal][nacl][L1]")
 {
    TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
    const char* x1 = "test_nacl.xyz";
@@ -232,7 +232,7 @@ TEST_CASE("NaCl-HalgrenKeywords", "[ff][evdw][hal][nacl]")
    run("gamma-halgren 0.13\nneighbor-list\na-axis 18.643\nvdw-cutoff 7.0\n", 47.5289, TINKER_CUDART);
 }
 
-TEST_CASE("NaCl-2", "[ff][empole][nonewald][nacl]")
+TEST_CASE("NaCl-2", "[ff][empole][nonewald][nacl][L1]")
 {
    TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
 
@@ -270,7 +270,7 @@ TEST_CASE("NaCl-2", "[ff][empole][nonewald][nacl]")
    }
 }
 
-TEST_CASE("NaCl-3", "[ff][empole][ewald][nacl]")
+TEST_CASE("NaCl-3", "[ff][empole][ewald][nacl][L1]")
 {
    TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
 

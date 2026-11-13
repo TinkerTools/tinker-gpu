@@ -5,7 +5,7 @@
 
 using namespace tinker;
 
-TEST_CASE("Strtor-A4", "[ff][estrtor][a4]")
+TEST_CASE("Strtor-A4", "[ff][estrtor][a4][L1]")
 {
    const char* k = "test_a4.key";
    const char* k0 = "strtorunit  10.0\n"

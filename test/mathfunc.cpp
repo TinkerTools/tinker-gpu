@@ -9,7 +9,7 @@
 
 using namespace tinker;
 
-TEST_CASE("MathFuncPow2", "[util][math]")
+TEST_CASE("MathFuncPow2", "[util][math][L1]")
 {
    SECTION("IsPow2")
    {
@@ -149,7 +149,7 @@ TEST_CASE("MathFuncPow2", "[util][math]")
    }
 }
 
-TEST_CASE("LUSolve", "[util][math]")
+TEST_CASE("LUSolve", "[util][math][L1]")
 {
 #if TINKER_CUDART
 #else
@@ -212,7 +212,7 @@ void checkSinhc(const double (&tol)[7])
 }
 }
 
-TEST_CASE("MathFuncSinhc", "[util][math]")
+TEST_CASE("MathFuncSinhc", "[util][math][L1]")
 {
    // about ten times the largest relative error of the host build
    SECTION("float")

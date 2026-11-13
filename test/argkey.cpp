@@ -5,7 +5,7 @@
 
 using namespace tinker;
 
-TEST_CASE("GetKV", "[util]")
+TEST_CASE("GetKV", "[util][L1]")
 {
    const char* key = R"(
 parameters           amoeba09.prm

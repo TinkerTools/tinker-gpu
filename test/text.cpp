@@ -3,7 +3,7 @@
 
 using namespace tinker;
 
-TEST_CASE("Text", "[util][text]")
+TEST_CASE("Text", "[util][text][L1]")
 {
    SECTION("Replace")
    {

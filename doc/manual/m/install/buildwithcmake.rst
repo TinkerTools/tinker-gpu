@@ -103,6 +103,8 @@ In general, users should not worry about the C++ standard for Tinker9.
 Using a more recent C++ standard to write the source code is unlikely
 to speed up the performance of Tinker9 and may harm the availability of
 Tinker9 to older machines.
+With CUDA 13 or newer, *AUTO* selects *17* because thrust and cub
+require it.
 
 **-DPREC (prec) = mixed**
 
@@ -204,7 +206,10 @@ Same as the default target.
 
 **test**
 
-Run unit tests in a random order. Exit on the first error.
+Run the base level of the unit tests in a random order.
+Exit on the first error.
+Set *T9_TEST_LEVEL* to run more levels, e.g. *T9_TEST_LEVEL=5 make test*
+for the full suite. See :ref:`label-run-tests`.
 
 **man**
 
@@ -213,4 +218,92 @@ Generate user manual.
 **doc**
 
 Generate developer guides.
+
+.. _label-run-tests:
+
+Run Tests
+---------
+The unit tests are compiled into the *all.tests* executable in the build
+directory. Run *make test* to execute the base level of the test suite,
+or set *T9_TEST_LEVEL* to execute more of it:
+
+.. code-block:: bash
+
+   make test                    # level 1, the default
+   T9_TEST_LEVEL=3 make test    # levels 1 to 3
+   T9_TEST_LEVEL=5 make test    # the full suite
+
+**Test levels**
+
+Each test case carries one level tag, *[L1]* to *[L5]*.
+A run at level *L* executes every case at level *L* or lower:
+
+===== ============ ==================================================
+Level Name         Test cases
+===== ============ ==================================================
+1     base         core in-process energy, gradient, virial and
+                   unit checks
+2     analytic     other in-process single-point checks, mostly
+                   the mutate fixtures
+3     numerical    finite-difference checks via testgrad, testlmda
+                   and testvir
+4     dynamics     molecular dynamics and sampling runs
+5     output       output files and runs of the *tinker9* program
+===== ============ ==================================================
+
+Level 1 takes seconds and the full suite a few minutes on a recent GPU.
+Level 1 runs in the *all.tests* process only, so it does not need the
+*tinker9* executable.
+
+**Run all.tests directly**
+
+The executable takes a test filter and Catch2 options:
+
+.. code-block:: bash
+
+   ./all.tests [filter...] [--level L] [Catch2 options]
+
+The level is chosen in this order:
+
+- *--level L*, if given;
+- otherwise the *T9_TEST_LEVEL* environment variable, if set;
+- otherwise 1 without a filter and 5 with a filter, so all cases matching
+  the filter are run unless a level is also given.
+
+A filter selects test cases by name or tag. Names may use the wildcard
+``*``. A comma between patterns means "or", and patterns in separate
+arguments must all match. Put each exclusion in its own argument.
+Quote filters so that the shell does not expand them:
+
+.. code-block:: bash
+
+   ./all.tests                          # level 1
+   ./all.tests --level 5                # the full suite
+   ./all.tests '[amoeba]'               # every case tagged amoeba
+   ./all.tests '[mutate]' --level 2     # mutate cases up to level 2
+   ./all.tests 'TESTLMDA-1*'            # cases by name
+   ./all.tests '[bar],[fep]'            # cases tagged bar or fep
+   ./all.tests '[fep]' '~[expol]'       # fep cases, except expol ones
+   ./all.tests --list-tests '[fep]'     # list the cases, do not run them
+   ./all.tests --level 5 --list-tags    # list all tags
+   ./all.tests info                     # print the build information
+
+Note that *-l* is the Catch2 short form of *--list-tests*, not the level.
+Other useful Catch2 options are *-a* (stop at the first failure),
+*--order rand --rng-seed time* (random order, as in *make test*),
+*--durations yes* (time each case), and *-s* (print every passing
+check). Run *./all.tests -h* for the full list.
+
+The tests write their input files into the current directory, so do not
+run two copies of *all.tests* in the same directory at the same time.
+
+**Add a test**
+
+Give every new test case one level tag, for example
+``TEST_CASE("Bond-Trpcage", "[ff][ebond][L1]")``. Choose the level by what
+the case does, using the table above. *all.tests* refuses to start, and
+names the case, if a test case has no level tag or more than one.
+Only the hidden *[noassert]* cases are exempt; they print information
+rather than check results, and run only when named, as in
+*./all.tests info*.
 

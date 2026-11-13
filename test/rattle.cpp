@@ -6,7 +6,7 @@
 
 using namespace tinker;
 
-TEST_CASE("Rattle", "[ff][rattle]")
+TEST_CASE("Rattle", "[ff][rattle][L4]")
 {
    int mask = calc::mass | calc::xyz | calc::vel;
    mask = mask | calc::energy | calc::grad | calc::virial;

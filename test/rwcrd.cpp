@@ -30,7 +30,7 @@ using namespace tinker;
 // An archive that ends with a blank line has only its two frames, and reading
 // the second one reports the end of the file. A blank line used to be read as a
 // third frame, with an atom index that was never set.
-TEST_CASE("CrdReader-trailing-blank", "[ff][rwcrd]")
+TEST_CASE("CrdReader-trailing-blank", "[ff][rwcrd][L1]")
 {
    const char* xn = "test_rwcrd.arc";
    TestFile xfile("", xn, std::string(frame1) + frame2 + "\n\n");
@@ -56,7 +56,7 @@ TEST_CASE("CrdReader-trailing-blank", "[ff][rwcrd]")
 
 // An atom line that cannot be read stops the reading instead of writing an
 // atom at an index that was never set.
-TEST_CASE("CrdReader-bad-atom-line", "[ff][rwcrd]")
+TEST_CASE("CrdReader-bad-atom-line", "[ff][rwcrd][L1]")
 {
    const char* xn = "test_rwcrd_bad.arc";
    std::string bad = std::string(frame1) + "     2  Frame 2\n     1  Na+    11.0    12.0    13.0     7\n garbage\n";

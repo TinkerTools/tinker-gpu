@@ -13,7 +13,7 @@ thermostat  bussi
 barostat    montecarlo
 )**";
 
-TEST_CASE("NPT-VRESPA", "[ff][npt][respa]")
+TEST_CASE("NPT-VRESPA", "[ff][npt][respa][L4]")
 {
    const char* k = "test_arbox.key";
    const char* d = "test_arbox.dyn";

@@ -20,7 +20,7 @@ bondterm                       only
 
 using namespace tinker;
 
-TEST_CASE("Bounds", "[ff][box]")
+TEST_CASE("Bounds", "[ff][box][L1]")
 {
    const char* xn = "test_bounds.xyz";
    TestFile xfile("", xn, coord);
