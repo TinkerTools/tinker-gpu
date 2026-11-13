@@ -988,7 +988,7 @@ namespace {
 struct ThetaScope
 {
    LmdaThMap map;
-   double alpha, theta, vtheta, mass, fric, dt, eff, mainlmda, kelvin;
+   double alpha, theta, vtheta, mass, fric, dt, eff, mainlmda, kelvin, lkelvin;
 
    ThetaScope()
       : map(lmdathmap)
@@ -1001,6 +1001,7 @@ struct ThetaScope
       , eff(deffdl)
       , mainlmda(lambda)
       , kelvin(bath::kelvin)
+      , lkelvin(lmdakelvin)
    {
       // the defaults mutate.f sets, which every case below overrides as it needs
       lmdathmap = LmdaThMap::TRI;
@@ -1019,6 +1020,7 @@ struct ThetaScope
       deffdl = eff;
       lambda = mainlmda;
       bath::kelvin = kelvin;
+      lmdakelvin = lkelvin;
    }
 };
 
@@ -1027,7 +1029,7 @@ struct ThetaScope
 struct FortranThetaScope
 {
    char map[3];
-   double alpha, theta, vtheta, mass, fric, dt, eff, mainlmda;
+   double alpha, theta, vtheta, mass, fric, dt, eff, mainlmda, lkelvin;
 
    FortranThetaScope()
       : alpha(dlmda::lmdathalpha)
@@ -1038,6 +1040,7 @@ struct FortranThetaScope
       , dt(dlmda::lmdadt)
       , eff(dlmda::deffdl)
       , mainlmda(mutant::lambda)
+      , lkelvin(dlmda::lmdakelvin)
    {
       std::memcpy(map, dlmda::lmdathmap, 3);
    }
@@ -1053,6 +1056,7 @@ struct FortranThetaScope
       dlmda::lmdadt = dt;
       dlmda::deffdl = eff;
       mutant::lambda = mainlmda;
+      dlmda::lmdakelvin = lkelvin;
    }
 };
 
@@ -1233,6 +1237,7 @@ TEST_CASE("DLMDA-theta-langevin-friction", "[ff][dlmda]")
    const double asina = std::asin(alpha);
 
    bath::kelvin = 300.0;
+   lmdakelvin = 0.0;
    lmdadt = 0.1;
    lmdamass = 2.0;
    lmdafric = 0.5;
@@ -1259,14 +1264,23 @@ TEST_CASE("DLMDA-theta-langevin-friction", "[ff][dlmda]")
    lmdavtheta = 0.0;
    lmdaLangStep(1.0);
    COMPARE_REALS(lmdamass * lmdavtheta * lmdavtheta / (1.0 - decay * decay), 0.59616127758, 1.0e-12);
+
+   // LAMBDA-TEMPERATURE sizes the kick by its own thermal energy, three times
+   // the bath value at 900 K
+   lmdakelvin = 900.0;
+   lmdatheta = th0;
+   lmdavtheta = 0.0;
+   lmdaLangStep(1.0);
+   COMPARE_REALS(lmdamass * lmdavtheta * lmdavtheta / (1.0 - decay * decay), 3.0 * 0.59616127758, 1.0e-12);
 }
 
 TEST_CASE("DLMDA-theta-langevin-sampling", "[ff][dlmda]")
 {
    // A step with friction samples a harmonic well in theta at the bath
-   // temperature for small and large friction times the time step. The step is
-   // linear in the well, so the stationary covariance of theta and its velocity
-   // follows exactly from the step matrix (test_eostmap.f:test_eostmap_lfmid).
+   // temperature, or at its own once LAMBDA-TEMPERATURE sets one, for small and
+   // large friction times the time step. The step is linear in the well, so the
+   // stationary covariance of theta and its velocity follows exactly from the
+   // step matrix (test_eostmap.f:test_eostmap_lfmid).
    ThetaScope scope;
 
    // a well centered where the sine squared map has unit slope and as stiff as
@@ -1276,7 +1290,6 @@ TEST_CASE("DLMDA-theta-langevin-sampling", "[ff][dlmda]")
    lmdadt = 0.01;
    lmdamass = 2.0;
    const double kspr = lmdamass / (lmdadt * lmdadt);
-   const double kt = units::gasconst * bath::kelvin;
    const double th0 = 0.25 * dpi, h = 0.01;
 
    // one step from theta offset d and velocity v with kick g, the effective
@@ -1292,32 +1305,36 @@ TEST_CASE("DLMDA-theta-langevin-sampling", "[ff][dlmda]")
       vout = lmdavtheta;
    };
 
-   for (double gdt : {0.5, 5.0, 20.0}) {
-      lmdafric = gdt / lmdadt;
+   for (double lk : {0.0, 900.0}) {
+      for (double gdt : {0.5, 5.0, 20.0}) {
+         lmdakelvin = lk;
+         const double kt = units::gasconst * (lk > 0.0 ? lk : bath::kelvin);
+         lmdafric = gdt / lmdadt;
 
-      // unit theta offset, velocity and kick give the step matrix and the kick
-      // vector
-      double q1, q2;
-      step(h, 0.0, 0.0, q1, q2);
-      const double a11 = q1 / h, a21 = q2 / h;
-      step(0.0, h, 0.0, q1, q2);
-      const double a12 = q1 / h, a22 = q2 / h;
-      step(0.0, 0.0, h, q1, q2);
-      const double b1 = q1 / h, b2 = q2 / h;
+         // unit theta offset, velocity and kick give the step matrix and the
+         // kick vector
+         double q1, q2;
+         step(h, 0.0, 0.0, q1, q2);
+         const double a11 = q1 / h, a21 = q2 / h;
+         step(0.0, h, 0.0, q1, q2);
+         const double a12 = q1 / h, a22 = q2 / h;
+         step(0.0, 0.0, h, q1, q2);
+         const double b1 = q1 / h, b2 = q2 / h;
 
-      // iterate the covariance under unit normal kicks to its stationary value
-      double pdd = 0.0, pdv = 0.0, pvv = 0.0;
-      for (int i = 0; i < 2000; ++i) {
-         double cdd = a11 * a11 * pdd + 2.0 * a11 * a12 * pdv + a12 * a12 * pvv + b1 * b1;
-         double cdv = a11 * a21 * pdd + (a11 * a22 + a12 * a21) * pdv + a12 * a22 * pvv + b1 * b2;
-         double cvv = a21 * a21 * pdd + 2.0 * a21 * a22 * pdv + a22 * a22 * pvv + b2 * b2;
-         pdd = cdd;
-         pdv = cdv;
-         pvv = cvv;
+         // iterate the covariance under unit normal kicks to its stationary value
+         double pdd = 0.0, pdv = 0.0, pvv = 0.0;
+         for (int i = 0; i < 2000; ++i) {
+            double cdd = a11 * a11 * pdd + 2.0 * a11 * a12 * pdv + a12 * a12 * pvv + b1 * b1;
+            double cdv = a11 * a21 * pdd + (a11 * a22 + a12 * a21) * pdv + a12 * a22 * pvv + b1 * b2;
+            double cvv = a21 * a21 * pdd + 2.0 * a21 * a22 * pdv + a22 * a22 * pvv + b2 * b2;
+            pdd = cdd;
+            pdv = cdv;
+            pvv = cvv;
+         }
+         CAPTURE(lk, gdt);
+         COMPARE_REALS(kspr * pdd / kt, 1.0, 1.0e-8);
+         COMPARE_REALS(lmdamass * pvv / kt, 1.0, 1.0e-8);
       }
-      CAPTURE(gdt);
-      COMPARE_REALS(kspr * pdd / kt, 1.0, 1.0e-8);
-      COMPARE_REALS(lmdamass * pvv / kt, 1.0, 1.0e-8);
    }
 }
 
@@ -1410,8 +1427,20 @@ TEST_CASE("DLMDA-theta-matches-fortran", "[ff][dlmda]")
          COMPARE_REALS(lambda, mutant::lambda, 1.0e-13);
       }
 
-      // and a trajectory with friction, each engine given the same random kicks
+      // the lambda particle temperature follows the bath unless the keyword
+      // sets its own
       bath::kelvin = 300.0;
+      lmdakelvin = 0.0;
+      dlmda::lmdakelvin = 0.0;
+      REQUIRE(lmdaTemp() == tinker_f_lmdatemp());
+      REQUIRE(lmdaTemp() == 300.0);
+      lmdakelvin = 900.0;
+      dlmda::lmdakelvin = 900.0;
+      REQUIRE(lmdaTemp() == tinker_f_lmdatemp());
+      REQUIRE(lmdaTemp() == 900.0);
+
+      // and a trajectory with friction at that temperature, each engine given
+      // the same random kicks
       lmdafric = 0.5;
       lmdatheta = 0.7;
       lmdavtheta = 3.0;

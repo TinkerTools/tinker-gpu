@@ -8,13 +8,16 @@
 #include "test.h"
 #include "testrt.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
+#include <sstream>
 #include <string>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <utility>
+#include <vector>
 
 using namespace tinker;
 
@@ -929,10 +932,12 @@ TEST_CASE("TinkerNIST-END-FILE", "[ff][tinkerNIST]")
 
 // A second OST run continues the bias history and the trajectory of the first
 // in place, and runs whose stored settings differ from the history or that
-// have no thermostat are refused and leave the history as it was. A run that
-// does not end on a save step writes its restart file at its last step, as
-// the history is. The refusals end the program, so it runs apart from this
-// one (test_eost.f:eostrstrun). Lambda dynamics needs the CUDA platform
+// have no thermostat are refused and leave the history as it was. The history
+// stores the lambda particle temperature, and metadynamics refuses Monte Carlo
+// lambda moves away from the bath temperature. A run that does not end on a
+// save step writes its restart file at its last step, as the history is. The
+// refusals end the program, so it runs apart from this one
+// (test_eost.f:eostrstrun). Lambda dynamics needs the CUDA platform
 // (dlmdaData2).
 #if TINKER_GPULANG_CUDA
 TEST_CASE("TinkerNIST-LMDA-RESTART", "[ff][tinkerNIST]")
@@ -940,18 +945,22 @@ TEST_CASE("TinkerNIST-LMDA-RESTART", "[ff][tinkerNIST]")
    const std::string files = TINKER9_DIRSTR "/test/file/";
    TestFile fx(files + "mutate/water2.xyz", "lmdarst.xyz");
    TestFile fp(files + "commit_6bd0b6fd/water03.prm");
-   TestFile fk("", "lmdarst.key",
+   const std::string keytext =
       "parameters water03\na-axis 18.643\nvdw-cutoff 7.0\newald\newald-cutoff 7.0\npolarization MUTUAL\n"
       "polar-eps 0.00001\nvdw-annihilate\nvdw-softcore 0.2 5.0\nvalenceterm none\nligand -1 6\n"
-      "vdw-lmda-map exp\nvdw-lmda-exp 1\nele-lambda 0.0\npol-lambda 0.0\nlambda 0.5\nlambda-mode ost\n"
-      "lambda-interval 10\nintegrator verlet\nrandomseed 1\n");
+      "vdw-lmda-map exp\nvdw-lmda-exp 1\nele-lambda 0.0\npol-lambda 0.0\nlambda 0.5\n"
+      "lambda-interval 10\nintegrator verlet\nrandomseed 1\n";
+   TestFile fk("", "lmdarst.key", keytext + "lambda-mode ost\n");
+   TestFile fx2(files + "mutate/water2.xyz", "lmdamc.xyz");
+   TestFile fk2("", "lmdamc.key",
+      keytext + "lambda-mode meta\nlambda-propagate mc\nlambda-mc-trial 1\nlambda-temperature 600\n");
    TestRemoveFileOnExit farc("lmdarst.arc"), fdyn("lmdarst.dyn"), fost("lmdarst.ost"), fost2("lmdarst.ost_2"),
-      flog("lmdarst.log");
+      flog("lmdarst.log"), fmeta("lmdamc.meta"), fdyn2("lmdamc.dyn"), farc2("lmdamc.arc");
 
    // runs of 1 fs steps, saved every 10, at the given step count and temperature
-   auto run = [](const char* args) {
-      const std::string cmd =
-         std::string(TINKER9_BINDIRSTR) + "/tinker9 dynamic lmdarst.xyz " + args + " > lmdarst.log 2>&1";
+   auto run = [](const char* args, const char* base = "lmdarst") {
+      const std::string cmd = std::string(TINKER9_BINDIRSTR) + "/tinker9 dynamic " + base + ".xyz " + args +
+         " > lmdarst.log 2>&1";
       const int rc = std::system(cmd.c_str());
       std::ifstream log("lmdarst.log");
       std::string text((std::istreambuf_iterator<char>(log)), std::istreambuf_iterator<char>());
@@ -964,6 +973,19 @@ TEST_CASE("TinkerNIST-LMDA-RESTART", "[ff][tinkerNIST]")
       for (int i = 0; i < 3; ++i)
          std::getline(f, line);
       return std::stoi(line);
+   };
+   // the values of the lambda state record of the history header
+   auto lmdaState = []() {
+      std::ifstream f("lmdarst.ost");
+      std::string line;
+      for (int i = 0; i < 7; ++i)
+         std::getline(f, line);
+      std::replace(line.begin(), line.end(), 'D', 'E');
+      std::istringstream ss(line);
+      std::vector<double> v;
+      for (double x; ss >> x;)
+         v.push_back(x);
+      return v;
    };
 
    auto r1 = run("20 1.0 0.01 2 300");
@@ -986,6 +1008,24 @@ TEST_CASE("TinkerNIST-LMDA-RESTART", "[ff][tinkerNIST]")
    auto r4 = run("20 1.0 0.01 1");
    REQUIRE(has(r4.second, "a Constant Temperature Ensemble"));
    REQUIRE(historyStep() == 40);
+
+   // the history stores the lambda particle temperature, which follows the
+   // bath without the keyword, and a run with a different one is refused
+   auto state = lmdaState();
+   REQUIRE(state.size() == 8);
+   REQUIRE(state[7] == 300.0);
+   std::ofstream("lmdarst.key", std::ios::app) << "lambda-temperature 600\n";
+   auto r4b = run("20 1.0 0.01 2 300");
+   std::ofstream("lmdarst.key") << keytext + "lambda-mode ost\n";
+   REQUIRE(has(r4b.second, "Setting Differs from the Bias History"));
+   REQUIRE(has(r4b.second, "LAMBDA-TEMPERATURE"));
+   REQUIRE(historyStep() == 40);
+
+   // metadynamics refuses Monte Carlo lambda moves away from the bath
+   // temperature, before it opens a history
+   auto rmc = run("20 1.0 0.01 2 300", "lmdamc");
+   REQUIRE(has(rmc.second, "Monte Carlo Lambda Moves"));
+   REQUIRE(not std::ifstream("lmdamc.meta").good());
 
    // a run shorter than the save interval saves nothing on the way, so the
    // restart file is written at its last step, along with the history

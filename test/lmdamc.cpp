@@ -488,6 +488,7 @@ TEST_CASE("LMDAMC-keys", "[ff][lmdamc]")
       REQUIRE(lmdanpc == 40);
       REQUIRE(lmdamctrial == 10);
       REQUIRE(lmdamcmove == 0.02);
+      REQUIRE(lmdakelvin == 0.0);
       s.session.end();
    }
 
@@ -508,6 +509,16 @@ TEST_CASE("LMDAMC-keys", "[ff][lmdamc]")
    {
       Setup s(kIonwat, "abf", kRc, 0., "lambda-mc-move -3.0\n");
       REQUIRE(lmdamcmove == 1.0);
+      s.session.end();
+   }
+
+   // the lambda particle temperature is set by keyword, and a negative value
+   // is taken as its magnitude (test_lmdamc.f:test_lmdamc_keys)
+   for (const char* extra : {"lambda-temperature 600.0\n", "lambda-temperature -600.0\n"}) {
+      CAPTURE(extra);
+      Setup s(kIonwat, "abf", kRc, 0., extra);
+      REQUIRE(lmdakelvin == 600.0);
+      REQUIRE(lmdaTemp() == 600.0);
       s.session.end();
    }
 
@@ -721,6 +732,41 @@ TEST_CASE("LMDAMC-bias-abf", "[ff][lmdamc]")
       s.session.end();
    }
 }
+
+// The Monte Carlo acceptance test uses the lambda particle temperature. A large
+// constant mean force makes every move from a lambda of zero steeply uphill, so
+// that a move rejected at a very low bath temperature is accepted once
+// LAMBDA-TEMPERATURE is far above the energy change of any move
+// (test_lmdamc.f:test_lmdamc_temp).
+void runTemp(const char* mode)
+{
+   Setup s(kIonwat, mode, kRc);
+   mcLoad();
+   for (int i = 1; i <= nlmda; ++i)
+      testSetLmdaBin(i, -1.0e5);
+   bath::kelvin = 1.0e-6;
+
+   // with no lambda temperature of its own the move follows the bath and is
+   // rejected
+   lmdakelvin = 0.0;
+   lambda = 0.0;
+   double eref = mcEnergy();
+   REQUIRE_FALSE(mcTrial(0.0, 1, eref));
+   REQUIRE(lambda == 0.0);
+
+   // at a lambda temperature of 1e12 K, a thermal energy of 2e9 kcal/mole, a
+   // move up to the largest bias change of 5000 kcal/mole is rejected less than
+   // once in 1e5 trials
+   lmdakelvin = 1.0e12;
+   lambda = 0.0;
+   eref = mcEnergy();
+   REQUIRE(mcTrial(0.0, 1, eref));
+   REQUIRE(lambda > 0.0);
+   s.session.end();
+}
+
+TEST_CASE("LMDAMC-temp-abf", "[ff][lmdamc]") { runTemp("abf"); }
+TEST_CASE("LMDAMC-temp-ost", "[ff][lmdamc]") { runTemp("ost"); }
 
 // Forces an accepted lambda move inside a region without data for the method
 // mode, and checks that the energy and the slope it keeps come from the filled

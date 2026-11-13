@@ -62,14 +62,14 @@ private:
    bool m_ended = false;
 };
 
-/// \brief Restores the lambda method flags and the interval convergence gate in
-/// its destructor, so that a failed check cannot leave them set for the cases
-/// that run after it.
+/// \brief Restores the lambda method flags, the interval convergence gate, the
+/// bias fill reach and the lambda particle temperature in its destructor, so
+/// that a failed check cannot leave them set for the cases that run after it.
 struct TestLmdaFlagGuard
 {
    bool ost = use_ost, meta = use_meta, abf = use_abf, cv = use_lmdacv, mc = use_lmdamc,
         fill = use_lmdafill;
-   double fillr = lmdafillr;
+   double fillr = lmdafillr, lkelvin = lmdakelvin;
    ~TestLmdaFlagGuard()
    {
       use_ost = ost;
@@ -79,6 +79,7 @@ struct TestLmdaFlagGuard
       use_lmdamc = mc;
       use_lmdafill = fill;
       lmdafillr = fillr;
+      lmdakelvin = lkelvin;
    }
 };
 

@@ -339,6 +339,11 @@ void lmdaThetaInv(double lmda, double& theta);
 /// Propagates the theta lambda particle under the selected theta map
 /// (dlambda.f:lmdalangevin).
 void lmdaLangevin();
+/// Returns the temperature at which the lambda particle and the Monte Carlo
+/// lambda trials move, set by LAMBDA-TEMPERATURE or else the bath temperature;
+/// the atoms and every free energy estimate stay at the bath temperature
+/// (dlambda.f:lmdatemp).
+double lmdaTemp();
 /// Takes one Langevin step of the theta lambda particle with the standard
 /// normal deviate \p gauss as its random kick (dlambda.f:lmdalangstep).
 void lmdaLangStep(double gauss);
@@ -531,6 +536,7 @@ TINKER_EXTERN double lmdatheta;   ///< theta coordinate used to propagate lambda
 TINKER_EXTERN double lmdavtheta;  ///< velocity of the theta lambda coordinate.
 TINKER_EXTERN double lmdamass;    ///< fictitious mass of the theta lambda coordinate.
 TINKER_EXTERN double lmdafric;    ///< friction coefficient of the theta lambda coordinate.
+TINKER_EXTERN double lmdakelvin;  ///< temperature of the lambda particle in Kelvin; zero follows the bath.
 TINKER_EXTERN double lmdadt;      ///< time step of the theta lambda coordinate.
 TINKER_EXTERN double lmdathalpha;  ///< sharpness of the smoothed triangle theta map.
 TINKER_EXTERN LmdaThMap lmdathmap; ///< theta -> main lambda mapping type.

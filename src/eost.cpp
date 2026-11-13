@@ -93,6 +93,7 @@ double metaVminimax()
 //                 -max(0, vlocal - vglobal - ostlthresh) / (kT * ostltempgamma))
 double temperedHeight(double vglobal, double vlocal)
 {
+   // the tempering scale is the bath temperature, not that of lambda
    const double rt = units::gasconst * bath::kelvin;
    if (rt <= 0.0)
       return hbias;
@@ -247,6 +248,8 @@ void addKernelHist(int ihist, bool dofkern)
    double sigf2 = sigf * sigf;
    double pref = osthhist[ihist] / (2.0 * dpi * sigl * sigf);
    double sourcefl = lmdafhist[ihist];
+   // the f kernel weights undo the bias on the atoms, so they use the bath
+   // temperature, never the lambda particle temperature
    const double rt = units::gasconst * bath::kelvin;
 
    int nlcut = nbinCut(oststdev * sigl, wlmda);
@@ -306,6 +309,7 @@ void addKernelHist(int ihist, bool dofkern)
 // (eost.f:buildfkernel).
 void buildFkernel()
 {
+   // the weights undo the bias on the atoms at the bath temperature
    const double rt = units::gasconst * bath::kelvin;
    for (int il = 1; il <= nlmda; ++il) {
       double avg = 0;

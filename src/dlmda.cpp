@@ -549,6 +549,7 @@ void dlmda_mech()
    lmdathalpha = dlmda::lmdathalpha;
    lmdamass = dlmda::lmdamass;
    lmdafric = dlmda::lmdafric;
+   lmdakelvin = dlmda::lmdakelvin;
    lmdadt = dlmda::lmdadt;
    use_lmdacv = (dlmda::use_lmdacv != 0);
    lmdacvstd = dlmda::lmdacvstd;
@@ -718,6 +719,15 @@ void lmdaLangevin()
    lmdaLangStep(gauss);
 }
 
+// The temperature of the lambda particle and of the Monte Carlo lambda trials,
+// set by LAMBDA-TEMPERATURE or else the bath temperature; the atoms and every
+// free energy estimate stay at the bath temperature, which OST and ABF use
+// alone since they average at a held lambda (dlambda.f:lmdatemp).
+double lmdaTemp()
+{
+   return lmdakelvin > 0.0 ? lmdakelvin : bath::kelvin;
+}
+
 // One Langevin step of the lambda particle in theta space, with the standard
 // normal deviate gauss as its random kick. The force on theta is in kcal/mole,
 // so the mass is in kcal/mole*ps**2 and the size of the kick follows from the
@@ -725,8 +735,8 @@ void lmdaLangevin()
 //
 // With friction the step is the leapfrog middle scheme, a full force kick, a
 // half drift, the exact friction and noise update and a second half drift,
-// which samples a harmonic well in theta at the bath temperature for any
-// friction times the time step; above about two over the time step, larger
+// which samples a harmonic well in theta at the lambda particle temperature for
+// any friction times the time step; above about two over the time step, larger
 // friction no longer slows the motion of theta. Without friction the step
 // reduces to plain leapfrog.
 void lmdaLangStep(double gauss)
@@ -744,7 +754,7 @@ void lmdaLangStep(double gauss)
    double gamma = std::max(0.0, lmdafric);
    if (gamma > 0.0) {
       double c = std::exp(-gamma * lmdadt);
-      double ktm = units::gasconst * bath::kelvin / lmdamass;
+      double ktm = units::gasconst * lmdaTemp() / lmdamass;
       double sigma = std::sqrt(ktm * (1.0 - c * c));
       lmdatheta = lmdatheta + 0.5 * lmdadt * lmdavtheta;
       lmdavtheta = c * lmdavtheta + sigma * gauss;
@@ -1078,8 +1088,9 @@ void lmdaMonte(int istep)
    if (random<double>() >= 1.0 / lmdamctrial)
       return;
 
-   // draw the trial lambda and reflect it into the lambda range
-   const double kt = units::gasconst * bath::kelvin;
+   // draw the trial lambda and reflect it into the lambda range; the trial is
+   // accepted at the lambda particle temperature
+   const double kt = units::gasconst * lmdaTemp();
    double ltrial = lambda + lmdamcmove * (2 * random<double>() - 1);
    if (ltrial < 0)
       ltrial = -ltrial;
