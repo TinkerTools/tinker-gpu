@@ -15,6 +15,7 @@ aplus/field.cpp
 aplus/induce.cpp
 atom.cpp
 box.cpp
+colvar.cpp
 compilers.cpp
 cudalib.cpp
 eangle.cpp

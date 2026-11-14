@@ -22,6 +22,7 @@ bonded/etors.cpp
 bonded/etortor.cpp
 bonded/eurey.cpp
 box.cpp
+colvar.cpp
 compilers.cpp
 cudalib.cpp
 dlmda.cpp

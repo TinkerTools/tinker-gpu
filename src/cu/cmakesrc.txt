@@ -12,6 +12,7 @@ amoeba/precond.cu
 amoeba/rotpole.cu
 amoeba/torque.cu
 atom.cu
+colvar.cu
 compilers.cu
 cudalib.cu
 cumod.cu

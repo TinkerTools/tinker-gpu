@@ -13,6 +13,7 @@ bounds.cpp
 box.cpp
 chglj.cpp
 chgtrn.cpp
+colvar.cpp
 disp.cpp
 dlmda.cpp
 eabf.cpp

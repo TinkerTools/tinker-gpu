@@ -68,6 +68,7 @@ static bool fts(std::string eng, bool& use_flag, unsigned tsflag, const TimeScal
 #include "ff/amoeba/emplar.h"
 #include "ff/amoeba/empole.h"
 #include "ff/amoeba/epolar.h"
+#include "ff/colvar.h"
 #include "ff/dlmda.h"
 #include "ff/echarge.h"
 #include "ff/echglj.h"
@@ -568,6 +569,7 @@ void energyData(RcOp op)
    // misc. terms
 
    RcMan egeom42{egeomData, op};
+   RcMan colvar42{colvarData, op};
 
    // non-bonded terms
 

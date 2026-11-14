@@ -118,7 +118,8 @@ static void numericalVirial(double (&virn)[3][3], const double (&dedl)[3][3])
 
 int testvirFlags()
 {
-   return calc::xyz + calc::energy + calc::grad + calc::virial;
+   // the group restraints and the CVs weigh their atoms by mass
+   return calc::xyz + calc::mass + calc::energy + calc::grad + calc::virial;
 }
 
 TestvirResult testvirEvaluate(double eps)

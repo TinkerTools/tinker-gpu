@@ -6,6 +6,103 @@
 #include "seq/seq.h"
 
 namespace tinker {
+/// \ingroup ff
+/// Offset of atom \c k from atom \c k1, scaled by \c wt. An atom in a molecule
+/// other than that of \c k1 is imaged next to it, since the atoms of a group
+/// need not share a molecule; a molecule is kept whole.
+#pragma acc routine seq
+SEQ_ROUTINE
+inline void geomGroupOffset(real& restrict dx,
+                            real& restrict dy,
+                            real& restrict dz,
+                            int k,
+                            int k1,
+                            real wt,
+                            const real* restrict x,
+                            const real* restrict y,
+                            const real* restrict z,
+                            const int* restrict molec,
+                            TINKER_IMAGE_PARAMS)
+{
+   real xr = x[k] - x[k1];
+   real yr = y[k] - y[k1];
+   real zr = z[k] - z[k1];
+   if (molec[k1] != molec[k])
+      image(xr, yr, zr);
+   dx = wt * xr;
+   dy = wt * yr;
+   dz = wt * zr;
+}
+
+/// \ingroup ff
+/// Mass-weighted center of the atoms `kgrp[j1]` to `kgrp[j2-1]`, which need
+/// not be contiguous; \c minv is one over their mass. The atoms are placed by
+/// #geomGroupOffset relative to the first one.
+#pragma acc routine seq
+SEQ_ROUTINE
+inline void geomGroupCenter(real& restrict cx,
+                            real& restrict cy,
+                            real& restrict cz,
+                            int j1,
+                            int j2,
+                            real minv,
+                            const int* restrict kgrp,
+                            const real* restrict x,
+                            const real* restrict y,
+                            const real* restrict z,
+                            const double* restrict mass,
+                            const int* restrict molec,
+                            TINKER_IMAGE_PARAMS)
+{
+   int k1 = kgrp[j1];
+   real dx = 0, dy = 0, dz = 0;
+   #pragma acc loop seq
+   for (int j = j1 + 1; j < j2; ++j) {
+      int k = kgrp[j];
+      real ex, ey, ez;
+      geomGroupOffset(ex, ey, ez, k, k1, (real)mass[k] * minv, x, y, z, molec, TINKER_IMAGE_ARGS);
+      dx += ex;
+      dy += ey;
+      dz += ez;
+   }
+   cx = x[k1] + dx;
+   cy = y[k1] + dy;
+   cz = z[k1] + dz;
+}
+
+/// \ingroup ff
+/// Vector from the center of group B to the center of group A, both as in
+/// #geomGroupCenter; it is imaged if the first atoms of A and B are in
+/// different molecules.
+#pragma acc routine seq
+SEQ_ROUTINE
+inline void geomGroupVector(real& restrict xr,
+                            real& restrict yr,
+                            real& restrict zr,
+                            int ja1,
+                            int ja2,
+                            real minva,
+                            int jb1,
+                            int jb2,
+                            real minvb,
+                            const int* restrict kgrp,
+                            const real* restrict x,
+                            const real* restrict y,
+                            const real* restrict z,
+                            const double* restrict mass,
+                            const int* restrict molec,
+                            TINKER_IMAGE_PARAMS)
+{
+   real xa, ya, za, xb, yb, zb;
+   geomGroupCenter(xa, ya, za, ja1, ja2, minva, kgrp, x, y, z, mass, molec, TINKER_IMAGE_ARGS);
+   geomGroupCenter(xb, yb, zb, jb1, jb2, minvb, kgrp, x, y, z, mass, molec, TINKER_IMAGE_ARGS);
+   xr = xa - xb;
+   yr = ya - yb;
+   zr = za - zb;
+   if (molec[kgrp[ja1]] != molec[kgrp[jb1]])
+      image(xr, yr, zr);
+}
+
 #pragma acc routine seq
 template <class Ver>
 SEQ_CUDA
@@ -46,54 +143,10 @@ void dk_geom_group(real& restrict e,
    int jb1 = igrp[ib][0];
    int jb2 = igrp[ib][1];
 
-   // image() calls are necessary here because atoms in the same group
-   // do not necessarily belong to the same molecule
-
-   real weigha = REAL_MAX((real)1, (real)grpmass[ia]);
-   int ka1 = kgrp[ja1];
-   real xa1 = x[ka1], ya1 = y[ka1], za1 = z[ka1];
-   real xacm = xa1 * weigha, yacm = ya1 * weigha, zacm = za1 * weigha;
-   #pragma acc loop seq
-   for (int j = ja1 + 1; j < ja2; ++j) {
-      int k = kgrp[j];
-      real weigh = (real)mass[k];
-      real xr = x[k] - xa1;
-      real yr = y[k] - ya1;
-      real zr = z[k] - za1;
-      if (molec[ka1] != molec[k])
-         image(xr, yr, zr);
-      xacm += xr * weigh;
-      yacm += yr * weigh;
-      zacm += zr * weigh;
-   }
-   weigha = REAL_RECIP(weigha);
-
-   real weighb = REAL_MAX((real)1, (real)grpmass[ib]);
-   int kb1 = kgrp[jb1];
-   real xb1 = x[kb1], yb1 = y[kb1], zb1 = z[kb1];
-   real xbcm = xb1 * weighb, ybcm = yb1 * weighb, zbcm = zb1 * weighb;
-   #pragma acc loop seq
-   for (int j = jb1 + 1; j < jb2; ++j) {
-      int k = kgrp[j];
-      real weigh = (real)mass[k];
-      real xr = x[k] - xb1;
-      real yr = y[k] - yb1;
-      real zr = z[k] - zb1;
-      if (molec[kb1] != molec[k])
-         image(xr, yr, zr);
-      xbcm += xr * weigh;
-      ybcm += yr * weigh;
-      zbcm += zr * weigh;
-   }
-   weighb = REAL_RECIP(weighb);
-
-   real xr = xacm * weigha - xbcm * weighb;
-   real yr = yacm * weigha - ybcm * weighb;
-   real zr = zacm * weigha - zbcm * weighb;
-
-   bool intermol = molec[kgrp[ja1]] != molec[kgrp[jb1]];
-   if (intermol)
-      image(xr, yr, zr);
+   real weigha = REAL_RECIP(REAL_MAX((real)1, (real)grpmass[ia]));
+   real weighb = REAL_RECIP(REAL_MAX((real)1, (real)grpmass[ib]));
+   real xr, yr, zr;
+   geomGroupVector(xr, yr, zr, ja1, ja2, weigha, jb1, jb2, weighb, kgrp, x, y, z, mass, molec, TINKER_IMAGE_ARGS);
 
    real r = REAL_SQRT(xr * xr + yr * yr + zr * zr);
    real force = gfix[i][0];

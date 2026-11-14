@@ -7,6 +7,8 @@
 #include "testrt.h"
 #include "tinker9.h"
 
+#include <algorithm>
+#include <cmath>
 #include <string>
 
 using namespace tinker;
@@ -15,8 +17,8 @@ namespace {
 struct Fixture
 {
    const char* name;
-   const char* xyz; ///< Coordinates, under test/file.
-   const char* prm; ///< Parameters, under test/file.
+   const char* xyz;      ///< Coordinates, under test/file.
+   const char* prm;      ///< Parameters, under test/file.
    double atol = 1.0e-3; ///< Tolerance of the analytical virial in mixed precision.
    double ntol = 5.0e-2; ///< Tolerance of the numerical virial in mixed precision.
    double step = 0.02;   ///< Finite difference stepsize of the lattice vectors, in Angstroms.
@@ -100,32 +102,68 @@ void runFixture(const Fixture& fx)
 }
 }
 
-TEST_CASE("TESTVIR-01_charge_ewald", "[ff][testvir][L3]") { runFixture(fx("01_charge_ewald")); }
-TEST_CASE("TESTVIR-02_charge_ewald_lights", "[ff][testvir][L3]") { runFixture(fx("02_charge_ewald_lights")); }
-TEST_CASE("TESTVIR-03_charge_ewald_nlist", "[ff][testvir][L3]") { runFixture(fx("03_charge_ewald_nlist")); }
-TEST_CASE("TESTVIR-04_mpole_ewald", "[ff][testvir][L3]") { runFixture(fx("04_mpole_ewald")); }
-TEST_CASE("TESTVIR-05_mpole_ewald_nlist", "[ff][testvir][L3]") { runFixture(fx("05_mpole_ewald_nlist")); }
+TEST_CASE("TESTVIR-01_charge_ewald", "[ff][testvir][L3]")
+{
+   runFixture(fx("01_charge_ewald"));
+}
+TEST_CASE("TESTVIR-02_charge_ewald_lights", "[ff][testvir][L3]")
+{
+   runFixture(fx("02_charge_ewald_lights"));
+}
+TEST_CASE("TESTVIR-03_charge_ewald_nlist", "[ff][testvir][L3]")
+{
+   runFixture(fx("03_charge_ewald_nlist"));
+}
+TEST_CASE("TESTVIR-04_mpole_ewald", "[ff][testvir][L3]")
+{
+   runFixture(fx("04_mpole_ewald"));
+}
+TEST_CASE("TESTVIR-05_mpole_ewald_nlist", "[ff][testvir][L3]")
+{
+   runFixture(fx("05_mpole_ewald_nlist"));
+}
 // The flux change of one AMOEBA+ water hydrogen is scaled, so the net charge
 // varies with geometry and the Ewald background term adds a charge flux virial.
-TEST_CASE("TESTVIR-09_mpole_cflux_l04", "[ff][testvir][cflux][L3]") { runFixture(fx("09_mpole_cflux_l04")); }
+TEST_CASE("TESTVIR-09_mpole_cflux_l04", "[ff][testvir][cflux][L3]")
+{
+   runFixture(fx("09_mpole_cflux_l04"));
+}
 // Ewald dispersion of an annihilated DMSO, whose reciprocal and self terms
 // follow the van der Waals lambda (test_testvir.f case 10).
-TEST_CASE("TESTVIR-10_disp_dewald_ann_l05", "[ff][testvir][hippo][disp][L3]") { runFixture(fx("10_disp_dewald_ann_l05")); }
+TEST_CASE("TESTVIR-10_disp_dewald_ann_l05", "[ff][testvir][hippo][disp][L3]")
+{
+   runFixture(fx("10_disp_dewald_ann_l05"));
+}
 // Case 11 needs replica images, its 7 A charge transfer cutoff reaching past
 // half of its 12 A box, which tinker9 does not have.
-TEST_CASE("TESTVIR-12_disp_corr", "[ff][testvir][hippo][disp][L3]") { runFixture(fx("12_disp_corr")); }
+TEST_CASE("TESTVIR-12_disp_corr", "[ff][testvir][hippo][disp][L3]")
+{
+   runFixture(fx("12_disp_corr"));
+}
 
 #if TINKER_GPULANG_CUDA
-TEST_CASE("TESTVIR-06_mpole_lambda_l05", "[ff][testvir][ast][L3]") { runFixture(fx("06_mpole_lambda_l05")); }
-TEST_CASE("TESTVIR-07_mpole_lambda_nlist_l05", "[ff][testvir][ast][L3]") { runFixture(fx("07_mpole_lambda_nlist_l05")); }
+TEST_CASE("TESTVIR-06_mpole_lambda_l05", "[ff][testvir][ast][L3]")
+{
+   runFixture(fx("06_mpole_lambda_l05"));
+}
+TEST_CASE("TESTVIR-07_mpole_lambda_nlist_l05", "[ff][testvir][ast][L3]")
+{
+   runFixture(fx("07_mpole_lambda_nlist_l05"));
+}
 // 09 through the multipole lambda derivative, where the background term's flux
 // virial comes from the net flux change of each lambda group.
-TEST_CASE("TESTVIR-08_mpole_cflux_lambda_l04", "[ff][testvir][ast][cflux][L3]") { runFixture(fx("08_mpole_cflux_lambda_l04")); }
+TEST_CASE("TESTVIR-08_mpole_cflux_lambda_l04", "[ff][testvir][ast][cflux][L3]")
+{
+   runFixture(fx("08_mpole_cflux_lambda_l04"));
+}
 // A TIP3P water decoupled from an AMBER box through the soft core
 // Lennard-Jones and scaled partial charges, with the lambda derivatives on,
 // under Ewald with a neighbor list and the long range correction
 // (test_testvir.f case 15).
-TEST_CASE("TESTVIR-15_tip3_ljchg_lambda_nlist_l05", "[ff][testvir][charge][lj][L3]") { runFixture(fx("15_tip3_ljchg_lambda_nlist_l05")); }
+TEST_CASE("TESTVIR-15_tip3_ljchg_lambda_nlist_l05", "[ff][testvir][charge][lj][L3]")
+{
+   runFixture(fx("15_tip3_ljchg_lambda_nlist_l05"));
+}
 #endif
 
 // tinker9 has no vacuum cell dipole term, so pmeData() refuses EWALD-BOUNDARY.
@@ -145,4 +183,38 @@ TEST_CASE("TESTVIR-EwaldBoundary", "[ff][testvir][L3]")
    TestSession session(argc, argv);
    rc_flag = testvirFlags();
    REQUIRE_THROWS(session.init());
+}
+
+// The group restraints weigh their atoms by mass. Without calc::mass in
+// testvirFlags() the device masses were never set up, and testvir printed a
+// zero virial, analytical and numerical alike, for a nonzero restraint.
+TEST_CASE("TESTVIR-group-restraint", "[ff][testvir][egeom][L2]")
+{
+   const std::string files = TINKER9_DIRSTR "/test/file/";
+   const char* xyzname = "test_local_frame2.xyz";
+   const char* keyname = "test_local_frame2.key";
+   TestFile fxyz(files + "local_frame/local_frame2.xyz", xyzname);
+   TestFile fkey(files + "local_frame/local_frame.key", keyname,
+      "a-axis 30.0\n"
+      "group 1 5\n"
+      "group 2 7,8\n"
+      "restrain-groups 1 2 2.1 1.3\n"
+      "restrainterm only\n");
+   TestFile fprm(files + "commit_6fe8e913/amoeba09.prm");
+
+   const char* argv[] = {"dummy", xyzname, "-k", keyname};
+   int argc = 4;
+   TestSession session(argc, argv);
+   rc_flag = testvirFlags();
+   session.init();
+
+   auto r = testvirEvaluate(0.02);
+   REQUIRE(r.numer);
+   double vmax = 0;
+   for (int k = 0; k < 9; ++k) {
+      vmax = std::max(vmax, std::abs(r.vanlyt[k]));
+      COMPARE_REALS(r.vanlyt[k], r.vnumer[k], 1.0e-2);
+   }
+   REQUIRE(vmax > 1.0);
+   session.end();
 }
