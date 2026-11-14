@@ -20,9 +20,9 @@ void zeroEGV(int vers)
       }
 
       if (not(dlkeep & calc::energy_dlmda1))
-         zeroOnHost(dedl, demdl, depdl, devdl);
+         zeroOnHost(dedl, demdl, depdl, devdl, decvdl);
       if (not(dlkeep & calc::energy_dlmda2))
-         zeroOnHost(d2edl2, d2emdl2, d2epdl2, d2evdl2);
+         zeroOnHost(d2edl2, d2emdl2, d2epdl2, d2evdl2, d2ecvdl2);
       if (dvers & calc::energy_dlmda1)
          zeroOnDeviceAsync(bsize, dedl_buf);
       if (dvers & calc::energy_dlmda2)

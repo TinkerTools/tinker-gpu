@@ -1,5 +1,6 @@
 #include "ff/amoeba/empole.h"
 #include "ff/amoeba/epolar.h"
+#include "ff/colvar.h"
 #include "ff/echarge.h"
 #include "ff/energy.h"
 #include "ff/ennintermol.h"
@@ -110,6 +111,9 @@ static void xAnalyzeE()
 
    if (use(Potent::GEOM))
       print(out, fmt, "Geometric Restraints", energy_eg, countBondedTerm(Potent::GEOM));
+
+   if (use(Potent::COLVAR))
+      print(out, fmt, "Lambda CV Restraint", energy_ecv, countBondedTerm(Potent::COLVAR));
 }
 }
 

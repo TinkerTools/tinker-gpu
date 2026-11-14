@@ -23,6 +23,7 @@ const TimeScaleConfig& defaultTSConfig()
       {"eangtor", 0},
       {"etortor", 0},
       {"egeom", 0},
+      {"ecolvar", 0},
 
       {"evalence", 0},
 
@@ -240,6 +241,11 @@ static void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconf
          if (tscfg("egeom", ecore_val))
             egeom(vers);
    }
+
+   // the LAMBDA-CV restraint on a collective variable
+   if (use(Potent::COLVAR))
+      if (tscfg("ecolvar", ecore_val))
+         ecolvar(vers);
 
    // non-bonded terms
 

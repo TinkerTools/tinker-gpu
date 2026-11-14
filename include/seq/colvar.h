@@ -60,10 +60,15 @@ inline void colvarSetCenter(real& restrict cx,
 /// DISTANCE, slot \c g of CV \c i: the distance between the centers of sets A
 /// and B, imaged if their first atoms are in different molecules. The slots
 /// are the atoms of A, then the atoms of B; a zero distance has a zero
-/// gradient. The first slot also writes q and W.
+/// gradient. The first slot also writes q and W. Returns q and dq/dx of the
+/// slot in \c q and \c gs.
 #pragma acc routine seq
 SEQ_ROUTINE
-inline void colvarDistanceSlot(int g,
+inline void colvarDistanceSlot(real& restrict q,
+                               real& restrict gsx,
+                               real& restrict gsy,
+                               real& restrict gsz,
+                               int g,
                                int i,
                                real* restrict val,
                                real (*restrict w)[9],
@@ -105,16 +110,25 @@ inline void colvarDistanceSlot(int g,
    const int na = ja2 - ja1;
    const int j = (local < na ? ja1 + local : jb1 + local - na);
    const real wt = (real)mass[satom[j]] * (local < na ? sminv[sa] : -sminv[sb]);
-   grad[g][0] = wt * ux;
-   grad[g][1] = wt * uy;
-   grad[g][2] = wt * uz;
+   q = r;
+   gsx = wt * ux;
+   gsy = wt * uy;
+   gsz = wt * uz;
+   grad[g][0] = gsx;
+   grad[g][1] = gsy;
+   grad[g][2] = gsz;
 }
 
 /// \ingroup ff
-/// Gradient slot \c g, by the type of its CV.
+/// Gradient slot \c g, by the type of its CV; returns q of the CV and dq/dx of
+/// the slot.
 #pragma acc routine seq
 SEQ_ROUTINE
-inline void colvarSlot1(int g,
+inline void colvarSlot1(real& restrict q,
+                        real& restrict gsx,
+                        real& restrict gsy,
+                        real& restrict gsz,
+                        int g,
                         const int* restrict gcv,
                         const int* restrict type,
                         real* restrict val,
@@ -134,7 +148,77 @@ inline void colvarSlot1(int g,
                         TINKER_IMAGE_PARAMS)
 {
    const int i = gcv[g];
+   q = 0, gsx = 0, gsy = 0, gsz = 0;
    if (type[i] == (int)ColvarType::DISTANCE)
-      colvarDistanceSlot(g, i, val, w, grad, ssum, iarg, slot, srange, satom, sminv, x, y, z, mass, molec, TINKER_IMAGE_ARGS);
+      colvarDistanceSlot(q, gsx, gsy, gsz, g, i, val, w, grad, ssum, iarg, slot, srange, satom, sminv, x, y, z, mass, molec, TINKER_IMAGE_ARGS);
+}
+
+/// \ingroup ff
+/// The LAMBDA-CV restraint E = K (q - q0)^2 of the CV of slot \c g, with
+/// q0 = qmin + g(lambda) dq and g, g', g'' in \c lg, \c lg1, \c lg2: the slot adds
+/// the gradient of its atom and the derivative of dE/dL over it; the first
+/// slot of the CV adds the energy, the virial from W, dE/dL, d2E/dL2 and the
+/// lambda derivative of the virial.
+#pragma acc routine seq
+template <class Ver>
+SEQ_CUDA
+void colvarCouple(int g,
+                  size_t offset,
+                  real q,
+                  real gsx,
+                  real gsy,
+                  real gsz,
+                  const int* restrict gcv,
+                  const int (*restrict slot)[2],
+                  const int* restrict gatom,
+                  const real (*restrict couple)[3],
+                  const real (*restrict w)[9],
+                  real lg,
+                  real lg1,
+                  real lg2,
+                  EnergyBuffer restrict ecv,
+                  VirialBuffer restrict vir_ecv,
+                  grad_prec* restrict decvx,
+                  grad_prec* restrict decvy,
+                  grad_prec* restrict decvz,
+                  EnergyBuffer restrict dl1,
+                  EnergyBuffer restrict dl2,
+                  VirialBuffer restrict dvirdl,
+                  grad_prec* restrict dfdlx,
+                  grad_prec* restrict dfdly,
+                  grad_prec* restrict dfdlz)
+{
+   const int i = gcv[g];
+   const real k = couple[i][0];
+   const real dq = couple[i][2];
+   const real dev = q - (couple[i][1] + lg * dq); // q - q0
+   const real dq0 = lg1 * dq;                     // dq0/dL
+   const real de = 2 * k * dev;                   // dE/dq
+   const real fdl = -2 * k * dq0;                 // d(dE/dL)/dq
+
+   if CONSTEXPR (Ver::g) {
+      const int ka = gatom[g];
+      atomic_add(de * gsx, decvx, ka);
+      atomic_add(de * gsy, decvy, ka);
+      atomic_add(de * gsz, decvz, ka);
+      if CONSTEXPR (Ver::g_dlmda) {
+         atomic_add(fdl * gsx, dfdlx, ka);
+         atomic_add(fdl * gsy, dfdly, ka);
+         atomic_add(fdl * gsz, dfdlz, ka);
+      }
+   }
+
+   if (g != slot[i][0])
+      return;
+   if CONSTEXPR (Ver::e)
+      atomic_add(k * dev * dev, ecv, offset);
+   if CONSTEXPR (Ver::v)
+      atomic_add(de * w[i][0], de * w[i][3], de * w[i][6], de * w[i][4], de * w[i][7], de * w[i][8], vir_ecv, offset);
+   if CONSTEXPR (Ver::e_dlmda1)
+      atomic_add(fdl * dev, dl1, offset);
+   if CONSTEXPR (Ver::e_dlmda2)
+      atomic_add(2 * k * dq0 * dq0 - de * lg2 * dq, dl2, offset);
+   if CONSTEXPR (Ver::v_dlmda)
+      atomic_add(fdl * w[i][0], fdl * w[i][3], fdl * w[i][6], fdl * w[i][4], fdl * w[i][7], fdl * w[i][8], dvirdl, offset);
 }
 }

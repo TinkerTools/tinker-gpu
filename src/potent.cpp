@@ -1,4 +1,5 @@
 #include "ff/potent.h"
+#include "ff/colvar.h"
 #include "ff/evalence.h"
 #include "nn/nn.h"
 #include <cassert>
@@ -111,6 +112,10 @@ bool use(Potent term)
       val = potent::use_mutate;
       break;
 
+   case Potent::COLVAR:
+      val = potent::use_colvar;
+      break;
+
    default:
       assert(false);
       break;
@@ -179,6 +184,9 @@ int countBondedTerm(Potent term)
          val += atoms::n;
       }
    } break;
+   case Potent::COLVAR:
+      val = colvar.ncv;
+      break;
 
    default:
       assert(false);

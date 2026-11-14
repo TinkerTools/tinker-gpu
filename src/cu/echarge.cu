@@ -375,7 +375,7 @@ static void exfieldCharge_cu2()
    real f = electric / dielec;
    real ef1 = extfld::texfld[0], ef2 = extfld::texfld[1], ef3 = extfld::texfld[2];
    const LmdaFn el = elecChain();
-   launch_k1s(g::s0, n, exfieldCharge_cu1<Ver>, nec, ec, vir_ec, decx, decy, decz, n, f, ef1, ef2, ef3, pchg, x, y,
+   launch_k1b(g::s0, n, exfieldCharge_cu1<Ver>, nec, ec, vir_ec, decx, decy, decz, n, f, ef1, ef2, ef3, pchg, x, y,
       z, pchg_dq, el.d1, el.d2, demdl_buf, d2emdl2_buf, dvirdl_buf, dfdlx, dfdly, dfdlz);
 }
 

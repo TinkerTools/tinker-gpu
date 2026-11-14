@@ -303,11 +303,13 @@ void testResetLmdaFlags()
    dlmda::use_edlmda = 0;
    dlmda::use_pdlmda = 0;
    dlmda::use_vdlmda = 0;
+   dlmda::use_cvdlmda = 0;
    use_dlmda = false;
    use_d2lmda = false;
    use_edlmda = false;
    use_pdlmda = false;
    use_vdlmda = false;
+   use_cvdlmda = false;
    use_emast = false;
    use_epast = false;
    use_ost = false;
@@ -333,9 +335,11 @@ void testRequireSharedLmdaBuffers()
    REQUIRE(shared(demdl_buf, dedl_buf));
    REQUIRE(shared(depdl_buf, dedl_buf));
    REQUIRE(shared(devdl_buf, dedl_buf));
+   REQUIRE(shared(decvdl_buf, dedl_buf));
    REQUIRE(shared(d2emdl2_buf, d2edl2_buf));
    REQUIRE(shared(d2epdl2_buf, d2edl2_buf));
    REQUIRE(shared(d2evdl2_buf, d2edl2_buf));
+   REQUIRE(shared(d2ecvdl2_buf, d2edl2_buf));
 }
 
 void testRefusedFixture(

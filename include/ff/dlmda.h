@@ -444,6 +444,9 @@ TINKER_EXTERN bool use_mainlmda;
 TINKER_EXTERN bool use_edlmda;
 TINKER_EXTERN bool use_pdlmda;
 TINKER_EXTERN bool use_vdlmda;
+/// Whether the LAMBDA-CV restraint takes its lambda derivatives: use_dlmda,
+/// CV-LMDA-MAP and the restraint on (mutate.f:setdlmdaterms).
+TINKER_EXTERN bool use_cvdlmda;
 
 TINKER_EXTERN bool use_epast;
 
@@ -622,6 +625,7 @@ bool sameLmdaMap(const LmdaMap& a, const LmdaMap& b);
 TINKER_EXTERN LmdaMap elmdamap; ///< electrostatic sub-lambda map
 TINKER_EXTERN LmdaMap plmdamap; ///< polarization sub-lambda map
 TINKER_EXTERN LmdaMap vlmdamap; ///< van der Waals sub-lambda map
+TINKER_EXTERN LmdaMap cvlmdamap; ///< collective variable sub-lambda map (LAMBDA-CV)
 
 //====================================================================//
 //        staged relative free energy schedule                        //
@@ -650,6 +654,12 @@ TINKER_EXTERN double dvldlmda;
 TINKER_EXTERN double d2eldlmda2;
 TINKER_EXTERN double d2pldlmda2;
 TINKER_EXTERN double d2vldlmda2;
+
+/// The collective variable sub-lambda of the LAMBDA-CV restraint, held at
+/// CV-LAMBDA unless CV-LMDA-MAP drives it, with its derivatives.
+TINKER_EXTERN double cvlam;
+TINKER_EXTERN double dcvldlmda;
+TINKER_EXTERN double d2cvldlmda2;
 
 /// Whether a term whose lambda derivatives are enabled by \c use must compute
 /// them, given the first and second derivatives of its sublambda map: they are
@@ -680,6 +690,13 @@ inline bool vdlmdaActive()
    return lmdaDrv(use_vdlmda, dvldlmda, d2vldlmda2);
 }
 
+/// The LAMBDA-CV restraint follows the collective variable sub-lambda, held
+/// or flat away from a QNT window like the others.
+inline bool cvdlmdaActive()
+{
+   return lmdaDrv(use_cvdlmda, dcvldlmda, d2cvldlmda2);
+}
+
 /// Whether the multipoles stay unscaled and each site's group scale is applied
 /// on the fly (single topology electrostatics). Set with use_edlmda, but kept
 /// for the whole run while the numerical lambda derivative switches use_edlmda
@@ -698,21 +715,25 @@ TINKER_EXTERN EnergyBuffer dedl_buf;
 TINKER_EXTERN EnergyBuffer demdl_buf;
 TINKER_EXTERN EnergyBuffer depdl_buf;
 TINKER_EXTERN EnergyBuffer devdl_buf;
+TINKER_EXTERN EnergyBuffer decvdl_buf;
 
 TINKER_EXTERN energy_prec dedl;
 TINKER_EXTERN energy_prec demdl;
 TINKER_EXTERN energy_prec depdl;
 TINKER_EXTERN energy_prec devdl;
+TINKER_EXTERN energy_prec decvdl;
 
 TINKER_EXTERN EnergyBuffer d2edl2_buf;
 TINKER_EXTERN EnergyBuffer d2emdl2_buf;
 TINKER_EXTERN EnergyBuffer d2epdl2_buf;
 TINKER_EXTERN EnergyBuffer d2evdl2_buf;
+TINKER_EXTERN EnergyBuffer d2ecvdl2_buf;
 
 TINKER_EXTERN energy_prec d2edl2;
 TINKER_EXTERN energy_prec d2emdl2;
 TINKER_EXTERN energy_prec d2epdl2;
 TINKER_EXTERN energy_prec d2evdl2;
+TINKER_EXTERN energy_prec d2ecvdl2;
 
 /// \ingroup ff
 /// The two lambda-derivative energy channels of one term, dE/dL and d2E/dL2.
@@ -756,6 +777,7 @@ enum class LmdaTerm
    POLAR, ///< depdl_buf and d2epdl2_buf: polarization and charge transfer (echgtrn1.f adds to depdl)
    VDW,   ///< devdl_buf and d2evdl2_buf: van der Waals, Pauli repulsion and damped dispersion (erepel1.f and
           ///< edisp1.f add to devdl)
+   COLVAR, ///< decvdl_buf and d2ecvdl2_buf: the LAMBDA-CV restraint on a collective variable
 };
 
 /// \ingroup ff
@@ -766,7 +788,7 @@ enum class LmdaTerm
 LmdaBuffer& lmdaChannel(LmdaTerm t);
 
 /// \ingroup ff
-/// Manages the three pairs of lambda-derivative channels.
+/// Manages the four pairs of lambda-derivative channels.
 void lmdaChannelsData(RcOp op);
 
 TINKER_EXTERN VirialBuffer dvirdl_buf;

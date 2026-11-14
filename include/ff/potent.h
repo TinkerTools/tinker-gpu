@@ -37,6 +37,7 @@ enum class Potent
    SOLV,   ///< Continuum solvation term.
    METAL,  ///< Ligand field term.
    GEOM,   ///< Geometric restraints.
+   COLVAR, ///< LAMBDA-CV restraint coupling a collective variable to lambda.
    EXTRA,  ///< Extra potential terms.
 
    CHGFLX, ///< Charge flux term.

@@ -1,5 +1,9 @@
 #include "ff/colvar.h"
+#include "ff/atom.h"
+#include "ff/dlmda.h"
 #include "ff/energy.h"
+#include "ff/potent.h"
+#include "math/zero.h"
 #include "tool/accasync.h"
 #include "tool/darray.h"
 #include "tool/error.h"
@@ -10,9 +14,11 @@
 #include <tinker/detail/atomid.hh>
 #include <tinker/detail/atoms.hh>
 #include <tinker/detail/keys.hh>
+#include <tinker/detail/mutant.hh>
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdlib>
 #include <stdexcept>
 
@@ -32,8 +38,15 @@ struct HostCv
    int slot0, slot1;
 };
 
+struct HostCouple
+{
+   int cv;
+   double k, qmin, qmax;
+};
+
 std::vector<HostSet> s_set;
 std::vector<HostCv> s_cv;
+std::vector<HostCouple> s_couple;
 
 std::string upcased(std::string s)
 {
@@ -160,10 +173,93 @@ void parseCvs()
    }
 }
 
+// LAMBDA-CV  cv  K  qmin  qmax, one line for each coupled CV
+void parseCouples()
+{
+   std::vector<HostCouple> couples;
+   std::vector<char> coupled(s_cv.size(), 0);
+   for (int i = 0; i < keys::nkey; ++i) {
+      auto vs = keyWords(i);
+      if (vs.size() == 0 or upcased(vs[0]) != "LAMBDA-CV")
+         continue;
+      if (vs.size() != 5)
+         TINKER_THROW("LAMBDA-CV  --  Give the CV, the Force Constant, and qmin and qmax");
+      HostCouple c = {};
+      const std::string name = upcased(vs[1]);
+      c.cv = colvarFind(name);
+      if (c.cv < 0)
+         TINKER_THROW(format("LAMBDA-CV  --  CV %s Is Not Defined by CV", name));
+      try {
+         c.k = std::stod(vs[2]);
+         c.qmin = std::stod(vs[3]);
+         c.qmax = std::stod(vs[4]);
+      } catch (const std::logic_error&) {
+         TINKER_THROW(format("LAMBDA-CV  --  Cannot Read the Force Constant and Range of CV %s", name));
+      }
+      if (not(std::isfinite(c.k) and std::isfinite(c.qmin) and std::isfinite(c.qmax)))
+         TINKER_THROW(format("LAMBDA-CV  --  The Force Constant and Range of CV %s Must Be Finite", name));
+      if (not(c.k > 0))
+         TINKER_THROW(format("LAMBDA-CV  --  The Force Constant of CV %s Must Be Positive", name));
+      if (c.qmin == c.qmax)
+         TINKER_THROW(format("LAMBDA-CV  --  CV %s Needs Different qmin and qmax", name));
+      if (coupled[c.cv])
+         TINKER_THROW(format("LAMBDA-CV  --  CV %s Is Coupled Twice", name));
+      coupled[c.cv] = 1;
+      couples.push_back(c);
+   }
+
+   if (not use_mainlmda)
+      TINKER_THROW("LAMBDA-CV  --  Coupling a CV to Lambda Requires the LAMBDA Keyword");
+   // a relative leg (REL-STAGE) has mutated atoms too
+   if (mutant::nmut > 0)
+      TINKER_THROW("LAMBDA-CV  --  Mutated Atoms and LAMBDA-CV Cannot Share the Main Lambda");
+   s_couple = couples;
+}
+
+// keeps only the coupled CVs, in the order defined, and the atom sets they
+// use, in the order first used, with their sets and gradient slots renumbered;
+// a CV no LAMBDA-CV line couples is checked but not set up
+void keepCoupled()
+{
+   std::vector<char> coupled(s_cv.size(), 0);
+   for (const auto& p : s_couple)
+      coupled[p.cv] = 1;
+   std::vector<int> newcv(s_cv.size(), -1), newset(s_set.size(), -1);
+   std::vector<HostCv> cvs;
+   std::vector<HostSet> sets;
+   int nslot = 0;
+   for (size_t i = 0; i < s_cv.size(); ++i) {
+      if (not coupled[i])
+         continue;
+      HostCv v = s_cv[i];
+      if (v.type == ColvarType::DISTANCE) {
+         for (int j = 0; j < 2; ++j) {
+            int& is = v.iarg[j];
+            if (newset[is] < 0) {
+               newset[is] = sets.size();
+               sets.push_back(s_set[is]);
+            }
+            is = newset[is];
+         }
+      }
+      const int ns = v.slot1 - v.slot0;
+      v.slot0 = nslot;
+      nslot += ns;
+      v.slot1 = nslot;
+      newcv[i] = cvs.size();
+      cvs.push_back(v);
+   }
+   for (auto& p : s_couple)
+      p.cv = newcv[p.cv];
+   s_cv = cvs;
+   s_set = sets;
+}
+
 void clearHost()
 {
    s_set.clear();
    s_cv.clear();
+   s_couple.clear();
 }
 }
 
@@ -188,68 +284,85 @@ std::string colvarName(int i)
 
 void colvarData(RcOp op)
 {
+   if (not use(Potent::COLVAR))
+      return;
+
    auto& c = colvar;
+   auto rc_a = rc_flag & calc::analyz;
 
    if (op & RcOp::DEALLOC) {
-      if (c.ncv > 0) {
-         darray::deallocate(c.type, c.iarg, c.slot, c.val, c.w);
-         darray::deallocate(c.srange);
-         darray::deallocate(c.satom);
-         darray::deallocate(c.sminv);
-         darray::deallocate(c.gatom, c.grad);
-         darray::deallocate(c.sown, c.gcv, c.ssum);
-      }
+      darray::deallocate(c.type, c.iarg, c.slot, c.couple, c.val, c.w);
+      darray::deallocate(c.srange, c.sminv, c.ssum);
+      darray::deallocate(c.satom, c.sown);
+      darray::deallocate(c.gatom, c.gcv, c.grad);
       c = Colvar{};
       clearHost();
+
+      if (rc_a)
+         bufferDeallocate(rc_flag, ecv, vir_ecv, decvx, decvy, decvz);
+      ecv = nullptr;
+      vir_ecv = nullptr;
+      decvx = nullptr;
+      decvy = nullptr;
+      decvz = nullptr;
    }
 
    if (op & RcOp::ALLOC) {
+      // a refused setup leaves nothing behind for the next one
       c = Colvar{};
       clearHost();
-      parseSets();
-      parseCvs();
-      if (s_cv.size() == 0) {
+      try {
+         parseSets();
+         parseCvs();
+         parseCouples();
+         keepCoupled();
+         // the centers of the sets weigh the atoms by their masses on the device
+         if (not(rc_flag & calc::mass))
+            TINKER_THROW("CV  --  This Program Does Not Set Up the Atomic Masses the CVs Need");
+      } catch (...) {
          clearHost();
-         return;
+         throw;
       }
-      // the centers of the sets weigh the atoms by their masses on the device
-      if (not(rc_flag & calc::mass))
-         TINKER_THROW("CV  --  This Program Does Not Set Up the Atomic Masses the CVs Need");
+
       c.ncv = s_cv.size();
       c.nset = s_set.size();
       c.nsat = 0;
-      for (const auto& s : s_set)
-         c.nsat += s.atom.size();
+      for (const auto& st : s_set)
+         c.nsat += st.atom.size();
       c.nslot = s_cv.back().slot1;
-      darray::allocate(c.ncv, &c.type, &c.iarg, &c.slot, &c.val, &c.w);
-      darray::allocate(c.nset, &c.srange, &c.sminv);
-      darray::allocate(c.nsat, &c.satom);
-      darray::allocate(c.nslot, &c.gatom, &c.grad);
-      darray::allocate(c.nsat, &c.sown);
-      darray::allocate(c.nslot, &c.gcv);
-      darray::allocate(c.nset, &c.ssum);
+      darray::allocate(c.ncv, &c.type, &c.iarg, &c.slot, &c.couple, &c.val, &c.w);
+      darray::allocate(c.nset, &c.srange, &c.sminv, &c.ssum);
+      darray::allocate(c.nsat, &c.satom, &c.sown);
+      darray::allocate(c.nslot, &c.gatom, &c.gcv, &c.grad);
+
+      // the term's own buffers under analysis, the shared ones otherwise
+      ecv = eng_buf;
+      vir_ecv = vir_buf;
+      decvx = gx;
+      decvy = gy;
+      decvz = gz;
+      if (rc_a)
+         bufferAllocate(rc_flag, &ecv, &vir_ecv, &decvx, &decvy, &decvz);
    }
 
    if (op & RcOp::INIT) {
-      if (c.ncv == 0)
-         return;
-
       // the atom sets: their atoms, and one over their masses
       std::vector<int> srange, satom, sown, gcv;
       std::vector<double> sminv;
-      for (const auto& s : s_set) {
-         sown.insert(sown.end(), s.atom.size(), (int)sminv.size());
+      for (const auto& st : s_set) {
+         sown.insert(sown.end(), st.atom.size(), (int)sminv.size());
          double m = 0;
-         for (int k : s.atom)
+         for (int k : st.atom)
             m += atomid::mass[k];
          sminv.push_back(1 / m);
          srange.push_back(satom.size());
-         satom.insert(satom.end(), s.atom.begin(), s.atom.end());
+         satom.insert(satom.end(), st.atom.begin(), st.atom.end());
          srange.push_back(satom.size());
       }
 
-      // the CVs and the atoms of their gradient slots
+      // the CVs, their restraints, and the atoms of their gradient slots
       std::vector<int> type, iarg, slot, gatom;
+      std::vector<double> couple(3 * c.ncv);
       for (const auto& v : s_cv) {
          type.push_back(static_cast<int>(v.type));
          iarg.insert(iarg.end(), v.iarg, v.iarg + 4);
@@ -261,15 +374,21 @@ void colvarData(RcOp op)
                for (int k : s_set[v.iarg[j]].atom)
                   gatom.push_back(k);
       }
+      for (const auto& p : s_couple) {
+         couple[3 * p.cv] = p.k;
+         couple[3 * p.cv + 1] = p.qmin;
+         couple[3 * p.cv + 2] = p.qmax - p.qmin;
+      }
 
       darray::copyin(g::q0, c.nset, c.srange, srange.data());
-      darray::copyin(g::q0, c.nsat, c.satom, satom.data());
       darray::copyin(g::q0, c.nset, c.sminv, sminv.data());
+      darray::copyin(g::q0, c.nsat, c.satom, satom.data());
+      darray::copyin(g::q0, c.nsat, c.sown, sown.data());
       darray::copyin(g::q0, c.ncv, c.type, type.data());
       darray::copyin(g::q0, c.ncv, c.iarg, iarg.data());
       darray::copyin(g::q0, c.ncv, c.slot, slot.data());
+      darray::copyin(g::q0, c.ncv, c.couple, couple.data());
       darray::copyin(g::q0, c.nslot, c.gatom, gatom.data());
-      darray::copyin(g::q0, c.nsat, c.sown, sown.data());
       darray::copyin(g::q0, c.nslot, c.gcv, gcv.data());
       darray::zero(g::q0, c.ncv, c.val, c.w);
       darray::zero(g::q0, c.nslot, c.grad);
@@ -277,12 +396,43 @@ void colvarData(RcOp op)
    }
 }
 
-TINKER_FVOID2(acc1, cu1, colvarEval);
-void colvarEval()
+TINKER_FVOID2(acc1, cu1, ecolvar, int);
+void ecolvar(int vers)
 {
-   if (colvar.ncv == 0)
-      return;
-   TINKER_FCALL2(acc1, cu1, colvarEval);
+   auto rc_a = rc_flag & calc::analyz;
+   auto do_e = vers & calc::energy;
+   auto do_v = vers & calc::virial;
+   auto do_g = vers & calc::grad;
+
+   if (rc_a) {
+      zeroOnHost(energy_ecv, virial_ecv);
+      auto bsize = bufferSize();
+      if (do_e)
+         darray::zero(g::q0, bsize, ecv);
+      if (do_v)
+         darray::zero(g::q0, bsize, vir_ecv);
+      if (do_g)
+         darray::zero(g::q0, n, decvx, decvy, decvz);
+   }
+   lmdaChannel(LmdaTerm::COLVAR).zero(vers);
+
+   const int dvers = lmdaDerivVers(vers, cvdlmdaActive());
+   TINKER_FCALL2(acc1, cu1, ecolvar, dvers);
+
+   if (rc_a) {
+      if (do_e) {
+         energy_ecv = energyReduce(ecv);
+         energy_valence += energy_ecv;
+      }
+      if (do_v) {
+         virialReduce(virial_ecv, vir_ecv);
+         for (int iv = 0; iv < 9; ++iv)
+            virial_valence[iv] += virial_ecv[iv];
+      }
+      if (do_g)
+         sumGradient(gx, gy, gz, decvx, decvy, decvz);
+   }
+   lmdaChannel(LmdaTerm::COLVAR).flush(vers);
 }
 
 void colvarCopyOut(int i, ColvarValue& v)

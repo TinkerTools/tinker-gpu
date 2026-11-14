@@ -1,4 +1,5 @@
 #pragma once
+#include "ff/energybuffer.h"
 #include "ff/precision.h"
 #include "tool/rcman.h"
 #include <string>
@@ -17,8 +18,12 @@ namespace tinker {
 /// cv        r   distance  na  cl
 /// ```
 ///
-/// Every CV type returns the same three things on the device, so that a
-/// consumer such as a restraint or an observable never needs to know the type:
+/// Only the CVs a LAMBDA-CV line couples to lambda are set up and evaluated,
+/// with the atom sets they use; any other CV line is read and checked, then
+/// left out, and nothing is set up with the restraint off (Potent::COLVAR).
+///
+/// Every CV type returns the same three things on the device, so that the
+/// restraint never needs to know the type:
 ///    - its value q;
 ///    - its gradient as a sparse list of slots, each an atom and dq/dx of that
 ///      atom; the slots of a CV are fixed when the data are set up;
@@ -39,6 +44,8 @@ namespace tinker {
 /// cv-atoms  na    20            # an ion
 /// cv  d1  distance  lig  pock
 /// cv  d2  distance  na   lig    # lig is used by two CVs
+/// lambda-cv  d1  10.0  2.5  8.0
+/// lambda-cv  d2   5.0  3.0  6.0
 /// ```
 ///
 /// The arrays store atoms 0-based, so input atom 10 is stored as 9; below, x9
@@ -89,7 +96,8 @@ namespace tinker {
 ///
 /// ### The evaluation
 ///
-/// Two kernels evaluate all the CVs at once, after ssum is zeroed:
+/// The LAMBDA-CV term (ecolvar) evaluates all the CVs at once in every energy
+/// call, with two kernels after ssum is zeroed:
 ///    - one thread per entry j of satom: s = sown[j], and the mass-weighted
 ///      offset of atom satom[j] from the first atom of s, imaged as for the
 ///      group restraints, is added to ssum[s] (fixed-point atomics in mixed
@@ -106,6 +114,27 @@ namespace tinker {
 ///      stored atom 10, and grad[7] = -(m10/M_lig) u.
 ///
 /// A type that combines CVs would be evaluated after the CVs it names.
+///
+/// ### The LAMBDA-CV restraint
+///
+/// ```
+/// lambda-cv  d1  10.0  2.5  8.0      # CV, K, qmin, qmax
+/// ```
+/// couples a CV to the main lambda with a moving harmonic restraint, one line
+/// for each CV coupled, all of them following the same sub-lambda; a term
+/// that CVTERM switches like the others (Potent::COLVAR), in the
+/// Tinker convention of the RESTRAIN keywords, no factor of one half:
+/// E = K (q - q0)^2 with q0 = qmin + g (qmax - qmin), where g is the collective
+/// variable sub-lambda: it follows the main lambda by CV-LMDA-MAP, or by the
+/// identity when no map is named at all, and is held at CV-LAMBDA when other
+/// maps are named but not this one. It needs LAMBDA, and applies at the lambda
+/// of the moment with or without LAMBDA-DERIV. With dq = qmax - qmin and
+/// dq0 = g' dq, its lambda derivatives are dE/dL = -2K (q - q0) dq0 and
+/// d2E/dL2 = 2K dq0^2 - 2K (q - q0) g'' dq, the derivative of dE/dL over the
+/// atoms is -2K dq0 dq/dx, and its virial is -2K dq0 W; they go to their own
+/// channel, LmdaTerm::COLVAR. The slot kernel adds the restraint as it writes each slot:
+/// the gradient of the atom of every slot, and the energy, virial and lambda
+/// derivatives from the first slot of the CV.
 
 /// \ingroup ff
 /// Types of collective variable.
@@ -131,9 +160,10 @@ struct Colvar
    real* sminv;      ///< One over the mass of each set.
 
    // CVs
-   int* type;      ///< ColvarType of each CV.
-   int (*iarg)[4]; ///< Integer arguments of each CV by type; DISTANCE: its sets A and B.
-   int (*slot)[2]; ///< First and one past the last gradient slot of each CV.
+   int* type;         ///< ColvarType of each CV.
+   int (*iarg)[4];    ///< Integer arguments of each CV by type; DISTANCE: its sets A and B.
+   int (*slot)[2];    ///< First and one past the last gradient slot of each CV.
+   real (*couple)[3]; ///< LAMBDA-CV restraint of each CV: K, qmin and qmax - qmin.
 
    // gradient slots
    int* gatom;      ///< Atom of each gradient slot, 0-based.
@@ -157,7 +187,8 @@ struct ColvarValue
 };
 
 /// \ingroup ff
-/// Parses the CV-ATOMS and CV keywords and sets up the device data.
+/// Sets up the LAMBDA-CV restraint (Potent::COLVAR): parses the CV-ATOMS, CV and
+/// LAMBDA-CV keywords and sets up the coupled CVs on the device.
 void colvarData(RcOp);
 /// \ingroup ff
 /// \return Number of collective variables.
@@ -169,11 +200,12 @@ int colvarFind(std::string name);
 /// \return Name of CV \c i, in upper case.
 std::string colvarName(int i);
 /// \ingroup ff
-/// Evaluates every CV on the device from the current coordinates.
-void colvarEval();
-/// \ingroup ff
-/// Copies CV \c i to the host after the device work queued so far.
+/// Copies CV \c i to the host, as the last energy call with the LAMBDA-CV
+/// restraint on evaluated it, after the device work queued so far.
 void colvarCopyOut(int i, ColvarValue& v);
+/// \ingroup ff
+/// Energy term of the LAMBDA-CV restraint.
+void ecolvar(int vers);
 }
 
 //====================================================================//
@@ -184,4 +216,12 @@ void colvarCopyOut(int i, ColvarValue& v);
 
 namespace tinker {
 TINKER_EXTERN Colvar colvar;
+
+TINKER_EXTERN EnergyBuffer ecv;
+TINKER_EXTERN VirialBuffer vir_ecv;
+TINKER_EXTERN grad_prec* decvx;
+TINKER_EXTERN grad_prec* decvy;
+TINKER_EXTERN grad_prec* decvz;
+TINKER_EXTERN energy_prec energy_ecv;
+TINKER_EXTERN virial_prec virial_ecv[9];
 }

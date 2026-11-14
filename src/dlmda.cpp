@@ -7,6 +7,7 @@
 #include "ff/efep.h"
 #include "ff/amoeba/induce.h"
 #include "ff/atom.h"
+#include "ff/colvar.h"
 #include "ff/egvop.h"
 #include "ff/elec.h"
 #include "ff/energy.h"
@@ -455,7 +456,7 @@ void LmdaBuffer::flush(int vers) const
    }
 }
 
-static LmdaBuffer lmda_channels[3];
+static LmdaBuffer lmda_channels[4];
 
 LmdaBuffer& lmdaChannel(LmdaTerm t)
 {
@@ -473,6 +474,9 @@ void lmdaChannelsData(RcOp op)
    if (use(Potent::VDW) or use(Potent::REPULS) or use(Potent::DISP))
       lmdaChannel(LmdaTerm::VDW)
          .manage(op, rc_flag, use_vdlmda, vdlmdaActive, &devdl_buf, &d2evdl2_buf, &devdl, &d2evdl2);
+   if (use(Potent::COLVAR))
+      lmdaChannel(LmdaTerm::COLVAR)
+         .manage(op, rc_flag, use_cvdlmda, cvdlmdaActive, &decvdl_buf, &d2ecvdl2_buf, &decvdl, &d2ecvdl2);
 }
 
 // E = w*E1 + (1-w)*E0 with the endpoint weight w = plam^epdtexp, so
@@ -507,6 +511,7 @@ void dlmda_mech()
    use_edlmda = (dlmda::use_edlmda != 0);
    use_pdlmda = (dlmda::use_pdlmda != 0);
    use_vdlmda = (dlmda::use_vdlmda != 0);
+   use_cvdlmda = (dlmda::use_cvdlmda != 0);
 
    use_epast = use_prst and use_pdlmda;
 
@@ -577,6 +582,8 @@ void dlmda_mech()
       dlmda::plmdainveps, dlmda::plmdaapmn, dlmda::plmdaapmrho, dlmda::qntplmda0, dlmda::qntplmda1};
    vlmdamap = {lmdamapFrom(dlmda::vlmdamap), dlmda::use_vlmdamap != 0, dlmda::vlmdaexp, dlmda::vlmdainvn,
       dlmda::vlmdainveps, dlmda::vlmdaapmn, dlmda::vlmdaapmrho, dlmda::qntvlmda0, dlmda::qntvlmda1};
+   cvlmdamap = {lmdamapFrom(dlmda::cvlmdamap), dlmda::use_cvlmdamap != 0, dlmda::cvlmdaexp, dlmda::cvlmdainvn,
+      dlmda::cvlmdainveps, dlmda::cvlmdaapmn, dlmda::cvlmdaapmrho, dlmda::qntcvlmda0, dlmda::qntcvlmda1};
 
    deldlmda = dlmda::deldlmda;
    dpldlmda = dlmda::dpldlmda;
@@ -584,6 +591,9 @@ void dlmda_mech()
    d2eldlmda2 = dlmda::d2eldlmda2;
    d2pldlmda2 = dlmda::d2pldlmda2;
    d2vldlmda2 = dlmda::d2vldlmda2;
+   cvlam = mutant::cvlambda;
+   dcvldlmda = dlmda::dcvldlmda;
+   d2cvldlmda2 = dlmda::d2cvldlmda2;
 
    relstage = relStageFrom(dlmda::relstage);
    for (int i = 0; i < 3; ++i) {
@@ -1498,6 +1508,11 @@ bool usePoleorig()
 
 void mapSubLambda()
 {
+   // the collective variable sub-lambda follows its own map, which no leg of
+   // the staged relative schedule takes over (dlambda.f:mapsublmda)
+   if (cvlmdamap.on)
+      setSub(mapOne(lambda, cvlmdamap), cvlam, dcvldlmda, d2cvldlmda2);
+
    if (use_rel) {
       mapRelStage(lambda);
       return;

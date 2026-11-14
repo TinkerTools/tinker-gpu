@@ -66,17 +66,19 @@ enum class LambdaVariable
 
 struct ScopedDlmdaOff
 {
-   bool saved, saved_e, saved_p, saved_v;
+   bool saved, saved_e, saved_p, saved_v, saved_cv;
    ScopedDlmdaOff()
       : saved(use_dlmda)
       , saved_e(use_edlmda)
       , saved_p(use_pdlmda)
       , saved_v(use_vdlmda)
+      , saved_cv(use_cvdlmda)
    {
       use_dlmda = false;
       use_edlmda = false;
       use_pdlmda = false;
       use_vdlmda = false;
+      use_cvdlmda = false;
    }
    ~ScopedDlmdaOff()
    {
@@ -84,6 +86,7 @@ struct ScopedDlmdaOff
       use_edlmda = saved_e;
       use_pdlmda = saved_p;
       use_vdlmda = saved_v;
+      use_cvdlmda = saved_cv;
    }
 };
 

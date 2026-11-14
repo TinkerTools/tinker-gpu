@@ -241,6 +241,8 @@ const TimeScaleConfig& respaTSConfig()
       {"etortor", fast},
       {"egeom", fast},
 
+      {"ecolvar", slow},
+
       {"evalence", fast},
 
       {"evdw", slow},
