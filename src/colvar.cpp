@@ -67,6 +67,26 @@ int findSet(const std::string& name)
    return -1;
 }
 
+// the whole word as a number; a word with anything after the number, as in
+// "10-12", cannot be read (std::invalid_argument)
+int wholeInt(const std::string& w)
+{
+   size_t len;
+   const int v = std::stoi(w, &len);
+   if (len != w.size())
+      throw std::invalid_argument(w);
+   return v;
+}
+
+double wholeReal(const std::string& w)
+{
+   size_t len;
+   const double v = std::stod(w, &len);
+   if (len != w.size())
+      throw std::invalid_argument(w);
+   return v;
+}
+
 // the words of key line i, commas taken as blanks
 std::vector<std::string> keyWords(int i)
 {
@@ -81,8 +101,8 @@ void readAtoms(const std::vector<std::string>& vs, size_t j0, const std::string&
 {
    try {
       for (size_t j = j0; j < vs.size(); ++j) {
-         const int first = std::stoi(vs[j]);
-         const int last = (first < 0 and j + 1 < vs.size()) ? std::stoi(vs[++j]) : std::abs(first);
+         const int first = wholeInt(vs[j]);
+         const int last = (first < 0 and j + 1 < vs.size()) ? wholeInt(vs[++j]) : std::abs(first);
          if (last < std::abs(first))
             TINKER_THROW(format("CV-ATOMS  --  Atom Range %d to %d of Set %s Is Empty", std::abs(first), last, set));
          for (int k = std::abs(first); k <= last; ++k) {
@@ -190,9 +210,9 @@ void parseCouples()
       if (c.cv < 0)
          TINKER_THROW(format("LAMBDA-CV  --  CV %s Is Not Defined by CV", name));
       try {
-         c.k = std::stod(vs[2]);
-         c.qmin = std::stod(vs[3]);
-         c.qmax = std::stod(vs[4]);
+         c.k = wholeReal(vs[2]);
+         c.qmin = wholeReal(vs[3]);
+         c.qmax = wholeReal(vs[4]);
       } catch (const std::logic_error&) {
          TINKER_THROW(format("LAMBDA-CV  --  Cannot Read the Force Constant and Range of CV %s", name));
       }
@@ -316,6 +336,9 @@ void colvarData(RcOp op)
          parseCvs();
          parseCouples();
          keepCoupled();
+         // the term is on only with a LAMBDA-CV line (mutate.f)
+         if (s_cv.empty())
+            TINKER_THROW("LAMBDA-CV  --  The CV Restraint Is On with No LAMBDA-CV Line");
          // the centers of the sets weigh the atoms by their masses on the device
          if (not(rc_flag & calc::mass))
             TINKER_THROW("CV  --  This Program Does Not Set Up the Atomic Masses the CVs Need");

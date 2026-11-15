@@ -179,6 +179,57 @@ TEST_CASE("BAR-mode1-logs-nonperiodic", "[ff][bar][L5]")
    REQUIRE(got[0].u1[0] == got[1].u0[0]);
 }
 
+TEST_CASE("Colvar-lambda-bar", "[ff][bar][colvar][L2]")
+{
+   // BAR window energies with a LAMBDA-CV restraint and no mutated atoms: two
+   // NaCl trajectories under the restraint alone at lambda 0.4 and 0.6, each
+   // frame at its own distance, give K (r - q0(L))^2 for every frame in both
+   // states, q0 = qmin + L (qmax - qmin).
+   TestLmdaFlagReset lmdaReset;
+   TestFile fprm(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
+   auto frame = [](double r) {
+      return format("     2  NaCl\n"
+                    "     1  Na+    0.000000    0.000000    0.000000     7\n"
+                    "     2  Cl-    %9.6f    0.000000    0.000000    15\n",
+         r);
+   };
+   const double ra[2] = {2.2, 3.0}, rb[2] = {2.6, 3.4};
+   TestFile farca("", "bar-cv-a.arc", frame(ra[0]) + frame(ra[1]));
+   TestFile farcb("", "bar-cv-b.arc", frame(rb[0]) + frame(rb[1]));
+   const std::string key = "parameters amoeba09\ncvterm only\ncv-atoms na 1\ncv-atoms cl 2\n"
+                           "cv r distance na cl\nlambda-cv r 10.0 2.0 4.0\n";
+   TestFile fkeya("", "bar-cv-a.key", key + "lambda 0.4\n");
+   TestFile fkeyb("", "bar-cv-b.key", key + "lambda 0.6\n");
+   const std::string barfile = "bar-cv-a.bar";
+   std::remove(barfile.c_str());
+   TestRemoveFileOnExit rmbar(barfile);
+
+   const char* argv[] = {"dummy", "1", "bar-cv-a.arc", "298", "bar-cv-b.arc", "298", "N"};
+   const int argc = 7;
+   {
+      FortranRuntimeScope scope(argc, argv);
+      xBar(argc, const_cast<char**>(argv));
+   }
+
+   auto expect = [](double r, double l) {
+      const double d = r - (2.0 + 2.0 * l);
+      return 10.0 * d * d;
+   };
+   auto got = readBar(barfile);
+   REQUIRE(got.size() == 2);
+   const double eps = 1.0e-3; // the file prints four decimals
+   for (int k = 0; k < 2; ++k) {
+      INFO(k);
+      const double* r = k == 0 ? ra : rb;
+      REQUIRE(got[k].nfrm == 2);
+      for (int i = 0; i < 2; ++i) {
+         INFO(i);
+         REQUIRE(got[k].u0[i] == Approx(expect(r[i], 0.4)).margin(eps));
+         REQUIRE(got[k].u1[i] == Approx(expect(r[i], 0.6)).margin(eps));
+      }
+   }
+}
+
 #endif
 
 // "bar" mode 2 reads a BAR file and evaluates no energies, so the cases below

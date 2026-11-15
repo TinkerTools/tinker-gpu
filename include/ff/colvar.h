@@ -13,10 +13,13 @@ namespace tinker {
 /// positions. The keywords define named atom sets and named CVs on them:
 ///
 /// ```
-/// cv-atoms  na  1           # atom set "na"; "-i j" is the range i to j,
-/// cv-atoms  cl  2           #    and lines with the same name append
+/// cv-atoms  na  1
+/// cv-atoms  cl  2
 /// cv        r   distance  na  cl
 /// ```
+///
+/// Each CV-ATOMS line adds atoms to the named set; "-i j" is the range i to j,
+/// and lines with the same name append. Key lines take no trailing comments.
 ///
 /// Only the CVs a LAMBDA-CV line couples to lambda are set up and evaluated,
 /// with the atom sets they use; any other CV line is read and checked, then
@@ -39,14 +42,17 @@ namespace tinker {
 /// ### The data, by example
 ///
 /// ```
-/// cv-atoms  lig   10 11 12      # three ligand atoms
-/// cv-atoms  pock  3 7           # two pocket atoms, not contiguous
-/// cv-atoms  na    20            # an ion
+/// cv-atoms  lig   10 11 12
+/// cv-atoms  pock  3 7
+/// cv-atoms  na    20
 /// cv  d1  distance  lig  pock
-/// cv  d2  distance  na   lig    # lig is used by two CVs
+/// cv  d2  distance  na   lig
 /// lambda-cv  d1  10.0  2.5  8.0
 /// lambda-cv  d2   5.0  3.0  6.0
 /// ```
+///
+/// lig holds three ligand atoms, pock two pocket atoms that are not
+/// contiguous, and na an ion; lig is used by both CVs.
 ///
 /// The arrays store atoms 0-based, so input atom 10 is stored as 9; below, x9
 /// and m9 are the position and mass of stored atom 9. The sets are numbered in
@@ -118,23 +124,36 @@ namespace tinker {
 /// ### The LAMBDA-CV restraint
 ///
 /// ```
-/// lambda-cv  d1  10.0  2.5  8.0      # CV, K, qmin, qmax
+/// lambda-cv  d1  10.0  2.5  8.0
 /// ```
-/// couples a CV to the main lambda with a moving harmonic restraint, one line
-/// for each CV coupled, all of them following the same sub-lambda; a term
-/// that CVTERM switches like the others (Potent::COLVAR), in the
-/// Tinker convention of the RESTRAIN keywords, no factor of one half:
-/// E = K (q - q0)^2 with q0 = qmin + g (qmax - qmin), where g is the collective
-/// variable sub-lambda: it follows the main lambda by CV-LMDA-MAP, or by the
-/// identity when no map is named at all, and is held at CV-LAMBDA when other
-/// maps are named but not this one. It needs LAMBDA, and applies at the lambda
-/// of the moment with or without LAMBDA-DERIV. With dq = qmax - qmin and
-/// dq0 = g' dq, its lambda derivatives are dE/dL = -2K (q - q0) dq0 and
-/// d2E/dL2 = 2K dq0^2 - 2K (q - q0) g'' dq, the derivative of dE/dL over the
-/// atoms is -2K dq0 dq/dx, and its virial is -2K dq0 W; they go to their own
-/// channel, LmdaTerm::COLVAR. The slot kernel adds the restraint as it writes each slot:
-/// the gradient of the atom of every slot, and the energy, virial and lambda
-/// derivatives from the first slot of the CV.
+/// (the CV, K, qmin and qmax) couples a CV to the main lambda with a moving
+/// harmonic restraint, one line for each CV coupled, all of them following the
+/// same sub-lambda; a term that CVTERM switches like the others
+/// (Potent::COLVAR), in the Tinker convention of the RESTRAIN keywords, no
+/// factor of one half: E = K (q - q0)^2 with q0 = qmin + g (qmax - qmin), where
+/// g is the collective variable sub-lambda: it follows the main lambda by
+/// CV-LMDA-MAP, or by the identity when no map is named at all, and is held at
+/// CV-LAMBDA when other maps are named but not this one. It needs LAMBDA, and
+/// applies at the lambda of the moment with or without LAMBDA-DERIV. Its
+/// gradient is 2K (q - q0) dq/dx and its virial 2K (q - q0) W. With
+/// dq = qmax - qmin and dq0 = g' dq, its lambda derivatives are
+/// dE/dL = -2K (q - q0) dq0 and d2E/dL2 = 2K dq0^2 - 2K (q - q0) g'' dq, the
+/// derivative of dE/dL over the atoms is -2K dq0 dq/dx, and that of the virial
+/// -2K dq0 W; the lambda derivatives go to their own channel,
+/// LmdaTerm::COLVAR. The slot kernel adds the restraint as it writes each
+/// slot: the gradient of the atom of every slot, and the energy, virial and
+/// lambda derivatives from the first slot of the CV.
+///
+/// Every lambda method sees the restraint through the energy at its lambda:
+/// OST, metadynamics and ABF, Monte Carlo lambda moves, TI, FEP and BAR. What
+/// they find is the free energy of moving the restraint center, G(L) =
+/// -kT ln int exp(-E/kT) dx, with the volume element of q in it; for a
+/// distance, the r^2 of 4 pi r^2 dr puts <q> above q0. It becomes the PMF
+/// -kT ln P(q) only once the restraint is taken out by reweighting. A stiff K
+/// makes E(L) steep, so keep a lambda step, LAMBDA-MC-MOVE or that of the
+/// lambda particle, small enough that K (dq dL)^2 stays near kT. The OST
+/// estimate reweights the cells of its bias and needs an HBIAS large enough to
+/// flatten them.
 
 /// \ingroup ff
 /// Types of collective variable.

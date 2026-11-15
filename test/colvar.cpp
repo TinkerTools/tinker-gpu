@@ -1,8 +1,10 @@
 #include "ff/colvar.h"
 #include "ff/atom.h"
 #include "ff/dlmda.h"
+#include "ff/efep.h"
 #include "ff/energy.h"
 #include "ff/eost.h"
+#include "ff/modamoeba.h"
 #include "ff/potent.h"
 #include "tool/darray.h"
 #include "tool/xtesthelper.h"
@@ -10,14 +12,18 @@
 #include "test.h"
 #include "testrt.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
+#include <sstream>
 #include <string>
 #include <tinker/detail/atomid.hh>
+#include <tinker/detail/bath.hh>
 #include <tinker/detail/molcul.hh>
+#include <tinker/detail/mutant.hh>
 #include <vector>
 
 using namespace tinker;
@@ -133,8 +139,8 @@ void compareCv(const char* name, const Ref& f, double eps)
       REQUIRE(v.w[k] == Approx(f.w[k]).margin(eps));
 }
 
-// The LAMBDA-CV term evaluates every CV in each energy call, coupled or not,
-// so the keys couple one CV to lambda and read the others in the same pass.
+// Only the CVs a LAMBDA-CV line couples are set up, so the keys couple every
+// CV a case reads back.
 const int kUsage = calc::xyz | calc::mass | calc::vmask;
 }
 
@@ -276,7 +282,8 @@ TEST_CASE("Colvar-keys", "[ff][colvar][L1]")
    const char* argv[] = {"dummy", kXyz};
 
    // the CV lines are read only with the restraint on: CVTERM and a LAMBDA-CV
-   // line, which comes after them and so after their errors
+   // line; the sets and CVs are parsed before the couplings, wherever the
+   // lines are, so their errors come first
    const std::string on = "parameters amoeba09\ncvterm only\nlambda 0.5\nlambda-cv r 1.0 0.0 1.0\n";
    auto refused = [&](const std::string& keys, const char* message) {
       INFO(keys);
@@ -299,6 +306,7 @@ TEST_CASE("Colvar-keys", "[ff][colvar][L1]")
    refused("cv-atoms na 1\ncv-atoms na 1\n", "Atom 1 Is Listed Twice in Set NA");
    refused("cv-atoms na 3\n", "Atom 3 of Set NA Is Out of Range");
    refused("cv-atoms na 0\n", "Atom 0 of Set NA Is Out of Range");
+   refused("cv-atoms na 1-2\n", "Cannot Read the Atoms of Set NA");
    refused("cv-atoms na x\n", "Cannot Read the Atoms of Set NA");
    refused("cv-atoms na -2 1\n", "Atom Range 2 to 1 of Set NA Is Empty");
 
@@ -563,6 +571,7 @@ TEST_CASE("Colvar-lambda-keys", "[ff][colvar][L1]")
    refused("lambda 0.5\nlambda-cv q 10.0 2.0 4.0\n", "CV Q Is Not Defined by CV");
    refused("lambda 0.5\nlambda-cv r 10.0 2.0\n", "Give the CV, the Force Constant, and qmin and qmax");
    refused("lambda 0.5\nlambda-cv r ten 2.0 4.0\n", "Cannot Read the Force Constant and Range of CV R");
+   refused("lambda 0.5\nlambda-cv r 10.0 2.0 4.0x\n", "Cannot Read the Force Constant and Range of CV R");
    refused("lambda 0.5\nlambda-cv r 0.0 2.0 4.0\n", "The Force Constant of CV R Must Be Positive");
    refused("lambda 0.5\nlambda-cv r 10.0 2.0 2.0\n", "CV R Needs Different qmin and qmax");
    refused("lambda 0.5\nlambda-cv r 10.0 2.0 4.0\nlambda-cv R 5.0 2.0 4.0\n", "CV R Is Coupled Twice");
@@ -839,21 +848,29 @@ TEST_CASE("Colvar-lambda-ost", "[ff][colvar][L2]")
 
 TEST_CASE("Colvar-lambda-dynamic", "[ff][colvar][L3]")
 {
-   // 200 steps of OST, metadynamics and ABF dynamics of the three waters,
-   // driven by the restraint alone, run to the end: no fatal stop (a Fortran
-   // stop exits 0, so read the log), a trajectory frame at each 0.1 ps, and a
-   // bias history
-   const std::string files = TINKER9_DIRSTR "/test/file/";
-   TestFile fpr(files + "commit_6fe8e913/water03.prm");
-   TestFile fxy("", "cvdyn.xyz", kWater3);
+   // 200 steps of stochastic dynamics of NaCl, driven by the restraint alone,
+   // under each lambda method: OST, metadynamics and ABF, then TI and FEP over
+   // two windows. Stochastic dynamics removes no motion of the center or
+   // rotation, so the pair keeps its six degrees of freedom. Each run ends
+   // cleanly (a Fortran stop exits 0, so read the log), with a frame at each
+   // 0.1 ps and the file of its method; the TI blocks are at the windows.
+   TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
+   TestFile fxy(TINKER9_DIRSTR "/test/file/nacl/nacl1.xyz", "cvdyn.xyz");
    TestRemoveFileOnExit farc("cvdyn.arc"), fdyn("cvdyn.dyn"), flog("cvdyn.log");
-   for (const char* mode : {"ost", "meta", "abf"}) {
+   const std::string windows = "lambda-window 0.4\nlambda-window 0.6\nlambda-eqratio 0.5\n";
+   const std::pair<const char*, std::string> modes[] = {{"ost", ""}, {"meta", ""}, {"abf", ""},
+      {"ti", windows + "ti-nstepavg 10\n"}, {"fep", windows}};
+   for (const auto& m : modes) {
+      const std::string mode = m.first;
       INFO(mode);
-      const std::string hist = std::string("cvdyn.") + mode;
+      const std::string hist = "cvdyn." + mode;
+      std::remove(hist.c_str());
       TestRemoveFileOnExit fhist(hist);
       TestFile fke("", "cvdyn.key",
-         water3Key(std::string("lambda 0.5\nlambda-mode ") + mode
-            + "\nlambda-interval 10\nlambda-cv d1 5.0 1.0 6.0\nintegrator verlet\nrandomseed 1\n" + kMap));
+         naclKey("lambda 0.5\nlambda-mode " + mode
+            + "\nlambda-interval 10\nlambda-cv r 10.0 2.0 4.0\n"
+              "integrator stochastic\nrandomseed 1\n"
+            + m.second + kMap));
       const std::string cmd = std::string(TINKER9_BINDIRSTR)
          + "/tinker9 dynamic cvdyn.xyz 200 1.0 0.1 2 298 > cvdyn.log 2>&1";
       const int rc = std::system(cmd.c_str());
@@ -866,8 +883,31 @@ TEST_CASE("Colvar-lambda-dynamic", "[ff][colvar][L3]")
       int lines = 0;
       for (std::string line; std::getline(farcin, line);)
          ++lines;
-      REQUIRE(lines == 2 * 11); // two frames of a header, a box line and nine atoms
-      REQUIRE(std::ifstream(hist).good());
+      REQUIRE(lines == 2 * 3); // two frames of a header and two atoms
+      std::ifstream fh(hist);
+      REQUIRE(fh.good());
+      if (mode == "ti") {
+         // the rows after the column labels: index, lambda, dE/dL, deviation
+         int nblock = 0;
+         bool rows = false;
+         for (std::string line; std::getline(fh, line);) {
+            if (line.find("Index") != std::string::npos) {
+               rows = true;
+               continue;
+            }
+            std::istringstream row(line);
+            int i;
+            double l, d, sd;
+            if (rows and (row >> i >> l >> d >> sd)) {
+               INFO(line);
+               REQUIRE(i == ++nblock);
+               REQUIRE((l == 0.4 or l == 0.6));
+               REQUIRE(std::isfinite(d));
+               REQUIRE(d != 0);
+            }
+         }
+         REQUIRE(nblock == 10); // five blocks of ten steps in each window
+      }
       std::remove("cvdyn.arc");
       std::remove("cvdyn.dyn");
    }
@@ -987,5 +1027,387 @@ TEST_CASE("Colvar-lambda-multi", "[ff][colvar][L2]")
    copyGradientFlat(calc::grad, g);
    requireNear(g, ge, eps);
    session.end();
+}
+
+namespace {
+// the bath that testMdInit sets, put back to none when the case ends
+struct BathReset
+{
+   ~BathReset()
+   {
+      bath::kelvin = 0;
+      bath::atmsph = 0;
+      bath::isothermal = 0;
+      bath::isobaric = 0;
+   }
+};
+
+// the bias inside esum for the method in use (eost.h)
+double biasInEsum()
+{
+   if (use_meta)
+      return bgbias;
+   if (use_abf)
+      return -bostlmda;
+   return bgbias - bostlmda;
+}
+
+template <class T>
+std::vector<T> grabDev(int len, const T* dev)
+{
+   std::vector<T> v(len);
+   darray::copyout(g::q0, len, v.data(), dev);
+   waitFor(g::q0);
+   return v;
+}
+
+std::vector<real> grabUind()
+{
+   std::vector<real> v(3 * n);
+   darray::copyout(g::q0, n, reinterpret_cast<real(*)[3]>(v.data()), uind);
+   waitFor(g::q0);
+   return v;
+}
+
+// what a lambda move turned down puts back, bit for bit; the energies of the
+// terms under analysis are not among them
+struct McState
+{
+   double lmda, g, g1, g2;
+   energy_prec dl[7];
+   std::vector<virial_prec> v;
+   std::vector<grad_prec> gx, gy, gz;
+
+   McState()
+      : lmda(lambda)
+      , g(cvlam)
+      , g1(dcvldlmda)
+      , g2(d2cvldlmda2)
+      , dl{dedl, d2edl2, decvdl, d2ecvdl2, demdl, depdl, devdl}
+      , v(vir, vir + 9)
+      , gx(grabDev(n, tinker::gx))
+      , gy(grabDev(n, tinker::gy))
+      , gz(grabDev(n, tinker::gz))
+   {}
+
+   void requireSame(const McState& o) const
+   {
+      REQUIRE(lmda == o.lmda);
+      REQUIRE(g == o.g);
+      REQUIRE(g1 == o.g1);
+      REQUIRE(g2 == o.g2);
+      for (int k = 0; k < 7; ++k) {
+         INFO(k);
+         REQUIRE(dl[k] == o.dl[k]);
+      }
+      REQUIRE(v == o.v);
+      REQUIRE(gx == o.gx);
+      REQUIRE(gy == o.gy);
+      REQUIRE(gz == o.gz);
+   }
+};
+
+// a lambda Monte Carlo move tried at every step of the adaptive bias
+// method mode; stochastic dynamics keeps every degree of freedom of a pair
+std::string mcKey(const char* mode)
+{
+   return std::string("lambda 0.5\nlambda-mode ") + mode
+      + "\nlambda-propagate mc\nlambda-mc-trial 1\nlambda-mc-move 0.05\nlambda-interval 4\n"
+        "integrator stochastic\n";
+}
+}
+
+TEST_CASE("Colvar-lambda-mc", "[ff][colvar][L2]")
+{
+   // A lambda Monte Carlo move with the restraint alone and no bias history.
+   // A step energy far below any trial turns the move down and leaves the step
+   // as it was; far above, the move is taken, and the energy it keeps is that
+   // of the restraint at the new lambda, as a fresh energy call finds it.
+   TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
+   TestFile fxy(TINKER9_DIRSTR "/test/file/nacl/nacl1.xyz", kXyz);
+   const char* argv[] = {"dummy", kXyz};
+   // without analysis, as in dynamics, and with it, where the channel of the
+   // restraint keeps its own sums for the turned-down move to put back
+   for (int rc : {kRcPlain, kUsage})
+      for (const char* mode : {"meta", "ost"}) {
+         INFO(mode << " analysis " << (rc == kUsage));
+         BathReset bathReset;
+         TestLmdaFlagReset lmdaReset;
+         TestLmdaFlagGuard guard;
+         TestFile fke("", kKey, naclKey(mcKey(mode) + "lambda-cv r 10.0 2.0 4.0\n" + kMap));
+         TestSession session(2, argv);
+         testMdInit(298., 0.);
+         rc_flag = rc;
+         session.init();
+         REQUIRE(use_lmdamc);
+         REQUIRE((use_ost or use_meta));
+
+         // the step: energy, forces, virial and lambda derivatives at 0.5
+         const double eps = 1.0e-4;
+         energy(calc::v1);
+         COMPARE_REALS(esum - biasInEsum(), expectCouple(kNacl, 2.2, 0.5).e, eps);
+         if (rc == kUsage)
+            COMPARE_REALS(decvdl, expectCouple(kNacl, 2.2, 0.5).dedl, eps);
+         const McState before;
+
+         esum = -1.0e30;
+         lmdaMonte(1);
+         REQUIRE(nlmdamctry == 1);
+         REQUIRE(nlmdamcacc == 0);
+         REQUIRE(esum == -1.0e30);
+         McState().requireSame(before);
+
+         esum = 1.0e30;
+         lmdaMonte(1);
+         REQUIRE(nlmdamctry == 2);
+         REQUIRE(nlmdamcacc == 1);
+         REQUIRE(lambda != 0.5);
+         REQUIRE(std::fabs(lambda - 0.5) <= 0.05);
+         REQUIRE(cvlam == Approx(lambda).epsilon(1.0e-12));
+         const auto x = expectCouple(kNacl, 2.2, lambda);
+         const double eacc = esum - biasInEsum();
+         COMPARE_REALS(eacc, x.e, eps);
+         energy(calc::v1);
+         COMPARE_REALS(esum - biasInEsum(), eacc, eps);
+         COMPARE_REALS(dedl, x.dedl, eps);
+         session.end();
+      }
+}
+
+TEST_CASE("Colvar-lambda-fep", "[ff][colvar][L2]")
+{
+   // The FEP trial energies at the windows are those of the restraint at the
+   // window lambdas, and the native lambda, that of the first window, comes
+   // back.
+   TestLmdaFlagReset lmdaReset;
+   TestLmdaFlagGuard guard;
+   TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
+   TestFile fxy(TINKER9_DIRSTR "/test/file/nacl/nacl1.xyz", kXyz);
+   TestFile fke("", kKey,
+      naclKey("lambda 0.3\nlambda-mode fep\nlambda-window 0.3\nlambda-window 0.5\nlambda-window 0.7\n"
+              "lambda-cv r 10.0 2.0 4.0\n"
+         + kMap));
+   const char* argv[] = {"dummy", kXyz};
+   TestSession session(2, argv);
+   rc_flag = kRcPlain;
+   session.init();
+   REQUIRE(use_fep);
+   REQUIRE(lambda == 0.3);
+
+   const double ltrial[2] = {0.5, 0.7};
+   double etrial[2], enative;
+   efepTrial(2, ltrial, etrial, enative);
+   const double eps = 1.0e-4;
+   COMPARE_REALS(etrial[0], expectCouple(kNacl, 2.2, 0.5).e, eps);
+   COMPARE_REALS(etrial[1], expectCouple(kNacl, 2.2, 0.7).e, eps);
+   COMPARE_REALS(enative, expectCouple(kNacl, 2.2, 0.3).e, eps);
+   REQUIRE(lambda == 0.3);
+   REQUIRE(cvlam == 0.3);
+   session.end();
+}
+
+// The whole force field needs a neighbor list, which an OpenACC build serves
+// from the ACC platform, where lambda dynamics is refused (dlmdaData2).
+#if TINKER_GPULANG_CUDA
+TEST_CASE("Colvar-lambda-full", "[ff][colvar][L2]")
+{
+   // A geometric lambda with no mutated atoms and the whole AMOEBA water field
+   // on, multipoles and mutual polarization with the predictor: next to the
+   // same system with no lambda, the restraint adds just its own energy,
+   // forces and virial, and the only lambda derivative is its own. A FEP
+   // trial and a lambda move turned down leave the step as it was. The
+   // analysis buffers keep the lambda derivative of each term apart.
+   TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/water03.prm");
+   TestFile fxy("", kXyz, kWater3);
+   const char* argv[] = {"dummy", kXyz};
+   const std::string base = "parameters water03\na-axis 18.643\nvdw-cutoff 7.0\nmpole-cutoff 6.5\n"
+                            "polarization mutual\npolar-eps 0.00001\npolar-predict aspc\n"
+                            "cv-atoms pair 1\ncv-atoms pair 4,-5 6\ncv-atoms w3 -7 9\ncv d1 distance pair w3\n";
+
+   double e0;
+   std::vector<double> g0;
+   std::vector<double> v0(9);
+   {
+      TestFile fke("", kKey, base);
+      TestSession session(2, argv);
+      rc_flag = kUsage;
+      session.init();
+      REQUIRE_FALSE(use(Potent::COLVAR));
+      REQUIRE(use(Potent::POLAR));
+      energy(calc::v1);
+      e0 = esum;
+      copyGradientFlat(calc::grad, g0);
+      for (int k = 0; k < 9; ++k)
+         v0[k] = vir[k];
+      session.end();
+   }
+
+   BathReset bathReset;
+   TestLmdaFlagReset lmdaReset;
+   TestLmdaFlagGuard guard;
+   TestFile fke("", kKey, base + mcKey("meta") + "lambda-deriv\nlambda-cv d1 5.0 1.0 6.0\n" + kMap);
+   TestSession session(2, argv);
+   testMdInit(298., 0.);
+   rc_flag = kUsage;
+   session.init();
+   REQUIRE(mutant::nmut == 0);
+   REQUIRE(use(Potent::COLVAR));
+   REQUIRE(use(Potent::POLAR));
+
+   energy(calc::v1);
+   const double estep = esum;
+   const auto v = [] {
+      ColvarValue c;
+      colvarCopyOut(0, c);
+      return c;
+   }();
+   const auto x = expectCouple(kW3, v.q, 0.5);
+   const double eps = 1.0e-4;
+   COMPARE_REALS(esum - biasInEsum() - e0, x.e, eps);
+   std::vector<double> g;
+   copyGradientFlat(calc::grad, g);
+   auto ge = slotGradient(0, x.de);
+   for (size_t k = 0; k < ge.size(); ++k)
+      ge[k] += g0[k];
+   requireNear(g, ge, eps);
+   for (int k = 0; k < 9; ++k) {
+      INFO(k);
+      REQUIRE(vir[k] - v0[k] == Approx(x.de * v.w[k]).margin(eps));
+   }
+   COMPARE_REALS(dedl, x.dedl, eps);
+   COMPARE_REALS(decvdl, x.dedl, eps);
+   REQUIRE(demdl == 0);
+   REQUIRE(depdl == 0);
+   REQUIRE(devdl == 0);
+
+   // a FEP trial at another lambda: the restraint alone changes
+   const auto u0 = grabUind();
+   const double ltrial = 0.8;
+   double etrial, enative;
+   efepTrial(1, &ltrial, &etrial, enative);
+   COMPARE_REALS(etrial - biasInEsum() - e0, expectCouple(kW3, v.q, 0.8).e, eps);
+   COMPARE_REALS(enative, estep, eps);
+   REQUIRE(lambda == 0.5);
+   const auto u1 = grabUind();
+   for (size_t k = 0; k < u0.size(); ++k) {
+      INFO(k);
+      REQUIRE(u1[k] == Approx(u0[k]).margin(1.0e-5));
+   }
+
+   // a lambda move turned down puts back the step
+   energy(calc::v1);
+   const McState step;
+   const auto u2 = grabUind();
+   esum = -1.0e30;
+   lmdaMonte(1);
+   REQUIRE(nlmdamcacc == 0);
+   McState().requireSame(step);
+   REQUIRE(grabUind() == u2);
+   session.end();
+}
+#endif
+
+namespace {
+// the numbers of the rows that follow the line holding label in file, with
+// Fortran D exponents, up to the first row of another length or a blank line
+std::vector<std::vector<double>> readRows(const std::string& file, const std::string& label)
+{
+   std::ifstream fin(file);
+   std::vector<std::vector<double>> rows;
+   bool on = false;
+   for (std::string line; std::getline(fin, line);) {
+      if (not on) {
+         on = line.find(label) != std::string::npos;
+         continue;
+      }
+      std::replace(line.begin(), line.end(), 'D', 'E');
+      std::istringstream ss(line);
+      std::vector<double> row;
+      for (double v; ss >> v;)
+         row.push_back(v);
+      if (row.empty() or (not rows.empty() and row.size() != rows[0].size()))
+         break;
+      rows.push_back(row);
+   }
+   return rows;
+}
+}
+
+TEST_CASE("Colvar-lambda-trajectory", "[ff][colvar][L2]")
+{
+   // 20 steps of ABF and OST stochastic dynamics of NaCl under the restraint
+   // alone, with a fixed random seed, against stored values: the positions,
+   // the lambda particle (lambda, theta and its velocity) and the dU/dL that
+   // the history keeps at each interval. The restraint reaches the forces, the
+   // lambda derivative, the bias and the lambda particle in these few steps;
+   // a change in any of them moves the numbers. The stored values come from
+   // this code, which the exact free energy of the pair checked: a long TI,
+   // ABF and OST run reproduced -kT ln int 4 pi r^2 exp(-E/kT) dr (2026-11-14).
+   // The mixed and double precision builds agree to about 1e-8 in the
+   // positions and 1e-5 in dU/dL.
+   TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
+   TestFile fxy(TINKER9_DIRSTR "/test/file/nacl/nacl1.xyz", "cvtraj.xyz");
+   TestRemoveFileOnExit farc("cvtraj.arc"), fdyn("cvtraj.dyn"), flog("cvtraj.log");
+   struct Ref
+   {
+      const char* mode;
+      double pos[6];
+      double lmda[3];    // lambda, theta and its velocity
+      double dudl[2][2]; // lambda and dU/dL at steps 10 and 20
+   };
+   const Ref refs[] = {
+      {"abf",
+         {0.3147124517834309e-02, 0.1479797042612912e+00, 0.2011461538417913e+00, 0.2418175651593189e+01,
+            -0.1881702318345878e+00, -0.1049676748591733e-01},
+         {0.3000099142266247e+00, 0.4712634147344069e+00, 0.2276486546435835e-02},
+         {{0.3000005951572286e+00, 0.1381219625473022e+02}, {0.3000099142266247e+00, 0.6981115341186523e+01}}},
+      {"ost",
+         {0.3142616638218754e-02, 0.1479800635908273e+00, 0.2011464132770521e+00, 0.2418178574645047e+01,
+            -0.1881704648616453e+00, -0.1049693570574691e-01},
+         {0.3000097899701811e+00, 0.4712632195583983e+00, 0.2227980236963097e-02},
+         {{0.3000005951572286e+00, 0.1381219625473022e+02}, {0.3000097899701811e+00, 0.6980845928192139e+01}}},
+   };
+   for (const auto& r : refs) {
+      const std::string mode = r.mode, hist = "cvtraj." + mode;
+      INFO(mode);
+      std::remove(hist.c_str());
+      std::remove("cvtraj.dyn");
+      std::remove("cvtraj.arc");
+      TestRemoveFileOnExit fhist(hist);
+      TestFile fke("", "cvtraj.key",
+         naclKey("lambda-cv r 10.0 2.0 4.0\n" + kMap
+            + "integrator stochastic\nfriction 10.0\nrandomseed 7\nlambda 0.3\nlambda-mode " + mode
+            + "\nlambda-dt 0.002\nlambda-interval 10\n"));
+      const std::string cmd = std::string(TINKER9_BINDIRSTR)
+         + "/tinker9 dynamic cvtraj.xyz 20 2.0 0.04 2 298 > cvtraj.log 2>&1";
+      const int rc = std::system(cmd.c_str());
+      std::ifstream log("cvtraj.log");
+      const std::string text((std::istreambuf_iterator<char>(log)), std::istreambuf_iterator<char>());
+      INFO(text);
+      REQUIRE(rc == 0);
+      REQUIRE(text.find("Unable to Continue") == std::string::npos);
+
+      const auto pos = readRows("cvtraj.dyn", "Current Atomic Positions");
+      REQUIRE(pos.size() == 2);
+      for (int k = 0; k < 6; ++k) {
+         INFO(k);
+         REQUIRE(pos[k / 3].at(k % 3) == Approx(r.pos[k]).margin(1.0e-5));
+      }
+      const auto lst = readRows(hist, "Lambda State");
+      REQUIRE(lst.size() == 1);
+      REQUIRE(lst[0].at(0) == Approx(r.lmda[0]).margin(1.0e-8));
+      REQUIRE(lst[0].at(1) == Approx(r.lmda[1]).margin(1.0e-8));
+      REQUIRE(lst[0].at(2) == Approx(r.lmda[2]).margin(1.0e-6));
+      // ABF rows: step, lambda, dU/dL; OST rows: step, seed, lambda, dU/dL, ...
+      const auto rows = readRows(hist, mode == "abf" ? "Sample History" : "Gaussian History");
+      REQUIRE(rows.size() == 2);
+      const int c = mode == "abf" ? 1 : 2;
+      for (int i = 0; i < 2; ++i) {
+         INFO(i);
+         REQUIRE(rows[i].at(0) == 10 * (i + 1));
+         REQUIRE(rows[i].at(c) == Approx(r.dudl[i][0]).margin(1.0e-8));
+         REQUIRE(rows[i].at(c + 1) == Approx(r.dudl[i][1]).margin(1.0e-3));
+      }
+   }
 }
 #endif
