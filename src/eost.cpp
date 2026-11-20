@@ -904,6 +904,24 @@ void eostBias(int vers)
          vir[k] += bdgdfl * dvirdl[k];
 }
 
+// ostVBias -- the orthogonal space tempering bias energy at the current lambda
+// and unbiased dU/dlambda from the history as it now stands, the same energy
+// that eostBias adds, so a deposit made after the forces of a step were found
+// can be taken into the energy of that step without a new energy call. No
+// saved value is changed (eost.f:eostvbias).
+double ostVBias()
+{
+   // the g kernel bias less the free energy term, as in eostBias
+   double egbias, dgdl, dgdfl;
+   if (ostinterpol)
+      egkernelInterpolate(egbias, dgdl, dgdfl);
+   else
+      egkernel(egbias, dgdl, dgdfl);
+   double eostlmda, dfdl;
+   efreeBias(lambda, eostlmda, dfdl);
+   return egbias - eostlmda;
+}
+
 // ostDeposit -- records one accepted interval of orthogonal space tempering as
 // a biasing gaussian centered on the interval lambda and dU/dlambda averages,
 // then updates the bias kernels and the free energy estimate

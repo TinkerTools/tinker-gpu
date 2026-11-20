@@ -317,6 +317,8 @@ void testResetLmdaFlags()
    use_ti = false;
    dlmda::use_lmdamc = 0;
    use_lmdamc = false;
+   dlmda::use_lmdahold = 1;
+   use_lmdahold = true;
    dlmda::use_fep = 0;
    use_fep = false;
    use_mainlmda = false;

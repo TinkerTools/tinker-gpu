@@ -559,6 +559,7 @@ void dlmda_mech()
    use_lmdacv = (dlmda::use_lmdacv != 0);
    lmdacvstd = dlmda::lmdacvstd;
    lmdacvrat = dlmda::lmdacvrat;
+   use_lmdahold = (dlmda::use_lmdahold != 0);
    use_lmdamc = (dlmda::use_lmdamc != 0);
    lmdamctrial = dlmda::lmdamctrial;
    lmdamcmove = dlmda::lmdamcmove;
@@ -653,13 +654,24 @@ int lmdaBin(double lambda)
 // Divides the lambda sample interval into the phase that propagates the lambda
 // particle, the phase that equilibrates at the frozen lambda and the phase that
 // averages dU/dlambda at that same fixed lambda, the averaging phase taking
-// whatever the other two leave (dlambda.f:setlmdaphase).
+// whatever the other two leave. When OST or ABF samples a moving lambda, the
+// lambda particle propagates and every step is averaged over the whole
+// interval, so the propagation and averaging phases both span it and there is
+// no equilibration (dlambda.f:setlmdaphase).
 void setLmdaPhase()
 {
-   // divide the interval, keeping at least one propagation step and at least
-   // two samples to average
+   // a moving OST or ABF interval propagates and averages every step
    if (lmdaintv < 1)
       lmdaintv = 1;
+   if ((use_ost or use_abf) and not use_lmdahold) {
+      lmdanpa = lmdaintv;
+      lmdanpb = 0;
+      lmdanpc = lmdaintv;
+      return;
+   }
+
+   // divide a held interval, keeping at least one propagation step and at
+   // least two samples to average
    lmdanpa = (int)(lmdaparatio * (double)lmdaintv);
    lmdanpb = (int)(lmdapbratio * (double)lmdaintv);
    lmdanpa = std::max(1, std::min(lmdanpa, lmdaintv - 1));
@@ -673,6 +685,11 @@ void setLmdaPhase()
       lmdanpa -= 1;
       lmdanpc += 1;
    }
+
+   // a one-step interval, which only metadynamics allows, averages its single
+   // step, which is also its propagation step
+   if (lmdanpc < 1)
+      lmdanpc = 1;
 }
 
 // Maps theta onto the main lambda, as sine squared or a smoothed triangle, and
@@ -732,7 +749,8 @@ void lmdaLangevin()
 // The temperature of the lambda particle and of the Monte Carlo lambda trials,
 // set by LAMBDA-TEMPERATURE or else the bath temperature; the atoms and every
 // free energy estimate stay at the bath temperature, which OST and ABF use
-// alone since they average at a held lambda (dlambda.f:lmdatemp).
+// alone since they average at a held lambda; OST or ABF sampling a moving
+// lambda requires the bath temperature (dlambda.f:lmdatemp).
 double lmdaTemp()
 {
    return lmdakelvin > 0.0 ? lmdakelvin : bath::kelvin;
@@ -792,8 +810,9 @@ static bool lmdaBiased()
    return use_ost or use_meta or use_abf;
 }
 
-// whether the bias averages dU/dlambda at a held lambda, OST or ABF
-static bool lmdaHeldAvg()
+// whether the bias averages dU/dlambda, OST or ABF, at a held lambda or, when
+// lambda is sampled moving, over every step of the interval
+static bool lmdaAvgDedl()
 {
    return use_ost or use_abf;
 }
@@ -803,7 +822,7 @@ static void lmdaBiasDerivs()
 {
    if (use_ost)
       ostdgdl = bdgdl + bdgdfl * d2edl2;
-   if (lmdaHeldAvg())
+   if (lmdaAvgDedl())
       lmdaddgdl = lmdadfdl;
 }
 
@@ -833,17 +852,18 @@ void elmdaDyn()
 
    // save all values in the interval, but average only after the propagation
    // and equilibration phases; only OST and ABF keep dU/dlambda, which they
-   // average at a fixed lambda
+   // average at a fixed lambda when held, or over every step of the interval
+   // as lambda moves
    lmdallist[isamp] = lambda;
-   if (lmdaHeldAvg())
+   if (lmdaAvgDedl())
       lmdaflist[isamp] = dedl;
 
    // deposit the interval average every lmdaintv steps; an OST or ABF interval
    // is kept only when its samples are converged
    if (im == 0) {
-      int nskip = lmdanpa + lmdanpb;
+      int nskip = lmdaintv - lmdanpc;
       avgstd(lmdallist, nskip, lmdanpc, lmdaavg, lmdastd);
-      if (lmdaHeldAvg()) {
+      if (lmdaAvgDedl()) {
          avgstd(lmdaflist, nskip, lmdanpc, dedlavg, dedlstd);
          if (depcriteria(dedlavg, dedlstd)) {
             if (use_ost)
@@ -861,8 +881,9 @@ void elmdaDyn()
       return;
 
    // propagate the lambda particle; OST and ABF hold lambda fixed after the
-   // propagation phase
-   if (not lmdaHeldAvg() or isamp < lmdanpa)
+   // propagation phase, which spans the whole interval when lambda is sampled
+   // moving
+   if (not lmdaAvgDedl() or isamp < lmdanpa)
       lmdaLangevin();
 }
 
@@ -1086,12 +1107,14 @@ static double elmdaBias()
    return vbias;
 }
 
-void lmdaMonte(int istep)
+void lmdaMonte()
 {
    // OST and ABF move lambda only in the propagation phase of the sample
-   // interval, while metadynamics moves it at any step
-   const int isamp = (istep - 1) % lmdaintv;
-   if (lmdaHeldAvg() and isamp >= lmdanpa)
+   // interval, which spans the interval when lambda is sampled moving, while
+   // metadynamics moves it at any step; the step is the one elmdaDyn has just
+   // counted, so a deposit it made is seen here
+   const int isamp = (lmdastep - 1) % lmdaintv;
+   if (lmdaAvgDedl() and isamp >= lmdanpa)
       return;
 
    // decide whether to attempt a lambda change at this step
@@ -1109,10 +1132,12 @@ void lmdaMonte(int istep)
    ++nlmdamctry;
 
    // The energy of the step no longer holds once the coordinates or the box
-   // have been set since it was found, as they are by a scaling barostat; nor
-   // does the OST energy hold once this step has added to the history.
-   const bool moved = esum_epoch != xyz_epoch;
-   const bool stale = moved or (use_ost and istep % lmdaintv == 0);
+   // have been set since it was found, as they are by a scaling barostat. The
+   // OST bias part of it no longer holds once this step has added to the
+   // history, which happens at the end of an interval whose lambda is sampled
+   // moving.
+   const bool stale = esum_epoch != xyz_epoch;
+   const bool deposit = use_ost and lmdastep % lmdaintv == 0;
 
    // Save the native state before any energy is found, so that a rejected move
    // restores just what the step has left. The trial solves start from the
@@ -1131,7 +1156,9 @@ void lmdaMonte(int istep)
    // Get the old energy at the native lambda, using the energy of the step
    // unless it is stale. A bias that follows lambda alone is taken from the
    // history as it now stands, which may hold a deposit made after the forces
-   // of the step were found; an energy call does the same.
+   // of the step were found; an energy call does the same. So is the OST bias
+   // at the unchanged lambda and dU/dlambda of the step after such a deposit,
+   // in place of the step's own bias, bgbias - bostlmda.
    const int vers = use_ost ? calc::v4 : calc::energy;
    double eold;
    if (stale) {
@@ -1141,6 +1168,8 @@ void lmdaMonte(int istep)
       eold = esum;
    } else if (use_ost) {
       eold = estep;
+      if (deposit)
+         eold = estep - (bgbias - bostlmda) + ostVBias();
    } else {
       eold = estep - (use_abf ? -bostlmda : bgbias) + elmdaBias();
    }
@@ -1175,7 +1204,7 @@ void lmdaMonte(int istep)
       esum = estep;
       // The energy calls of the trial marked the energy as current, which the
       // energy of a step that the system had already left behind is not.
-      if (moved)
+      if (stale)
          esum_epoch = epoch;
    }
 
@@ -1230,7 +1259,7 @@ void lmdaWinDyn(int istep)
 
    // try a Monte Carlo move of an adaptively biased lambda
    if (use_lmdamc and lmdaBiased())
-      lmdaMonte(istep);
+      lmdaMonte();
 
    // try a Monte Carlo hop of a water near the ligand, once the samples of
    // the step are taken

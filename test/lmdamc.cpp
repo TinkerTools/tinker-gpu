@@ -294,9 +294,10 @@ double mcEnergy()
 bool mcTrial(double lmda, int istep, double efake)
 {
    lambda = lmda;
+   lmdastep = istep;
    esum = efake;
    const int nacc = nlmdamcacc;
-   lmdaMonte(istep);
+   lmdaMonte();
    return nlmdamcacc > nacc;
 }
 
@@ -336,8 +337,9 @@ void runMove(const char* mode, int rc)
       const auto g0 = gradient();
 
       // an old energy far below the trial energy rejects the move
+      lmdastep = 1;
       esum = -1.0e30;
-      lmdaMonte(1);
+      lmdaMonte();
       REQUIRE(nlmdamctry == 1);
       REQUIRE(nlmdamcacc == 0);
       REQUIRE(esum == -1.0e30);
@@ -356,8 +358,9 @@ void runMove(const char* mode, int rc)
       // is not zero.
       lmdamcmove = 2.0 * wlmda;
       lmdavtheta = 1.0;
+      lmdastep = 1;
       esum = e0 + 1.0e6;
-      lmdaMonte(1);
+      lmdaMonte();
       REQUIRE(nlmdamctry == 2);
       REQUIRE(nlmdamcacc == 1);
       REQUIRE(lambda != lold);
@@ -432,7 +435,6 @@ void runStale(const char* mode)
    const double eps = testGetEps(1.0e-5, 1.0e-6);
    Setup s(kIonwat, mode, kRcDyn);
    mcLoad();
-   const bool ost = use_ost;
    for (int i = 1; i <= nlmda; ++i)
       testSetLmdaBin(i, -1.0e5);
    bath::kelvin = 1.0e-6;
@@ -464,12 +466,13 @@ void runStale(const char* mode)
    REQUIRE_FALSE(mcTrial(1.0, 1, -1.0e30));
    REQUIRE(mcTrial(0.0, 1, 1.0e30));
 
-   // On a step that deposits, orthogonal space tempering finds its energy
-   // again, while adaptive biasing force only has to take its bias from the
-   // history as it now stands.
+   // On a step that deposits, adaptive biasing force and orthogonal space
+   // tempering take only their bias from the history as it now stands, at the
+   // lambda and dU/dlambda of the step, and trust the rest of the energy that
+   // it hands over.
    energy(calc::v4);
    lmdanpa = lmdaintv;
-   REQUIRE(mcTrial(1.0, lmdaintv, -1.0e30) == ost);
+   REQUIRE_FALSE(mcTrial(1.0, lmdaintv, -1.0e30));
 
    s.session.end();
 }
@@ -598,8 +601,9 @@ TEST_CASE("LMDAMC-trial", "[ff][lmdamc][L4]")
       // no trial is made once the propagation phase is over
       for (int i = 0; i < 10; ++i) {
          for (int istep : {3, 4, 7, 8}) {
+            lmdastep = istep;
             esum = e0 + 1.0e6;
-            lmdaMonte(istep);
+            lmdaMonte();
          }
       }
       REQUIRE(nlmdamctry == 0);
@@ -609,8 +613,9 @@ TEST_CASE("LMDAMC-trial", "[ff][lmdamc][L4]")
       // a long mean time between trials leaves the lambda alone
       lmdamctrial = 1000000000;
       for (int i = 0; i < 10; ++i) {
+         lmdastep = 1;
          esum = e0 + 1.0e6;
-         lmdaMonte(1);
+         lmdaMonte();
       }
       REQUIRE(nlmdamctry == 0);
       lmdamctrial = 1;
@@ -676,6 +681,36 @@ TEST_CASE("LMDAMC-deposit", "[ff][lmdamc][L4]")
    lmdamcmove = 2.0 * wlmda;
    const double lold = lambda;
    REQUIRE(mcTrial(lold, 4, e0));
+   REQUIRE(nlmdamctry == 1);
+   REQUIRE(lambda != lold);
+   const double eacc = esum;
+   COMPARE_REALS(eacc, mcEnergy(), testGetEps(1.0e-5, 1.0e-6));
+   s.session.end();
+}
+
+TEST_CASE("LMDAMC-deposit-ost", "[ff][lmdamc][L4]")
+{
+   // A lambda move tried on the step that deposits an OST gaussian, at the end
+   // of an interval whose lambda moves at every step, takes the bias of its old
+   // energy from the history with that gaussian in place, at the lambda and
+   // dU/dlambda of the step; judged against the bias the step was found with,
+   // it would see the whole of the new gaussian as an energy barrier
+   // (test_lmdamc.f:test_lmdamc_depositost).
+   Setup s(kIonwat, "ost", kRcDyn);
+   const double e0 = mcLoad();
+
+   // a tall gaussian lands on the lambda and dU/dlambda of the step after its
+   // forces were found
+   hbias = 1000.0;
+   lmdaavg = lambda;
+   dedlavg = dedl;
+   ostDeposit(lmdaintv);
+
+   // a move of up to two lambda bins leaves the peak, so it is downhill
+   lmdamcmove = 2.0 * wlmda;
+   lmdanpa = lmdaintv;
+   const double lold = lambda;
+   REQUIRE(mcTrial(lold, lmdaintv, e0));
    REQUIRE(nlmdamctry == 1);
    REQUIRE(lambda != lold);
    const double eacc = esum;
@@ -1175,6 +1210,141 @@ TEST_CASE("LMDAMC-run", "[ff][lmdamc][L4]")
       inform::iwrite = oldiwrite;
       s.session.end();
    }
+}
+
+TEST_CASE("LMDAMC-ostvbias", "[ff][lmdamc][L4]")
+{
+   // ostVBias gives the orthogonal space tempering bias that an energy call
+   // adds at the same structure, before and after a new deposit, so a lambda
+   // move on a step that deposits may take its old energy from the energy of
+   // the step and the bias as the history now stands
+   // (test_lmdamc.f:test_lmdamc_ostvbias).
+   const double eps = testGetEps(1.0e-4, 1.0e-6);
+   Setup s(kIonwat, "ost", kRcDyn);
+   const double e0 = mcLoad();
+   const double v0 = bgbias - bostlmda;
+   COMPARE_REALS(ostVBias(), v0, eps);
+
+   // after one more deposit the step energy less its old bias plus the new
+   // bias from the history is the energy of a new energy call
+   lmdaavg = lambda;
+   dedlavg = dedl + 0.5;
+   ostDeposit(2);
+   const double v1 = ostVBias();
+   REQUIRE(std::fabs(v1 - v0) > 1.0e-6);
+   energy(calc::v4);
+   COMPARE_REALS(v1, bgbias - bostlmda, eps);
+   COMPARE_REALS(e0 - v0 + v1, esum, eps);
+   s.session.end();
+}
+
+TEST_CASE("LMDAMC-sample", "[ff][lmdamc][L4]")
+{
+   // LAMBDA-SAMPLE selects a held or a moving lambda for ABF, a held interval
+   // too short for its phases is reset, a moving interval propagates and
+   // averages every step down to a single step, and metadynamics keeps the
+   // held split of its interval (test_lmdamc.f:test_lmdamc_sample).
+   {
+      Setup s(kIonwat, "abf", kRc, 0., "lambda-interval 10\n");
+      REQUIRE(use_lmdahold);
+      COMPARE_INTS(lmdaintv, 10);
+      COMPARE_INTS(lmdanpa, 5);
+      COMPARE_INTS(lmdanpb, 2);
+      COMPARE_INTS(lmdanpc, 3);
+      s.session.end();
+   }
+   {
+      Setup s(kIonwat, "abf", kRc, 0., "lambda-interval 2\n");
+      REQUIRE(use_lmdahold);
+      COMPARE_INTS(lmdaintv, 100);
+      COMPARE_INTS(lmdanpa, 50);
+      COMPARE_INTS(lmdanpc, 25);
+      COMPARE_INTS((int)lmdallist.size(), lmdaintv);
+      COMPARE_INTS((int)lmdaflist.size(), lmdaintv);
+      s.session.end();
+   }
+   {
+      Setup s(kIonwat, "abf", kRc, 0., "Lambda-Sample Moving\n");
+      REQUIRE_FALSE(use_lmdahold);
+      COMPARE_INTS(lmdaintv, 4);
+      COMPARE_INTS(lmdanpa, 4);
+      COMPARE_INTS(lmdanpb, 0);
+      COMPARE_INTS(lmdanpc, 4);
+      s.session.end();
+   }
+   {
+      Setup s(kIonwat, "abf", kRc, 0., "lambda-sample moving\nlambda-interval 1\n");
+      REQUIRE_FALSE(use_lmdahold);
+      COMPARE_INTS(lmdaintv, 1);
+      COMPARE_INTS(lmdanpa, 1);
+      COMPARE_INTS(lmdanpb, 0);
+      COMPARE_INTS(lmdanpc, 1);
+      COMPARE_INTS((int)lmdallist.size(), 1);
+      s.session.end();
+   }
+   {
+      Setup s(kIonwat, "abf", kRc, 0., "lambda-sample moving\nlambda-sample held\n");
+      REQUIRE(use_lmdahold);
+      COMPARE_INTS(lmdanpa, 2);
+      COMPARE_INTS(lmdanpb, 0);
+      COMPARE_INTS(lmdanpc, 2);
+      s.session.end();
+   }
+   {
+      Setup s(kIonwat, "meta", kRc, 0., "lambda-sample moving\n");
+      REQUIRE(use_meta);
+      COMPARE_INTS(lmdanpa, 2);
+      COMPARE_INTS(lmdanpb, 0);
+      COMPARE_INTS(lmdanpc, 2);
+      s.session.end();
+   }
+}
+
+TEST_CASE("LMDAMC-movetrial", "[ff][lmdamc][L4]")
+{
+   // ABF with lambda sampled moving tries a Monte Carlo lambda move at every
+   // step of the interval, where a held lambda would try only while it
+   // propagates (test_lmdamc.f:test_lmdamc_movetrial).
+   Setup s(kIonwat, "abf", kRcDyn, 0., "lambda-sample moving\n");
+   const double e0 = mcLoad();
+   for (int i = 0; i < 5; ++i) {
+      for (int istep : {3, 4}) {
+         lmdastep = istep;
+         esum = e0 + 1.0e6;
+         lmdaMonte();
+      }
+   }
+   COMPARE_INTS(nlmdamctry, 10);
+   s.session.end();
+}
+
+TEST_CASE("LMDAMC-sample-run", "[ff][lmdamc][L4]")
+{
+   // A short ABF dynamics run with lambda sampled moving and a one-step
+   // interval records every step, at a lambda that changes each step
+   // (test_lmdamc.f:test_lmdamc_samplerun).
+   const int nstep = 20;
+   const std::string extra = "integrator verlet\nthermostat bussi\nlambda-sample moving\n"
+                             "lambda-interval 1\nlambda-propagate langevin\nlambda-mass 0.06\n"
+                             "lambda-friction 1000.0\nlambda-dt 0.001\nrandomseed 123456789\n";
+   Setup s(kIonwat, "abf", kMd, 0., extra);
+   REQUIRE_FALSE(use_lmdahold);
+   REQUIRE_FALSE(use_lmdamc);
+   TestRemoveFileOnExit fdyn("ionwat.dyn");
+   const int oldiwrite = inform::iwrite;
+   inform::iwrite = 1000;
+
+   mdPropagate(nstep, 0.001);
+
+   REQUIRE(std::isfinite(esum));
+   COMPARE_INTS(nlmdahist, nstep);
+   for (int k = 2; k <= nstep; ++k) {
+      CAPTURE(k);
+      REQUIRE(lmdalhist[k] != lmdalhist[k - 1]);
+      COMPARE_INTS(lmdaihist[k], lmdaihist[k - 1] + 1);
+   }
+   inform::iwrite = oldiwrite;
+   s.session.end();
 }
 
 TEST_CASE("LMDAMC-stale-table", "[ff][lmdamc][L4]")

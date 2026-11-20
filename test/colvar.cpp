@@ -1150,15 +1150,17 @@ TEST_CASE("Colvar-lambda-mc", "[ff][colvar][L2]")
             COMPARE_REALS(decvdl, expectCouple(kNacl, 2.2, 0.5).dedl, eps);
          const McState before;
 
+         lmdastep = 1;
          esum = -1.0e30;
-         lmdaMonte(1);
+         lmdaMonte();
          REQUIRE(nlmdamctry == 1);
          REQUIRE(nlmdamcacc == 0);
          REQUIRE(esum == -1.0e30);
          McState().requireSame(before);
 
+         lmdastep = 1;
          esum = 1.0e30;
-         lmdaMonte(1);
+         lmdaMonte();
          REQUIRE(nlmdamctry == 2);
          REQUIRE(nlmdamcacc == 1);
          REQUIRE(lambda != 0.5);
@@ -1298,8 +1300,9 @@ TEST_CASE("Colvar-lambda-full", "[ff][colvar][L2]")
    energy(calc::v1);
    const McState step;
    const auto u2 = grabUind();
+   lmdastep = 1;
    esum = -1.0e30;
-   lmdaMonte(1);
+   lmdaMonte();
    REQUIRE(nlmdamcacc == 0);
    McState().requireSame(step);
    REQUIRE(grabUind() == u2);

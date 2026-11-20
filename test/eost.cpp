@@ -1065,6 +1065,27 @@ TEST_CASE("EOST-metadyn", "[ff][eost][L2]")
       CAPTURE(k);
       REQUIRE(lmv[k] != lmv[k - 1]);
    }
+   use_lmdacv = false;
+
+   // a one-step interval centers each gaussian on the lambda of its own step,
+   // rather than on an empty average
+   resetost(5, 5, 1);
+   use_meta = true;
+   resetmeta(2);
+   lmdaintv = 1;
+   setLmdaPhase();
+   hbias = 2.0;
+   wlmda = 0.25;
+   wlhist = 0.3;
+   maxwlhist = wlhist;
+   dedl = 0.0;
+   lmdadt = 0.0;
+   for (int istep = 1; istep <= 2; ++istep) {
+      lambda = lam[istep + 1];
+      elmdaDyn();
+      COMPARE_INTS(nmetahist, istep);
+      COMPARE_REALS(metalhist[istep], lam[istep + 1], 1.0e-12);
+   }
 }
 
 TEST_CASE("EOST-vkernelmax", "[ff][eost][L2]")
@@ -1275,6 +1296,49 @@ TEST_CASE("EOST-ostphase", "[ff][eost][L2]")
    COMPARE_INTS(lmdanpa, 1);
    COMPARE_INTS(lmdanpc, 2);
    COMPARE_INTS(lmdanpa + lmdanpb + lmdanpc, lmdaintv);
+
+   // a moving ABF or OST interval propagates and averages every step, whatever
+   // the ratios, down to a single step
+   TestLmdaFlagGuard guard;
+   use_lmdahold = false;
+   use_meta = false;
+   use_ost = false;
+   use_abf = true;
+   lmdaintv = 10;
+   lmdaparatio = 0.3;
+   lmdapbratio = 0.3;
+   setLmdaPhase();
+   COMPARE_INTS(lmdanpa, 10);
+   COMPARE_INTS(lmdanpb, 0);
+   COMPARE_INTS(lmdanpc, 10);
+   lmdaintv = 1;
+   setLmdaPhase();
+   COMPARE_INTS(lmdanpa, 1);
+   COMPARE_INTS(lmdanpb, 0);
+   COMPARE_INTS(lmdanpc, 1);
+   use_abf = false;
+   use_ost = true;
+   lmdaintv = 10;
+   setLmdaPhase();
+   COMPARE_INTS(lmdanpa, 10);
+   COMPARE_INTS(lmdanpb, 0);
+   COMPARE_INTS(lmdanpc, 10);
+
+   // metadynamics keeps the held split when the moving flag is set
+   use_ost = false;
+   use_meta = true;
+   setLmdaPhase();
+   COMPARE_INTS(lmdanpa, 3);
+   COMPARE_INTS(lmdanpb, 3);
+   COMPARE_INTS(lmdanpc, 4);
+
+   // a held one-step interval averages its single propagation step
+   use_lmdahold = true;
+   lmdaintv = 1;
+   setLmdaPhase();
+   COMPARE_INTS(lmdanpa, 1);
+   COMPARE_INTS(lmdanpb, 0);
+   COMPARE_INTS(lmdanpc, 1);
 }
 
 TEST_CASE("EOST-ostdyn", "[ff][eost][L2]")

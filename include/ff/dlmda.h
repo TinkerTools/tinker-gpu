@@ -409,8 +409,9 @@ void lmdaWinDyn(int istep);
 /// place of propagating the lambda particle, once the step and its deposit are
 /// complete (dlambda.f:lmdamonte). The energy of the step is \ref esum, which
 /// an accepted move replaces with the energy at the new lambda; a rejected
-/// move leaves the step as it was. \c istep is the step elmdaDyn was given.
-void lmdaMonte(int istep);
+/// move leaves the step as it was. The step within the sample interval is
+/// \ref lmdastep, as elmdaDyn has just advanced it.
+void lmdaMonte();
 /// Stops OST, metadynamics or ABF dynamics that has no thermostat or runs at
 /// 0 K, as the bias, the lambda particle and Monte Carlo lambda moves work at a
 /// set temperature, which the OST and metadynamics histories store. For the
@@ -543,6 +544,9 @@ TINKER_EXTERN double lmdakelvin;  ///< temperature of the lambda particle in Kel
 TINKER_EXTERN double lmdadt;      ///< time step of the theta lambda coordinate.
 TINKER_EXTERN double lmdathalpha;  ///< sharpness of the smoothed triangle theta map.
 TINKER_EXTERN LmdaThMap lmdathmap; ///< theta -> main lambda mapping type.
+
+// whether OST and ABF hold lambda to equilibrate and average, or sample it moving.
+TINKER_EXTERN bool use_lmdahold;  ///< OST/ABF hold lambda, else lambda moves every step.
 
 // Monte Carlo trial moves of the main lambda, in place of the lambda particle.
 TINKER_EXTERN bool use_lmdamc;    ///< move the main lambda by Monte Carlo trials.

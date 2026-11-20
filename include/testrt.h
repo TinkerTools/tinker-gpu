@@ -68,7 +68,7 @@ private:
 struct TestLmdaFlagGuard
 {
    bool ost = use_ost, meta = use_meta, abf = use_abf, cv = use_lmdacv, mc = use_lmdamc,
-        fill = use_lmdafill;
+        fill = use_lmdafill, hold = use_lmdahold;
    double fillr = lmdafillr, lkelvin = lmdakelvin;
    ~TestLmdaFlagGuard()
    {
@@ -78,6 +78,7 @@ struct TestLmdaFlagGuard
       use_lmdacv = cv;
       use_lmdamc = mc;
       use_lmdafill = fill;
+      use_lmdahold = hold;
       lmdafillr = fillr;
       lmdakelvin = lkelvin;
    }

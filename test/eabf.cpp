@@ -261,6 +261,69 @@ TEST_CASE("EABF-gate", "[ff][eabf][L2]")
    COMPARE_REALS(lmdafhist[1], 1.0, 1.0e-12);
 }
 
+TEST_CASE("EABF-moving", "[ff][eabf][L2]")
+{
+   // with lambda sampled moving, the lambda particle moves at every step, a
+   // one-step interval records the dU/dlambda of each step at its own lambda,
+   // and a longer interval records the average lambda and dU/dlambda over
+   // every one of its steps (test_eabf.f:test_eabf_moving)
+   TestLmdaFlagGuard guard;
+   auto startParticle = [] {
+      lmdadt = 0.1;
+      lmdamass = 1.0;
+      lmdafric = 0.0;
+      lmdatheta = 0.25 * pi;
+      lmdavtheta = 0.0;
+      lambda = 0.5;
+      lmdadfdl = 0.0;
+   };
+
+   // a one-step interval records every step at its own lambda
+   resetabf(5, 8);
+   use_abf = true;
+   use_lmdahold = false;
+   lmdaintv = 1;
+   setLmdaPhase();
+   startParticle();
+   for (int istep = 1; istep <= 4; ++istep) {
+      CAPTURE(istep);
+      const double lam = lambda;
+      dedl = (double)istep;
+      elmdaDyn();
+      COMPARE_INTS(nlmdahist, istep);
+      REQUIRE(lmdalhist[istep] == lam);
+      REQUIRE(lmdafhist[istep] == (double)istep);
+      REQUIRE(lambda != lam);
+   }
+
+   // a longer interval records one average over all of its steps
+   resetabf(5, 8);
+   use_abf = true;
+   use_lmdahold = false;
+   lmdaintv = 4;
+   setLmdaPhase();
+   startParticle();
+   double lam[5] = {0};
+   double lsum = 0, fsum = 0;
+   for (int istep = 1; istep <= lmdaintv; ++istep) {
+      lam[istep - 1] = lambda;
+      dedl = (double)istep;
+      lsum += lambda;
+      fsum += dedl;
+      elmdaDyn();
+      if (istep < lmdaintv)
+         COMPARE_INTS(nlmdahist, 0);
+   }
+   lam[lmdaintv] = lambda;
+   for (int k = 1; k <= lmdaintv; ++k) {
+      CAPTURE(k);
+      REQUIRE(lam[k] != lam[k - 1]);
+   }
+   COMPARE_INTS(nlmdahist, 1);
+   COMPARE_REALS(lmdalhist[1], lsum / lmdaintv, 1.0e-12);
+   COMPARE_REALS(lmdafhist[1], fsum / lmdaintv, 1.0e-12);
+}
+
 TEST_CASE("EABF-resize", "[ff][eabf][L2]")
 {
    // three samples overflow a history sized for two

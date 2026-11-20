@@ -90,6 +90,7 @@ void updateKernels();
 void buildFkernel();
 void egkernel(double& egbias, double& dgdl, double& dgdfl);
 void egkernelInterpolate(double& egbias, double& dgdl, double& dgdfl);
+double ostVBias();
 void eMetaBias(double lmda, double& vbias, double& dvdl);
 void eMetaBiasInterpolate(double lmda, double& vbias, double& dvdl);
 void addMetaGrid(int ihist);
