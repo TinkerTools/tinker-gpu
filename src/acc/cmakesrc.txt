@@ -56,4 +56,5 @@ nblist.cpp
 pme.cpp
 rattle.cpp
 stochastic.cpp
+watermc.cpp
 )

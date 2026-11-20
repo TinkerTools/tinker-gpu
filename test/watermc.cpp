@@ -1,4 +1,5 @@
 #include "ff/amoeba/induce.h"
+#include "ff/amoeba/mpolestate.h"
 #include "ff/atom.h"
 #include "ff/box.h"
 #include "ff/dlmda.h"
@@ -6,6 +7,7 @@
 #include "ff/energybuffer.h"
 #include "ff/modamoeba.h"
 #include "ff/evdw.h"
+#include "ff/hippo/edisp.h"
 #include "ff/eost.h"
 #include "ff/modamoeba.h"
 #include "ff/nblist.h"
@@ -31,7 +33,9 @@
 #include <cstring>
 #include <fstream>
 #include <functional>
+#include <limits>
 #include <memory>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -46,6 +50,48 @@
 // the choice among the candidates.
 
 using namespace tinker;
+
+// helpers of the cases on every platform and of those on CUDA
+namespace {
+struct BathReset
+{
+   ~BathReset()
+   {
+      bath::kelvin = 0.;
+      bath::atmsph = 0.;
+      bath::isothermal = 0;
+      bath::isobaric = 0;
+   }
+};
+
+// Puts the three atoms of water \c w at \c x, \c y, \c z on the device.
+void putWater(int w, const double* x, const double* y, const double* z)
+{
+   const auto& a = waterMcShell().water(w);
+   for (int k = 0; k < 3; ++k) {
+      const pos_prec p[3] = {(pos_prec)x[k], (pos_prec)y[k], (pos_prec)z[k]};
+      darray::copyin(g::q0, 1, xpos + a[k], &p[0]);
+      darray::copyin(g::q0, 1, ypos + a[k], &p[1]);
+      darray::copyin(g::q0, 1, zpos + a[k], &p[2]);
+   }
+   waitFor(g::q0);
+   copyPosToXyz();
+}
+
+// a rotation by angle t about the unit vector along u
+void axisRotation(const double u0[3], double t, double (&m)[3][3])
+{
+   const double l = std::sqrt(u0[0] * u0[0] + u0[1] * u0[1] + u0[2] * u0[2]);
+   const double u[3] = {u0[0] / l, u0[1] / l, u0[2] / l};
+   const double c = std::cos(t), s = std::sin(t);
+   for (int i = 0; i < 3; ++i)
+      for (int j = 0; j < 3; ++j)
+         m[i][j] = (i == j ? c : 0) + (1 - c) * u[i] * u[j];
+   m[0][1] -= s * u[2], m[0][2] += s * u[1];
+   m[1][0] += s * u[2], m[1][2] -= s * u[0];
+   m[2][0] -= s * u[1], m[2][1] += s * u[0];
+}
+}
 
 #if TINKER_GPULANG_CUDA
 
@@ -68,17 +114,6 @@ const Box kBoxes[] = {
    {"cubic", "", BoxShape::ORTHO},
    {"octahedron", "octahedron\na-axis 40.0\n", BoxShape::OCT},
    {"triclinic", "a-axis 40.0\nb-axis 42.0\nc-axis 44.0\nalpha 75.0\nbeta 80.0\ngamma 100.0\n", BoxShape::TRI},
-};
-
-struct BathReset
-{
-   ~BathReset()
-   {
-      bath::kelvin = 0.;
-      bath::atmsph = 0.;
-      bath::isothermal = 0;
-      bath::isobaric = 0;
-   }
 };
 
 struct ForceReset
@@ -273,20 +308,6 @@ std::vector<int> movedAtoms(const State& a, const State& b)
    return m;
 }
 
-// Puts the three atoms of water \c w at \c x, \c y, \c z on the device.
-void putWater(int w, const double* x, const double* y, const double* z)
-{
-   const auto& a = waterMcShell().water(w);
-   for (int k = 0; k < 3; ++k) {
-      const pos_prec p[3] = {(pos_prec)x[k], (pos_prec)y[k], (pos_prec)z[k]};
-      darray::copyin(g::q0, 1, xpos + a[k], &p[0]);
-      darray::copyin(g::q0, 1, ypos + a[k], &p[1]);
-      darray::copyin(g::q0, 1, zpos + a[k], &p[2]);
-   }
-   waitFor(g::q0);
-   copyPosToXyz();
-}
-
 // The energy with water \c w at candidate \c c, found apart from the hop, with
 // the water put back.
 double candidateEnergy(int w, const WaterMcCandidate& c)
@@ -343,6 +364,81 @@ double dist(const State& s, int i, int j)
 {
    double dx = s.x[i] - s.x[j], dy = s.y[i] - s.y[j], dz = s.z[i] - s.z[j];
    return std::sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+// the physical multipoles of every atom, rotated at the current coordinates
+std::vector<real> physicalRpole()
+{
+   mpoleEnsurePhysical();
+   std::vector<real> v(n * MPL_TOTAL);
+   darray::copyout(g::q0, n, reinterpret_cast<real (*)[MPL_TOTAL]>(v.data()), rpole);
+   waitFor(g::q0);
+   return v;
+}
+
+// the coordinates of water w as the device holds them now
+struct WaterNow
+{
+   double x[3], y[3], z[3];
+
+   explicit WaterNow(int w)
+   {
+      const auto& a = waterMcShell().water(w);
+      const auto px = grab1(xpos), py = grab1(ypos), pz = grab1(zpos);
+      for (int k = 0; k < 3; ++k)
+         x[k] = px[a[k]], y[k] = py[a[k]], z[k] = pz[a[k]];
+   }
+};
+
+// water w of now turned by m about its oxygen
+WaterNow turned(const WaterNow& now, const double (&m)[3][3])
+{
+   WaterNow t = now;
+   for (int k = 0; k < 3; ++k) {
+      const double r[3] = {now.x[k] - now.x[0], now.y[k] - now.y[0], now.z[k] - now.z[0]};
+      t.x[k] = now.x[0] + m[0][0] * r[0] + m[0][1] * r[1] + m[0][2] * r[2];
+      t.y[k] = now.y[0] + m[1][0] * r[0] + m[1][1] * r[1] + m[1][2] * r[2];
+      t.z[k] = now.z[0] + m[2][0] * r[0] + m[2][1] * r[1] + m[2][2] * r[2];
+   }
+   return t;
+}
+
+// the log of the mean of exp(l) over l, the terms of -inf as zeros
+double logMeanExp(const std::vector<double>& l)
+{
+   double top = -std::numeric_limits<double>::infinity();
+   for (double x : l)
+      top = std::max(top, x);
+   if (not std::isfinite(top))
+      return top;
+   double sum = 0;
+   for (double x : l)
+      sum += std::exp(x - top);
+   return top + std::log(sum / l.size());
+}
+
+// the identity rotation
+const double kOne[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+
+// The cheap energy of water w as it is, from the multipoles rotated where it
+// is.
+double cheapInPlace(int w)
+{
+   const WaterNow now(w);
+   const double p[3] = {now.x[0], now.y[0], now.z[0]};
+   return waterMcCheapEnergy(w, kOne, p);
+}
+
+// the cheap energy of water w with its atoms put at c, from the multipoles
+// rotated there, with the water put back
+double candidateCheap(int w, const WaterMcCandidate& c)
+{
+   const WaterNow back(w);
+   putWater(w, c.x, c.y, c.z);
+   const double u = cheapInPlace(w);
+   putWater(w, back.x, back.y, back.z);
+   nblistRefresh();
+   return u;
 }
 }
 
@@ -536,16 +632,38 @@ TEST_CASE("WaterMC-Acceptance-Ratio", "[ff][watermc][L4]")
    // it is the ratio of the Rosenbluth weights of the new site and of the old
    // one, the latter with the others of the hop back drawn from the part the
    // water leaves, times the ratio of the proposals of the chosen candidate.
+   //
+   // With m orientations, the weight of each site is exp(-(U - uc)/kT) times
+   // the mean of exp(-u/kT) over its orientations, of which the cheap energy uc
+   // of the one kept, and of the old site in place, are found again from the
+   // multipoles rotated at the candidate, times the factor s of the cheap
+   // energy. With g positions of each try, the mean runs over the g positions,
+   // each of which is recorded, the old site first among its own.
    const double eps_u = testGetEps(2.0e-3, 1.0e-6);
-   for (int k : {1, 4}) {
-      CAPTURE(k);
-      Setup s(kMd, "integrator verlet\nwater-mc-moves 1 1 1\nwater-mc-tries " + std::to_string(k) + "\n");
+   const double eps_c = 1.0e-3;
+   const struct
+   {
+      int k, g, m;
+      double s;
+   } kgm[] = {{1, 1, 1, 1}, {4, 1, 1, 1}, {1, 1, 6, 1}, {4, 1, 6, 1}, {1, 3, 1, 1}, {2, 3, 4, 0.7}};
+   for (const auto& p : kgm) {
+      const int k = p.k, ng = p.g, m = p.m;
+      const double sc = p.s;
+      CAPTURE(k, ng, m, sc);
+      Setup s(kMd,
+         "integrator verlet\nwater-mc-moves 1 1 1\nwater-mc-tries " + std::to_string(k) + " " + std::to_string(ng)
+            + "\nwater-mc-orient " + std::to_string(m) + "\nwater-mc-cheap 5.0 " + std::to_string(sc) + "\n");
       const double kt = units::gasconst * bath::kelvin;
       REQUIRE(kt > 0);
       energy(calc::energy);
       auto& shell = waterMcShell();
       int nkind[3] = {0, 0, 0};
-      for (int hop = 0; hop < 6; ++hop) {
+      // the log likelihood of the positions kept by their cheap weights over
+      // that by uniform chances, which is positive for a draw by the weights
+      // and negative for a uniform one
+      double llr = 0;
+      const int nhop = ng > 1 ? 16 : 6;
+      for (int hop = 0; hop < nhop; ++hop) {
          CAPTURE(hop);
          REQUIRE_FALSE(hopOnce(1, -1));
          const auto h = waterMcLastHop;
@@ -576,27 +694,87 @@ TEST_CASE("WaterMC-Acceptance-Ratio", "[ff][watermc][L4]")
                if (c.clear)
                   REQUIRE(std::fabs(c.u - candidateEnergy(w, c)) < eps_u);
 
-         // the ratio, from the energies of the hop
+         // the cheap terms: none with one orientation and one position; else
+         // the cheap energies of the orientations kept and of the old site,
+         // each among the m of its position, so the term of the position is
+         // at least exp(-uc/kT)/m, and with g positions the term of the try is
+         // the mean of those of its positions
+         if (m == 1 and ng == 1) {
+            REQUIRE(h.ucold == 0);
+            REQUIRE(h.lnwold == 0);
+            REQUIRE(h.lnwoldpos.empty());
+            for (const auto* set : {&h.fwd, &h.rev})
+               for (const auto& c : *set)
+                  REQUIRE((c.uc == 0 and c.lnw == 0 and c.lnwpos.empty()));
+         } else {
+            REQUIRE(std::fabs(h.ucold - cheapInPlace(w)) < eps_c);
+            const double lnwown = ng == 1 ? h.lnwold : h.lnwoldpos.at(0);
+            REQUIRE(lnwown >= -h.ucold / kt - std::log(m) - 1.0e-9);
+            if (ng == 1) {
+               REQUIRE(h.lnwoldpos.empty());
+            } else {
+               REQUIRE(h.lnwoldpos.size() == (size_t)ng);
+               REQUIRE(std::fabs(h.lnwold - logMeanExp(h.lnwoldpos)) < 1.0e-9);
+            }
+            for (const auto* set : {&h.fwd, &h.rev})
+               for (const auto& c : *set) {
+                  if (ng > 1) {
+                     REQUIRE(c.lnwpos.size() == (size_t)ng);
+                     if (c.clear) {
+                        REQUIRE(c.pickpos >= 0);
+                        REQUIRE(c.pickpos < ng);
+                        REQUIRE(std::isfinite(c.lnwpos[c.pickpos]));
+                        int nclear = 0;
+                        for (double l : c.lnwpos)
+                           nclear += std::isfinite(l) ? 1 : 0;
+                        const double lse = logMeanExp(c.lnwpos) + std::log(ng);
+                        llr += (c.lnwpos[c.pickpos] - lse) + std::log(nclear);
+                     }
+                  } else {
+                     REQUIRE(c.pickpos == -1);
+                  }
+                  if (not c.clear)
+                     continue;
+                  REQUIRE(std::fabs(c.uc - candidateCheap(w, c)) < eps_c);
+                  const double floor = -c.uc / kt - std::log(m) - 1.0e-9;
+                  if (ng == 1) {
+                     REQUIRE(c.lnwpos.empty());
+                     REQUIRE(c.lnw >= floor);
+                  } else {
+                     // the position kept is one of the g
+                     REQUIRE(std::fabs(c.lnw - logMeanExp(c.lnwpos)) < 1.0e-9);
+                     REQUIRE(c.lnwpos[c.pickpos] >= floor);
+                  }
+               }
+         }
+
+         // the ratio, from the energies of the hop, each relative to that of
+         // the old site as the hop takes it
          const double pr = waterMcProposalRatio(shell, h.kind, w, h.fwd[h.pick].v);
-         double uref = h.uold;
+         auto lw = [&](double u, double uc, double lnw) { return -((u - h.uold) - uc) / kt + lnw; };
+         double lref = lw(h.uold, h.ucold, h.lnwold);
          for (const auto* set : {&h.fwd, &h.rev})
             for (const auto& c : *set)
                if (c.clear)
-                  uref = std::min(uref, c.u);
-         double wnew = 0, wold = std::exp(-(h.uold - uref) / kt);
+                  lref = std::max(lref, lw(c.u, c.uc, c.lnw));
+         double wnew = 0, wold = std::exp(lw(h.uold, h.ucold, h.lnwold) - lref);
          for (const auto& c : h.fwd)
-            wnew += c.clear ? std::exp(-(c.u - uref) / kt) : 0;
+            wnew += c.clear ? std::exp(lw(c.u, c.uc, c.lnw) - lref) : 0;
          for (const auto& c : h.rev)
-            wold += c.clear ? std::exp(-(c.u - uref) / kt) : 0;
+            wold += c.clear ? std::exp(lw(c.u, c.uc, c.lnw) - lref) : 0;
          REQUIRE(std::fabs(h.lnratio - std::log(wnew / wold * pr)) < 1.0e-9);
 
          // with one candidate, from energies found apart from the hop
-         if (k == 1) {
+         if (k == 1 and ng == 1 and m == 1) {
             const double unew = candidateEnergy(w, h.fwd[0]);
             REQUIRE(std::fabs(h.lnratio - (-(unew - uold) / kt + std::log(pr))) < eps_u / kt);
          }
       }
-      REQUIRE(nkind[0] + nkind[1] + nkind[2] == 6);
+      REQUIRE(nkind[0] + nkind[1] + nkind[2] == nhop);
+      if (ng > 1) {
+         CAPTURE(llr);
+         REQUIRE(llr > 0);
+      }
       s.session.end();
    }
 }
@@ -606,15 +784,19 @@ TEST_CASE("WaterMC-Reject-Restores", "[ff][watermc][L4]")
    // A rejected hop puts back the coordinates, the velocities, the energy, the
    // forces, the dipoles and the predictor history, after the energies of all
    // of its candidates.
-   Setup s(kMd, "integrator verlet\npolar-predict\nwater-mc-tries 4\n");
-   for (int i = 0; i < 4; ++i)
-      energy(calc::v4);
-   REQUIRE(esum_epoch == xyz_epoch);
-   const State before;
-   REQUIRE_FALSE(hopOnce(1, -1));
-   REQUIRE(esum_epoch == xyz_epoch);
-   requireSame(State(), before);
-   s.session.end();
+   for (const char* cheap :
+      {"water-mc-tries 4\n", "water-mc-tries 4\nwater-mc-orient 6\n", "water-mc-tries 4 3\nwater-mc-orient 6\nwater-mc-cheap 5.0 0.7\n"}) {
+      CAPTURE(cheap);
+      Setup s(kMd, std::string("integrator verlet\npolar-predict\n") + cheap);
+      for (int i = 0; i < 4; ++i)
+         energy(calc::v4);
+      REQUIRE(esum_epoch == xyz_epoch);
+      const State before;
+      REQUIRE_FALSE(hopOnce(1, -1));
+      REQUIRE(esum_epoch == xyz_epoch);
+      requireSame(State(), before);
+      s.session.end();
+   }
    // the hops end with the run, so a later case that steps the lambda windows
    // without a system does not try one
    REQUIRE_FALSE(waterMcOn());
@@ -711,6 +893,10 @@ TEST_CASE("WaterMC-Integrators", "[ff][watermc][L4]")
       // integrator and this one would both own the Monte Carlo buffers
       {"respa montecarlo", "integrator respa\nrespa-inner 4\n", 1.,
          [=] { return (BasicIntegrator*)new RespaIntegrator(bussi, BarostatEnum::MONTECARLO); }},
+      // a box move every step, then a hop by the cheap energy, which reads the
+      // box and the multipoles the move left
+      {"verlet montecarlo cheap", "integrator verlet\nvolume-trial 1\nwater-mc-orient 4\nwater-mc-cheap 5.0 0.7\n", 1.,
+         [=] { return (BasicIntegrator*)new VerletIntegrator(bussi, BarostatEnum::MONTECARLO); }},
       {"stochastic", "integrator stochastic\n", 0., [] { return (BasicIntegrator*)new StochasticIntegrator; }},
       {"lp2022", "integrator verlet\nbarostat langevin\n", 1., [] { return (BasicIntegrator*)new LP22Integrator(1); }},
       {"nhc2006", "integrator verlet\nbarostat nhc06\n", 1., [] { return (BasicIntegrator*)new Nhc06Integrator(1); }},
@@ -947,6 +1133,203 @@ TEST_CASE("WaterMC-Lambda-Dynamics", "[ff][watermc][L4]")
    }
 }
 
+TEST_CASE("WaterMC-Orient-Multipoles", "[ff][watermc][L4]")
+{
+   // The cheap energy turns the multipoles of the hopping water with it. That
+   // holds because each local frame of a water is defined by its own atoms, so
+   // the multipoles rotated at the turned water are those at the old one
+   // turned: the charges kept, the dipoles turned by R, and the quadrupoles by
+   // R Q R^T. The cheap energy from the multipoles turned on the host then
+   // equals that from the multipoles rotated at the turned water.
+   Setup s(kRcDyn, "water-mc-orient 8\n");
+   auto& shell = waterMcShell();
+   const double axes[][3] = {{1, 2, 3}, {-2, 0.5, 1}, {0, 0, 1}};
+   const double angles[] = {1.1, 2.7, -0.6};
+   for (int w : {0, 7, 18}) {
+      CAPTURE(w);
+      const auto& a = shell.water(w);
+      const WaterNow now(w);
+      const double o[3] = {now.x[0], now.y[0], now.z[0]};
+      const auto rp0 = physicalRpole();
+      for (int t = 0; t < 3; ++t) {
+         CAPTURE(t);
+         double m[3][3];
+         axisRotation(axes[t], angles[t], m);
+         const WaterNow host = turned(now, m);
+         const double uhost = waterMcCheapEnergy(w, m, o);
+         REQUIRE(std::isfinite(uhost));
+
+         putWater(w, host.x, host.y, host.z);
+         const auto rp1 = physicalRpole();
+         for (int k = 0; k < 3; ++k) {
+            const real* p0 = &rp0[a[k] * MPL_TOTAL];
+            const real* p1 = &rp1[a[k] * MPL_TOTAL];
+            REQUIRE(std::fabs(p1[MPL_PME_0] - p0[MPL_PME_0]) < 1.0e-6);
+            for (int i = 0; i < 3; ++i) {
+               double d = 0;
+               for (int j = 0; j < 3; ++j)
+                  d += m[i][j] * p0[MPL_PME_X + j];
+               REQUIRE(std::fabs(p1[MPL_PME_X + i] - d) < 1.0e-5);
+            }
+            const int qi[3][3] = {{MPL_PME_XX, MPL_PME_XY, MPL_PME_XZ}, {MPL_PME_XY, MPL_PME_YY, MPL_PME_YZ},
+               {MPL_PME_XZ, MPL_PME_YZ, MPL_PME_ZZ}};
+            for (int i = 0; i < 3; ++i)
+               for (int j = 0; j < 3; ++j) {
+                  double q = 0;
+                  for (int u = 0; u < 3; ++u)
+                     for (int v = 0; v < 3; ++v)
+                        q += m[i][u] * p0[qi[u][v]] * m[j][v];
+                  REQUIRE(std::fabs(p1[qi[i][j]] - q) < 1.0e-5);
+               }
+         }
+         REQUIRE(std::fabs(cheapInPlace(w) - uhost) < 1.0e-3);
+
+         putWater(w, now.x, now.y, now.z);
+      }
+   }
+   s.session.end();
+}
+
+TEST_CASE("WaterMC-Orient-Tracks-Energy", "[ff][watermc][L4]")
+{
+   // The cheap energy follows the full energy over the orientations of a water
+   // in place, which is what makes it worth drawing them by. A multipole term
+   // of the wrong sign leaves the two unrelated.
+   Setup s(kRcDyn, "water-mc-orient 8\n");
+   std::mt19937 rng(20261119);
+   std::normal_distribution<double> gauss;
+   for (int w : {0, 7, 18}) {
+      CAPTURE(w);
+      const WaterNow now(w);
+      const double o[3] = {now.x[0], now.y[0], now.z[0]};
+      std::vector<double> uc, uf;
+      for (int t = 0; t < 16; ++t) {
+         const double axis[3] = {gauss(rng), gauss(rng), gauss(rng)};
+         double m[3][3];
+         axisRotation(axis, 3.14159 * std::fabs(gauss(rng)), m);
+         const WaterNow host = turned(now, m);
+         const double u = waterMcCheapEnergy(w, m, o);
+         if (not std::isfinite(u))
+            continue;
+         WaterMcCandidate c;
+         for (int k = 0; k < 3; ++k)
+            c.x[k] = host.x[k], c.y[k] = host.y[k], c.z[k] = host.z[k];
+         uc.push_back(u);
+         uf.push_back(candidateEnergy(w, c));
+      }
+      REQUIRE(uc.size() >= 12);
+      const int nn = uc.size();
+      double mc = 0, mf = 0;
+      for (int i = 0; i < nn; ++i)
+         mc += uc[i] / nn, mf += uf[i] / nn;
+      double scc = 0, sff = 0, scf = 0;
+      for (int i = 0; i < nn; ++i) {
+         scc += (uc[i] - mc) * (uc[i] - mc);
+         sff += (uf[i] - mf) * (uf[i] - mf);
+         scf += (uc[i] - mc) * (uf[i] - mf);
+      }
+      const double r = scf / std::sqrt(scc * sff);
+      CAPTURE(r);
+      REQUIRE(r > 0.5);
+   }
+   s.session.end();
+}
+
+TEST_CASE("WaterMC-Orient-Softcore", "[ff][watermc][L4]")
+{
+   // The cheap energy takes the soft core of the ligand from VDW-SOFTCORE, as
+   // the full energy does. Between a soft and a nearly hard core, with a water
+   // put by a partly coupled ligand, the cheap energy changes as the full one
+   // does, less the same change with the water where it is, which takes away
+   // every pair but those of the water and the ligand. A soft core
+   // fixed in the cheap energy leaves it the same under both keywords.
+   const char* cores[] = {"vdw-softcore 0.7 5.0\n", "vdw-softcore 0.0001 5.0\n"};
+   std::vector<WaterMcCandidate> put;
+   int wfar = -1;
+   std::vector<double> dfull[2], dcheap[2];
+   for (int ic = 0; ic < 2; ++ic) {
+      CAPTURE(cores[ic]);
+      Setup s(kRcDyn, std::string("lambda 0.7\nwater-mc-orient 8\n") + cores[ic]);
+      auto& shell = waterMcShell();
+      const auto px = grab1(xpos), py = grab1(ypos), pz = grab1(zpos);
+      // the ligand atoms -1 20 of the fixture, its heavy atoms and its center
+      double cen[3] = {0, 0, 0};
+      std::vector<int> heavy;
+      for (int i = 0; i < 20; ++i) {
+         cen[0] += px[i] / 20, cen[1] += py[i] / 20, cen[2] += pz[i] / 20;
+         if (atomid::atomic[i] > 1)
+            heavy.push_back(i);
+      }
+      if (ic == 0) {
+         // the water farthest from the ligand, by the nearest image in the
+         // cubic box of the fixture, put 2.6 Angstroms out from each of the
+         // first heavy atoms of the ligand, away from its center, where it may
+         // overlap an atom and have no cheap energy
+         REQUIRE(box_shape == BoxShape::ORTHO);
+         const double side = lvec1.x;
+         double best = 0;
+         for (int w = 0; w < shell.nwater(); ++w) {
+            const int o = shell.water(w)[0];
+            double dmin = 1.0e9;
+            for (int i = 0; i < 20; ++i) {
+               double d[3] = {px[o] - px[i], py[o] - py[i], pz[o] - pz[i]};
+               for (auto& x : d)
+                  x -= side * std::round(x / side);
+               dmin = std::min(dmin, std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]));
+            }
+            if (dmin > best)
+               best = dmin, wfar = w;
+         }
+         // Within the cutoff of the cheap energy, which then counts the whole
+         // ligand as the full energy does; farther, the soft core would hardly
+         // change either. Either way the change there drops out.
+         REQUIRE(best > 3.0);
+         const auto& a = shell.water(wfar);
+         for (size_t t = 0; t < 8 and t < heavy.size(); ++t) {
+            const int j = heavy[t];
+            double u[3] = {px[j] - cen[0], py[j] - cen[1], pz[j] - cen[2]};
+            const double l = std::sqrt(u[0] * u[0] + u[1] * u[1] + u[2] * u[2]);
+            WaterMcCandidate c = {};
+            for (int k = 0; k < 3; ++k) {
+               c.x[k] = px[j] + 2.6 * u[0] / l + (px[a[k]] - px[a[0]]);
+               c.y[k] = py[j] + 2.6 * u[1] / l + (py[a[k]] - py[a[0]]);
+               c.z[k] = pz[j] + 2.6 * u[2] / l + (pz[a[k]] - pz[a[0]]);
+            }
+            put.push_back(c);
+         }
+      }
+      // the full and the cheap energies with the water far, then put by the
+      // ligand
+      std::vector<grad_prec> g;
+      const double ffar = freshEnergy(g);
+      const double cfar = cheapInPlace(wfar);
+      REQUIRE(std::isfinite(cfar));
+      for (const auto& c : put) {
+         dfull[ic].push_back(candidateEnergy(wfar, c) - ffar);
+         dcheap[ic].push_back(candidateCheap(wfar, c) - cfar);
+      }
+      s.session.end();
+   }
+   double most = 0;
+   int ncmp = 0;
+   for (size_t t = 0; t < put.size(); ++t) {
+      CAPTURE(t);
+      if (not std::isfinite(dcheap[0][t]) or not std::isfinite(dcheap[1][t]))
+         continue;
+      const double ddf = dfull[1][t] - dfull[0][t];
+      const double ddc = dcheap[1][t] - dcheap[0][t];
+      CAPTURE(ddf, ddc);
+      // the same pairs by the same formula at the same reduced sites, so
+      // only round-off apart; a soft core fixed in the cheap energy would
+      // leave all of ddf, and sites not reduced 3 to 45 percent of it
+      REQUIRE(std::fabs(ddc - ddf) < 1.0e-3 * std::fabs(ddf) + 2.0e-3);
+      most = std::max(most, std::fabs(ddf));
+      ++ncmp;
+   }
+   REQUIRE(ncmp >= 2);
+   REQUIRE(most > 0.3);
+}
+
 TEST_CASE("WaterMC-Keywords", "[ff][watermc][L4]")
 {
    // The keywords that would break the hops, or that are misspelled, are
@@ -961,10 +1344,28 @@ TEST_CASE("WaterMC-Keywords", "[ff][watermc][L4]")
       {"site atom", "water-mc-site 3.0 0\n"},
       {"moves", "water-mc-moves 1 1 0\n"},
       {"hbond", "water-mc-hbond 0\n"},
+      {"orient zero", "water-mc-orient 0\n"},
+      {"orient fraction", "water-mc-orient 2.5\n"},
+      {"orient cutoff", "water-mc-orient 8 5.0\n"},
+      {"cheap cutoff", "water-mc-cheap 2.0\n"},
+      {"cheap factor", "water-mc-cheap 5.0 0\n"},
+      {"cheap extra", "water-mc-cheap 5.0 1.0 2.0\n"},
+      {"tries zero", "water-mc-tries 0\n"},
+      {"tries huge", "water-mc-tries 1e12\n"},
+      {"tries group zero", "water-mc-tries 4 0\n"},
+      {"tries group fraction", "water-mc-tries 4 1.5\n"},
    };
    for (const auto& b : bad) {
       CAPTURE(b.name);
       REQUIRE_THROWS(Setup(kRcDyn, b.keys));
+   }
+
+   // A cheap cutoff that the box cannot hold is refused at a hop, which sees
+   // the box a barostat has left; the dynamics refuses it at the start.
+   {
+      Setup s(kRcDyn, "water-mc-orient 2\nwater-mc-cheap 19.0\n");
+      REQUIRE_THROWS(hopOnce(1, -1));
+      s.session.end();
    }
 
    // repeated lines and ranges add spheres
@@ -972,4 +1373,473 @@ TEST_CASE("WaterMC-Keywords", "[ff][watermc][L4]")
    s.session.end();
 }
 
+namespace {
+// the nodes and weights of n-point Gauss-Legendre quadrature on [-1, 1]
+void gaussLegendre(int n, std::vector<double>& x, std::vector<double>& w)
+{
+   const double pi = std::acos(-1.0);
+   x.resize(n), w.resize(n);
+   for (int i = 0; i < n; ++i) {
+      double t = std::cos(pi * (i + 0.75) / (n + 0.5)), dp = 1;
+      for (int it = 0; it < 100; ++it) {
+         double p0 = 1, p1 = t;
+         for (int k = 2; k <= n; ++k) {
+            const double p2 = ((2 * k - 1) * t * p1 - (k - 1) * p0) / k;
+            p0 = p1, p1 = p2;
+         }
+         dp = n * (t * p1 - p0) / (t * t - 1);
+         const double dt = p1 / dp;
+         t -= dt;
+         if (std::fabs(dt) < 1e-15)
+            break;
+      }
+      x[i] = t, w[i] = 2 / ((1 - t * t) * dp * dp);
+   }
+}
+
+// Puts atom \c i at \c x, \c y, \c z on the device.
+void putAtom(int i, double x, double y, double z)
+{
+   const pos_prec p[3] = {(pos_prec)x, (pos_prec)y, (pos_prec)z};
+   darray::copyin(g::q0, 1, xpos + i, &p[0]);
+   darray::copyin(g::q0, 1, ypos + i, &p[1]);
+   darray::copyin(g::q0, 1, zpos + i, &p[2]);
+   waitFor(g::q0);
+   copyPosToXyz();
+}
+}
+
+TEST_CASE("WaterMC-Samples-Boltzmann", "[ff][watermc][L4]")
+{
+   // Hops alone, with no dynamics, must sample a water by exp(-U/kT) over the
+   // void voxels of the region and its orientations. One rigid water hops
+   // about a sodium ion, with its charge at an electrostatic lambda of 0.3; the
+   // site is the first shell, from the 2.5 Angstroms the ion keeps clear to
+   // 3.0, where the water spends about half its time, and the reservoir reaches
+   // 7. The other two ions are moved 1000 Angstroms away. Since the ion is a
+   // sphere, the weight of a point at a distance d from it is F(d), the mean of
+   // exp(-U/kT) over the directions of the ion seen from the water, which the
+   // full energy finds by Gauss-Legendre quadrature with the ion moved about
+   // the water (1e-4 from its limit). Summing F over the points of the void
+   // voxels of each part, from the shell of the run, gives the exact chance
+   // that the water is in the site and its mean distance from the ion, which
+   // the run must find within 4 of its standard errors, from 40 block means.
+   //
+   // The run takes every setting at once: tries, positions of each try, and
+   // orientations, with a cheap energy scaled by 0.7 that reaches 5 of the 7
+   // Angstroms, so that it differs from the full one. The seed fixes the run,
+   // which with the correct hops stays within 2.6 errors over 9 seeds. It
+   // catches the old site's group of positions drawn from the part the water
+   // enters (12 errors off), which no single hop shows, and slips the single
+   // hops of WaterMC-Acceptance-Ratio also catch: the proposal ratio left out
+   // (50), the reverse tries drawn from the part the water enters (25), the
+   // cheap energy left out of the weight of a site (34), and the old site not
+   // keeping its own orientation (8.5). Slips that move the sampling less, such
+   // as the old site weighed by its own position alone (3.9), are left to
+   // WaterMC-Acceptance-Ratio.
+   TestLmdaFlagReset lmdaReset;
+   TestLmdaFlagGuard guard;
+   ForceReset forceReset;
+   const char* argv[] = {"dummy", "boltz.xyz", "-k", "boltz.key"};
+   TestFile fxyz(TINKER9_DIRSTR "/test/file/testlmda/ionwat.xyz", "boltz.xyz");
+   TestFile fkey("", "boltz.key",
+      "parameters amoeba09\npolarizeterm none\nintegrator verlet\nrandomseed 1234\nligand 1\nvdw-lambda 1.0\n"
+      "ele-lambda 0.3\nwater-mc-trial 1\nwater-mc-type 39 40\nwater-mc-site 3.0 1\nwater-mc-reservoir 7.0\n"
+      "water-mc-tries 3 4\nwater-mc-orient 6\nwater-mc-cheap 5.0 0.7\n");
+   TestFile fprm(TINKER9_DIRSTR "/test/file/commit_ebe3611e/amoeba09.prm");
+   BathReset bathReset;
+   TestSession session(4, argv);
+   testMdInit(298., 0.);
+   rc_flag = kMd;
+   session.init();
+   REQUIRE(box_shape == BoxShape::UNBOUND);
+   REQUIRE_FALSE(use(Potent::POLAR));
+   const double kt = units::gasconst * bath::kelvin;
+   REQUIRE(kt > 0);
+   const double clear = 2.5, reservoir = 7.0, h = 0.4; // the clearance, reservoir and voxel spacing
+
+   const auto px = grab1(xpos), py = grab1(ypos), pz = grab1(zpos);
+   for (int i : {1, 2})
+      putAtom(i, px[i] + 1000, py[i], pz[i]);
+   nblistRefresh();
+   const double na[3] = {px[0], py[0], pz[0]};
+   auto& shell = waterMcShell();
+   const auto& a = shell.water(0);
+   const double o[3] = {px[a[0]], py[a[0]], pz[a[0]]};
+   // a hop that is rejected builds the shell, centered on the ion
+   waterMcForce = -1;
+   waterMonte(1);
+   waterMcForce = 0;
+   const auto c = shell.local(0);
+   REQUIRE(c[0] == 0);
+   REQUIRE(c[1] == 0);
+   REQUIRE(c[2] == 0);
+
+   // ln F(d) on a grid of d covering every point of the region
+   const double pi = std::acos(-1.0);
+   const int nth = 6, nph = 12;
+   const double dd = 0.1, d0 = clear - h * std::sqrt(3.0) / 2 - dd;
+   const int nd = (int)std::ceil((reservoir + h * std::sqrt(3.0) / 2 + dd - d0) / dd) + 3;
+   std::vector<double> ct, wt, lnf(nd);
+   gaussLegendre(nth, ct, wt);
+   double eref = 0;
+   for (int k = nd - 1; k >= 0; --k) {
+      const double d = d0 + (k - 1) * dd;
+      double sum = 0;
+      for (int i = 0; i < nth; ++i) {
+         const double st = std::sqrt(1 - ct[i] * ct[i]);
+         for (int j = 0; j < nph; ++j) {
+            const double ph = 2 * pi * (j + 0.5) / nph;
+            putAtom(0, o[0] + d * st * std::cos(ph), o[1] + d * st * std::sin(ph), o[2] + d * ct[i]);
+            nblistRefresh();
+            energy(calc::energy);
+            if (k == nd - 1 and i == 0 and j == 0)
+               eref = esum;
+            sum += 0.5 * wt[i] / nph * std::exp(-(esum - eref) / kt);
+         }
+      }
+      lnf[k] = std::log(sum);
+   }
+   putAtom(0, na[0], na[1], na[2]);
+   nblistRefresh();
+   // cubic interpolation of ln F
+   auto lnF = [&](double d) {
+      const double u = (d - d0) / dd + 1;
+      const int k = std::min(std::max((int)std::floor(u) - 1, 0), nd - 4);
+      const double s = u - k;
+      double r = 0;
+      for (int p = 0; p < 4; ++p) {
+         double l = 1;
+         for (int q = 0; q < 4; ++q)
+            if (q != p)
+               l *= (s - q) / (p - q);
+         r += l * lnf[k + p];
+      }
+      return r;
+   };
+
+   // F summed over each void voxel of each part, by 4 points on each edge
+   std::vector<double> gx, gw;
+   gaussLegendre(4, gx, gw);
+   double z[2] = {0, 0}, zd = 0, dmin = 1e9, dmax = 0;
+   for (auto part : {WaterPart::RESERVOIR, WaterPart::SITE})
+      for (int v : shell.voidSet(0, part))
+         for (int i = 0; i < 4; ++i)
+            for (int j = 0; j < 4; ++j)
+               for (int k = 0; k < 4; ++k) {
+                  const double f[3] = {0.5 + 0.5 * gx[i], 0.5 + 0.5 * gx[j], 0.5 + 0.5 * gx[k]};
+                  const auto t = shell.hop(0, v, f);
+                  const double r[3] = {o[0] + t[0] - na[0], o[1] + t[1] - na[1], o[2] + t[2] - na[2]};
+                  const double d = std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
+                  dmin = std::min(dmin, d), dmax = std::max(dmax, d);
+                  const double wq = gw[i] * gw[j] * gw[k] * std::exp(lnF(d));
+                  z[(int)part] += wq;
+                  zd += wq * d;
+               }
+   REQUIRE(dmin > d0 + dd);
+   REQUIRE(dmax < d0 + (nd - 3) * dd);
+   const double pexact = z[(int)WaterPart::SITE] / (z[0] + z[1]);
+   const double dexact = zd / (z[0] + z[1]);
+   REQUIRE(pexact > 0.3);
+   REQUIRE(pexact < 0.7);
+
+   // the run of hops, in 40 blocks
+   const int nb = 40, len = 50;
+   std::vector<double> bs(nb, 0), bd(nb, 0);
+   const auto c0 = waterMcCount;
+   for (int t = 0; t < nb * len; ++t) {
+      waterMonte(t + 1);
+      pos_prec q[3];
+      darray::copyout(g::q0, 1, &q[0], xpos + a[0]);
+      darray::copyout(g::q0, 1, &q[1], ypos + a[0]);
+      darray::copyout(g::q0, 1, &q[2], zpos + a[0]);
+      waitFor(g::q0);
+      const double r[3] = {q[0] - na[0], q[1] - na[1], q[2] - na[2]};
+      const int v = shell.voxelOf(r);
+      REQUIRE(v >= 0);
+      bs[t / len] += (shell.partOf(v) == WaterPart::SITE ? 1.0 : 0.0) / len;
+      bd[t / len] += std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]) / len;
+   }
+   auto meanErr = [&](const std::vector<double>& b) {
+      double m = 0, v = 0;
+      for (double x : b)
+         m += x / nb;
+      for (double x : b)
+         v += (x - m) * (x - m) / (nb - 1);
+      return std::make_pair(m, std::sqrt(v / nb));
+   };
+   const auto ps = meanErr(bs), pd = meanErr(bd);
+   const int nacc = waterMcCount.nacc - c0.nacc;
+   CAPTURE(pexact, ps.first, ps.second, dexact, pd.first, pd.second, nacc);
+   REQUIRE(nacc > 300);
+   REQUIRE(ps.second < 0.04);
+   REQUIRE(std::fabs(ps.first - pexact) < 4 * ps.second);
+   REQUIRE(std::fabs(pd.first - dexact) < 4 * pd.second);
+   session.end();
+}
+
 #endif
+
+// The cheap energy against the full energy, on every platform.
+namespace {
+struct CheapCase
+{
+   const char* name;
+   const char* xyz;
+   const char* prm;
+   const char* keys;
+   std::vector<Potent> terms; // the terms the case must have on
+};
+}
+
+TEST_CASE("WaterMC-Cheap-Matches-Full", "[ff][watermc][L2]")
+{
+   // With polarization off, no box and every cutoff beyond the cluster, a
+   // rigid move of a water changes the full energy only by the pairs of the
+   // water with the other atoms, which are those of the cheap energy once its
+   // own cutoff takes in every molecule: the bonded terms and the pairs within
+   // the water move with it. The two then change alike, the ligand at its
+   // lambda included: its scaled multipoles, its soft cores and the group
+   // weight of its charge transfer. This checks every term and its wiring
+   // against the kernels of the full energy: AMOEBA multipoles and buffered
+   // 14-7 with a sodium ion as the ligand; AMOEBA+ charge penetration, flux,
+   // buffered 14-7 and charge transfer with ethanol as the ligand; HIPPO
+   // charge penetration by a sodium ion (its parameters from fep/expol.key),
+   // and repulsion, dispersion and charge transfer (the parameters of
+   // water21.prm, which expol.prm leaves out) with another water as the
+   // ligand; and partial charges and Lennard-Jones (Amber99SB TIP3P) with a
+   // sodium ion as the ligand. The linear lambda maps put the van der Waals
+   // and electrostatic lambdas at 0.6.
+   const char* common = "polarizeterm none\ncutoff 50\nwater-mc-trial 1\nwater-mc-orient 4\nwater-mc-cheap 40\n"
+                        "vdw-lmda-map exp\nvdw-lmda-exp 1\nele-lmda-map exp\nele-lmda-exp 1\nlambda 0.6\n";
+   const CheapCase cases[] = {
+      {"amoeba", "testlmda/ionwat.xyz", "commit_ebe3611e/amoeba09.prm",
+         "water-mc-type 39 40\nwater-mc-site 3.0 1\nligand 1\n", {Potent::MPOLE, Potent::VDW, Potent::MUTATE}},
+      {"amoeba+", "testlmda/apgas.xyz", "commit_152ecec0/AMOEBAplus_Org.prm",
+         "water-mc-type 1 2\nwater-mc-site 3.0 4\nligand -4 12\n",
+         {Potent::MPOLE, Potent::VDW, Potent::CHGTRN, Potent::CHGFLX, Potent::MUTATE}},
+      {"hippo", "testlmda/expnaclus.xyz", "commit_dd1761ac/expol.prm",
+         "water-mc-type 1 2\nwater-mc-site 3.0 13\nligand -4 6\n"
+         "chgpen 7 4.090412102728663 5.346221041987701\n"
+         "chgtrn 1 3.63984 0.00000\nchgtrn 2 0.00000 3.27760\n",
+         {Potent::MPOLE, Potent::REPULS, Potent::DISP, Potent::CHGTRN, Potent::MUTATE}},
+      {"lj", "testlmda/tip3naclus.xyz", "commit_350df099/amber99sb.prm",
+         "water-mc-type 2001 2002\nwater-mc-site 3.0 13\nligand 13\n", {Potent::CHARGE, Potent::VDW, Potent::MUTATE}},
+   };
+   for (const auto& c : cases) {
+      CAPTURE(c.name);
+      std::string prm = c.prm;
+      const std::string pname = prm.substr(prm.rfind('/') + 1, prm.rfind('.') - prm.rfind('/') - 1);
+      TestLmdaFlagReset lmdaReset;
+      TestLmdaFlagGuard guard;
+      const char* argv[] = {"dummy", "cheap.xyz", "-k", "cheap.key"};
+      TestFile fxyz(std::string(TINKER9_DIRSTR "/test/file/") + c.xyz, "cheap.xyz");
+      TestFile fkey("", "cheap.key", "parameters " + pname + "\n" + common + c.keys);
+      TestFile fprm(std::string(TINKER9_DIRSTR "/test/file/") + c.prm);
+      BathReset bathReset;
+      TestSession session(4, argv);
+      testMdInit(298., 0.);
+      rc_flag = calc::xyz | calc::vel | calc::mass | calc::energy | calc::grad;
+      session.init();
+
+      for (Potent t : c.terms) {
+         CAPTURE((int)t);
+         REQUIRE(use(t));
+      }
+      REQUIRE_FALSE(use(Potent::POLAR));
+
+      const auto& a = waterMcShell().water(0);
+      std::vector<pos_prec> px(n), py(n), pz(n);
+      darray::copyout(g::q0, n, px.data(), xpos);
+      darray::copyout(g::q0, n, py.data(), ypos);
+      darray::copyout(g::q0, n, pz.data(), zpos);
+      waitFor(g::q0);
+      double x0[3], y0[3], z0[3];
+      for (int k = 0; k < 3; ++k)
+         x0[k] = px[a[k]], y0[k] = py[a[k]], z0[k] = pz[a[k]];
+      const double o[3] = {x0[0], y0[0], z0[0]};
+
+      // out by 1.5 Angstroms from the center of the other atoms, turned
+      double cen[3] = {0, 0, 0};
+      int nother = 0;
+      for (int i = 0; i < n; ++i) {
+         if (i == a[0] or i == a[1] or i == a[2])
+            continue;
+         cen[0] += px[i], cen[1] += py[i], cen[2] += pz[i];
+         ++nother;
+      }
+      double out[3];
+      for (int k = 0; k < 3; ++k)
+         out[k] = o[k] - cen[k] / nother;
+      const double lo = std::sqrt(out[0] * out[0] + out[1] * out[1] + out[2] * out[2]);
+      const double p[3] = {o[0] + 1.5 * out[0] / lo, o[1] + 1.5 * out[1] / lo, o[2] + 1.5 * out[2] / lo};
+      const double axis[3] = {1, -2, 0.5};
+      double m[3][3];
+      axisRotation(axis, 1.0, m);
+      double x1[3], y1[3], z1[3];
+      for (int k = 0; k < 3; ++k) {
+         const double r[3] = {x0[k] - o[0], y0[k] - o[1], z0[k] - o[2]};
+         x1[k] = p[0] + m[0][0] * r[0] + m[0][1] * r[1] + m[0][2] * r[2];
+         y1[k] = p[1] + m[1][0] * r[0] + m[1][1] * r[1] + m[1][2] * r[2];
+         z1[k] = p[2] + m[2][0] * r[0] + m[2][1] * r[1] + m[2][2] * r[2];
+      }
+
+      const double one[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+      const double c0 = waterMcCheapEnergy(0, one, o);
+      const double c1 = waterMcCheapEnergy(0, m, p);
+      energy(calc::energy);
+      const double e0 = esum;
+      putWater(0, x1, y1, z1);
+      nblistRefresh();
+      energy(calc::energy);
+      const double e1 = esum;
+      putWater(0, x0, y0, z0);
+      nblistRefresh();
+      energy(calc::energy);
+      REQUIRE(esum == e0);
+
+      CAPTURE(c0, c1, e0, e1);
+      REQUIRE(std::isfinite(c0));
+      REQUIRE(std::isfinite(c1));
+      REQUIRE(std::fabs(e1 - e0) > 0.3);
+      // mixed precision leaves at most 1e-5 here, and a term of HIPPO charge
+      // transfer left out would leave 3e-3
+      REQUIRE(std::fabs((c1 - c0) - (e1 - e0)) < 1.0e-5 * std::fabs(e1 - e0) + 5.0e-5);
+      session.end();
+   }
+}
+
+TEST_CASE("WaterMC-Cheap-Dhal", "[ff][watermc][L2]")
+{
+   // A buffered 14-7 vdW with Ewald dispersion in a box hands the dispersion
+   // only its tail past the vdW switch (use_dhal). The 14-7 of the cheap
+   // energy, with no cutoff, already holds that tail, so the cheap energy
+   // must be the one of the same run with no dispersion at all.
+   const std::string common = "parameters water03\na-axis 18.643\nvdw-cutoff 7.0\nvdw-taper 0.5\newald\n"
+                              "ewald-cutoff 7.0\ndewald\npolarizeterm none\nwater-mc-trial 1\nwater-mc-type 1 2\n"
+                              "water-mc-orient 4\n";
+   double c[2];
+   for (int k = 0; k < 2; ++k) {
+      CAPTURE(k);
+      TestLmdaFlagReset lmdaReset;
+      TestLmdaFlagGuard guard;
+      const char* argv[] = {"dummy", "dhal.xyz", "-k", "dhal.key"};
+      TestFile fxyz(TINKER9_DIRSTR "/test/file/testlmda/water2.xyz", "dhal.xyz");
+      TestFile fkey("", "dhal.key", common + (k ? "dispersionterm none\n" : ""));
+      TestFile fprm(TINKER9_DIRSTR "/test/file/commit_6bd0b6fd/water03.prm");
+      BathReset bathReset;
+      TestSession session(4, argv);
+      testMdInit(298., 0.);
+      rc_flag = calc::xyz | calc::vel | calc::mass | calc::energy | calc::grad;
+      session.init();
+      REQUIRE(use(Potent::VDW));
+      REQUIRE(use(Potent::DISP) == (k == 0));
+      if (k == 0)
+         REQUIRE(useDHal());
+
+      const auto& a = waterMcShell().water(0);
+      pos_prec o[3];
+      darray::copyout(g::q0, 1, &o[0], xpos + a[0]);
+      darray::copyout(g::q0, 1, &o[1], ypos + a[0]);
+      darray::copyout(g::q0, 1, &o[2], zpos + a[0]);
+      waitFor(g::q0);
+      const double one[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+      const double p[3] = {o[0], o[1], o[2]};
+      c[k] = waterMcCheapEnergy(0, one, p);
+      session.end();
+   }
+   CAPTURE(c[0], c[1]);
+   REQUIRE(std::isfinite(c[0]));
+   REQUIRE(std::fabs(c[0] - c[1]) < 1.0e-6);
+}
+
+TEST_CASE("WaterMC-Cheap-Overlap-Edge", "[ff][watermc][L2]")
+{
+   // Whether a cheap orientation overlaps an atom must be the test a hop
+   // starts from, in double precision, however close the atom lies to its
+   // overlap distance: else a structure could be left that no hop enters. A
+   // water whose oxygen sits a hair inside or outside the overlap distance
+   // of an atom comes out so, which single precision alone cannot tell.
+   TestLmdaFlagReset lmdaReset;
+   TestLmdaFlagGuard guard;
+   const char* argv[] = {"dummy", "edge.xyz", "-k", "edge.key"};
+   TestFile fxyz(TINKER9_DIRSTR "/test/file/testlmda/ionwat.xyz", "edge.xyz");
+   TestFile fkey("", "edge.key",
+      "parameters amoeba09\npolarizeterm none\nwater-mc-trial 1\nwater-mc-orient 4\n"
+      "water-mc-type 39 40\nligand 1\nvdw-lmda-map exp\nvdw-lmda-exp 1\nlambda 0.6\n");
+   TestFile fprm(TINKER9_DIRSTR "/test/file/commit_ebe3611e/amoeba09.prm");
+   BathReset bathReset;
+   TestSession session(4, argv);
+   testMdInit(298., 0.);
+   rc_flag = calc::xyz | calc::vel | calc::mass | calc::energy | calc::grad;
+   session.init();
+   REQUIRE(box_shape == BoxShape::UNBOUND);
+
+   const auto& a = waterMcShell().water(0);
+   std::vector<pos_prec> px(n), py(n), pz(n);
+   darray::copyout(g::q0, n, px.data(), xpos);
+   darray::copyout(g::q0, n, py.data(), ypos);
+   darray::copyout(g::q0, n, pz.data(), zpos);
+   waitFor(g::q0);
+   auto inWater = [&](int i) { return i == a[0] or i == a[1] or i == a[2]; };
+
+   // each atom of the water relative to its oxygen
+   double r[3][3];
+   for (int k = 0; k < 3; ++k)
+      r[k][0] = px[a[k]] - px[a[0]], r[k][1] = py[a[k]] - py[a[0]], r[k][2] = pz[a[k]] - pz[a[0]];
+
+   for (int j = 0; j < n; ++j) {
+      if (inWater(j))
+         continue;
+      CAPTURE(j);
+      const double ov = waterMcOverlapDistance(j);
+      REQUIRE(ov > 0.5);
+      // outward from the center of the other atoms
+      double cen[3] = {0, 0, 0};
+      int nc = 0;
+      for (int i = 0; i < n; ++i)
+         if (not inWater(i) and i != j)
+            cen[0] += px[i], cen[1] += py[i], cen[2] += pz[i], ++nc;
+      double u[3] = {px[j] - cen[0] / nc, py[j] - cen[1] / nc, pz[j] - cen[2] / nc};
+      const double lu = std::sqrt(u[0] * u[0] + u[1] * u[1] + u[2] * u[2]);
+      for (double& c : u)
+         c /= lu;
+
+      // a turn that keeps every other pair clear by 0.3 Angstroms
+      double m[3][3];
+      bool found = false;
+      for (int t = 0; t < 200 and not found; ++t) {
+         const double axis[3] = {std::sin(1.0 * t), std::cos(1.3 * t), 0.7};
+         axisRotation(axis, 0.37 * t, m);
+         const double p[3] = {px[j] + ov * u[0], py[j] + ov * u[1], pz[j] + ov * u[2]};
+         found = true;
+         for (int k = 0; k < 3 and found; ++k) {
+            const double w[3] = {p[0] + m[0][0] * r[k][0] + m[0][1] * r[k][1] + m[0][2] * r[k][2],
+               p[1] + m[1][0] * r[k][0] + m[1][1] * r[k][1] + m[1][2] * r[k][2],
+               p[2] + m[2][0] * r[k][0] + m[2][1] * r[k][1] + m[2][2] * r[k][2]};
+            for (int i = 0; i < n and found; ++i) {
+               if (inWater(i) or (k == 0 and i == j))
+                  continue;
+               const double d[3] = {w[0] - px[i], w[1] - py[i], w[2] - pz[i]};
+               const double dist = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+               found = dist > waterMcOverlapDistance(i) + 0.3;
+            }
+         }
+      }
+      REQUIRE(found);
+
+      // a hair: far below single precision, unless the coordinates are single
+      const double eps = sizeof(pos_prec) == sizeof(double) ? 1.0e-9 : 1.0e-4;
+      for (double dr : {eps, -eps, 100 * eps, -100 * eps}) {
+         CAPTURE(dr);
+         const double p[3] = {px[j] + (ov + dr) * u[0], py[j] + (ov + dr) * u[1], pz[j] + (ov + dr) * u[2]};
+         const double e = waterMcCheapEnergy(0, m, p);
+         if (dr > 0)
+            REQUIRE(std::isfinite(e));
+         else
+            REQUIRE(std::isinf(e));
+      }
+   }
+   session.end();
+}
+

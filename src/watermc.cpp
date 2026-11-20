@@ -1,32 +1,46 @@
 #include "ff/watermc.h"
 #include "ff/amoeba/induce.h"
+#include "ff/amoeba/mpolestate.h"
 #include "ff/atom.h"
 #include "ff/box.h"
 #include "ff/dlmda.h"
+#include "ff/echarge.h"
 #include "ff/egvop.h"
 #include "ff/energy.h"
 #include "ff/evdw.h"
 #include "ff/eost.h"
+#include "ff/hippo/chgpen.h"
+#include "ff/hippo/edisp.h"
+#include "ff/hippo/erepel.h"
+#include "ff/modamoeba.h"
+#include "ff/modhippo.h"
 #include "ff/nblist.h"
+#include "ff/potent.h"
+#include "ff/watermccheap.h"
 #include "math/random.h"
 #include "md/misc.h"
 #include "md/pq.h"
 #include "tool/argkey.h"
 #include "tool/darray.h"
 #include "tool/error.h"
+#include "tool/externfunc.h"
 #include "tool/iofortstr.h"
 #include "tool/iotext.h"
 #include "tool/ioprint.h"
 #include <tinker/detail/atomid.hh>
 #include <tinker/detail/atoms.hh>
 #include <tinker/detail/bath.hh>
+#include <tinker/detail/chgpot.hh>
 #include <tinker/detail/files.hh>
 #include <tinker/detail/keys.hh>
 #include <tinker/detail/molcul.hh>
+#include <tinker/detail/mplpot.hh>
 #include <tinker/detail/mutant.hh>
 #include <tinker/detail/units.hh>
+#include <tinker/detail/vdw.hh>
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstdio>
 #include <limits>
@@ -370,6 +384,16 @@ double ligandCoupling(int g)
 bool s_on;
 int s_trial;
 int s_tries;
+int s_group;         // positions of each try, of which the cheap energy keeps one
+int s_orient;        // orientations of each position, 1 for uniform ones
+double s_cheapCut;   // WATER-MC-CHEAP rc: how far from the oxygen atoms count
+double s_cheapScale; // WATER-MC-CHEAP s: the factor of the cheap energy
+
+// whether the hops draw by the cheap energy
+bool cheapOn()
+{
+   return s_orient > 1 or s_group > 1;
+}
 double s_pmove[3]; // the chances of the hops out, within and in
 bool s_sited;
 WaterShell s_shell;
@@ -387,6 +411,9 @@ struct Site
    double rot[3][3];
    bool clear;
    double u;
+   double uc = 0, lnw = 0;    // the cheap terms, see WaterMcCandidate
+   std::vector<double> lnwpos; // the cheap terms of each position of its try
+   int pickpos = -1;           // the position kept
    LmdaStepState state;
 };
 
@@ -405,12 +432,23 @@ void randomRotation(double (&m)[3][3])
    m[2][0] = 2 * (b * d - a * c), m[2][1] = 2 * (c * d + a * b), m[2][2] = a * a - b * b - c * c + d * d;
 }
 
-// whether an atom of the water at x, y, z comes too close to another atom
-template <class T>
-bool overlaps(const std::array<int, 3>& a, const T* x, const T* y, const T* z)
+// an index drawn by the weights whose running sums are cum, of which the last
+// is positive
+int drawIndex(const std::vector<double>& cum)
 {
+   const int k = std::upper_bound(cum.begin(), cum.end(), random<double>() * cum.back()) - cum.begin();
+   return std::min(k, (int)cum.size() - 1);
+}
+
+// Whether an atom of the water at x, y, z comes too close to another atom:
+// any atom, or the \c nidx atoms of \c idx, which hold every atom that could.
+template <class T>
+bool overlaps(const std::array<int, 3>& a, const T* x, const T* y, const T* z, const int* idx = nullptr, int nidx = 0)
+{
+   const int nj = idx ? nidx : n;
    for (int k = 0; k < 3; ++k) {
-      for (int j = 0; j < n; ++j) {
+      for (int t = 0; t < nj; ++t) {
+         const int j = idx ? idx[t] : t;
          if (j == a[0] or j == a[1] or j == a[2])
             continue;
          double xr = x[k] - s_dx[j], yr = y[k] - s_dy[j], zr = z[k] - s_dz[j];
@@ -421,6 +459,399 @@ bool overlaps(const std::array<int, 3>& a, const T* x, const T* y, const T* z)
       }
    }
    return false;
+}
+
+// The radius of the largest sphere about a point that the periodic box holds
+// without touching an image of itself, infinite without a box.
+double inscribedRadius()
+{
+   if (box_shape == BoxShape::UNBOUND)
+      return std::numeric_limits<double>::infinity();
+   if (box_shape == BoxShape::OCT)
+      return std::sqrt(3.0) / 4 * lvec1.x;
+   double w = std::numeric_limits<double>::infinity();
+   for (const auto& rk : {recipa, recipb, recipc})
+      w = std::min(w, 1 / std::sqrt((double)rk.x * rk.x + (double)rk.y * rk.y + (double)rk.z * rk.z));
+   return 0.5 * w;
+}
+
+// The cheap energy (WATER-MC-ORIENT, WATER-MC-TRIES k g) of the hopping water
+// with the atoms near its oxygen, by the pair functions of the full energy
+// (seq/watermccheap.h). It reads the physical multipoles rotated at the
+// coordinates of the hop: at the electrostatic lambda, with the charge flux if
+// it is on. A rotation of the water turns its own multipoles with it, the
+// dipoles by R and the quadrupoles by R Q R^T, since each of its local frames
+// is defined by its own atoms; the multipoles of the other atoms do not
+// depend on where the water is, so the energy is a function of the structure
+// alone, as the hop and the hop back need. The induced dipoles are left out
+// for that reason.
+std::vector<int> s_molOf;                 // the molecule of each atom
+std::vector<std::vector<int>> s_molAtoms; // the atoms of each molecule
+constexpr size_t kWholeMolecule = 500;    // larger molecules count by atom
+constexpr double kCheapCap = 100;         // cap of a van der Waals or repulsion pair
+// Within this of an overlap distance the device leaves the verdict to the
+// host, far above the error of its single precision.
+constexpr double kOverlapEdge = 1.0e-3;
+
+struct Cheap
+{
+   WaterMcCheapTerms terms;
+   WaterMcCheapDev dev;
+   std::array<int, 3> a;
+   double b[3][3];           // the atoms of the water relative to its oxygen
+   double mp[3][MPL_TOTAL];  // their multipoles in the global frame
+   double rp[3][MPL_TOTAL];  // their repulsion multipoles
+   int wpar[3];              // the water atom toward which each vdW site moves
+   double wred[3];           // and the reduction factor that takes it there
+   int wgrp, mutcls;         // the group of the water and the pair classes
+   bool mutate;              // whether a pair may follow lambda
+   GrpPairScale ctsc;        // the group weights of charge transfer
+   std::vector<int> near;    // every atom near enough a position of the hop
+};
+Cheap s_cheap;
+
+// A batch of orientations on the host, as WaterMcCheapBatch lays it out.
+struct Batch
+{
+   std::vector<int> beg, end, nbj, nbmc;
+   std::vector<real> site, nbr;
+   std::vector<double> u;
+   std::vector<int> hit;
+
+   void clear()
+   {
+      beg.clear(), end.clear(), nbj.clear(), nbmc.clear(), site.clear(), nbr.clear();
+   }
+};
+Batch s_batch;
+
+// the device copies of a batch, which grow as needed
+int* s_bufI;
+real* s_bufR;
+double* s_bufU;
+int* s_bufH;
+size_t s_capI, s_capR, s_capU, s_capH;
+
+void cheapDeallocate()
+{
+   if (s_bufI)
+      darray::deallocate(s_bufI);
+   if (s_bufR)
+      darray::deallocate(s_bufR);
+   if (s_bufU)
+      darray::deallocate(s_bufU);
+   if (s_bufH)
+      darray::deallocate(s_bufH);
+   s_bufI = nullptr, s_bufR = nullptr, s_bufU = nullptr, s_bufH = nullptr;
+   s_capI = 0, s_capR = 0, s_capU = 0, s_capH = 0;
+}
+
+void cheapMolecules()
+{
+   s_molOf.assign(atoms::n, 0);
+   s_molAtoms.assign(molcul::nmol, {});
+   for (int m = 0; m < molcul::nmol; ++m) {
+      for (int j = molcul::imol[2 * m] - 1; j < molcul::imol[2 * m + 1]; ++j) {
+         const int i = molcul::kmol[j] - 1;
+         s_molOf[i] = m;
+         s_molAtoms[m].push_back(i);
+      }
+   }
+}
+
+// Sets up the cheap energy of water a at the coordinates of the hop.
+void cheapRefresh(const std::array<int, 3>& a)
+{
+   if (s_molAtoms.empty())
+      cheapMolecules();
+   // the displacements of the neighbors are the minimum images from the
+   // oxygen, which those from the hydrogens must stay
+   if (s_cheapCut + 1.5 > inscribedRadius())
+      TINKER_THROW("WATER-MC-CHEAP  --  The Cutoff Plus 1.5 Angstroms Must Be Less Than Half the Box");
+
+   auto& c = s_cheap;
+   c.a = a;
+   auto& t = c.terms;
+   t = WaterMcCheapTerms{};
+   for (int k = 0; k < 3; ++k)
+      t.a[k] = a[k];
+   t.f = chgpot::electric / chgpot::dielec;
+   t.cap = kCheapCap;
+   t.big = 1.0e6;
+   t.edge = kOverlapEdge;
+   if (use(Potent::MPOLE)) {
+      mpoleEnsurePhysical();
+      t.elec = not mplpot::use_chgpen ? 2 : (pentyp == Chgpen::GORDON2 ? 4 : 3);
+   } else if (use(Potent::CHARGE)) {
+      t.elec = 1;
+   }
+   if (use(Potent::VDW) and (vdwtyp == Vdw::HAL or vdwtyp == Vdw::LJ)) {
+      t.vdw = vdwtyp == Vdw::HAL ? 1 : 2;
+      t.ghal = ghal, t.dhal = dhal;
+      grpSoftCores(t.vdw == 1 ? halSoft : ljSoft, false, t.vs1, t.vs2);
+   }
+   if (use(Potent::REPULS)) {
+      repoleInit(0);
+      t.repel = 1;
+      grpSoftCores(repelSoft, false, t.rs1, t.rs2);
+   }
+   // A buffered 14-7 vdW with Ewald dispersion hands the dispersion only its
+   // tail past the vdW switch (useDHal), which the 14-7 here, with no cutoff,
+   // already holds.
+   if (use(Potent::DISP) and not useDHal()) {
+      t.disp = 1;
+      t.ds1 = dispGroupSoft(1);
+      t.ds2 = use_rel ? dispGroupSoft(2) : t.ds1;
+   }
+   if (use(Potent::CHGTRN)) {
+      t.ct = ctrntyp == Chgtrn::COMBINED ? 2 : 1;
+      c.ctsc = ctScale();
+   }
+   c.dev = {rpole, rrepole, pchg, jvdw, radmin, epsilon, njvdw, pcore, pval, palpha, sizpr, dmppr, elepr, csix, adisp,
+      chgct, dmpct};
+   c.mutate = use(Potent::MUTATE);
+   c.mutcls = vdwMutclsTable();
+   c.wgrp = hostGroup(a[0]);
+
+   // the water: its body, its multipoles and its van der Waals sites
+   for (int k = 0; k < 3; ++k) {
+      c.b[k][0] = s_dx[a[k]] - s_dx[a[0]];
+      c.b[k][1] = s_dy[a[k]] - s_dy[a[0]];
+      c.b[k][2] = s_dz[a[k]] - s_dz[a[0]];
+      c.wpar[k] = k, c.wred[k] = 1;
+      for (int j = 0; j < MPL_TOTAL; ++j)
+         c.mp[k][j] = 0, c.rp[k][j] = 0;
+   }
+   real buf[MPL_TOTAL];
+   for (int k = 0; k < 3; ++k) {
+      if (t.elec >= 2) {
+         darray::copyout(g::q0, 1, reinterpret_cast<real (*)[MPL_TOTAL]>(buf), rpole + a[k]);
+         waitFor(g::q0);
+         for (int j = 0; j < MPL_TOTAL; ++j)
+            c.mp[k][j] = buf[j];
+      }
+      if (t.repel) {
+         darray::copyout(g::q0, 1, reinterpret_cast<real (*)[MPL_TOTAL]>(buf), rrepole + a[k]);
+         waitFor(g::q0);
+         for (int j = 0; j < MPL_TOTAL; ++j)
+            c.rp[k][j] = buf[j];
+      }
+      if (t.vdw) {
+         const int par = vdw::ired[a[k]] - 1;
+         const int kp = par == a[0] ? 0 : (par == a[1] ? 1 : (par == a[2] ? 2 : k));
+         if (kp != k)
+            c.wpar[k] = kp, c.wred[k] = vdw::kred[a[k]];
+      }
+   }
+}
+
+// The atoms other than those of water a within reach of any of the points of
+// its oxygen, for the gathers and the overlap tests of a hop. The sphere that
+// holds them is centered on the middle of the points, which spread over the
+// site and the reservoir.
+void cheapNear(const std::array<int, 3>& a, const std::vector<std::array<double, 3>>& pts, double reach)
+{
+   auto& near = s_cheap.near;
+   near.clear();
+   if (pts.empty())
+      return;
+   double c[3] = {0, 0, 0};
+   for (const auto& p : pts) {
+      double r[3] = {p[0] - pts[0][0], p[1] - pts[0][1], p[2] - pts[0][2]};
+      minimumImage(r[0], r[1], r[2]);
+      for (int k = 0; k < 3; ++k)
+         c[k] += r[k] / pts.size();
+   }
+   for (int k = 0; k < 3; ++k)
+      c[k] += pts[0][k];
+   double far = 0;
+   for (const auto& p : pts) {
+      double r[3] = {p[0] - c[0], p[1] - c[1], p[2] - c[2]};
+      minimumImage(r[0], r[1], r[2]);
+      far = std::max(far, std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]));
+   }
+   const double lim = far + reach;
+   for (int j = 0; j < n; ++j) {
+      if (j == a[0] or j == a[1] or j == a[2])
+         continue;
+      double r[3] = {s_dx[j] - c[0], s_dy[j] - c[1], s_dz[j] - c[2]};
+      minimumImage(r[0], r[1], r[2]);
+      if (r[0] * r[0] + r[1] * r[1] + r[2] * r[2] < lim * lim)
+         near.push_back(j);
+   }
+}
+
+// how far from the oxygen the water reaches
+double waterReach(const std::array<int, 3>& a)
+{
+   double far = 0;
+   for (int k = 1; k < 3; ++k) {
+      const double r[3] = {s_dx[a[k]] - s_dx[a[0]], s_dy[a[k]] - s_dy[a[0]], s_dz[a[k]] - s_dz[a[0]]};
+      far = std::max(far, std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]));
+   }
+   return far;
+}
+
+// Adds to the batch the neighbors of the oxygen at p: every atom of a molecule
+// of up to kWholeMolecule atoms with an atom within the cutoff, and the atoms
+// within it of larger molecules. Returns where they start and end.
+std::array<int, 2> cheapGather(Batch& bt, const double p[3])
+{
+   const auto& c = s_cheap;
+   const auto& a = c.a;
+   const int start = bt.nbj.size();
+   static std::vector<char> mark;
+   static std::vector<int> marked;
+   mark.assign(s_molAtoms.size(), 0);
+   marked.clear();
+   const double rc2 = s_cheapCut * s_cheapCut;
+   auto add = [&](int j, const double (&d)[3]) {
+      // the van der Waals site of the atom, on the way to its neighbor
+      double vd[3] = {d[0], d[1], d[2]};
+      const int par = vdw::ired[j] - 1;
+      if (c.terms.vdw and par >= 0 and par != j) {
+         double r[3] = {s_dx[j] - s_dx[par], s_dy[j] - s_dy[par], s_dz[j] - s_dz[par]};
+         minimumImage(r[0], r[1], r[2]);
+         for (int k = 0; k < 3; ++k)
+            vd[k] += (vdw::kred[j] - 1) * r[k];
+      }
+      const int g = hostGroup(j);
+      const int ik = 3 * c.wgrp + g;
+      const int mc = c.mutate ? ((c.mutcls >> (2 * ik)) & 3) - 1 : 0;
+      double ctw = 0;
+      if (c.terms.ct)
+         ctw = (c.ctsc.live >> ik & 1) ? c.ctsc.sc[c.wgrp][g] : 0;
+      bt.nbj.push_back(j);
+      bt.nbmc.push_back(mc);
+      const double nb[WMC_NNB] = {d[0], d[1], d[2], vd[0], vd[1], vd[2], waterMcOverlapDistance(j), ctw};
+      for (double v : nb)
+         bt.nbr.push_back(v);
+   };
+   for (int j : c.near) {
+      double d[3] = {s_dx[j] - p[0], s_dy[j] - p[1], s_dz[j] - p[2]};
+      minimumImage(d[0], d[1], d[2]);
+      if (d[0] * d[0] + d[1] * d[1] + d[2] * d[2] >= rc2)
+         continue;
+      const int m = s_molOf[j];
+      if (s_molAtoms[m].size() > kWholeMolecule) {
+         add(j, d);
+      } else if (not mark[m]) {
+         mark[m] = 1;
+         marked.push_back(m);
+      }
+   }
+   for (int m : marked) {
+      for (int j : s_molAtoms[m]) {
+         if (j == a[0] or j == a[1] or j == a[2])
+            continue;
+         double d[3] = {s_dx[j] - p[0], s_dy[j] - p[1], s_dz[j] - p[2]};
+         minimumImage(d[0], d[1], d[2]);
+         add(j, d);
+      }
+   }
+   return {start, (int)bt.nbj.size()};
+}
+
+// a multipole turned by m: the charge kept, the dipole by m, the quadrupole
+// by m Q m^T
+void turnMultipole(const double (&m)[3][3], const double* in, real* out)
+{
+   const double d[3] = {in[MPL_PME_X], in[MPL_PME_Y], in[MPL_PME_Z]};
+   const double q[3][3] = {{in[MPL_PME_XX], in[MPL_PME_XY], in[MPL_PME_XZ]},
+      {in[MPL_PME_XY], in[MPL_PME_YY], in[MPL_PME_YZ]}, {in[MPL_PME_XZ], in[MPL_PME_YZ], in[MPL_PME_ZZ]}};
+   double dt[3], qt[3][3];
+   for (int i = 0; i < 3; ++i) {
+      dt[i] = m[i][0] * d[0] + m[i][1] * d[1] + m[i][2] * d[2];
+      for (int j = 0; j < 3; ++j) {
+         double s = 0;
+         for (int u = 0; u < 3; ++u)
+            for (int v = 0; v < 3; ++v)
+               s += m[i][u] * q[u][v] * m[j][v];
+         qt[i][j] = s;
+      }
+   }
+   out[MPL_PME_0] = in[MPL_PME_0];
+   out[MPL_PME_X] = dt[0], out[MPL_PME_Y] = dt[1], out[MPL_PME_Z] = dt[2];
+   out[MPL_PME_XX] = qt[0][0], out[MPL_PME_YY] = qt[1][1], out[MPL_PME_ZZ] = qt[2][2];
+   out[MPL_PME_XY] = qt[0][1], out[MPL_PME_XZ] = qt[0][2], out[MPL_PME_YZ] = qt[1][2];
+}
+
+// Adds an orientation of the water, turned by m about its oxygen, with the
+// neighbors \c nb of its position.
+void cheapOrient(Batch& bt, const std::array<int, 2>& nb, const double (&m)[3][3])
+{
+   const auto& c = s_cheap;
+   bt.beg.push_back(nb[0]);
+   bt.end.push_back(nb[1]);
+   double rw[3][3];
+   for (int k = 0; k < 3; ++k)
+      for (int j = 0; j < 3; ++j)
+         rw[k][j] = m[j][0] * c.b[k][0] + m[j][1] * c.b[k][1] + m[j][2] * c.b[k][2];
+   for (int k = 0; k < 3; ++k) {
+      real s[WMC_NSITE] = {};
+      const int kp = c.wpar[k];
+      for (int j = 0; j < 3; ++j) {
+         s[WMC_X + j] = rw[k][j];
+         s[WMC_V + j] = rw[kp][j] + c.wred[k] * (rw[k][j] - rw[kp][j]);
+      }
+      turnMultipole(m, c.mp[k], s + WMC_M);
+      turnMultipole(m, c.rp[k], s + WMC_R);
+      bt.site.insert(bt.site.end(), s, s + WMC_NSITE);
+   }
+}
+
+template <class T>
+void cheapGrow(T*& p, size_t& cap, size_t need)
+{
+   if (need <= cap)
+      return;
+   if (p)
+      darray::deallocate(p);
+   cap = std::max(need, 2 * cap);
+   darray::allocate(cap, &p);
+}
+
+// Sums the batch on the device and leaves the cheap energy of each
+// orientation, the factor of WATER-MC-CHEAP in it, and whether it overlaps.
+void cheapEvaluate(Batch& bt)
+{
+   const int nori = bt.beg.size(), nnb = bt.nbj.size();
+   bt.u.assign(nori, 0);
+   bt.hit.assign(nori, 0);
+   if (nori == 0)
+      return;
+   std::vector<int> ib;
+   ib.reserve(2 * nori + 2 * nnb);
+   ib.insert(ib.end(), bt.beg.begin(), bt.beg.end());
+   ib.insert(ib.end(), bt.end.begin(), bt.end.end());
+   ib.insert(ib.end(), bt.nbj.begin(), bt.nbj.end());
+   ib.insert(ib.end(), bt.nbmc.begin(), bt.nbmc.end());
+   std::vector<real> rb;
+   rb.reserve(bt.site.size() + bt.nbr.size());
+   rb.insert(rb.end(), bt.site.begin(), bt.site.end());
+   rb.insert(rb.end(), bt.nbr.begin(), bt.nbr.end());
+   cheapGrow(s_bufI, s_capI, std::max<size_t>(ib.size(), 1));
+   cheapGrow(s_bufR, s_capR, std::max<size_t>(rb.size(), 1));
+   cheapGrow(s_bufU, s_capU, nori);
+   cheapGrow(s_bufH, s_capH, nori);
+   darray::copyin(g::q0, ib.size(), s_bufI, ib.data());
+   darray::copyin(g::q0, rb.size(), s_bufR, rb.data());
+   WaterMcCheapBatch db;
+   db.nori = nori;
+   db.beg = s_bufI;
+   db.end = s_bufI + nori;
+   db.nbj = s_bufI + 2 * nori;
+   db.nbmc = s_bufI + 2 * nori + nnb;
+   db.site = s_bufR;
+   db.nbr = s_bufR + bt.site.size();
+   db.u = s_bufU;
+   db.hit = s_bufH;
+   TINKER_FCALL2(acc1, cu1, waterMcCheap, s_cheap.terms, s_cheap.dev, db);
+   darray::copyout(g::q0, nori, bt.u.data(), s_bufU);
+   darray::copyout(g::q0, nori, bt.hit.data(), s_bufH);
+   waitFor(g::q0);
+   for (auto& v : bt.u)
+      v *= s_cheapScale;
 }
 
 // the parts a hop of each kind leaves and reaches, and the kind of the hop back
@@ -468,34 +899,180 @@ double proposalRatio(const WaterShell& shell, WaterHop hop, int w, int v, double
    return back / fwd;
 }
 
-// an index drawn by the weights whose running sums are cum, of which the last
-// is positive
-int drawIndex(const std::vector<double>& cum)
+// a rotation matrix
+struct Rot
 {
-   const int k = std::upper_bound(cum.begin(), cum.end(), random<double>() * cum.back()) - cum.begin();
-   return std::min(k, (int)cum.size() - 1);
+   double m[3][3];
+};
+
+// A position of a hop: its voxel, the translation of the oxygen there, and the
+// orientations tried there, the first of the old site the water's own; with
+// the cheap energy, where its orientations start in the batch and the range of
+// its neighbors there.
+struct Position
+{
+   int v;
+   double d[3];
+   bool own;
+   std::vector<Rot> rots;
+   int ori0 = 0;
+   int nb0 = 0, nb1 = 0;
+};
+
+// Draws a uniform point of a voxel of \c voids by its weight, whose running
+// sums are \c cum, and its orientations: one uniform, or with the cheap energy
+// WATER-MC-ORIENT of them.
+Position drawPosition(int w, const std::vector<int>& voids, const std::vector<double>& cum)
+{
+   Position ps;
+   ps.v = voids[drawIndex(cum)];
+   const double f[3] = {random<double>(), random<double>(), random<double>()};
+   const auto d = s_shell.hop(w, ps.v, f);
+   for (int k = 0; k < 3; ++k)
+      ps.d[k] = d[k];
+   ps.own = false;
+   ps.rots.resize(cheapOn() ? s_orient : 1);
+   for (auto& r : ps.rots)
+      randomRotation(r.m);
+   return ps;
 }
 
-// A uniform point of a voxel of \c voids drawn by its weight, whose running
-// sums are \c cum, with a uniform orientation of the water about its oxygen.
-Site drawSite(int w, const std::vector<int>& voids, const std::vector<double>& cum)
+// The old site of water w, its own orientation first and the other m - 1
+// drawn.
+Position ownPosition(int w)
 {
-   const auto& a = s_shell.water(w);
-   const int v = voids[drawIndex(cum)];
-   const double f[3] = {random<double>(), random<double>(), random<double>()};
-   const auto d = s_shell.hop(w, v, f);
-   Site s;
-   s.v = v;
-   randomRotation(s.rot);
+   Position ps;
+   ps.v = s_shell.voxelOfWater(w);
+   ps.d[0] = ps.d[1] = ps.d[2] = 0;
+   ps.own = true;
+   ps.rots.resize(s_orient);
+   ps.rots[0] = {{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}};
+   for (size_t i = 1; i < ps.rots.size(); ++i)
+      randomRotation(ps.rots[i].m);
+   return ps;
+}
+
+// The coordinates of water a turned by m about its oxygen and moved by d, as
+// a hop would write them.
+void placeWater(const std::array<int, 3>& a, const double d[3], const double (&m)[3][3], pos_prec* x, pos_prec* y,
+   pos_prec* z)
+{
    const double o[3] = {s_dx[a[0]], s_dy[a[0]], s_dz[a[0]]};
    for (int k = 0; k < 3; ++k) {
       const double r[3] = {s_dx[a[k]] - o[0], s_dy[a[k]] - o[1], s_dz[a[k]] - o[2]};
-      s.x[k] = o[0] + d[0] + s.rot[0][0] * r[0] + s.rot[0][1] * r[1] + s.rot[0][2] * r[2];
-      s.y[k] = o[1] + d[1] + s.rot[1][0] * r[0] + s.rot[1][1] * r[1] + s.rot[1][2] * r[2];
-      s.z[k] = o[2] + d[2] + s.rot[2][0] * r[0] + s.rot[2][1] * r[1] + s.rot[2][2] * r[2];
+      x[k] = o[0] + d[0] + m[0][0] * r[0] + m[0][1] * r[1] + m[0][2] * r[2];
+      y[k] = o[1] + d[1] + m[1][0] * r[0] + m[1][1] * r[1] + m[1][2] * r[2];
+      z[k] = o[2] + d[2] + m[2][0] * r[0] + m[2][1] * r[1] + m[2][2] * r[2];
    }
-   s.clear = not overlaps(a, s.x, s.y, s.z);
+}
+
+// Whether orientation o of the batch, water a turned by m and moved by d,
+// overlaps an atom: the verdict of the device, or where an atom lies within
+// kOverlapEdge of its overlap distance, that of the host among the neighbors
+// gathered from nb0 to nb1, which hold every atom that could overlap. Either
+// way it is the test a hop starts from, in the double precision of the host
+// on the coordinates the hop would write.
+bool orientOverlaps(const Batch& bt, int o, const std::array<int, 3>& a, const double d[3], const double (&m)[3][3],
+   int nb0, int nb1)
+{
+   if (bt.hit[o] != WMC_EDGE)
+      return bt.hit[o] == WMC_HIT;
+   pos_prec x[3], y[3], z[3];
+   placeWater(a, d, m, x, y, z);
+   return overlaps(a, x, y, z, bt.nbj.data() + nb0, nb1 - nb0);
+}
+
+// The site a position keeps. With the cheap energy, the orientation drawn by
+// exp(-u/kT) among its m, the old site keeping its own, with the cheap energy
+// uc of the one kept and lnw, the log of the mean of exp(-u/kT) over the m,
+// -inf if all overlap. An orientation that overlaps an atom has no weight, so
+// the one kept is clear; the own one of the old site was found clear when the
+// hop began, by the same test. Without it, the one orientation is tested
+// among the atoms near the hop.
+Site keepPosition(int w, const Position& ps)
+{
+   const auto& a = s_shell.water(w);
+   Site s;
+   s.v = ps.v;
+   int pick = 0;
+   if (cheapOn()) {
+      const double kt = units::gasconst * bath::kelvin;
+      const int m = ps.rots.size();
+      std::vector<double> u(m);
+      double umin = std::numeric_limits<double>::infinity();
+      for (int i = 0; i < m; ++i) {
+         const int o = ps.ori0 + i;
+         const bool hit = not(ps.own and i == 0) and orientOverlaps(s_batch, o, a, ps.d, ps.rots[i].m, ps.nb0, ps.nb1);
+         u[i] = hit ? std::numeric_limits<double>::infinity() : s_batch.u[o];
+         umin = std::min(umin, u[i]);
+      }
+      if (not std::isfinite(umin)) {
+         s.lnw = -std::numeric_limits<double>::infinity();
+         s.uc = u[0];
+      } else {
+         std::vector<double> cum(m);
+         double sum = 0;
+         for (int i = 0; i < m; ++i)
+            cum[i] = (sum += std::exp(-(u[i] - umin) / kt));
+         if (not ps.own)
+            pick = drawIndex(cum);
+         s.uc = u[pick];
+         s.lnw = -umin / kt + std::log(sum / m);
+      }
+   }
+   for (int j = 0; j < 3; ++j)
+      for (int k = 0; k < 3; ++k)
+         s.rot[j][k] = ps.rots[pick].m[j][k];
+   placeWater(a, ps.d, s.rot, s.x, s.y, s.z);
+   if (cheapOn()) {
+      s.clear = std::isfinite(s.lnw);
+   } else {
+      const auto& near = s_cheap.near;
+      s.clear = not overlaps(a, s.x, s.y, s.z, near.data(), (int)near.size());
+   }
    s.u = 0;
+   return s;
+}
+
+// The log of the mean of exp(lnw) over the terms lnw, of which those of -inf
+// count as zeros.
+double logMeanExp(const std::vector<double>& lnw)
+{
+   const double top = *std::max_element(lnw.begin(), lnw.end());
+   if (not std::isfinite(top))
+      return -std::numeric_limits<double>::infinity();
+   double sum = 0;
+   for (double l : lnw)
+      sum += std::exp(l - top);
+   return top + std::log(sum / lnw.size());
+}
+
+// A try of a hop from its sites, one with WATER-MC-TRIES k g of g: the one
+// kept by exp(lnw), its cheap weight over its orientations, and none that is
+// not clear. The lnw of the try is then the log of the mean of those of its
+// positions (Frenkel and Smit, Section 13.2, one level up).
+Site keepTry(std::vector<Site> pos)
+{
+   if (pos.size() == 1)
+      return pos[0];
+   const int ng = pos.size();
+   std::vector<double> lnw(ng);
+   for (int j = 0; j < ng; ++j)
+      lnw[j] = pos[j].clear ? pos[j].lnw : -std::numeric_limits<double>::infinity();
+   const double top = *std::max_element(lnw.begin(), lnw.end());
+   int pick = 0;
+   if (std::isfinite(top)) {
+      std::vector<double> c(ng);
+      double sum = 0;
+      for (int j = 0; j < ng; ++j)
+         c[j] = (sum += std::exp(lnw[j] - top));
+      pick = drawIndex(c);
+   }
+   Site s = pos[pick];
+   s.lnw = logMeanExp(lnw);
+   s.lnwpos = lnw;
+   s.pickpos = pick;
+   s.clear = std::isfinite(s.lnw) and pos[pick].clear;
    return s;
 }
 
@@ -620,12 +1197,43 @@ void waterMcMech()
       TINKER_THROW("WATER-MC-MOVES  --  The Hops Out and In Undo Each Other, So Both or Neither Must Be Zero");
    for (int k = 0; k < 3; ++k)
       s_pmove[k] = moves[k] / (moves[0] + moves[1] + moves[2]);
-   getKV("WATER-MC-TRIES", s_tries, 1);
-   s_tries = std::max(1, s_tries);
+   // a whole number from lo to hi, checked before it is cast
+   auto whole = [](double v, int lo, int hi) { return v >= lo and v <= hi and v == std::floor(v); };
+   std::vector<double> tries;
+   getKV("WATER-MC-TRIES", tries);
+   if (tries.size() > 2 or (tries.size() > 0 and not whole(tries[0], 1, 10000)))
+      TINKER_THROW("WATER-MC-TRIES  --  Give a Whole Number of Candidates, at Least 1");
+   if (tries.size() > 1 and not whole(tries[1], 1, 10000))
+      TINKER_THROW("WATER-MC-TRIES  --  Give a Whole Number of Positions of Each Try, at Least 1");
+   s_tries = tries.size() > 0 ? (int)tries[0] : 1;
+   s_group = tries.size() > 1 ? (int)tries[1] : 1;
+   std::vector<double> orient;
+   getKV("WATER-MC-ORIENT", orient);
+   if (orient.size() > 1)
+      TINKER_THROW("WATER-MC-ORIENT  --  Give Only the Number of Orientations; WATER-MC-CHEAP Sets the Cutoff and the "
+                   "Factor");
+   if (orient.size() > 0 and not whole(orient[0], 1, 10000))
+      TINKER_THROW("WATER-MC-ORIENT  --  Give a Whole Number of Orientations, at Least 1");
+   s_orient = orient.size() > 0 ? (int)orient[0] : 1;
+   std::vector<double> cheap;
+   getKV("WATER-MC-CHEAP", cheap);
+   if (cheap.size() > 2)
+      TINKER_THROW("WATER-MC-CHEAP  --  Give the Cutoff and the Factor of the Cheap Energy");
+   s_cheapCut = cheap.size() > 0 ? cheap[0] : 5.0;
+   s_cheapScale = cheap.size() > 1 ? cheap[1] : 1.0;
+   if (not(s_cheapCut >= 3))
+      TINKER_THROW("WATER-MC-CHEAP  --  The Cutoff Must Be at Least 3 Angstroms");
+   if (not(s_cheapScale > 0))
+      TINKER_THROW("WATER-MC-CHEAP  --  The Factor of the Cheap Energy Must Be Positive");
    bool probe;
    getKV("WATER-MC-PROBE", probe, false);
    if (probe)
       waterMcForce = -1;
+
+   // the molecules, by which the cheap energy gathers the atoms near a point,
+   // found at its first use
+   s_molOf.clear();
+   s_molAtoms.clear();
 
    // waters: molecules of three atoms of the given types, oxygen first
    std::vector<std::array<int, 3>> waters;
@@ -727,6 +1335,7 @@ void waterMcData(RcOp op)
       s_gx = nullptr;
       s_gy = nullptr;
       s_gz = nullptr;
+      cheapDeallocate();
       // waterMcMech turns the hops back on for the next run that asks for them
       s_on = false;
       s_trial = 0;
@@ -748,6 +1357,9 @@ void waterMcCheck()
       TINKER_THROW("DYNAMIC  --  Monte Carlo Water Moves Require WATER-MC-SITE");
    if (s_shell.nwater() == 0)
       TINKER_THROW("DYNAMIC  --  No Water Matches the WATER-MC-TYPE Atom Types");
+   // checked again at each hop, after a barostat may have shrunk the box
+   if (cheapOn() and s_cheapCut + 1.5 > inscribedRadius())
+      TINKER_THROW("WATER-MC-CHEAP  --  The Cutoff Plus 1.5 Angstroms Must Be Less Than Half the Box");
 
    std::string name = FstrView(files::filename)(1, files::leng).trim() + ".wmc";
    s_log = std::fopen(name.c_str(), "w");
@@ -819,15 +1431,74 @@ void waterMonte(int istep)
    // draws from the source as this hop draws from the target
    const auto cdst = cumulativeWeights(s_shell, w, vdst);
    const auto csrc = src == dst ? cdst : cumulativeWeights(s_shell, w, vsrc);
+   // Every position is drawn first: the g of each try of the hop and of the
+   // others of the hop back, and with the cheap energy the old site with the
+   // g - 1 others of its try, drawn from the part the water leaves. One batch
+   // then finds the cheap energies of all their orientations.
+   const int ng = s_group;
+   std::vector<Position> pos;
+   for (int k = 0; k < s_tries * ng; ++k)
+      pos.push_back(drawPosition(w, vdst, cdst));
+   for (int k = ng; k < s_tries * ng; ++k)
+      pos.push_back(drawPosition(w, vsrc, csrc));
+   if (cheapOn()) {
+      pos.push_back(ownPosition(w));
+      for (int j = 1; j < ng; ++j)
+         pos.push_back(drawPosition(w, vsrc, csrc));
+   }
+   std::vector<std::array<double, 3>> pts;
+   for (const auto& ps : pos)
+      pts.push_back({from[0] + ps.d[0], from[1] + ps.d[1], from[2] + ps.d[2]});
+   // Every atom an atom of the water at a point could overlap lies within the
+   // reach of the water plus the overlap distance of the point, so within the
+   // cutoff of the cheap energy, which is at least 3 Angstroms: the neighbors
+   // a position gathers hold them all.
+   const double overlapReach = kOverlap + waterReach(a);
+   assert(not cheapOn() or s_cheapCut >= overlapReach);
+   cheapNear(a, pts, (cheapOn() ? std::max(s_cheapCut, overlapReach) : overlapReach) + 0.5);
+   if (cheapOn()) {
+      cheapRefresh(a);
+      s_batch.clear();
+      for (size_t i = 0; i < pos.size(); ++i) {
+         const auto nb = cheapGather(s_batch, pts[i].data());
+         pos[i].ori0 = s_batch.beg.size();
+         pos[i].nb0 = nb[0], pos[i].nb1 = nb[1];
+         for (const auto& r : pos[i].rots)
+            cheapOrient(s_batch, nb, r.m);
+      }
+      cheapEvaluate(s_batch);
+   }
+   std::vector<Site> sites;
+   for (const auto& ps : pos)
+      sites.push_back(keepPosition(w, ps));
+   // the tries of the hop, then the others of the hop back, then the old site
+   auto tryOf = [&](int t) { return keepTry(std::vector<Site>(sites.begin() + t * ng, sites.begin() + (t + 1) * ng)); };
    std::vector<Site> fwd, rev;
    for (int k = 0; k < s_tries; ++k)
-      fwd.push_back(drawSite(w, vdst, cdst));
+      fwd.push_back(tryOf(k));
    for (int k = 1; k < s_tries; ++k)
-      rev.push_back(drawSite(w, vsrc, csrc));
+      rev.push_back(tryOf(s_tries + k - 1));
    if (std::none_of(fwd.begin(), fwd.end(), [](const Site& s) { return s.clear; })) {
       ++waterMcCount.noverlap;
       logHop(istep, a[0], 'O', 0, dir, nsrc, vdst.size(), from, from);
       return;
+   }
+
+   // the cheap terms of the old site, its own orientation kept, and with
+   // WATER-MC-TRIES k g those of the g - 1 others of its try
+   double ucold = 0, lnwold = 0;
+   std::vector<double> lnwoldpos;
+   if (cheapOn()) {
+      const int first = (2 * s_tries - 1) * ng;
+      ucold = sites[first].uc;
+      lnwold = sites[first].lnw;
+      if (ng > 1) {
+         for (int j = 0; j < ng; ++j) {
+            const Site& p = sites[first + j];
+            lnwoldpos.push_back(p.clear ? p.lnw : -std::numeric_limits<double>::infinity());
+         }
+         lnwold = logMeanExp(lnwoldpos);
+      }
    }
 
    // Save what the step left, so that a rejected hop restores it. Every energy
@@ -874,17 +1545,19 @@ void waterMonte(int istep)
    }
    setWater(a, ox, oy, oz);
 
-   // The Rosenbluth weights relative to the lowest energy found, and the
-   // choice among the candidates by their weights.
+   // The Rosenbluth weights relative to the largest, and the choice among the
+   // candidates by their weights. With WATER-MC-ORIENT the weight of a site is
+   // exp(-(U - uc)/kT) times the mean of exp(-u/kT) over its orientations.
    const double kt = units::gasconst * bath::kelvin;
-   double uref = uold;
+   auto lnweight = [&](double u, double uc, double lnw) { return -((u - uold) - uc) / kt + lnw; };
+   double lref = lnweight(uold, ucold, lnwold);
    for (auto* set : {&fwd, &rev})
       for (const auto& s : *set)
          if (s.clear)
-            uref = std::min(uref, s.u);
-   auto weight = [&](const Site& s) { return s.clear ? std::exp(-(s.u - uref) / kt) : 0.0; };
+            lref = std::max(lref, lnweight(s.u, s.uc, s.lnw));
+   auto weight = [&](const Site& s) { return s.clear ? std::exp(lnweight(s.u, s.uc, s.lnw) - lref) : 0.0; };
    std::vector<double> cnew(s_tries);
-   double wnew = 0, wold = std::exp(-(uold - uref) / kt);
+   double wnew = 0, wold = std::exp(lnweight(uold, ucold, lnwold) - lref);
    for (int k = 0; k < s_tries; ++k)
       cnew[k] = (wnew += weight(fwd[k]));
    for (const auto& s : rev)
@@ -902,12 +1575,14 @@ void waterMonte(int istep)
          std::vector<WaterMcCandidate> c(set.size());
          for (size_t k = 0; k < set.size(); ++k) {
             c[k].v = set[k].v, c[k].clear = set[k].clear, c[k].u = set[k].u;
+            c[k].uc = set[k].uc, c[k].lnw = set[k].lnw, c[k].lnwpos = set[k].lnwpos;
+            c[k].pickpos = set[k].pickpos;
             for (int j = 0; j < 3; ++j)
                c[k].x[j] = set[k].x[j], c[k].y[j] = set[k].y[j], c[k].z[j] = set[k].z[j];
          }
          return c;
       };
-      waterMcLastHop = {kind, w, uold, record(fwd), record(rev), pick, s_lnratio};
+      waterMcLastHop = {kind, w, uold, ucold, lnwold, lnwoldpos, record(fwd), record(rev), pick, s_lnratio};
       if (waterMcForce != 0)
          accept = waterMcForce > 0;
       else
@@ -975,6 +1650,43 @@ void waterMcFinal()
 WaterShell& waterMcShell()
 {
    return s_shell;
+}
+
+double waterMcCheapEnergy(int w, const double (&rot)[3][3], const double p[3])
+{
+   // The coordinates of now, as a hop takes them. The shell points into the
+   // host coordinates of the last hop, so they are put back after, in the
+   // same buffers.
+   struct Keep
+   {
+      std::vector<pos_prec> px, py, pz;
+      std::vector<double> dx, dy, dz;
+      Keep()
+         : px(s_px), py(s_py), pz(s_pz), dx(s_dx), dy(s_dy), dz(s_dz)
+      {}
+      ~Keep()
+      {
+         s_px.assign(px.begin(), px.end()), s_py.assign(py.begin(), py.end()), s_pz.assign(pz.begin(), pz.end());
+         s_dx.assign(dx.begin(), dx.end()), s_dy.assign(dy.begin(), dy.end()), s_dz.assign(dz.begin(), dz.end());
+      }
+   } keep;
+   s_px.resize(n), s_py.resize(n), s_pz.resize(n);
+   darray::copyout(g::q0, n, s_px.data(), xpos);
+   darray::copyout(g::q0, n, s_py.data(), ypos);
+   darray::copyout(g::q0, n, s_pz.data(), zpos);
+   waitFor(g::q0);
+   s_dx.assign(s_px.begin(), s_px.end());
+   s_dy.assign(s_py.begin(), s_py.end());
+   s_dz.assign(s_pz.begin(), s_pz.end());
+   const auto& a = s_shell.water(w);
+   cheapNear(a, {{p[0], p[1], p[2]}}, s_cheapCut + 0.5);
+   cheapRefresh(a);
+   Batch bt;
+   const auto nb = cheapGather(bt, p);
+   cheapOrient(bt, nb, rot);
+   cheapEvaluate(bt);
+   const double d[3] = {p[0] - s_dx[a[0]], p[1] - s_dy[a[0]], p[2] - s_dz[a[0]]};
+   return orientOverlaps(bt, 0, a, d, rot, nb[0], nb[1]) ? std::numeric_limits<double>::infinity() : bt.u[0];
 }
 
 double waterMcOverlapDistance(int i)

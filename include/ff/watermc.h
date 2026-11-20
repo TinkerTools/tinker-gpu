@@ -51,7 +51,39 @@ namespace tinker {
 ///     atom of a candidate keeps from any other atom scales with the ligand
 ///     the same way.
 ///   - WATER-MC-GRID h: voxel spacing; 0.4 Angstroms.
-///   - WATER-MC-TRIES k: candidates of each hop; 1.
+///   - WATER-MC-TRIES k [g]: candidates of each hop, each the full energy
+///     finds; 1. With g, each candidate is one of g positions, drawn as one
+///     would be, kept by its weight in the cheap energy (the mean of
+///     exp(-u/kT) over its orientations, see WATER-MC-ORIENT) and none that
+///     overlaps an atom; so are the others of the hop back, and the old site is
+///     one of g with g - 1 drawn from the part the water leaves. The weight of
+///     each candidate in the ratio of the Rosenbluth weights is then
+///     exp(-(U - u)/kT) times the mean of exp(-u/kT) over its g positions and
+///     their m orientations, u that of the one kept. A hop finds 2k full
+///     energies and 2kgm cheap ones in one batch; 1, no positions dropped,
+///     unless set.
+///   - WATER-MC-ORIENT m: each candidate, and the old site, takes m
+///     orientations of the water at its point, the old site its own and m-1
+///     drawn, and a candidate keeps one drawn by exp(-u/kT), u being the cheap
+///     energy. An orientation that overlaps another atom has no weight. The
+///     weight of each site in the ratio of the Rosenbluth weights then becomes
+///     exp(-(U - u)/kT) W/m, where W sums exp(-u/kT) over its m orientations
+///     (Frenkel and Smit, Section 13.2). Any u keeps the sampling exact; a good
+///     one raises the acceptance. 1, uniform orientations, unless set.
+///   - WATER-MC-CHEAP rc [s]: the cheap energy of WATER-MC-ORIENT and
+///     WATER-MC-TRIES k g, s times that of the water with the atoms near its
+///     oxygen, by the pair functions of the full energy without cutoffs,
+///     tapers or polarization: the multipoles at the electrostatic lambda
+///     (charge penetration damped for HIPPO and AMOEBA+), or the partial
+///     charges; the buffered 14-7 or Lennard-Jones van der Waals between the
+///     sites reduced toward their neighbors; HIPPO Pauli repulsion and damped
+///     dispersion; and HIPPO or AMOEBA+ charge transfer, its group weight
+///     taken. A pair with the ligand takes the soft core of the full energy at
+///     its coupling, and each van der Waals or repulsion pair is capped at 100
+///     kcal/mol. A molecule of up to 500 atoms with an atom within rc of the
+///     oxygen counts whole, a larger one by its atoms within rc. rc is 5.0
+///     Angstroms, at least 3, and 1.5 less than half the box; s is 1, and a
+///     factor below 1 makes up for the contrast that polarization softens.
 ///   - WATER-MC-PROBE: finds and logs the acceptance ratio of every hop and
 ///     rejects it, leaving the dynamics alone. The mean acceptance min(1, ratio)
 ///     of the hops out tried in one state, times the chance of a hop out, over
@@ -194,28 +226,42 @@ extern WaterMcCount waterMcCount;
 
 /// \ingroup mdintg
 /// A candidate site of a hop: its voxel, whether it is clear of the other
-/// atoms, its energy if it is, and the coordinates of the oxygen and the two
-/// hydrogens there.
+/// atoms, its energy if it is, the coordinates of the oxygen and the two
+/// hydrogens there, and with the cheap energy (WATER-MC-ORIENT, or WATER-MC-TRIES
+/// k g) the cheap energy of the orientation kept and the log of the mean of
+/// exp(-u/kT) over the orientations of its g positions, both 0 without it, and
+/// with g above 1 the log of the mean over the orientations of each position,
+/// -inf for one that is not clear, and the position kept, else -1.
 struct WaterMcCandidate
 {
    int v;
    bool clear;
    double u;
    double x[3], y[3], z[3];
+   double uc, lnw;
+   std::vector<double> lnwpos;
+   int pickpos;
 };
 /// \ingroup mdintg
 /// A hop that reached the energy test: its kind, the water, the energy of the
-/// old site, the candidates of the hop and the others of the hop back, the
-/// candidate chosen, and the log of the acceptance ratio.
+/// old site and its cheap terms, with g above 1 those of each position of its
+/// try, its own first, the candidates of the hop and the others of the hop
+/// back, the candidate chosen, and the log of the acceptance ratio.
 struct WaterMcHop
 {
    WaterHop kind;
    int water;
-   double uold;
+   double uold, ucold, lnwold;
+   std::vector<double> lnwoldpos;
    std::vector<WaterMcCandidate> fwd, rev;
    int pick;
    double lnratio;
 };
+/// \ingroup mdintg
+/// For testing: the cheap energy, its factor in it, of water \c w turned by
+/// \c rot about its oxygen and put with its oxygen at \c p, against the other
+/// atoms where they are now; +inf if it comes too close to one.
+double waterMcCheapEnergy(int w, const double (&rot)[3][3], const double p[3]);
 /// \ingroup mdintg
 /// The last hop that reached the energy test, for testing.
 extern WaterMcHop waterMcLastHop;

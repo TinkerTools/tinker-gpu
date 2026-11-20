@@ -50,4 +50,5 @@ rattle.cu
 spatial.cu
 stochastic.cu
 upredict.cu
+watermc.cu
 )

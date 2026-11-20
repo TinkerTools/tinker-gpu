@@ -232,6 +232,11 @@ static DispSoft dispSoft(const LmdaFn& c, const LmdaFn& q)
    return ds;
 }
 
+DispSoft dispGroupSoft(int ig)
+{
+   return dispSoft(vdwGroupPower(scexpd, ig, false), vdwGroupPower(scexpd + scexpdq, ig, false));
+}
+
 TINKER_FVOID2(acc1, cu1, edispNonEwald, int, DispSoft, DispSoft);
 static void edispNonEwald(int vers, const DispSoft& sc1, const DispSoft& sc2)
 {

@@ -27,6 +27,10 @@ struct DispSoft
    real rs2, rrs2;    ///< the switch radius squared and its reciprocal
 };
 
+/// The soft core of a dispersion pair of ligand group \c ig, 1 or 2, without
+/// its lambda derivatives.
+DispSoft dispGroupSoft(int ig);
+
 /// The window of the vdW switch over which an Ewald dispersion tail mapped
 /// from a buffered 14-7 vdW takes over from it, the real space pairs weighted
 /// by \f$ w = 1 - S(r) \f$, zero up to \c cut and one from \c off on, and
