@@ -324,6 +324,7 @@ void testResetLmdaFlags()
    use_mainlmda = false;
    mutant::use_rel = 0;
    use_rel = false;
+   ostflatten = OstFlatten::KERNEL;
 }
 
 std::string testBaseName(const std::string& path)

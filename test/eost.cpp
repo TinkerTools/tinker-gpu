@@ -19,6 +19,7 @@
 #include <cmath>
 #include <cstring>
 #include <fstream>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -118,6 +119,8 @@ void resetost(int nl, int nf, int nhist)
    lmdafsum.assign(nlmda + 1, 0.0);
    lmdafwt.assign(nlmda + 1, 0.0);
    vkernelmax.assign(nlmda + 1, 0.0);
+   ostflatten = OstFlatten::KERNEL;
+   clearFlatSamples();
 
    use_lmdacv = false;
    lmdacvstd = 0.0;
@@ -2116,4 +2119,322 @@ TEST_CASE("EOST-metarestart", "[ff][eost][L2]")
    mdsaveLmdaFinal(0);
    REQUIRE(not fileExistsAndDelete(scope.histfile + "_2"));
    COMPARE_INTS(historyRecords(scope.histfile), 4);
+}
+
+// The cases below cover OST-FLATTEN, which tinker9 has ahead of the Fortran
+// code; they check the sampled mean force of the flattening bias against hand
+// and brute-force values rather than a port of test_eost.f.
+
+namespace {
+// Restores the OST state the flatten cases set beyond the lambda flags.
+struct OstFlattenStateGuard
+{
+   double kelvin = bath::kelvin, lmda = lambda, dudl = dedl, fwidth = wflmda, fwidth2 = wflmda2;
+   bool interp = ostinterpol, fast = fastkernel;
+   ~OstFlattenStateGuard()
+   {
+      bath::kelvin = kelvin;
+      lambda = lmda;
+      dedl = dudl;
+      wflmda = fwidth;
+      wflmda2 = fwidth2;
+      ostinterpol = interp;
+      fastkernel = fast;
+   }
+};
+}
+
+// OST-FLATTEN names the mean force of the flattening bias: the kernel one by
+// default, the sampled one on request, and a setting that cannot apply is
+// refused as the run is set up.
+TEST_CASE("EOST-flatten-keys", "[ff][eost][L2]")
+{
+   TestLmdaFlagReset lmdaReset;
+   TestLmdaFlagGuard guard;
+   const char* xyz = "test_eostflat.xyz";
+   const char* key = "test_eostflat.key";
+   TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
+   TestFile fxy(TINKER9_DIRSTR "/test/file/nacl/nacl1.xyz", xyz);
+   const char* argv[] = {"dummy", xyz};
+   const int flags = calc::xyz | calc::mass | calc::energy;
+   auto keys = [](const std::string& mode, const std::string& extra) {
+      return "parameters amoeba09\ncvterm only\ncv-atoms na 1\ncv-atoms cl 2\ncv r distance na cl\n"
+             "lambda 0.5\nlambda-cv r 10.0 2.0 4.0\ncv-lmda-map exp\nlambda-mode "
+         + mode + "\n" + extra;
+   };
+   auto setting = [&](const std::string& extra) {
+      TestFile fke("", key, keys("ost", extra));
+      TestSession session(2, argv);
+      rc_flag = flags;
+      session.init();
+      REQUIRE(use_ost);
+      const OstFlatten f = ostflatten;
+      session.end();
+      return f;
+   };
+   auto refused = [&](const std::string& mode, const std::string& extra, const char* message) {
+      INFO(mode + ": " + extra);
+      TestFile fke("", key, keys(mode, extra));
+      TestSession session(2, argv);
+      rc_flag = flags;
+      REQUIRE_THROWS_WITH(session.init(), Catch::Matchers::ContainsSubstring(message));
+      REQUIRE(ostflatten == OstFlatten::KERNEL);
+   };
+
+   REQUIRE(setting("") == OstFlatten::KERNEL);
+   REQUIRE(setting("ost-flatten kernel\n") == OstFlatten::KERNEL);
+   REQUIRE(setting("ost-interpolate\nost-flatten sample\n") == OstFlatten::SAMPLE);
+   refused("ost", "ost-flatten grid\n", "Unknown Mean Force GRID");
+   refused("ost", "ost-interpolate\nost-flatten\n", "Give the Mean Force, KERNEL or SAMPLE");
+   refused("ost", "ost-flatten sample\n", "SAMPLE Requires OST-INTERPOLATE");
+   refused("meta", "ost-interpolate\nost-flatten sample\n", "SAMPLE Requires LAMBDA-MODE OST");
+}
+
+// Where the g bias is negligible, the sampled mean force is the plain average
+// of the deposits, so a rare high dU/dlambda counts once, while the kernel mean
+// force counts every cell the gaussians reach once and so follows the outlier;
+// the bias that drives lambda takes the mean force OST-FLATTEN names, and the
+// free energy estimate always the kernel one.
+TEST_CASE("EOST-flatten-sparse", "[ff][eost][L2]")
+{
+   TestLmdaFlagGuard guard;
+   OstFlattenStateGuard state;
+   bath::kelvin = 298.0;
+   resetost(11, 401, 64);
+   oststdev = 4.0;
+   ostflatten = OstFlatten::SAMPLE;
+
+   // forty deposits at dU/dlambda 18 and one at 130, all at lambda 0.5
+   const double h = 1.0e-8;
+   for (int k = 1; k <= 40; ++k)
+      sethist(k, 0.5, 18.0, h, 0.1, 1.0);
+   sethist(41, 0.5, 130.0, h, 0.1, 1.0);
+   nlmdahist = 41;
+   buildOstIndex();
+   buildKernels();
+
+   // every bin within the lambda cutoff of 0.4 sees the same samples
+   const double expect = (40.0 * 18.0 + 130.0) / 41.0;
+   for (int i = 2; i <= 10; ++i) {
+      CAPTURE(i);
+      REQUIRE(ostflatwt[i] > 0.0);
+      COMPARE_REALS(ostflatmean[i], expect, 1.0e-6);
+   }
+   REQUIRE(ostflatwt[1] == 0.0);
+   REQUIRE(ostflatwt[11] == 0.0);
+   REQUIRE(lmdafmean[6] > 70.0);
+
+   use_ost = true;
+   use_lmdafill = false;
+   double ef, dfdl;
+   efreeBias(0.5, ef, dfdl);
+   COMPARE_REALS(dfdl, ostflatmean[6], 1.0e-12);
+   efreeLmda(0.5, ef, dfdl);
+   COMPARE_REALS(dfdl, lmdafmean[6], 1.0e-12);
+   ostflatten = OstFlatten::KERNEL;
+   efreeBias(0.5, ef, dfdl);
+   COMPARE_REALS(dfdl, lmdafmean[6], 1.0e-12);
+
+   // the fill completes the sampled profile from its own sampled bins: a bin
+   // the deposits leave without weight is interpolated from its neighbors,
+   // whatever the kernel holds there, and an end bin takes the nearest one
+   ostflatten = OstFlatten::SAMPLE;
+   use_lmdafill = true;
+   lmdafillr = 0.1;
+   ostflatmean[4] = 999.0;
+   ostflatwt[4] = 0.0;
+   efreeBias(0.3, ef, dfdl);
+   COMPARE_REALS(dfdl, expect, 1.0e-6);
+   efreeBias(0.0, ef, dfdl);
+   COMPARE_REALS(dfdl, ostflatmean[2], 1.0e-12);
+
+   // the bias energy takes the free energy term from the same profile
+   ostinterpol = true;
+   fastkernel = true;
+   lambda = 0.5;
+   dedl = 18.0;
+   double g, dgdl, dgdfl;
+   gkernelHermite(0.5, 18.0, g, dgdl, dgdfl);
+   double efs, efk;
+   efreeBias(0.5, efs, dfdl);
+   COMPARE_REALS(ostVBias(), g - efs, 1.0e-12);
+   ostflatten = OstFlatten::KERNEL;
+   efreeBias(0.5, efk, dfdl);
+   COMPARE_REALS(ostVBias(), g - efk, 1.0e-12);
+   REQUIRE(efk > efs + 1.0);
+}
+
+// With gaussians tall enough that exp(g/RT) overflows a double many times
+// over, the sampled mean force, kept relative to the largest g of each bin,
+// matches a long double sum taken in one pass per bin over every deposit and
+// mirror image, each weighted by the bicubic g before it was added; a restart
+// that rebuilds the kernels from the saved deposits recovers it exactly.
+TEST_CASE("EOST-flatten-reference", "[ff][eost][L2]")
+{
+   TestLmdaFlagGuard guard;
+   OstFlattenStateGuard state;
+   bath::kelvin = 298.0;
+   const double rt = units::gasconst * bath::kelvin;
+   const int nhist = 300;
+   resetost(21, 2001, nhist);
+   oststdev = 4.0;
+   ostflatten = OstFlatten::SAMPLE;
+
+   std::mt19937 gen(20261120);
+   std::uniform_real_distribution<double> ul(0.0, 1.0), uf(-40.0, 80.0);
+   for (int k = 1; k <= nhist; ++k) {
+      // draw in a fixed order, as the deposits below do
+      const double l = ul(gen);
+      const double f = uf(gen);
+      sethist(k, l, f, 200.0, 0.05, 4.0);
+   }
+   nlmdahist = nhist;
+   buildOstIndex();
+
+   // the g each deposit saw, from the kernels built one deposit at a time
+   std::fill(gkernel.begin(), gkernel.end(), 0.0);
+   std::fill(gfkernel.begin(), gfkernel.end(), 0.0);
+   std::fill(glkernel.begin(), glkernel.end(), 0.0);
+   std::fill(glfkernel.begin(), glfkernel.end(), 0.0);
+   std::fill(lmdafsum.begin(), lmdafsum.end(), 0.0);
+   std::fill(lmdafwt.begin(), lmdafwt.end(), 0.0);
+   std::fill(vkernelmax.begin(), vkernelmax.end(), 0.0);
+   std::vector<double> gk(nhist + 1);
+   double gtop = 0.0;
+   for (int k = 1; k <= nhist; ++k) {
+      double dgdl, dgdfl;
+      gkernelHermite(lmdalhist[k], lmdafhist[k], gk[k], dgdl, dgdfl);
+      gtop = std::max(gtop, gk[k]);
+      addKernelHist(k, true);
+   }
+   REQUIRE(gtop / rt > 1000.0); // exp(g/RT) alone would overflow
+
+   // the reference: every deposit and image within the lambda cutoff of a bin
+   std::vector<double> ref(nlmda + 1, 0.0);
+   std::vector<bool> hit(nlmda + 1, false);
+   for (int i = 1; i <= nlmda; ++i) {
+      const double li = (i - 1) * wlmda;
+      long double gm = -1.0e300L, a = 0.0L, b = 0.0L;
+      for (int pass = 0; pass < 2; ++pass) {
+         for (int k = 1; k <= nhist; ++k) {
+            const double sigl = ostwlhist[k];
+            for (double src : {lmdalhist[k], -lmdalhist[k], 2.0 - lmdalhist[k]}) {
+               const double d = li - src;
+               if (std::fabs(d) > oststdev * sigl)
+                  continue;
+               if (pass == 0) {
+                  gm = std::max(gm, (long double)gk[k]);
+                  continue;
+               }
+               long double w = std::exp(-(long double)(d * d) / (2.0L * sigl * sigl))
+                  * std::exp(((long double)gk[k] - gm) / (long double)rt);
+               a += w * lmdafhist[k];
+               b += w;
+            }
+         }
+      }
+      hit[i] = b > 0.0L;
+      ref[i] = hit[i] ? (double)(a / b) : 0.0;
+   }
+
+   buildKernels();
+   for (int i = 1; i <= nlmda; ++i) {
+      CAPTURE(i);
+      REQUIRE(std::isfinite(ostflatmean[i]));
+      REQUIRE((ostflatwt[i] > 0.0) == hit[i]);
+      REQUIRE(std::fabs(ostflatmean[i] - ref[i]) <= 1.0e-9 * std::max(1.0, std::fabs(ref[i])));
+   }
+
+   // deposits made one at a time leave the sums a rebuild from them recovers
+   const std::vector<double> mean0 = ostflatmean, wt0 = ostflatwt, sum0 = ostflatsum;
+   resetost(21, 2001, nhist);
+   oststdev = 4.0;
+   ostflatten = OstFlatten::SAMPLE;
+   // as OST-INTERPOLATE sets them, which OST-FLATTEN SAMPLE requires
+   ostinterpol = true;
+   fastkernel = true;
+   hbias = 200.0;
+   wlhist = 0.05;
+   wfhist = 4.0;
+   std::mt19937 gen2(20261120);
+   for (int k = 1; k <= nhist; ++k) {
+      lmdaavg = ul(gen2);
+      dedlavg = uf(gen2);
+      ostDeposit(10 * k);
+   }
+   const std::vector<double> mean1 = ostflatmean, wt1 = ostflatwt;
+   buildKernels();
+   for (int i = 1; i <= nlmda; ++i) {
+      CAPTURE(i);
+      REQUIRE(ostflatwt[i] == wt1[i]);
+      REQUIRE(ostflatmean[i] == mean1[i]);
+      // the same deposits as above, with heights tempered off
+      REQUIRE(std::fabs(ostflatmean[i] - mean0[i]) <= 1.0e-9 * std::max(1.0, std::fabs(mean0[i])));
+   }
+}
+
+// The flambda grid grows at both ends while deposits are made, shifting the
+// kernels already built, and a restart rebuilds every deposit on the final
+// grid; the g each deposit saw sits at the same dU/dlambda either way, so the
+// sampled mean force made one deposit at a time matches the rebuild, and a run
+// whose grid held every deposit from the start, here with a flambda width that
+// is not a whole number.
+TEST_CASE("EOST-flatten-grow", "[ff][eost][L2]")
+{
+   TestLmdaFlagGuard guard;
+   OstFlattenStateGuard state;
+   bath::kelvin = 298.0;
+   const int nhist = 200, half = nhist / 2;
+
+   // the first half of the deposits fits the starting grid of nf bins, the
+   // second half reaches past both of its ends
+   int nflmda1 = 0, fli01 = 0;
+   auto deposit = [&](int nf) {
+      resetost(21, nf, nhist);
+      wflmda = 0.7;
+      wflmda2 = 0.5 * wflmda;
+      oststdev = 4.0;
+      ostflatten = OstFlatten::SAMPLE;
+      ostinterpol = true;
+      fastkernel = true;
+      hbias = 200.0;
+      wlhist = 0.05;
+      wfhist = 1.0;
+      std::mt19937 gen(20261121);
+      std::uniform_real_distribution<double> ul(0.0, 1.0), unear(-20.0, 20.0), ufar(-100.0, 120.0);
+      for (int k = 1; k <= nhist; ++k) {
+         if (k == half + 1) {
+            nflmda1 = nflmda;
+            fli01 = fli0;
+         }
+         lmdaavg = ul(gen);
+         dedlavg = (k <= half) ? unear(gen) : ufar(gen);
+         ostDeposit(10 * k);
+      }
+   };
+   auto close = [](double a, double b) { return std::fabs(a - b) <= 1.0e-9 * std::max(1.0, std::fabs(b)); };
+
+   deposit(401);
+   REQUIRE(nflmda1 == 401);
+   REQUIRE(fli01 == 201);
+   REQUIRE(fli0 > 201);
+   REQUIRE(nflmda - fli0 > 401 - 201);
+   const std::vector<double> mean1 = ostflatmean, wt1 = ostflatwt;
+
+   // a restart rebuilds the same deposits on the grown grid
+   buildKernels();
+   for (int i = 1; i <= nlmda; ++i) {
+      CAPTURE(i);
+      REQUIRE((ostflatwt[i] > 0.0) == (wt1[i] > 0.0));
+      REQUIRE(close(ostflatmean[i], mean1[i]));
+   }
+
+   // a grid that never grows
+   deposit(1001);
+   REQUIRE(nflmda == 1001);
+   for (int i = 1; i <= nlmda; ++i) {
+      CAPTURE(i);
+      REQUIRE((ostflatwt[i] > 0.0) == (wt1[i] > 0.0));
+      REQUIRE(close(ostflatmean[i], mean1[i]));
+   }
 }

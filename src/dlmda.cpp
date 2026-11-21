@@ -933,10 +933,16 @@ static std::vector<double> s_fillbias;
 // derivative, from the mean force that drives lambda, in which the unsampled
 // bins are filled from the sampled ones within the lambda reach lmdafillr if
 // use_lmdafill is set. It is the only route by which filled values reach an
-// energy or force, and no free energy estimate may call it
-// (dlambda.f:efreebias).
+// energy or force, and no free energy estimate may call it. Under OST-FLATTEN
+// SAMPLE the mean force is the reweighted deposit average, ostflatmean, which
+// the estimate never uses (dlambda.f:efreebias).
 void efreeBias(double lmda, double& eflmda, double& dfdl)
 {
+   // the mean force the bias removes is that of the estimate, unless OST
+   // flattens with the reweighted deposits (OST-FLATTEN SAMPLE)
+   const bool flat = use_ost and ostflatten == OstFlatten::SAMPLE;
+   const std::vector<double>& fmean = flat ? ostflatmean : lmdafmean;
+
    // convert the fill reach to a whole number of bins, where the cap at the bin
    // count already reaches across every bin
    int nreach = (int)std::min(lmdafillr / wlmda + 1.0e-6, (double)nlmda);
@@ -944,7 +950,7 @@ void efreeBias(double lmda, double& eflmda, double& dfdl)
    // without the fill, or with a reach under one bin, the bias follows the
    // sampled mean force
    if (not use_lmdafill or nreach == 0) {
-      efreeProf(lmda, lmdafmean, eflmda, dfdl);
+      efreeProf(lmda, fmean, eflmda, dfdl);
       return;
    }
 
@@ -952,9 +958,9 @@ void efreeBias(double lmda, double& eflmda, double& dfdl)
    // profiles keep their storage across calls, as this runs every step
    s_fillsamp.assign(nlmda + 1, false);
    for (int i = 1; i <= nlmda; ++i)
-      s_fillsamp[i] = lmdaSampled(i);
+      s_fillsamp[i] = flat ? ostflatwt[i] > 0.0 : lmdaSampled(i);
    s_fillbias.assign(nlmda + 1, 0.0);
-   lmdaFill(nlmda, lmdafmean, s_fillsamp, nreach, s_fillbias);
+   lmdaFill(nlmda, fmean, s_fillsamp, nreach, s_fillbias);
    efreeProf(lmda, s_fillbias, eflmda, dfdl);
 }
 

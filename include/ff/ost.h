@@ -15,6 +15,14 @@ void eostData(RcOp op);
 /// from the mean force with unsampled bins filled, and saves its derivatives
 /// for elmdaDyn (eost.f:eostbias).
 void eostBias(int vers);
+
+/// The mean force of the lambda bins that the OST flattening bias removes,
+/// set by OST-FLATTEN; the free energy estimate always uses \c KERNEL.
+enum class OstFlatten
+{
+   KERNEL, ///< the g kernel cells weighted by exp(g/RT), valid once g is flat in dU/dlambda.
+   SAMPLE  ///< the deposits weighted by exp(g/RT) of the g each one saw, valid at any g.
+};
 }
 
 //====================================================================//
@@ -31,6 +39,17 @@ namespace tinker {
 // evaluate the g kernel by bicubic interpolation and fuse the f-kernel update.
 TINKER_EXTERN bool ostinterpol;
 TINKER_EXTERN bool fastkernel;
+
+// the mean force of the flattening bias under OST-FLATTEN SAMPLE: each deposit
+// is spread over the lambda bins by its lambda gaussian and weighted by
+// exp(g/RT), with g the bicubic g kernel at its center before it was added;
+// the sums of a bin are kept relative to the largest g in them, so no weight
+// exceeds one, and the shift cancels in the mean.
+TINKER_EXTERN OstFlatten ostflatten;            ///< mean force of the flattening bias.
+TINKER_EXTERN std::vector<double> ostflatsum;  ///< weighted dU/dlambda sum of each lambda bin.
+TINKER_EXTERN std::vector<double> ostflatwt;   ///< total weight of each lambda bin, zero if unsampled.
+TINKER_EXTERN std::vector<double> ostflatgmax; ///< largest g of the samples of each lambda bin.
+TINKER_EXTERN std::vector<double> ostflatmean; ///< weighted mean dU/dlambda of each lambda bin.
 
 // flambda grid and metadynamics history bookkeeping.
 TINKER_EXTERN int nflmda;       ///< number of dU/dlambda bins.
