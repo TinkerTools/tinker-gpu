@@ -95,11 +95,16 @@ inline void pairMplar(real r2, real3 dR, real mscale, real dscale, real pscale, 
       mscale = 1;
       dscale = 0.5f;
       pscale = 0.5f;
-      uscale = 0.5f;
    } else {
       dscale *= 0.5f;
       pscale *= 0.5f;
-      uscale *= 0.5f;
+   }
+   // uscale only enters the U-U gradient
+   if CONSTEXPR (do_g) {
+      if CONSTEXPR (eq<ETYP, EWALD>())
+         uscale = 0.5f;
+      else
+         uscale *= 0.5f;
    }
 
    // a rotation matrix that rotates (xr,yr,zr) to (0,0,r); R G = Q
@@ -478,10 +483,8 @@ inline void pairMplar(real r2, real3 dR, real mscale, real dscale, real pscale, 
       frc.x = -invr1 * (trqa.y + trqb.y + trqau.y + trqbu.y);
       frc.y = invr1 * (trqa.x + trqb.x + trqau.x + trqbu.x);
       frc.z = frc1z;
-   }
 
-   // U-U
-   {
+      // U-U
       real coeu5 = uscale * sr5 * r;
       real coeu7 = uscale * sr7 * r2 * r;
       frc.x += coeu5 * (uid.x * ukp.z + uid.z * ukp.x + uip.x * ukd.z + uip.z * ukd.x);

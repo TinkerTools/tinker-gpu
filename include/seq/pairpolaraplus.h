@@ -414,7 +414,6 @@ inline void pair_polar_aplus_v2(real r2,
    if CONSTEXPR (eq<ETYP, EWALD>()) {
       dscale = 1;
       // pscale = 1;
-      uscale = 1;
    }
 
    real dir = dix * xr + diy * yr + diz * zr;

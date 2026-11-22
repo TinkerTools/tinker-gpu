@@ -90,7 +90,6 @@ inline void pair_polar( //
    if CONSTEXPR (eq<ETYP, EWALD>()) {
       dscale = 1;
       pscale = 1;
-      uscale = 1;
    }
 
    real dir = dix * xr + diy * yr + diz * zr;
@@ -455,9 +454,10 @@ inline void pair_polar_v2( //
    constexpr bool do_v = Ver::v;
 
    if CONSTEXPR (eq<ETYP, EWALD>()) {
-      dscale = 1;
+      // dscale only enters the gradient here
+      if CONSTEXPR (do_g)
+         dscale = 1;
       pscale = 1;
-      uscale = 1;
    }
 
    real dir = dix * xr + diy * yr + diz * zr;

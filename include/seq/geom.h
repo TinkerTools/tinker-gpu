@@ -56,7 +56,6 @@ inline void geomGroupCenter(real& restrict cx,
 {
    int k1 = kgrp[j1];
    real dx = 0, dy = 0, dz = 0;
-   #pragma acc loop seq
    for (int j = j1 + 1; j < j2; ++j) {
       int k = kgrp[j];
       real ex, ey, ez;
