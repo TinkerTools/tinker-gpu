@@ -1076,15 +1076,15 @@ void ostDeposit(int istep)
    ostnext[nlmdahist] = osthead[gidx(ilmda, iflmda)];
    osthead[gidx(ilmda, iflmda)] = nlmdahist;
 
-   if (true) {
-      double vmm = ostVminimax();
-      double th = temperedHeight(vmm, vkernelmax[ilmda]);
-      printf("istep: %i\n", istep);
-      printf("ostlmda  avg, std: %8.4f %8.4e\n", lmdaavg, lmdastd);
-      printf("ostdedl  avg, std: %8.4f %8.4e\n", dedlavg, dedlstd);
-      printf("vminmax temperedHeight: %8.4e %8.4e\n", vmm, th);
-      printf("\n");
-   }
+   // if (true) {
+   //    double vmm = ostVminimax();
+   //    double th = temperedHeight(vmm, vkernelmax[ilmda]);
+   //    printf("istep: %i\n", istep);
+   //    printf("ostlmda  avg, std: %8.4f %8.4e\n", lmdaavg, lmdastd);
+   //    printf("ostdedl  avg, std: %8.4f %8.4e\n", dedlavg, dedlstd);
+   //    printf("vminmax temperedHeight: %8.4e %8.4e\n", vmm, th);
+   //    printf("\n");
+   // }
 
    // the flattening sample sees the g of the gaussians before this one
    if (ostflatten == OstFlatten::SAMPLE)
