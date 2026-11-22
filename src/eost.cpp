@@ -333,7 +333,7 @@ void clearFlatSamples()
 // before the gaussian itself is added to the g kernel: its dU/dlambda center
 // counts in each lambda bin that its lambda gaussian reaches, with its mirror
 // images, weighted by that gaussian and by exp(g/RT) for the bicubic g at its
-// center, the bias the dynamics felt there under OST-INTERPOLATE. The sums of a
+// center, the bias the dynamics felt there with OST-INTERPOLATE. The sums of a
 // bin are kept relative to the largest g they hold and rescaled when a sample
 // raises it, so no weight exceeds one and the exponential cannot overflow; old
 // samples that this rescaling takes below the double range carry no weight
@@ -865,11 +865,11 @@ static void metaFromFortran()
 
 // Reads OST-FLATTEN, the mean force of the flattening bias, as the run is set
 // up, before a continued history is rebuilt with it. A line that names no mean
-// force is refused, and so is the sampled one outside OST or without
-// OST-INTERPOLATE, whose bicubic g is the bias the dynamics feels and so the g
-// that weights each deposit (OST-INTERPOLATE also sets the fused kernel
-// updates, whose derivative grids that lookup reads). A refused setting leaves
-// the kernel mean force, so it leaves no trace in the next run.
+// force is refused, and so is the sampled one outside OST or under
+// OST-INTERPOLATE NONE: the default bicubic g is the bias the dynamics feels and
+// so the g that weights each deposit, read from the derivative grids that the
+// fused kernel updates keep. A refused setting leaves the kernel mean force, so
+// it leaves no trace in the next run.
 static void ostFlattenInit()
 {
    ostflatten = OstFlatten::KERNEL;
@@ -888,7 +888,7 @@ static void ostFlattenInit()
    if (not use_ost)
       TINKER_THROW("OST-FLATTEN  --  SAMPLE Requires LAMBDA-MODE OST");
    if (not ostinterpol)
-      TINKER_THROW("OST-FLATTEN  --  SAMPLE Requires OST-INTERPOLATE");
+      TINKER_THROW("OST-FLATTEN  --  SAMPLE Requires OST-INTERPOLATE, Not NONE");
    ostflatten = OstFlatten::SAMPLE;
 }
 

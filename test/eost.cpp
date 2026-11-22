@@ -2183,11 +2183,13 @@ TEST_CASE("EOST-flatten-keys", "[ff][eost][L2]")
 
    REQUIRE(setting("") == OstFlatten::KERNEL);
    REQUIRE(setting("ost-flatten kernel\n") == OstFlatten::KERNEL);
+   // the bias is interpolated by default, and only NONE turns that off
+   REQUIRE(setting("ost-flatten sample\n") == OstFlatten::SAMPLE);
    REQUIRE(setting("ost-interpolate\nost-flatten sample\n") == OstFlatten::SAMPLE);
    refused("ost", "ost-flatten grid\n", "Unknown Mean Force GRID");
-   refused("ost", "ost-interpolate\nost-flatten\n", "Give the Mean Force, KERNEL or SAMPLE");
-   refused("ost", "ost-flatten sample\n", "SAMPLE Requires OST-INTERPOLATE");
-   refused("meta", "ost-interpolate\nost-flatten sample\n", "SAMPLE Requires LAMBDA-MODE OST");
+   refused("ost", "ost-flatten\n", "Give the Mean Force, KERNEL or SAMPLE");
+   refused("ost", "ost-interpolate none\nost-flatten sample\n", "SAMPLE Requires OST-INTERPOLATE, Not NONE");
+   refused("meta", "ost-flatten sample\n", "SAMPLE Requires LAMBDA-MODE OST");
 }
 
 // Where the g bias is negligible, the sampled mean force is the plain average
@@ -2350,7 +2352,8 @@ TEST_CASE("EOST-flatten-reference", "[ff][eost][L2]")
    resetost(21, 2001, nhist);
    oststdev = 4.0;
    ostflatten = OstFlatten::SAMPLE;
-   // as OST-INTERPOLATE sets them, which OST-FLATTEN SAMPLE requires
+   // the default interpolation and fused kernel updates, which OST-FLATTEN
+   // SAMPLE requires
    ostinterpol = true;
    fastkernel = true;
    hbias = 200.0;

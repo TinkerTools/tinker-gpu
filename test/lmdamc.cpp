@@ -27,6 +27,7 @@
 #include <tinker/detail/mutant.hh>
 #include <tinker/routines.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <functional>
@@ -1473,14 +1474,20 @@ TEST_CASE("LMDAMC-restart-kickoff", "[ff][lmdamc][L4]")
 
    // the forces at the restored lambda with the bias, without it, and at the
    // lambda of the key, from the energy and gradient call of a dynamics step,
-   // which includes the bias force
+   // which includes the bias force; the bias is taken away from both the
+   // gaussian sum and the grids that the default interpolation reads, which
+   // the continued history has rebuilt
    energy(calc::v4);
    const auto g1 = gradient();
    const double h1 = osthhist[1];
+   const auto gk = gkernel, gl = glkernel, gf = gfkernel, glf = glfkernel;
    osthhist[1] = 0.0;
+   for (auto* grid : {&gkernel, &glkernel, &gfkernel, &glfkernel})
+      std::fill(grid->begin(), grid->end(), 0.0);
    energy(calc::v4);
    const auto g2 = gradient();
    osthhist[1] = h1;
+   gkernel = gk, glkernel = gl, gfkernel = gf, glfkernel = glf;
    lambda = 0.5;
    energy(calc::v4);
    const auto g3 = gradient();
