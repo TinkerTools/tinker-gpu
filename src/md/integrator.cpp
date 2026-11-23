@@ -32,6 +32,13 @@ void BasicIntegrator::plan(int istep)
       vers1 &= ~calc::virial;
    if (not save and not mcbaro and not use_dlmda)
       vers1 &= ~calc::energy;
+
+   // Lambda dynamics keeps the energy on every step for its lambda
+   // derivatives, but needs the energy itself only on a step that saves it or
+   // applies a Monte Carlo barostat, or when a Monte Carlo lambda move, which
+   // may follow any step, starts from it.
+   if (use_dlmda and not save and not mcbaro and not use_lmdamc)
+      vers1 |= calc::dlmda_only;
 }
 
 BasicIntegrator::BasicIntegrator(int nRespaLogV, PropagatorEnum pe, //

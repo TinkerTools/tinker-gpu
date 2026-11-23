@@ -126,6 +126,14 @@ struct calc
    /// Bits of every lambda derivative.
    static constexpr int dlmda = energy_dlmda1 + energy_dlmda2 + grad_dlmda + virial_dlmda;
 
+   /// Asks energy() for a dynamics step that keeps its energy only for the
+   /// lambda derivatives: the terms lambda does not drive now run without
+   /// their energy, and neither the energy totals nor their parts are reduced,
+   /// so esum holds just the bias and esum_epoch is left behind, and the
+   /// energy reads as stale. Not an energy version, so outside vmask; energy()
+   /// takes it off before anything else sees the version.
+   static constexpr int dlmda_only = 0x2000;
+
    /// Bits mask to clear energy-irrelevant flags.
    static constexpr int vmask = energy + grad + virial + analyz + dlmda;
    /// Similar to Tinker energy routines. Energy only.

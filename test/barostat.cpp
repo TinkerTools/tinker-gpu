@@ -1112,4 +1112,104 @@ TEST_CASE("OST-Update-At-Step-End", "[ff][npt][ost][L4]")
    bath::isothermal = 0;
    bath::isobaric = 0;
 }
+
+TEST_CASE("OST-Dlmda-Only-Step", "[ff][ost][L4]")
+{
+   // A lambda dynamics step that does not save its energy keeps only the lambda
+   // derivatives and the bias (calc::dlmda_only): its energy reads as stale,
+   // the energy calls after it find the full energy, and the lambda
+   // derivatives, bias and forces are those of a full call.
+   TestLmdaFlagGuard guard;
+   // Guards destroyed in reverse order put everything back even when a check
+   // fails: the dynamics state before the session ends, since the session
+   // would otherwise end with calc::md set and free mdsave events it never
+   // made, and the bath after it ends.
+   struct BathReset
+   {
+      ~BathReset()
+      {
+         bath::kelvin = 0.;
+         bath::atmsph = 0.;
+         bath::isothermal = 0;
+         bath::isobaric = 0;
+      }
+   } bathReset;
+   auto session = loadIonwatOst();
+   struct MdReset
+   {
+      int iwrite = inform::iwrite;
+      ~MdReset()
+      {
+         inform::iwrite = iwrite;
+         delete intg;
+         intg = nullptr;
+         rc_flag = usage_ & ~calc::md;
+      }
+   } mdReset;
+   inform::iwrite = 1000;
+
+   // deposit one gaussian off center in dU/dlambda, so the bias and its force
+   // along the dU/dlambda gradient are not zero
+   energy(calc::v4);
+   lmdaavg = lambda;
+   dedlavg = dedl + 0.5 * wfhist;
+   ostDeposit(1);
+
+   rc_flag = usage_;
+   intg = new VerletIntegrator(ThermostatEnum::NONE, BarostatEnum::NONE);
+
+   // run-to-run noise of a mixed-precision energy call, from its float atomics
+   auto near = [](double a, double b, double rel) { return std::fabs(a - b) <= rel * std::fmax(1.0, std::fabs(b)); };
+   auto grad = [] {
+      std::vector<double> g(3 * n);
+      copyGradient(calc::grad, &g[0], &g[n], &g[2 * n]);
+      return g;
+   };
+   auto check = [&](bool stale) {
+      CAPTURE(stale);
+      REQUIRE((esum_epoch != xyz_epoch) == stale);
+      const double dedl0 = dedl, d2edl20 = d2edl2, bias0 = bgbias - bostlmda, bdgdfl0 = bdgdfl;
+      const energy_prec e0 = esum;
+      const auto g0 = grad();
+      CAPTURE(bias0, bdgdfl0);
+      REQUIRE(std::fabs(bias0) > 1.0e-6);
+      REQUIRE(std::fabs(bdgdfl0) > 1.0e-6);
+      if (stale)
+         REQUIRE(std::fabs(e0 - bias0) <= 1.0e-10);
+
+      energy(calc::v4);
+      REQUIRE(esum_epoch == xyz_epoch);
+      CAPTURE(e0, esum, dedl0, dedl, d2edl20, d2edl2, bgbias - bostlmda, bdgdfl);
+      REQUIRE(near(dedl, dedl0, 1.0e-6));
+      REQUIRE(near(d2edl2, d2edl20, 1.0e-6));
+      REQUIRE(near(bgbias - bostlmda, bias0, 1.0e-6));
+      REQUIRE(near(bdgdfl, bdgdfl0, 1.0e-6));
+      if (not stale)
+         REQUIRE(near(esum, e0, 1.0e-6));
+      else
+         REQUIRE(std::fabs(esum - e0) > 1.0e-6);
+      // the terms lambda does not drive ran without their energy, a kernel
+      // version whose mixed-precision forces differ by round-off
+      const auto g1 = grad();
+      for (int i = 0; i < 3 * n; ++i) {
+         CAPTURE(i, g0[i], g1[i]);
+         REQUIRE(near(g1[i], g0[i], 1.0e-4));
+      }
+   };
+
+   // a step that does not save keeps only the lambda derivatives
+   intg->dynamic(1, 0.001);
+   check(true);
+
+   // the energy call outside a step finds the full energy even right after one
+   intg->dynamic(2, 0.001);
+   energy(calc::v4);
+   REQUIRE(esum_epoch == xyz_epoch);
+   REQUIRE(std::fabs(esum - (bgbias - bostlmda)) > 1.0e-6);
+
+   // a step that saves keeps the energy
+   inform::iwrite = 3;
+   intg->dynamic(3, 0.001);
+   check(false);
+}
 #endif

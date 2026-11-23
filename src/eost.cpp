@@ -200,7 +200,8 @@ void ensureFlambda(double dudl)
 
 // addkernelpoint -- update one g kernel cell and the associated f kernel
 // numerator/partition-function accumulators, given the thermal energy rt; the
-// caller sets the row mean force (eost.f:addkernelpoint).
+// caller sets the row mean force (the dofkern update inlined in
+// eost.f:addkernelhist).
 void addKernelPoint(int ilmda, int iflmda, double e, double ldelta, double fldelta, double sigl2, double sigf2,
    double rt)
 {
@@ -821,7 +822,7 @@ static void ostFromFortran()
    lmdaflist.assign(lmdaintv, 0.0);
 
    // rebuild the lookup and the kernels from the saved gaussians, as
-   // rdosthist does
+   // rdost does
    buildOstIndex();
    if (fastkernel) {
       buildKernels();

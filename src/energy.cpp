@@ -175,13 +175,22 @@ static bool ennintermol(int vers)
 
 // Evaluates the energy terms selected by tsflag and tsconfig, without zeroing or
 // reducing the buffers.
-static void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
+static void energy_core(int vers, bool dlonly, unsigned tsflag, const TimeScaleConfig& tsconfig)
 {
 #define tscfg(x, f) fts(x, f, tsflag, tsconfig)
 
    pmeStreamStartRecord(use_pme_stream);
 
    vers = vers & calc::vmask;
+
+   // On a step that keeps the energy only for its lambda derivatives
+   // (calc::dlmda_only), a term whose lambda derivative is not taken now, such
+   // as one with a flat map, runs without its energy, as on a plain dynamics
+   // step.
+   auto tvers = [&](bool driven) { return (dlonly and not driven) ? (vers & ~calc::energy) : vers; };
+   const bool vdl = vdlmdaActive();
+   const bool epdl = edlmdaActive() or pdlmdaActive();
+   const int vval = tvers(false);
 
    ecore_val = false;
    ecore_vdw = false;
@@ -194,111 +203,111 @@ static void energy_core(int vers, unsigned tsflag, const TimeScaleConfig& tsconf
          or use(Potent::PITORS) or use(Potent::STRTOR) or use(Potent::ANGTOR) or use(Potent::TORTOR)
          or use(Potent::GEOM) or use(Potent::NNVAL);
       if (calc_val and tscfg("evalence", ecore_val))
-         evalence(vers);
+         evalence(vval);
    } else {
       // bonded terms
 
       if (use(Potent::BOND))
          if (tscfg("ebond", ecore_val))
-            ebond(vers);
+            ebond(vval);
       if (use(Potent::ANGLE))
          if (tscfg("eangle", ecore_val))
-            eangle(vers);
+            eangle(vval);
       if (use(Potent::STRBND))
          if (tscfg("estrbnd", ecore_val))
-            estrbnd(vers);
+            estrbnd(vval);
       if (use(Potent::UREY))
          if (tscfg("eurey", ecore_val))
-            eurey(vers);
+            eurey(vval);
       if (use(Potent::OPBEND))
          if (tscfg("eopbend", ecore_val))
-            eopbend(vers);
+            eopbend(vval);
       if (use(Potent::IMPROP))
          if (tscfg("eimprop", ecore_val))
-            eimprop(vers);
+            eimprop(vval);
       if (use(Potent::IMPTORS))
          if (tscfg("eimptor", ecore_val))
-            eimptor(vers);
+            eimptor(vval);
       if (use(Potent::TORSION))
          if (tscfg("etors", ecore_val))
-            etors(vers);
+            etors(vval);
       if (use(Potent::PITORS))
          if (tscfg("epitors", ecore_val))
-            epitors(vers);
+            epitors(vval);
       if (use(Potent::STRTOR))
          if (tscfg("estrtor", ecore_val))
-            estrtor(vers);
+            estrtor(vval);
       if (use(Potent::ANGTOR))
          if (tscfg("eangtor", ecore_val))
-            eangtor(vers);
+            eangtor(vval);
       if (use(Potent::TORTOR))
          if (tscfg("etortor", ecore_val))
-            etortor(vers);
+            etortor(vval);
 
       // misc. terms
 
       if (use(Potent::GEOM))
          if (tscfg("egeom", ecore_val))
-            egeom(vers);
+            egeom(vval);
    }
 
    // the LAMBDA-CV restraint on a collective variable
    if (use(Potent::COLVAR))
       if (tscfg("ecolvar", ecore_val))
-         ecolvar(vers);
+         ecolvar(tvers(cvdlmdaActive()));
 
    // non-bonded terms
 
    if (ennintermol(vers))
       if (tscfg("ennintermol", ecore_nnintermol))
-         ennintermol_cu(vers);
+         ennintermol_cu(tvers(false));
 
    if (amoeba_evdw(vers))
       if (tscfg("evdw", ecore_vdw))
-         evdw(vers);
+         evdw(tvers(vdl));
 
    if (amoeba_echarge(vers))
       if (tscfg("echarge", ecore_ele))
-         echarge(vers);
+         echarge(tvers(edlmdaActive()));
    if (amoeba_echglj(vers))
       if (tscfg("echglj", ecore_ele)) {
          ecore_vdw = true;
-         echglj(vers);
+         echglj(tvers(edlmdaActive() or vdl));
       }
 
    if (amoeba_empole(vers))
       if (tscfg("empole", ecore_ele))
-         empole(vers);
+         empole(tvers(epdl));
    if (amoeba_epolar(vers))
       if (tscfg("epolar", ecore_ele)) {
          if (use_epdt)
-            epolar_dt(vers);
+            epolar_dt(tvers(epdl));
          else
-            epolar(vers);
+            epolar(tvers(epdl));
       }
    if (amoeba_emplar(vers))
       if (tscfg("emplar", ecore_ele)) {
          if (use_emast)
-            emplarAst(vers);
+            emplarAst(tvers(epdl));
          else
-            emplar(vers);
+            emplar(tvers(epdl));
       }
 
    if (hippo_empole(vers))
       if (tscfg("empoleChgpen", ecore_ele))
-         empoleChgpen(vers);
+         empoleChgpen(tvers(epdl));
    if (hippo_epolar(vers))
       if (tscfg("epolarChgpen", ecore_ele))
-         epolarChgpen(vers);
+         epolarChgpen(tvers(epdl));
    if (use(Potent::CHGTRN))
       if (tscfg("echgtrn", ecore_ele))
-         echgtrn(vers);
+         echgtrn(tvers(epdl));
    if (use(Potent::DISP))
       if (tscfg("edisp", ecore_vdw))
-         edisp(vers);
+         edisp(tvers(vdl));
    if (use(Potent::REPULS))
       if (tscfg("erepel", ecore_vdw))
-         erepel(vers);
+         erepel(tvers(vdl));
 
    pmeStreamFinishWait(use_pme_stream and not static_cast<bool>(vers & calc::analyz));
 
@@ -337,6 +346,12 @@ static DHRc* ev_dptr;
 
 void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
 {
+   // A dynamics step that keeps the energy only for its lambda derivatives
+   // needs neither the energy of the terms lambda does not drive now nor the
+   // energy totals. The flag is not an energy version, so it comes off first.
+   const bool dlonly = (vers & calc::dlmda_only) and (vers & calc::energy) and use_dlmda;
+   vers &= ~calc::dlmda_only;
+
    // The terms were never set up, so their arrays are whatever an earlier
    // session left behind; an integrator asks for an energy here as it starts.
    if (not useEnergyData())
@@ -353,12 +368,12 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
    pchgEnsureElec();
 
    zeroEGV(vers);
-   energy_core(vers, tsflag, tsconfig);
+   energy_core(vers, dlonly, tsflag, tsconfig);
    // If the induced dipoles failed to converge, the atoms have been wiggled;
    // recompute every term at the new positions.
    while (induceWiggleRetry()) {
       zeroEGV(vers);
-      energy_core(vers, tsflag, tsconfig);
+      energy_core(vers, dlonly, tsflag, tsconfig);
    }
 
    auto rc_a = rc_flag & calc::analyz;
@@ -375,7 +390,7 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
    ev_hobj.dedl = 0;
    ev_hobj.d2edl2 = 0;
    if (do_e) {
-      if (!rc_a) {
+      if (!rc_a and not dlonly) {
          size_t bufsize = bufferSize();
          if (ecore_val) {
             must_wait = true;
@@ -439,7 +454,7 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
       waitFor(g::q0);
    }
    if (do_e) {
-      if (!rc_a) {
+      if (!rc_a and not dlonly) {
          if (ecore_val) {
             energy_valence += toFloatingPoint<energy_prec>(ev_hobj.e_val);
          }
@@ -459,8 +474,12 @@ void energy(int vers, unsigned tsflag, const TimeScaleConfig& tsconfig)
       if ((dvers & calc::energy_dlmda2) and d2edl2_buf) {
          d2edl2 += toFloatingPoint<energy_prec>(ev_hobj.d2edl2);
       }
-      esum = energy_valence + energy_vdw + energy_elec + energy_nnintermol;
-      esum_epoch = xyz_epoch;
+      // a step that keeps only the lambda derivatives leaves esum at zero for
+      // the bias, and esum_epoch behind
+      if (not dlonly) {
+         esum = energy_valence + energy_vdw + energy_elec + energy_nnintermol;
+         esum_epoch = xyz_epoch;
+      }
    }
    if (do_v) {
       if (!rc_a) {
