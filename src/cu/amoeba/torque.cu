@@ -210,10 +210,11 @@ void torque_cu1(int n, VirialBuffer restrict gpu_vir, //
          t2siz1 = REAL_RSQRT(torqueDot(t2, t2));
          torqueNormal(t2, t2siz1);
 
-         real ut1cos = torqueDot(u, t1);
-         real ut1sin = REAL_SQRT(REAL_MAX((real)0, 1 - ut1cos * ut1cos));
-         real ut2cos = torqueDot(u, t2);
-         real ut2sin = REAL_SQRT(REAL_MAX((real)0, 1 - ut2cos * ut2cos));
+         // signed sines s.(u x t1), s.(u x t2); unsigned ones are wrong when u lies between t1 and t2
+         real ut1sin = s[0] * (u[1] * t1[2] - u[2] * t1[1]) + s[1] * (u[2] * t1[0] - u[0] * t1[2])
+            + s[2] * (u[0] * t1[1] - u[1] * t1[0]);
+         real ut2sin = s[0] * (u[1] * t2[2] - u[2] * t2[1]) + s[1] * (u[2] * t2[0] - u[0] * t2[2])
+            + s[2] * (u[0] * t2[1] - u[1] * t2[0]);
          real _1_ut1sin_ut2sin = REAL_RECIP(ut1sin + ut2sin);
 
          // negative of dot product of torque with unit vectors gives result of

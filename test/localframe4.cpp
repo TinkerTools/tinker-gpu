@@ -15,15 +15,18 @@ using namespace tinker;
 // Seen from H59, C24 and S31 both lie behind N28, so the projection of
 // H59->C24 onto the (z, bisector) plane is nearly parallel to z here:
 // cos = 0.99999999986 in double precision. In single precision it rounds
-// to 1 or a little above, and the unclamped sqrt(1 - cos*cos) in the
-// Z-Bisect torque returns NaN. The force itself is finite, because the
+// to 1 or a little above, and the old unclamped sqrt(1 - cos*cos) in the
+// Z-Bisect torque returned NaN. The force itself is finite, because the
 // torque divides by the sum of two sines (about 0.42 here). Before the
-// clamp, the gradients on atoms 24, 31 and 59 came out as +/-2^31 (a NaN
+// fix, the gradients on atoms 24, 31 and 59 came out as +/-2^31 (a NaN
 // in fixed-point accumulation) and the ligand left the box in one step.
-// The energy is the same with or without the clamp; only the gradient
-// catches the bug.
+// The torque now uses the signed sines s.(u x t1) and s.(u x t2), with no
+// sqrt; the unsigned ones also gave wrong forces here, because u lies
+// between t1 and t2 in this frame. The energy is unaffected; only the
+// gradient catches either bug.
 //
-// Reference values: double-precision CPU Tinker (testgrad), multipoles only.
+// Reference values: double-precision CPU Tinker (testgrad) with the signed
+// Z-Bisect torque, multipoles only; they match the numerical gradient.
 static int usage = calc::xyz | calc::vmask;
 static const char* key0 = R"**(
 parameters  local_frame4
@@ -53,8 +56,8 @@ TEST_CASE("Local-Frame4-1", "[ff][empole][nonewald][z-bisect][local-frame4][L1]"
          {2.1162, 0.4623, 1.0847}, {-1.3720, 2.1997, -1.5175}, {0.4456, 0.0245, 0.6104}, {-0.4391, -0.2267, 0.0159},
          {0.2325, -0.0315, -0.5958}, {0.8745, 0.6424, 1.0164}, {2.0104, -3.6316, -0.4200}, {-1.8763, -0.3574, 0.9060},
          {1.4205, 5.3414, 9.0313}, {0.4601, -0.2686, -1.7546}, {-0.2436, -0.1073, -1.7922}, {-1.0586, -0.2191, -0.6246},
-         {-0.0379, 1.4976, -1.6652}, {-2.1138, -2.2010, 1.5071}, {1.9765, 0.5874, 0.7761}, {-0.8700, -2.8870, 2.6143},
-         {2.0690, -4.3538, 3.9249}, {-2.0224, -1.2838, 4.1112}, {-1.0752, 0.7126, 6.9158}, {-0.9251, 2.9648, -9.7777},
+         {-0.0822, 1.4846, -1.6320}, {-2.1138, -2.2010, 1.5071}, {1.9765, 0.5874, 0.7761}, {-0.8700, -2.8870, 2.6143},
+         {2.1733, -4.3716, 3.9371}, {-2.0224, -1.2838, 4.1112}, {-1.0752, 0.7126, 6.9158}, {-0.9251, 2.9648, -9.7777},
          {3.2040, 3.5069, 3.8255}, {-0.6529, -2.6433, -6.3055}, {-0.5569, 0.7041, 3.8760}, {0.5785, -0.2452, -0.1052},
          {0.4397, 1.5387, 2.9955}, {-1.2512, 0.2184, -0.3174}, {-0.3419, -0.2704, 0.1340}, {-0.5559, -0.4285, -0.1793},
          {-0.3250, -0.9175, -0.4129}, {0.7227, -0.7276, -1.3702}, {-0.4317, -1.0597, 0.1147},
@@ -62,7 +65,7 @@ TEST_CASE("Local-Frame4-1", "[ff][empole][nonewald][z-bisect][local-frame4][L1]"
          {-1.3539, 1.9914, -0.3941}, {0.0524, 1.0022, -1.9004}, {-0.8440, -2.0324, -1.4156}, {0.4982, -0.0777, -0.3908},
          {0.2509, 0.1194, 0.1074}, {0.2385, -0.6797, -3.5042}, {0.6781, 0.3330, 1.1687}, {-1.0604, 0.1782, 3.0385},
          {-0.3881, -0.9053, -0.7001}, {1.0585, -0.0512, 0.5287}, {-0.9373, -0.7710, -0.0477},
-         {0.7307, -0.4286, -1.2092}, {-0.0295, 5.1034, -4.0330}, {0.6198, 0.7975, -1.0707}, {0.1653, -0.0608, -0.2988},
+         {0.7307, -0.4286, -1.2092}, {-0.0894, 5.1340, -4.0784}, {0.6198, 0.7975, -1.0707}, {0.1653, -0.0608, -0.2988},
          {-0.2778, -2.1084, 0.8375}, {-1.2680, -0.6657, 1.3733}, {-0.1907, 0.9683, 1.6992}, {0.0865, 2.0584, -0.0500},
          {1.2688, 1.0430, -1.5726}, {0.0989, -1.8376, -2.0415}, {0.7310, 1.4970, -0.4845}, {-0.8646, -0.8673, -0.0027},
          {0.3242, 0.4653, -1.1982}, {0.0621, -0.0815, 0.1620}, {1.1774, -0.2141, 0.6634}, {-0.7957, -0.2243, -0.1778},
