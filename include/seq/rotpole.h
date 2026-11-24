@@ -188,7 +188,7 @@ inline void rotpoleAtomI(int i,
       // even if it is not needef for z then x)
       if (polaxe == LFRM_Z_ONLY) {
          // pick x
-         int okay = !(REAL_ABS(zz[0]) > 0.866f);
+         int okay = !(REAL_ABS(zz[0]) > 0.707f);
          xx[0] = (okay ? 1 : 0);
          xx[1] = (okay ? 0 : 1);
          xx[2] = 0;

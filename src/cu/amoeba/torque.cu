@@ -52,7 +52,7 @@ void torque_cu1(int n, VirialBuffer restrict gpu_vir, //
          v[2] = z[ic] - z[ib];
          vsiz1 = REAL_RSQRT(torqueDot(v, v));
       } else {
-         int foo = !(REAL_ABS(u[0]) > (real)0.866);
+         int foo = !(REAL_ABS(u[0]) > (real)0.707);
          v[0] = (foo ? 1 : 0);
          v[1] = (foo ? 0 : 1);
          v[2] = 0;
