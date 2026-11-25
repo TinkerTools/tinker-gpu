@@ -237,6 +237,10 @@ void torque_cu1(int n, VirialBuffer restrict gpu_vir, //
             }
          }
       } else if (axetyp == LFRM_3_FOLD) {
+         // z = p, the unit trisector of u, v and w; x = r, the x-axis bond v made
+         // perpendicular to p; y = s = p x r. The frame rotates by p x dp + (s.dr) p,
+         // so eps = dE/d(u+v+w) and t1 = dE/dv, each projected perpendicular to its
+         // bond; this is the exact derivative of the frame.
          real psiz1;
          p[0] = u[0] + v[0] + w[0];
          p[1] = u[1] + v[1] + w[1];
@@ -244,77 +248,35 @@ void torque_cu1(int n, VirialBuffer restrict gpu_vir, //
          psiz1 = REAL_RSQRT(torqueDot(p, p));
          torqueNormal(p, psiz1);
 
-         real wpcos = torqueDot(w, p);
-         real upcos = torqueDot(u, p);
          real vpcos = torqueDot(v, p);
-
          real rsiz1;
-         real delsiz1;
-         real dphidr, dphiddel;
-
-         r[0] = u[0] + v[0];
-         r[1] = u[1] + v[1];
-         r[2] = u[2] + v[2];
+         r[0] = v[0] - vpcos * p[0];
+         r[1] = v[1] - vpcos * p[1];
+         r[2] = v[2] - vpcos * p[2];
          rsiz1 = REAL_RSQRT(torqueDot(r, r));
          torqueNormal(r, rsiz1);
-         dphidr = -torqueDot(trq, r);
-         torqueCross(del, r, w);
-         delsiz1 = REAL_RSQRT(torqueDot(del, del));
-         // 1/sin(r,w) from |r x w|, as for uvsin1
-         real rwsin1 = delsiz1;
-         torqueNormal(del, delsiz1);
-         dphiddel = -torqueDot(trq, del);
-         torqueCross(eps, del, w);
+         torqueCross(s, p, r);
+         torqueCross(del, trq, p);
+         real tz = torqueDot(trq, p);
          for (int j = 0; j < 3; ++j) {
-            real dw = del[j] * dphidr * wsiz1 * rwsin1 + eps[j] * dphiddel * wpcos * wsiz1 * psiz1;
-            deid[j] += dw;
-            deib[j] -= dw;
-            if CONSTEXPR (DO_V) {
-               frcy[j] += dw;
-            }
+            eps[j] = (tz * vpcos * rsiz1 * s[j] - del[j]) * psiz1;
+            t1[j] = eps[j] - tz * rsiz1 * s[j];
          }
-
-         r[0] = v[0] + w[0];
-         r[1] = v[1] + w[1];
-         r[2] = v[2] + w[2];
-         rsiz1 = REAL_RSQRT(torqueDot(r, r));
-         torqueNormal(r, rsiz1);
-         dphidr = -torqueDot(trq, r);
-         torqueCross(del, r, u);
-         delsiz1 = REAL_RSQRT(torqueDot(del, del));
-         // 1/sin(r,u) from |r x u|, as for uvsin1
-         real rusin1 = delsiz1;
-         torqueNormal(del, delsiz1);
-         dphiddel = -torqueDot(trq, del);
-         torqueCross(eps, del, u);
+         real udot = torqueDot(eps, u);
+         real vdot = torqueDot(t1, v);
+         real wdot = torqueDot(eps, w);
          for (int j = 0; j < 3; ++j) {
-            real du = del[j] * dphidr * usiz1 * rusin1 + eps[j] * dphiddel * upcos * usiz1 * psiz1;
+            real du = (eps[j] - udot * u[j]) * usiz1;
+            real dv = (t1[j] - vdot * v[j]) * vsiz1;
+            real dw = (eps[j] - wdot * w[j]) * wsiz1;
             deia[j] += du;
-            deib[j] -= du;
+            deic[j] += dv;
+            deid[j] += dw;
+            deib[j] -= (du + dv + dw);
             if CONSTEXPR (DO_V) {
                frcz[j] += du;
-            }
-         }
-
-         r[0] = u[0] + w[0];
-         r[1] = u[1] + w[1];
-         r[2] = u[2] + w[2];
-         rsiz1 = REAL_RSQRT(torqueDot(r, r));
-         torqueNormal(r, rsiz1);
-         dphidr = -torqueDot(trq, r);
-         torqueCross(del, r, v);
-         delsiz1 = REAL_RSQRT(torqueDot(del, del));
-         // 1/sin(r,v) from |r x v|, as for uvsin1
-         real rvsin1 = delsiz1;
-         torqueNormal(del, delsiz1);
-         dphiddel = -torqueDot(trq, del);
-         torqueCross(eps, del, v);
-         for (int j = 0; j < 3; ++j) {
-            real dv = del[j] * dphidr * vsiz1 * rvsin1 + eps[j] * dphiddel * vpcos * vsiz1 * psiz1;
-            deic[j] += dv;
-            deib[j] -= dv;
-            if CONSTEXPR (DO_V) {
                frcx[j] += dv;
+               frcy[j] += dw;
             }
          }
       }
