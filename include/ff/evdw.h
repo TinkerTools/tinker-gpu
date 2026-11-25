@@ -147,26 +147,38 @@ TINKER_EXTERN Vdw epsrule;
 /// the volume of the box (evcorr.f:evcorr1). The energy times the volume is
 /// `s0 + w*s1 + b*s2` with `w = vlambda^nw` for pairs of the environment and
 /// ligand 1 and `b = (1-vlambda)^nb` for those of the environment and ligand 2,
-/// so it holds at any vlambda. The sums are 0 if the system is unbound.
+/// so it holds at any vlambda. Under a sharp cutoff (TRUNCATE) the boundary
+/// sums `t0`, `t1` and `t2` carry each class's `off^3 E(off)` with the same
+/// weights; a taper zeroes them. The sums are 0 if the system is unbound.
 struct LrcSums
 {
    double s0; ///< pairs that do not follow the vdw lambda
    double s1; ///< pairs that follow vlambda
    double s2; ///< pairs that follow one minus vlambda
-   double nw; ///< lambda exponent of \c s1
-   double nb; ///< lambda exponent of \c s2
+   double t0; ///< boundary term of \c s0 under a sharp cutoff
+   double t1; ///< boundary term of \c s1 under a sharp cutoff
+   double t2; ///< boundary term of \c s2 under a sharp cutoff
+   double nw; ///< lambda exponent of \c s1 and \c t1
+   double nb; ///< lambda exponent of \c s2 and \c t2
 };
 
 /// Integrates the class sums of the van der Waals (\c dsp false) or the
-/// dispersion correction from the Fortran setup.
+/// dispersion correction from the Fortran setup, starting the tail at the
+/// taper distance, or at the cutoff under a sharp cutoff (evcorr.f:evcorr1).
 void lrcSetup(LrcSums& ls, bool dsp);
 
 /// The correction times the volume at vdw lambda \c v, given with its main
 /// lambda derivatives, with its own first and second derivatives only if
 /// \c dodl (lmdaPwrChain); ligand 2 couples as the complement
-/// (lmdaComplement). A constant over the volume, its virial is minus the
-/// energy on each diagonal element.
+/// (lmdaComplement).
 LmdaFn lrcEval(const LrcSums& ls, const LmdaFn& v, bool dodl);
+
+/// The virial of the correction on each diagonal element times the volume, as
+/// lrcEval gives the energy. A constant over the volume, the correction has
+/// minus its energy as its virial; a sharp cutoff adds minus a third of the
+/// boundary sums, the impulse of pairs crossing the cutoff, which the truncated
+/// forces never carry.
+LmdaFn lrcVirial(const LrcSums& ls, const LmdaFn& v, bool dodl);
 
 /// Adds the correction at the current vlam over the box volume to the energy and
 /// virial of the term, \c eterm and \c vterm, and of van der Waals, with its

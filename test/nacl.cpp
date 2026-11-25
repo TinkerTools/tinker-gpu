@@ -171,6 +171,73 @@ TEST_CASE("NaCl-1", "[ff][evdw][evcorr][hal][switch][nacl][L1]")
 
       session.end();
    }
+
+   // Under a sharp cutoff the tail starts at the 2.6 Ang cutoff, and the
+   // virial adds the boundary term -off^3 E(off) over three times the volume,
+   // -1.092460 of the -1.295802 here (test_nacl.f evcorr_trunc).
+   SECTION("  - ehal -- evcorr truncate vlambda = 1.0")
+   {
+      std::string key6 = key;
+      // overwrite the default box size
+      key6 += "b-axis            10.0\n";
+      key6 += "c-axis            10.0\n";
+      key6 += "vdw-correction\n";
+      key6 += "truncate\n";
+
+      TestFile fke(TINKER9_DIRSTR "/test/file/nacl/nacl.key", "test_nacl.key", key6);
+      const char* x6 = "test_nacl.xyz_6";
+      TestFile fx6(TINKER9_DIRSTR "/test/file/nacl/nacl1.xyz", x6);
+
+      const char* argv[] = {"dummy", x6};
+      int argc = 2;
+
+      const double ref_eng = 51.6275;
+      const int ref_count = 1;
+      const double ref_grad[][3] = {{184.4899, 0.0, 0.0}, {-184.4899, 0.0, 0.0}};
+      const double ref_v[][3] = {{-407.174, 0.0, 0.0}, {0.0, -1.2958, 0.0}, {0.0, 0.0, -1.2958}};
+
+      TestSession session(argc, argv);
+      rc_flag = usage;
+      session.init();
+
+      COMPARE_CODE_BLOCK1;
+
+      session.end();
+   }
+
+   // The same with the sodium and chloride class pair at 0.9^5, in the tail
+   // and its boundary term (test_nacl.f evcorr_lambda_trunc).
+   SECTION("  - ehal -- evcorr truncate vlambda = 0.9")
+   {
+      std::string key7 = key;
+      // overwrite the default box size
+      key7 += "b-axis            10.0\n";
+      key7 += "c-axis            10.0\n";
+      key7 += "vdw-correction\n";
+      key7 += "truncate\n";
+      key7 += "ligand 2\n";
+      key7 += "vdw-lambda 0.9\n";
+
+      TestFile fke(TINKER9_DIRSTR "/test/file/nacl/nacl.key", "test_nacl.key", key7);
+      const char* x7 = "test_nacl.xyz_7";
+      TestFile fx7(TINKER9_DIRSTR "/test/file/nacl/nacl1.xyz", x7);
+
+      const char* argv[] = {"dummy", x7};
+      int argc = 2;
+
+      const double ref_eng = 25.4473;
+      const int ref_count = 1;
+      const double ref_grad[][3] = {{81.9570, 0.0, 0.0}, {-81.9570, 0.0, 0.0}};
+      const double ref_v[][3] = {{-181.402, 0.0, 0.0}, {0.0, -1.0962, 0.0}, {0.0, 0.0, -1.0962}};
+
+      TestSession session(argc, argv);
+      rc_flag = usage;
+      session.init();
+
+      COMPARE_CODE_BLOCK1;
+
+      session.end();
+   }
 }
 
 #define COMPARE_CODE_BLOCK2                        \

@@ -529,7 +529,7 @@ void evdwData(RcOp op)
 
 void lrcSetup(LrcSums& ls, bool dsp)
 {
-   ls = {0, 0, 0, 1, 1};
+   ls = {0, 0, 0, 0, 0, 0, 1, 1};
    if (not bound::use_bounds)
       return;
 
@@ -557,12 +557,18 @@ void lrcSetup(LrcSums& ls, bool dsp)
    const double c0 = shunt::c0, c1 = shunt::c1, c2 = shunt::c2;
    const double c3 = shunt::c3, c4 = shunt::c4, c5 = shunt::c5;
 
-   // The number of steps and range of the numerical integration.
+   // The number of steps and range of the numerical integration, which starts
+   // at the taper distance, or at the cutoff when truncation has moved the
+   // taper distance beyond it; a sharp cutoff leaves a boundary term in the
+   // virial at the cutoff.
    const int nstep = 2;
    const double range = 100.0;
-   const int ndelta = (int)((double)nstep * (range - cut));
-   const double rdelta = (range - cut) / (double)ndelta;
-   const double offset = cut - 0.5 * rdelta;
+   const double rstart = std::min(cut, off);
+   const int ndelta = (int)((double)nstep * (range - rstart));
+   const double rdelta = (range - rstart) / (double)ndelta;
+   const double offset = rstart - 0.5 * rdelta;
+   const bool trunc = (cut >= off);
+   const double off3 = off * off * off;
 
    // Count the types, or the classes for dispersion, of the environment and
    // each ligand group.
@@ -626,9 +632,8 @@ void lrcSetup(LrcSums& ls, bool dsp)
             rv6 = rv2 * rv2 * rv2;
             rv7 = rv6 * rv;
          }
-         double etot = 0;
-         for (int j = 1; j <= ndelta; ++j) {
-            double r = offset + j * rdelta;
+         // The untapered pair energy of the class pair (evcorr.f:evcorre).
+         auto pairE = [&](double r) {
             double r2 = r * r;
             double r3 = r2 * r;
             double r6 = r3 * r3;
@@ -651,6 +656,14 @@ void lrcSetup(LrcSums& ls, bool dsp)
                double expterm = abuck * std::exp(-bbuck / p);
                e = eps * (expterm - cbuck * p6);
             }
+            return e;
+         };
+         double etot = 0;
+         for (int j = 1; j <= ndelta; ++j) {
+            double r = offset + j * rdelta;
+            double r2 = r * r;
+            double r3 = r2 * r;
+            double e = pairE(r);
             if (r < off) {
                double r4 = r2 * r2;
                double r5 = r2 * r3;
@@ -662,15 +675,40 @@ void lrcSetup(LrcSums& ls, bool dsp)
          ls.s0 += f0 * etot;
          ls.s1 += f1 * etot;
          ls.s2 += f2 * etot;
+         if (trunc) {
+            double ebnd = off3 * pairE(off);
+            ls.t0 += f0 * ebnd;
+            ls.t1 += f1 * ebnd;
+            ls.t2 += f2 * ebnd;
+         }
       }
    }
+}
+
+// Three class sums weighted by w for the pairs of ligand 1 and b for those of
+// ligand 2, with their lambda derivatives.
+static LmdaFn lrcCombine(double a0, double a1, double a2, const LmdaFn& w, const LmdaFn& b)
+{
+   return {a0 + w.f * a1 + b.f * a2, w.d1 * a1 + b.d1 * a2, w.d2 * a1 + b.d2 * a2};
 }
 
 LmdaFn lrcEval(const LrcSums& ls, const LmdaFn& v, bool dodl)
 {
    const LmdaFn w = lmdaPwrChain(v, ls.nw, dodl);
    const LmdaFn b = lmdaPwrChain(lmdaComplement(v), ls.nb, dodl);
-   return {ls.s0 + w.f * ls.s1 + b.f * ls.s2, w.d1 * ls.s1 + b.d1 * ls.s2, w.d2 * ls.s1 + b.d2 * ls.s2};
+   return lrcCombine(ls.s0, ls.s1, ls.s2, w, b);
+}
+
+// Integrating r^3 dE/dr by parts from the start of the tail leaves the
+// boundary term r^3 E there, which a taper sends to zero; under a sharp cutoff
+// it remains as -off^3 E(off), so the virial is -(E + T/3) (evcorr.f:evcorr1).
+LmdaFn lrcVirial(const LrcSums& ls, const LmdaFn& v, bool dodl)
+{
+   const LmdaFn w = lmdaPwrChain(v, ls.nw, dodl);
+   const LmdaFn b = lmdaPwrChain(lmdaComplement(v), ls.nb, dodl);
+   const LmdaFn e = lrcCombine(ls.s0, ls.s1, ls.s2, w, b);
+   const LmdaFn t = lrcCombine(ls.t0, ls.t1, ls.t2, w, b);
+   return {-e.f - t.f / 3, -e.d1 - t.d1 / 3, -e.d2 - t.d2 / 3};
 }
 
 void lrcApply(int vers, int dlvers, const LrcSums& ls, energy_prec& eterm, virial_prec (&vterm)[9])
@@ -699,17 +737,18 @@ void lrcApply(int vers, int dlvers, const LrcSums& ls, energy_prec& eterm, viria
          d2edl2 += corr;
       }
    }
-   // the virial of a constant over the volume is minus its energy
+   // minus the energy, and a third of the boundary term under a sharp cutoff
    if (do_v) {
-      if (e.f != 0) {
-         virial_prec term = -e.f / vol;
+      const LmdaFn vir = lrcVirial(ls, v, dodl);
+      if (vir.f != 0) {
+         virial_prec term = vir.f / vol;
          for (int k : {0, 4, 8}) {
             vterm[k] += term;
             virial_vdw[k] += term;
          }
       }
-      if ((dlvers & calc::virial_dlmda) and e.d1 != 0) {
-         virial_prec term = -e.d1 / vol;
+      if ((dlvers & calc::virial_dlmda) and vir.d1 != 0) {
+         virial_prec term = vir.d1 / vol;
          for (int k : {0, 4, 8})
             dvirdl[k] += term;
       }

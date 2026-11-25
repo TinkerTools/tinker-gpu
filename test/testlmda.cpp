@@ -282,6 +282,10 @@ const Fixture kFixtures[] = {
    {"172_octwat_rels_vdwm_vcorr_nlist_l05", 2.0e-2, 2.0, 1.0e-4, "trunc8/octwater.xyz",
       "commit_6fe8e913/water03.prm"},
    {"173_octwat_rels_lig1_st_l085", 4.0e-3, 3.0, 1.0e-4, "trunc8/octwater.xyz", "commit_6fe8e913/water03.prm"},
+   // the first water decoupled with the correction under a sharp cutoff, whose
+   // virial carries the boundary term (test_testlmda.f case 174)
+   {"174_octwat_ast_vcorr_trunc_nlist_l05", 2.0e-2, 2.0, 1.0e-4, "trunc8/octwater.xyz",
+      "commit_6fe8e913/water03.prm"},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
@@ -449,8 +453,9 @@ void runRefusedFixture(const Fixture& fx, const char* what)
 
 // The long range correction from its class sums against Fortran evcorr1 at a
 // few van der Waals lambdas, for the van der Waals (dsp false) or the
-// dispersion correction. Fortran takes the second lambda derivative only with
-// use_d2lmda, and its virial is minus the energy. evcorr1 compares its whole
+// dispersion correction, with its virial, which is minus the energy and, under
+// a sharp cutoff, minus a third of the boundary term. Fortran takes the second
+// lambda derivative only with use_d2lmda. evcorr1 compares its whole
 // character*6 mode, so the mode is padded to six characters.
 void runLrcFixture(const Fixture& fx, bool dsp)
 {
@@ -485,14 +490,15 @@ void runLrcFixture(const Fixture& fx, bool dsp)
          tinker_f_evcorr1({const_cast<char*>("VDW   "), 6}, &elrc, &vlrc, &delrc, &dvlrc, &d2elrc);
       // with respect to vlambda itself
       const LmdaFn f = lrcEval(ls, {vl, 1, 0}, true);
+      const LmdaFn w = lrcVirial(ls, {vl, 1, 0}, true);
       const double e = f.f, de = f.d1, d2e = f.d2;
       auto near = [](double a, double b) { return std::fabs(a - b) <= 1.0e-12 * std::fabs(b) + 1.0e-15; };
-      CAPTURE(fx.name, e / vol, elrc, de / vol, delrc, d2e / vol, d2elrc);
+      CAPTURE(fx.name, e / vol, elrc, de / vol, delrc, d2e / vol, d2elrc, w.f / vol, vlrc, w.d1 / vol, dvlrc);
       REQUIRE(near(e / vol, elrc));
       REQUIRE(near(de / vol, delrc));
       REQUIRE(near(d2e / vol, d2elrc));
-      REQUIRE(vlrc == -elrc);
-      REQUIRE(dvlrc == -delrc);
+      REQUIRE(near(w.f / vol, vlrc));
+      REQUIRE(near(w.d1 / vol, dvlrc));
    }
    mutant::vlambda = saved;
 }
@@ -501,8 +507,9 @@ void runLrcFixture(const Fixture& fx, bool dsp)
 // the virial and its lambda derivative, as the difference of the fixture's key
 // with and without its correction keyword, against Fortran evcorr1 carried to
 // the main lambda. The key keeps only the term that owns the correction; its
-// cubic van der Waals map puts both map derivatives into the chain rule.
-void runLrcChainFixture(const Fixture& fx, bool dsp)
+// cubic van der Waals map puts both map derivatives into the chain rule. The
+// keywords in \c extra go into both keys, as "truncate" does for a sharp cutoff.
+void runLrcChainFixture(const Fixture& fx, bool dsp, const char* extra = "")
 {
    TestLmdaFlagReset lmdaReset;
 
@@ -524,7 +531,7 @@ void runLrcChainFixture(const Fixture& fx, bool dsp)
          without += line + "\n";
    }
    REQUIRE(found);
-   const std::string only = dsp ? "dispersionterm only\n" : "vdwterm only\n";
+   const std::string only = std::string(dsp ? "dispersionterm only\n" : "vdwterm only\n") + extra;
    with += only;
    without += only;
 
@@ -752,13 +759,18 @@ TEST_CASE("TESTLMDA-lrc-evcorr1", "[ff][testlmda][L3]")
    runLrcFixture(fx("11_water_rels_vdwm_vcorr_l050"), false);
    runLrcFixture(fx("113_hipmix_dsp_corr_l04"), true);
    runLrcFixture(fx("114_hipmix_dsp_corr_annih_l04"), true);
+   runLrcFixture(fx("174_octwat_ast_vcorr_trunc_nlist_l05"), false);
 }
 // The long range correction's own lambda derivatives and virial through a cubic
-// van der Waals map, buffered 14-7 and dispersion at lambda 0.6.
+// van der Waals map, buffered 14-7 and dispersion at lambda 0.6, then both again
+// under a sharp cutoff, whose tail starts at the cutoff and whose virial adds
+// the boundary term.
 TEST_CASE("TESTLMDA-lrc-chain", "[ff][testlmda][L3]")
 {
    runLrcChainFixture(fx("09_water_ast_vcorr_l06exp"), false);
    runLrcChainFixture(fx("121_hipmix_dsp_corr_exp3_l06"), true);
+   runLrcChainFixture(fx("09_water_ast_vcorr_l06exp"), false, "truncate\n");
+   runLrcChainFixture(fx("121_hipmix_dsp_corr_exp3_l06"), true, "truncate\n");
 }
 TEST_CASE("TESTLMDA-120_hipmix_dsp_ewald_exp3_l08", "[ff][testlmda][disp][L3]") { runFixture(fx("120_hipmix_dsp_ewald_exp3_l08")); }
 // The long range dispersion correction through the cubic map (test_testlmda.f
@@ -850,6 +862,8 @@ TEST_CASE("TESTLMDA-170_octwat_rels3_l085", "[ff][testlmda][octahedron][rdt][L3]
 TEST_CASE("TESTLMDA-171_octwat_rels3_l015", "[ff][testlmda][octahedron][rdt][L3]") { runFixture(fx("171_octwat_rels3_l015")); }
 TEST_CASE("TESTLMDA-172_octwat_rels_vdwm_vcorr_nlist_l05", "[ff][testlmda][octahedron][rdt][L3]") { runFixture(fx("172_octwat_rels_vdwm_vcorr_nlist_l05")); }
 TEST_CASE("TESTLMDA-173_octwat_rels_lig1_st_l085", "[ff][testlmda][octahedron][rdt][L3]") { runFixture(fx("173_octwat_rels_lig1_st_l085")); }
+// The first water decoupled with the correction under a sharp cutoff.
+TEST_CASE("TESTLMDA-174_octwat_ast_vcorr_trunc_nlist_l05", "[ff][testlmda][octahedron][L3]") { runFixture(fx("174_octwat_ast_vcorr_trunc_nlist_l05")); }
 
 // Every fixture once more without analysis, as dynamics runs it.
 TEST_CASE("TESTLMDA-DYN-01_water_adt_l05", "[ff][testlmda][dyn][L3]") { runFixture(fx("01_water_adt_l05"), false); }
@@ -1014,4 +1028,5 @@ TEST_CASE("TESTLMDA-DYN-170_octwat_rels3_l085", "[ff][testlmda][dyn][octahedron]
 TEST_CASE("TESTLMDA-DYN-171_octwat_rels3_l015", "[ff][testlmda][dyn][octahedron][rdt][L3]") { runFixture(fx("171_octwat_rels3_l015"), false); }
 TEST_CASE("TESTLMDA-DYN-172_octwat_rels_vdwm_vcorr_nlist_l05", "[ff][testlmda][dyn][octahedron][rdt][L3]") { runFixture(fx("172_octwat_rels_vdwm_vcorr_nlist_l05"), false); }
 TEST_CASE("TESTLMDA-DYN-173_octwat_rels_lig1_st_l085", "[ff][testlmda][dyn][octahedron][rdt][L3]") { runFixture(fx("173_octwat_rels_lig1_st_l085"), false); }
+TEST_CASE("TESTLMDA-DYN-174_octwat_ast_vcorr_trunc_nlist_l05", "[ff][testlmda][dyn][octahedron][L3]") { runFixture(fx("174_octwat_ast_vcorr_trunc_nlist_l05"), false); }
 #endif

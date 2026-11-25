@@ -23,6 +23,10 @@ struct Fixture
    double ntol = 5.0e-2; ///< Tolerance of the numerical virial in mixed precision.
    double step = 0.02;   ///< Finite difference stepsize of the lattice vectors, in Angstroms.
    double dstep = 0.02;  ///< The stepsize in double precision.
+   /// Pairs cross a sharp cutoff within the finite difference step, so the
+   /// numerical virial is checked by its trace alone, within \c ntol in either
+   /// precision, and not against the reference.
+   bool crossing = false;
 };
 
 const Fixture kFixtures[] = {
@@ -47,6 +51,17 @@ const Fixture kFixtures[] = {
    // leave it 1.8 off at 1e-2 in mixed precision and more at any other step
    {"15_tip3_ljchg_lambda_nlist_l05", "testlmda/tip3box.xyz", "commit_350df099/amber99sb.prm", 1.0e-3, 3.0, 1.0e-2,
       2.0e-3},
+   // the long range correction of a liquid argon box under a sharp cutoff,
+   // buffered 14-7 and Lennard-Jones, whose virial carries the boundary term of
+   // pairs crossing the cutoff, -off^3 E(off) over three times the volume, 11.50
+   // and 19.00 on each diagonal (test_testvir.f cases 16 and 17); testvir.x
+   // takes a 3e-5 step that no pair crosses, so its numerical virial lacks the
+   // term, while at 0.02 here a dozen or so pairs cross the cutoff and their
+   // jumps carry it: the trace lands 0.39 and 0.68 from the analytical one, each
+   // element up to 6 off, and smaller steps leave fewer crossings, each of
+   // larger weight
+   {"16_argon_trunc_corr", "trunc8/arbox.xyz", "commit_6fe8e913/amoeba09.prm", 1.0e-3, 2.0, 0.02, 0.02, true},
+   {"17_argon_lj_trunc_corr", "trunc8/arbox.xyz", "testvir/arlj.prm", 1.0e-3, 2.0, 0.02, 0.02, true},
 };
 
 // The fixture of a given name. Cases look their fixture up by name so that
@@ -93,10 +108,17 @@ void runFixture(const Fixture& fx)
    const double eps_n = testGetEps(fx.ntol, 1.0e-2);
 
    COMPARE_VIR9(r.vanlyt, ref.getVirial(), eps_a);
-   COMPARE_VIR9(r.vnumer, ref.getNumerVirial(), eps_n);
-   // The analytical virial against its own finite difference, as test_testvir.f does.
-   for (int k = 0; k < 9; ++k)
-      COMPARE_REALS(r.vanlyt[k], r.vnumer[k], eps_n);
+   if (fx.crossing) {
+      // The pairs crossing the cutoff average into the boundary term.
+      const double tra = (r.vanlyt[0] + r.vanlyt[4] + r.vanlyt[8]) / 3;
+      const double trn = (r.vnumer[0] + r.vnumer[4] + r.vnumer[8]) / 3;
+      COMPARE_REALS(tra, trn, fx.ntol);
+   } else {
+      COMPARE_VIR9(r.vnumer, ref.getNumerVirial(), eps_n);
+      // The analytical virial against its own finite difference, as test_testvir.f does.
+      for (int k = 0; k < 9; ++k)
+         COMPARE_REALS(r.vanlyt[k], r.vnumer[k], eps_n);
+   }
 
    session.end();
 }
@@ -139,6 +161,17 @@ TEST_CASE("TESTVIR-10_disp_dewald_ann_l05", "[ff][testvir][hippo][disp][L3]")
 TEST_CASE("TESTVIR-12_disp_corr", "[ff][testvir][hippo][disp][L3]")
 {
    runFixture(fx("12_disp_corr"));
+}
+// The long range correction of liquid argon under a sharp cutoff, whose
+// analytical virial exceeds the numerical one by the boundary term on each
+// diagonal element (test_testvir.f cases 16 and 17).
+TEST_CASE("TESTVIR-16_argon_trunc_corr", "[ff][testvir][evcorr][hal][L3]")
+{
+   runFixture(fx("16_argon_trunc_corr"));
+}
+TEST_CASE("TESTVIR-17_argon_lj_trunc_corr", "[ff][testvir][evcorr][lj][L3]")
+{
+   runFixture(fx("17_argon_lj_trunc_corr"));
 }
 
 #if TINKER_GPULANG_CUDA
