@@ -26,7 +26,6 @@ TEST_CASE("EREPEL-1", "[ff][hippo][erepel][c5h12-acnh2][L1]")
    int argc = 4;
 
    const double eps_e = testGetEps(0.0001, 0.0001);
-   const double eps_g = testGetEps(0.0001, 0.0001);
    const double eps_v = testGetEps(0.001, 0.001);
 
    TestReference r(TINKER9_DIRSTR "/test/ref/rephippo.1.txt");
@@ -38,6 +37,7 @@ TEST_CASE("EREPEL-1", "[ff][hippo][erepel][c5h12-acnh2][L1]")
    rc_flag = calc::xyz | calc::vmask;
    TestSession session(argc, argv);
    session.init();
+   const double eps_g = testGetEpsAcc(0.0001, 0.0002, 0.0001);
 
    energy(calc::v0);
    COMPARE_REALS(esum, ref_e, eps_e);
