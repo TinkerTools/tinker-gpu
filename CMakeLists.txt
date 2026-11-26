@@ -568,6 +568,12 @@ if (NOT HOST AND GPU_LANG STREQUAL "OPENACC")
    else ()
       set (__T9_ACC_TARGET "-ta=tesla:")
    endif ()
+   # ,cc60,cc70 -> -gpu=cc60,cc70, for the configurations without a suboption
+   string (REGEX REPLACE "^," "" __T9_ACC_CCLST "${__T9_ACC_CCLST4}")
+   set (__T9_ACC_GPU_CC)
+   if (__T9_ACC_CCLST)
+      set (__T9_ACC_GPU_CC "${__T9_ACC_TARGET}${__T9_ACC_CCLST}")
+   endif ()
 endif ()
 
 

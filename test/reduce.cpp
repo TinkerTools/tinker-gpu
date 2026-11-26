@@ -56,8 +56,7 @@ TEST_CASE("Reduce", "[util][math][reduce][L1]")
 
    const char* k = "test_trpcage.key";
    const char* x1 = "test_trpcage.xyz";
-   std::string k0 = "bondterm only\n "
-                    "gpu-package cuda\n";
+   std::string k0 = "bondterm only\n";
    TestFile fke(TINKER9_DIRSTR "/test/file/trpcage/trpcage.key", k, k0);
    TestFile fx1(TINKER9_DIRSTR "/test/file/trpcage/trpcage.xyz", x1);
    TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoebapro13.prm");

@@ -119,14 +119,10 @@ void runOctWater(const char* key, const char* prm, const char* ref, bool alyz, c
 
    const char* xn = "test_oct.xyz";
    const char* kn = "test_oct.key";
-   std::string ke;
-#if TINKER_GPULANG_OPENACC
-   ke += "\ngpu-package openacc\n";
-#endif
 
    const std::string files = TINKER9_DIRSTR "/test/file/";
    TestFile fx(files + "trunc8/octwater.xyz", xn);
-   TestFile fk(files + "trunc8/" + key, kn, ke);
+   TestFile fk(files + "trunc8/" + key, kn);
    std::unique_ptr<TestFile> fp;
    if (prm)
       fp.reset(new TestFile(files + prm));
@@ -144,10 +140,8 @@ void runOctWater(const char* key, const char* prm, const char* ref, bool alyz, c
    int argc = 2;
 
    TestSession session(argc, argv);
+   session.useAccKernels();
    session.init();
-#if TINKER_GPULANG_OPENACC
-   REQUIRE(pltfm_config & Platform::ACC);
-#endif
    if (use(Potent::CHARGE) and not alyz and (clistVersion() & Nbl::SPATIAL))
       REQUIRE(echgljAvailable());
 

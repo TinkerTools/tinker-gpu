@@ -43,6 +43,7 @@ static void empoleEwaldRealSelf_acc1()
                deviceptr(DEVICE_PTRS,grp,mlst)
    #pragma acc loop gang independent
    for (int i = 0; i < n; ++i) {
+      const int gi = grp ? grp[i] : 0; // read once, not hoisted past the null check
       real xi = x[i];
       real yi = y[i];
       real zi = z[i];
@@ -56,8 +57,8 @@ static void empoleEwaldRealSelf_acc1()
       real qiyy = rpole[i][MPL_PME_YY];
       real qiyz = rpole[i][MPL_PME_YZ];
       real qizz = rpole[i][MPL_PME_ZZ];
-      MAYBE_UNUSED real gxi = 0, gyi = 0, gzi = 0;
-      MAYBE_UNUSED real txi = 0, tyi = 0, tzi = 0;
+      MAYBE_UNUSED grad_prec gxi = 0, gyi = 0, gzi = 0;
+      MAYBE_UNUSED grad_prec txi = 0, tyi = 0, tzi = 0;
 
       int nmlsti = mlst->nlst[i];
       int base = i * maxnlst;
@@ -71,7 +72,7 @@ static void empoleEwaldRealSelf_acc1()
          real zr = z[k] - zi;
 
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off2 and (not grp or grpPairLive(live, grp[i], grp[k]))) {
+         if (r2 <= off2 and (not grp or grpPairLive(live, gi, grp[k]))) {
             MAYBE_UNUSED real e;
             pair_mpole<do_e, do_g, EWALD>(r2, xr, yr, zr, 1,          //
                ci, dix, diy, diz, qixx, qixy, qixz, qiyy, qiyz, qizz, //
@@ -86,16 +87,16 @@ static void empoleEwaldRealSelf_acc1()
             if CONSTEXPR (do_e)
                atomic_add(e, em, offset);
             if CONSTEXPR (do_g) {
-               gxi += pgrad.frcx;
-               gyi += pgrad.frcy;
-               gzi += pgrad.frcz;
+               gxi += floatTo<grad_prec>(pgrad.frcx);
+               gyi += floatTo<grad_prec>(pgrad.frcy);
+               gzi += floatTo<grad_prec>(pgrad.frcz);
                atomic_add(-pgrad.frcx, demx, k);
                atomic_add(-pgrad.frcy, demy, k);
                atomic_add(-pgrad.frcz, demz, k);
 
-               txi += pgrad.ttmi[0];
-               tyi += pgrad.ttmi[1];
-               tzi += pgrad.ttmi[2];
+               txi += floatTo<grad_prec>(pgrad.ttmi[0]);
+               tyi += floatTo<grad_prec>(pgrad.ttmi[1]);
+               tzi += floatTo<grad_prec>(pgrad.ttmi[2]);
                atomic_add(pgrad.ttmk[0], trqx, k);
                atomic_add(pgrad.ttmk[1], trqy, k);
                atomic_add(pgrad.ttmk[2], trqz, k);
@@ -120,9 +121,9 @@ static void empoleEwaldRealSelf_acc1()
          atomic_add(gxi, demx, i);
          atomic_add(gyi, demy, i);
          atomic_add(gzi, demz, i);
-         atomic_add(txi, trqx, i);
-         atomic_add(tyi, trqy, i);
-         atomic_add(tzi, trqz, i);
+         atomic_add(toFloatGrad<real>(txi), trqx, i);
+         atomic_add(toFloatGrad<real>(tyi), trqy, i);
+         atomic_add(toFloatGrad<real>(tzi), trqz, i);
       }
 
       // compute the self-energy part of the Ewald summation

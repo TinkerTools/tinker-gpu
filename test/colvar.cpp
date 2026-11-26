@@ -629,8 +629,8 @@ TEST_CASE("Colvar-lambda-mcstate", "[ff][colvar][L1]")
    d2ecvdl2 = 0;
 }
 
-// lambda derivatives and lambda dynamics need the CUDA platform (dlmdaData2)
-#if TINKER_CUDART
+// Lambda derivatives and lambda dynamics need the CUDA platform (dlmdaData2).
+#if TINKER_GPULANG_CUDA
 TEST_CASE("Colvar-lambda-analytic", "[ff][colvar][L1]")
 {
    // Under analysis the term keeps its energy and its lambda derivatives in
@@ -759,7 +759,8 @@ TEST_CASE("Colvar-lambda-gradvir", "[ff][colvar][L2]")
    }
 }
 
-#if TINKER_CUDART
+// Lambda derivatives and lambda dynamics need the CUDA platform (dlmdaData2).
+#if TINKER_GPULANG_CUDA
 TEST_CASE("Colvar-lambda-versions", "[ff][colvar][L2]")
 {
    // Without analysis the term adds into the shared buffers; every version
@@ -1208,9 +1209,6 @@ TEST_CASE("Colvar-lambda-fep", "[ff][colvar][L2]")
    session.end();
 }
 
-// The whole force field needs a neighbor list, which an OpenACC build serves
-// from the ACC platform, where lambda dynamics is refused (dlmdaData2).
-#if TINKER_GPULANG_CUDA
 TEST_CASE("Colvar-lambda-full", "[ff][colvar][L2]")
 {
    // A geometric lambda with no mutated atoms and the whole AMOEBA water field
@@ -1308,7 +1306,6 @@ TEST_CASE("Colvar-lambda-full", "[ff][colvar][L2]")
    REQUIRE(grabUind() == u2);
    session.end();
 }
-#endif
 
 namespace {
 // the numbers of the rows that follow the line holding label in file, with

@@ -60,8 +60,10 @@ static void erepel_acc1()
       real vali = elepr[i];
       int imut = mut[i];
 
-      MAYBE_UNUSED real gxi = 0, gyi = 0, gzi = 0;
-      MAYBE_UNUSED real txi = 0, tyi = 0, tzi = 0;
+      // per-atom sums in fixed point, so that hundreds of float additions do
+      // not round away the precision the pair terms have
+      MAYBE_UNUSED grad_prec gxi = 0, gyi = 0, gzi = 0;
+      MAYBE_UNUSED grad_prec txi = 0, tyi = 0, tzi = 0;
 
       int nmlsti = mlst->nlst[i];
       int base = i * maxnlst;
@@ -94,16 +96,16 @@ static void erepel_acc1()
             if CONSTEXPR (do_e)
                atomic_add(e, er, offset);
             if CONSTEXPR (do_g) {
-               gxi += pgrad.frcx;
-               gyi += pgrad.frcy;
-               gzi += pgrad.frcz;
+               gxi += floatTo<grad_prec>(pgrad.frcx);
+               gyi += floatTo<grad_prec>(pgrad.frcy);
+               gzi += floatTo<grad_prec>(pgrad.frcz);
                atomic_add(-pgrad.frcx, derx, k);
                atomic_add(-pgrad.frcy, dery, k);
                atomic_add(-pgrad.frcz, derz, k);
 
-               txi += pgrad.ttqi[0];
-               tyi += pgrad.ttqi[1];
-               tzi += pgrad.ttqi[2];
+               txi += floatTo<grad_prec>(pgrad.ttqi[0]);
+               tyi += floatTo<grad_prec>(pgrad.ttqi[1]);
+               tzi += floatTo<grad_prec>(pgrad.ttqi[2]);
                atomic_add(pgrad.ttqk[0], trqx, k);
                atomic_add(pgrad.ttqk[1], trqy, k);
                atomic_add(pgrad.ttqk[2], trqz, k);
@@ -127,9 +129,9 @@ static void erepel_acc1()
          atomic_add(gxi, derx, i);
          atomic_add(gyi, dery, i);
          atomic_add(gzi, derz, i);
-         atomic_add(txi, trqx, i);
-         atomic_add(tyi, trqy, i);
-         atomic_add(tzi, trqz, i);
+         atomic_add(toFloatGrad<real>(txi), trqx, i);
+         atomic_add(toFloatGrad<real>(tyi), trqy, i);
+         atomic_add(toFloatGrad<real>(tzi), trqz, i);
       }
    } // end for (int i)
 

@@ -149,10 +149,11 @@ TEST_CASE("MathFuncPow2", "[util][math][L1]")
    }
 }
 
+// symlusolve takes device memory, which the host arrays here are only on the
+// CPU build (it has no CUDA version at all).
+#if !TINKER_CUDART
 TEST_CASE("LUSolve", "[util][math][L1]")
 {
-#if TINKER_CUDART
-#else
    //  1  2  3                      1.5      8
    //  *  5  5  matrix-vector-dot  -0.5  =  13
    //  *  * 12                      2.5     32
@@ -163,8 +164,8 @@ TEST_CASE("LUSolve", "[util][math][L1]")
    symlusolve<3, float>(aUpRow, b);
    for (int i = 0; i < 3; ++i)
       REQUIRE(x[i] == b[i]);
-#endif
 }
+#endif
 
 namespace {
 // fk(d) = sum_n d^(2n) / ((2n)!! (2k+2n-1)!!), summed in long double.

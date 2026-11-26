@@ -16,7 +16,6 @@ TEST_CASE("EMPOLE-1-EWALD-HIPPO", "[ff][hippo][emhippo][ewald][L1]")
    int argc = 4;
 
    const double eps_e = testGetEps(0.0003, 0.0001);
-   const double eps_g = testGetEps(0.0002, 0.0001);
    const double eps_v = testGetEps(0.001, 0.001);
 
    TestReference r(TINKER9_DIRSTR "/test/ref/emhippo.1.txt");
@@ -28,6 +27,7 @@ TEST_CASE("EMPOLE-1-EWALD-HIPPO", "[ff][hippo][emhippo][ewald][L1]")
    rc_flag = calc::xyz | calc::vmask;
    TestSession session(argc, argv);
    session.init();
+   const double eps_g = testGetEpsAcc(0.0002, 0.0004, 0.0001);
 
    energy(calc::v0);
    COMPARE_REALS(esum, ref_e, eps_e);

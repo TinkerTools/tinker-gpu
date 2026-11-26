@@ -55,12 +55,18 @@ public:
    ~TestSession();                           ///< Calls end() unless it has run.
    TestSession(const TestSession&) = delete;
    TestSession& operator=(const TestSession&) = delete;
+   /// \brief Runs the session on the OpenACC kernels of a build that has them,
+   /// whatever the key file or a GPU_PACKAGE environment variable names
+   /// (platformData keeps a platform set before it), and init() requires that
+   /// it did. Does nothing on a CUDA build. Call it before init().
+   void useAccKernels();
    void init(); ///< Calls initialize().
    void end();  ///< Calls finish() after init(), then testEnd(); only the first call does anything.
 
 private:
    bool m_init = false;
    bool m_ended = false;
+   bool m_acc = false;
 };
 
 /// \brief Restores the lambda method flags, the interval convergence gate, the
@@ -151,6 +157,11 @@ public:
 double testGetEps(double epsSingle, ///< Larger eps value for lower floating-point precision.
                   double epsDouble  ///< Smaller eps value for higher floating-point precision.
 );
+
+/// \brief As testGetEps(), but \c epsAccSingle in place of \c epsSingle when the
+/// session runs the OpenACC kernels in mixed precision, whose Ewald exclusions
+/// lose more to round-off. It reads the platform, so call it after init().
+double testGetEpsAcc(double epsSingle, double epsAccSingle, double epsDouble);
 
 /// \brief Initializes the test.
 void testBeginWithArgs(int argc, const char** argv);

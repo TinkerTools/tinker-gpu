@@ -221,11 +221,6 @@ void runAplusLiquidCase(const char* keyextra, const char* ref)
    std::string ke = std::string("\n"
                                 "ewald\n")
       + keyextra;
-   // The OpenACC build runs this on its own kernels, whose interaction count
-   // these cases check.
-#if TINKER_GPULANG_OPENACC
-   ke += "gpu-package openacc\n";
-#endif
 #if TINKER_REAL_SIZE == 8
    // Converged this far the gradient no longer depends on the preconditioner.
    ke += "polar-eps 1e-9\n";
@@ -248,10 +243,10 @@ void runAplusLiquidCase(const char* keyextra, const char* ref)
    int argc = 2;
 
    TestSession session(argc, argv);
+   // The OpenACC build runs this on its own kernels, whose interaction count
+   // these cases check.
+   session.useAccKernels();
    session.init();
-#if TINKER_GPULANG_OPENACC
-   REQUIRE(pltfm_config & Platform::ACC);
-#endif
 
    energy(calc::v1);
    COMPARE_REALS(esum, ref_e, eps_e);

@@ -20,11 +20,14 @@ elseif (GPU_LANG STREQUAL "OPENACC")
       -Minfo=accel
    )
    ## Debug add flag: -gpu=lineinfo,cc60,cc70
-   ## Release add flag: -gpu=fastmath,cc60,cc70
+   ## Release add flag: -gpu=cc60,cc70
+   ## No fastmath: with it nvc++ takes 1/sqrt as rsqrt in some versions of a
+   ## kernel and not in others, so the energy-only and gradient energies
+   ## disagree, and the kernels spill more to local memory and run slower.
    target_compile_options (tinker9_acc PUBLIC
       "$<$<CONFIG:DEBUG>:${__T9_ACC_TARGET}lineinfo${__T9_ACC_CCLST4}>"
-      "$<$<CONFIG:RELWITHDEBINFO>:${__T9_ACC_TARGET}lineinfo,fastmath${__T9_ACC_CCLST4}>"
-      "$<$<CONFIG:RELEASE>:${__T9_ACC_TARGET}fastmath${__T9_ACC_CCLST4}>"
-      "$<$<CONFIG:MINSIZEREL>:${__T9_ACC_TARGET}fastmath${__T9_ACC_CCLST4}>"
+      "$<$<CONFIG:RELWITHDEBINFO>:${__T9_ACC_TARGET}lineinfo${__T9_ACC_CCLST4}>"
+      "$<$<CONFIG:RELEASE>:${__T9_ACC_GPU_CC}>"
+      "$<$<CONFIG:MINSIZEREL>:${__T9_ACC_GPU_CC}>"
    )
 endif ()

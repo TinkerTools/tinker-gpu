@@ -2147,6 +2147,8 @@ struct OstFlattenStateGuard
 // OST-FLATTEN names the mean force of the flattening bias: the kernel one by
 // default, the sampled one on request, and a setting that cannot apply is
 // refused as the run is set up.
+// Lambda dynamics needs the CUDA platform (dlmdaData2).
+#if TINKER_GPULANG_CUDA
 TEST_CASE("EOST-flatten-keys", "[ff][eost][L2]")
 {
    TestLmdaFlagReset lmdaReset;
@@ -2191,6 +2193,7 @@ TEST_CASE("EOST-flatten-keys", "[ff][eost][L2]")
    refused("ost", "ost-interpolate none\nost-flatten sample\n", "SAMPLE Requires OST-INTERPOLATE, Not NONE");
    refused("meta", "ost-flatten sample\n", "SAMPLE Requires LAMBDA-MODE OST");
 }
+#endif
 
 // Where the g bias is negligible, the sampled mean force is the plain average
 // of the deposits, so a rare high dU/dlambda counts once, while the kernel mean

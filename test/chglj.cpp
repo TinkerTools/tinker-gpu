@@ -472,7 +472,7 @@ TEST_CASE("Chglj-Lmda-FusedVsSeparate", "[ff][echglj][charge][lj][L1]")
 #if !TINKER_GPULANG_CUDA
 // The lambda derivative versions are CUDA only. dlmdaData2 refuses them first,
 // but the OpenACC kernels refuse them as well instead of taking no term at
-// all; without a neighbor list every term here runs on OpenACC.
+// all.
 TEST_CASE("Chglj-AccRefusesLambdaVersions", "[ff][echarge][evdw][hippo][L1]")
 {
    rc_flag = calc::xyz | calc::energy | calc::grad | calc::virial;
@@ -502,8 +502,8 @@ TEST_CASE("Chglj-AccRefusesLambdaVersions", "[ff][echarge][evdw][hippo][L1]")
       TestFile fk1(c.key, kn, c.extra);
       TestFile fp1(c.prm);
       TestSession session(argc, argv);
+      session.useAccKernels();
       session.init();
-      REQUIRE(pltfm_config & Platform::ACC);
       REQUIRE_THROWS_WITH(c.term(calc::v7), Catch::Matchers::ContainsSubstring("do not take version"));
       session.end();
    }

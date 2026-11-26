@@ -123,11 +123,6 @@ TEST_CASE("EDISP-3-DEWALD-ZEROC6", "[ff][hippo][edisp][dewald][L1]")
    const char* xn = "c5h12acnh2.xyz";
    const char* kn = "dewald.key";
    std::string ke = "\ndispersion         2          0.0     4.3225\n";
-   // The OpenACC build runs this on its own kernels, whose interaction count
-   // this case exists to check.
-#if TINKER_GPULANG_OPENACC
-   ke += "gpu-package openacc\n";
-#endif
    TestFile fk1(TINKER9_DIRSTR "/test/file/disp/dewald.key", kn, ke);
    TestFile fp1(TINKER9_DIRSTR "/test/file/disp/hippo19.prm");
    const char* argv[] = {"dummy", xn, "-k", kn};
@@ -147,10 +142,10 @@ TEST_CASE("EDISP-3-DEWALD-ZEROC6", "[ff][hippo][edisp][dewald][L1]")
 
    rc_flag = calc::xyz | calc::vmask;
    TestSession session(argc, argv);
+   // The OpenACC build runs this on its own kernels, whose interaction count
+   // this case exists to check.
+   session.useAccKernels();
    session.init();
-#if TINKER_GPULANG_OPENACC
-   REQUIRE(pltfm_config & Platform::ACC);
-#endif
 
    energy(calc::v1);
    COMPARE_REALS(esum, ref_e, eps_e);

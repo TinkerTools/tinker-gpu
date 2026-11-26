@@ -276,6 +276,15 @@ double testGetEps(double eps_single, double eps_double)
 #endif
 }
 
+double testGetEpsAcc(double eps_single, double eps_acc_single, double eps_double)
+{
+#if TINKER_REAL_SIZE == 4
+   if (pltfm_config & Platform::ACC)
+      return eps_acc_single;
+#endif
+   return testGetEps(eps_single, eps_double);
+}
+
 void testBeginWithArgs(int argc, const char** argv)
 {
    tinkerFortranRuntimeBegin(argc, const_cast<char**>(argv));
@@ -369,10 +378,20 @@ TestSession::TestSession(int argc, const char** argv)
    testBeginWithArgs(argc, argv);
 }
 
+void TestSession::useAccKernels()
+{
+#if !TINKER_GPULANG_CUDA
+   pltfm_config = Platform::ACC;
+   m_acc = true;
+#endif
+}
+
 void TestSession::init()
 {
    initialize();
    m_init = true;
+   if (m_acc)
+      REQUIRE(pltfm_config & Platform::ACC);
 }
 
 void TestSession::end()

@@ -431,12 +431,28 @@ static const double g3_xyz10[2][20][3] = {
 // eps_present: what there is to remove, at least 0.037 in every cell.
 // eps_recorded: the spread of the recorded momenta, 3e-8 in mixed precision
 //    and 6e-15 in double.
-const double eps_conserved_p = testGetEps(3e-7, 5e-14);
+//
+// OpenACC mixed precision has its own values, again ten times the largest
+// deviation over five runs: its forces leave about 7e-8 of net momentum per
+// step, so the linear momentum is off by up to 8.1e-7 from its conserved
+// value and 8.8e-7 from the predicted and recorded ones after ten steps.
+double sdGetEps(double eps_mixed, double eps_acc_mixed, double eps_double)
+{
+#if TINKER_GPULANG_OPENACC && TINKER_REAL_SIZE == 4
+   (void)eps_mixed;
+   return testGetEps(eps_acc_mixed, eps_double);
+#else
+   (void)eps_acc_mixed;
+   return testGetEps(eps_mixed, eps_double);
+#endif
+}
+
+const double eps_conserved_p = sdGetEps(3e-7, 8e-6, 5e-14);
 const double eps_conserved_l = 2e-6;
-const double eps_predicted = testGetEps(2e-7, 5e-14);
+const double eps_predicted = sdGetEps(2e-7, 9e-6, 5e-14);
 const double eps_removed = 1e-12;
 const double eps_present = 1e-3;
-const double eps_recorded = testGetEps(3e-7, 6e-14);
+const double eps_recorded = sdGetEps(3e-7, 9e-6, 6e-14);
 
 // Linear and angular momentum at steps 1 to 10 of the Momentum section in the
 // cells without removal, recorded from the double build with POLAR-EPS 1e-9.

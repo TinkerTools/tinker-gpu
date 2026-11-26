@@ -165,7 +165,7 @@ TEST_CASE("NBList-ArBox", "[ff][nblist][arbox][L2]")
    TestSession session(argc, argv);
 
    rc_flag = usage_;
-   pltfm_config = Platform::ACC; // to always use nblist
+   session.useAccKernels(); // to always use nblist
    trajn = 5;
    session.init();
 

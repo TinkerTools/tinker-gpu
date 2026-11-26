@@ -63,7 +63,7 @@ static void echarge_acc1()
       real yi = y[i];
       real zi = z[i];
       real ci = pchg[i];
-      MAYBE_UNUSED real gxi = 0, gyi = 0, gzi = 0;
+      MAYBE_UNUSED grad_prec gxi = 0, gyi = 0, gzi = 0;
 
       int nlsti = nlst[i];
       #pragma acc loop vector independent reduction(+:gxi,gyi,gzi)
@@ -112,9 +112,9 @@ static void echarge_acc1()
             if CONSTEXPR (do_e)
                atomic_add(e, ec, offset);
             if CONSTEXPR (do_g) {
-               gxi += frcx;
-               gyi += frcy;
-               gzi += frcz;
+               gxi += floatTo<grad_prec>(frcx);
+               gyi += floatTo<grad_prec>(frcy);
+               gzi += floatTo<grad_prec>(frcz);
                atomic_add(-frcx, decx, k);
                atomic_add(-frcy, decy, k);
                atomic_add(-frcz, decz, k);

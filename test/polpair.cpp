@@ -252,10 +252,6 @@ const TholeCase kDang = {"/test/file/polpair/dang.xyz", "/test/file/polpair/dang
 void runTholeCase(const TholeCase& tc, bool analyz)
 {
    std::string ke = std::string("\n") + tc.keyextra;
-   // The OpenACC build runs this on its own kernels.
-#if TINKER_GPULANG_OPENACC
-   ke += "gpu-package openacc\n";
-#endif
    TestFile fx1(std::string(TINKER9_DIRSTR) + tc.xyz, xn);
    TestFile fk1(std::string(TINKER9_DIRSTR) + tc.key, kn, ke);
    std::unique_ptr<TestFile> fp1;
@@ -276,10 +272,9 @@ void runTholeCase(const TholeCase& tc, bool analyz)
 
    rc_flag = calc::xyz | (analyz ? calc::vmask : calc::energy | calc::grad | calc::virial);
    TestSession session(argc, argv);
+   // The OpenACC build runs this on its own kernels.
+   session.useAccKernels();
    session.init();
-#if TINKER_GPULANG_OPENACC
-   REQUIRE(pltfm_config & Platform::ACC);
-#endif
 
    energy(calc::v0);
    COMPARE_REALS(esum, ref_e, eps_e);

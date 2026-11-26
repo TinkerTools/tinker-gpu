@@ -455,23 +455,12 @@ std::vector<std::unique_ptr<TestFile>> copyParams(const std::string& base, const
    return files;
 }
 
-// The extra key lines of a fixture. The OpenACC build names its own package, so
-// that a run there exercises the OpenACC kernels; runFixture checks that it did,
-// since a GPU_PACKAGE environment variable overrides the key.
-std::string platformKey(const char* keyextra)
-{
-#if TINKER_GPULANG_OPENACC
-   return std::string(keyextra) + "\ngpu-package openacc\n";
-#else
-   return keyextra;
-#endif
-}
-
 // Copies a fixture's coordinates, its key file with \c keyextra appended, and
 // its parameters into the working directory, and begins a session on them with
 // \c rc as rc_flag. The session is declared after the files, so it ends before
 // they are removed, and the lambda flags are reset after it ends. With \c init
 // false the caller runs session.init() itself, after adjusting the Fortran side.
+// The OpenACC build runs the fixtures on its own kernels.
 struct Setup
 {
    TestLmdaFlagReset lmdaReset;
@@ -486,10 +475,11 @@ struct Setup
       , key(std::string(fx.name) + ".key")
       , argv{"dummy", xyz.c_str(), "-k", key.c_str()}
       , fxyz(systemDir(fx.base) + xyz, xyz)
-      , fkey(TINKER9_DIRSTR "/test/file/mutate/" + key, key, platformKey(keyextra))
+      , fkey(TINKER9_DIRSTR "/test/file/mutate/" + key, key, keyextra)
       , fprm(copyParams(fx.base, fx.prm))
       , session(4, argv)
    {
+      session.useAccKernels();
       rc_flag = rc;
       if (init)
          session.init();
@@ -545,9 +535,6 @@ void runFixture(const Fixture& fx, Fuse fuse = Fuse::Off, LmdaMode lmdaMode = Lm
    // These key files enable the lambda-derivative machinery through the
    // "lambda-deriv" keyword, so the Fortran-side use_dlmda needs no nudging here.
    Setup s(fx, rc, keyextra);
-#if TINKER_GPULANG_OPENACC
-   REQUIRE(pltfm_config & Platform::ACC);
-#endif
 
    // The fixtures carry LAMBDA-DERIV, which asks for every derivative channel
    // whatever the sampling mode; without it TI, META and ABF would ask for the

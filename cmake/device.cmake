@@ -3,9 +3,9 @@ if (GPU_LANG STREQUAL "OPENACC")
       -acc
       -Mcudalib=cufft,cublas
       "$<$<CONFIG:DEBUG>:${__T9_ACC_TARGET}lineinfo${__T9_ACC_CCLST4}>"
-      "$<$<CONFIG:RELWITHDEBINFO>:${__T9_ACC_TARGET}lineinfo,fastmath${__T9_ACC_CCLST4}>"
-      "$<$<CONFIG:RELEASE>:${__T9_ACC_TARGET}fastmath${__T9_ACC_CCLST4}>"
-      "$<$<CONFIG:MINSIZEREL>:${__T9_ACC_TARGET}fastmath${__T9_ACC_CCLST4}>"
+      "$<$<CONFIG:RELWITHDEBINFO>:${__T9_ACC_TARGET}lineinfo${__T9_ACC_CCLST4}>"
+      "$<$<CONFIG:RELEASE>:${__T9_ACC_GPU_CC}>"
+      "$<$<CONFIG:MINSIZEREL>:${__T9_ACC_GPU_CC}>"
    )
    set (__T9_ACC_LIB_STR tinker9_acc)
 # elseif (GPU_LANG STREQUAL "CUDA")

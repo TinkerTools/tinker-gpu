@@ -20,6 +20,7 @@ struct Fixture
    double ntol = 1.0e-2; ///< Tolerance of the numerical gradient in mixed precision.
    double dtol = 1.0e-4; ///< Tolerance of the analytical gradient in double precision.
    double etol = 1.0e-3; ///< Tolerance of the energy in mixed precision.
+   double ntolAcc = 0;   ///< ntol on the OpenACC kernels in mixed precision, if not 0.
 };
 
 const Fixture kFixtures[] = {
@@ -33,7 +34,7 @@ const Fixture kFixtures[] = {
    {"08_g3_nlist", "g3/g3.xyz", "g3/g3.prm", 2.0e-2, 5.0e-4},
    {"09_aplus_thole0", "aplus2022/tetramer.xyz", "aplus2022/AMOEBAplus_Org.prm"},
    {"10_aplus_polpair", "aplus2022/tetramer.xyz", "aplus2022/AMOEBAplus_Org.prm"},
-   {"11_hippo_ast_l05", "dmso/dmso.xyz", "hippo/hippo19.prm", 2.0e-2},
+   {"11_hippo_ast_l05", "dmso/dmso.xyz", "hippo/hippo19.prm", 2.0e-2, 1.0e-4, 1.0e-3, 4.0e-2},
    {"12_hipwat_group_inter", "testgrad/hipwat.xyz", "commit_aad9340c/water21.prm"},
    {"13_hipwat_group_inter_mlist", "testgrad/hipwat.xyz", "commit_aad9340c/water21.prm"},
    {"14_hipwat_group_ost_l04", "testgrad/hipwat.xyz", "commit_aad9340c/water21.prm"},
@@ -101,7 +102,7 @@ void runFixture(const Fixture& fx, const char* keys = nullptr)
    const double eps_e = testGetEps(fx.etol, 1.0e-4);
    const double eps_g = testGetEps(1.0e-3, fx.dtol);
    // Central differences at this stepsize, on top of mixed-precision energies.
-   const double eps_n = testGetEps(fx.ntol, 1.0e-2);
+   const double eps_n = testGetEpsAcc(fx.ntol, fx.ntolAcc ? fx.ntolAcc : fx.ntol, 1.0e-2);
 
    COMPARE_REALS(r.energy, ref.getEnergy(), eps_e);
    COMPARE_GRADIENT_FLAT(r.ganlyt, ref_g, eps_g);

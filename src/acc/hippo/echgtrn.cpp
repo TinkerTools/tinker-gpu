@@ -51,7 +51,7 @@ static void echgtrn_acc1()
       real alphai = dmpct[i];
       int imut = mut[i];
 
-      MAYBE_UNUSED real gxi = 0, gyi = 0, gzi = 0;
+      MAYBE_UNUSED grad_prec gxi = 0, gyi = 0, gzi = 0;
 
       int nmlsti = mlst->nlst[i];
       int base = i * maxnlst;
@@ -87,9 +87,9 @@ static void echgtrn_acc1()
                real dedy = de * yr;
                real dedz = de * zr;
 
-               gxi -= dedx;
-               gyi -= dedy;
-               gzi -= dedz;
+               gxi -= floatTo<grad_prec>(dedx);
+               gyi -= floatTo<grad_prec>(dedy);
+               gzi -= floatTo<grad_prec>(dedz);
 
                atomic_add(dedx, dectx, k);
                atomic_add(dedy, decty, k);

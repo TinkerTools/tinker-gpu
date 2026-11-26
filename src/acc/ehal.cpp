@@ -90,7 +90,7 @@ static void ehal_acc1()
       real yi = yred[i];
       real zi = zred[i];
       int mut1 = mut[i];
-      MAYBE_UNUSED real gxi = 0, gyi = 0, gzi = 0;
+      MAYBE_UNUSED grad_prec gxi = 0, gyi = 0, gzi = 0;
 
       int nvlsti = vlst->nlst[i];
       #pragma acc loop vector independent reduction(+:gxi,gyi,gzi)
@@ -132,9 +132,9 @@ static void ehal_acc1()
                real dedy = de * yr;
                real dedz = de * zr;
 
-               gxi += dedx;
-               gyi += dedy;
-               gzi += dedz;
+               gxi += floatTo<grad_prec>(dedx);
+               gyi += floatTo<grad_prec>(dedy);
+               gzi += floatTo<grad_prec>(dedz);
                atomic_add(-dedx, gxred, k);
                atomic_add(-dedy, gyred, k);
                atomic_add(-dedz, gzred, k);

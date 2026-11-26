@@ -49,6 +49,7 @@ void dfieldEwaldReal_acc(real (*field)[3], real (*fieldp)[3])
                deviceptr(DFIELD_DPTRS,grp,mlst)
    #pragma acc loop gang independent
    for (int i = 0; i < n; ++i) {
+      const int gi = grp ? grp[i] : 0; // read once, not hoisted past the null check
       real xi = x[i];
       real yi = y[i];
       real zi = z[i];
@@ -64,8 +65,8 @@ void dfieldEwaldReal_acc(real (*field)[3], real (*fieldp)[3])
       real qizz = rpole[i][MPL_PME_ZZ];
       real pdi = pdamp[i];
       int jpi = jpolar[i];
-      real gxi = 0, gyi = 0, gzi = 0;
-      real txi = 0, tyi = 0, tzi = 0;
+      grad_prec gxi = 0, gyi = 0, gzi = 0;
+      grad_prec txi = 0, tyi = 0, tzi = 0;
 
       int nmlsti = mlst->nlst[i];
       int base = i * maxnlst;
@@ -77,7 +78,7 @@ void dfieldEwaldReal_acc(real (*field)[3], real (*fieldp)[3])
          real zr = z[k] - zi;
 
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off2 and (not grp or grpPairLive(live, grp[i], grp[k]))) {
+         if (r2 <= off2 and (not grp or grpPairLive(live, gi, grp[k]))) {
             real3 fid = make_real3(0, 0, 0);
             real3 fip = make_real3(0, 0, 0);
             real3 fkd = make_real3(0, 0, 0);
@@ -93,12 +94,12 @@ void dfieldEwaldReal_acc(real (*field)[3], real (*fieldp)[3])
                rpole[k][MPL_PME_ZZ], pdamp[k], //
                aewald, fid, fip, fkd, fkp);
 
-            gxi += fid.x;
-            gyi += fid.y;
-            gzi += fid.z;
-            txi += fip.x;
-            tyi += fip.y;
-            tzi += fip.z;
+            gxi += floatTo<grad_prec>(fid.x);
+            gyi += floatTo<grad_prec>(fid.y);
+            gzi += floatTo<grad_prec>(fid.z);
+            txi += floatTo<grad_prec>(fip.x);
+            tyi += floatTo<grad_prec>(fip.y);
+            tzi += floatTo<grad_prec>(fip.z);
 
             atomic_add(fkd.x, &field[k][0]);
             atomic_add(fkd.y, &field[k][1]);
@@ -109,12 +110,12 @@ void dfieldEwaldReal_acc(real (*field)[3], real (*fieldp)[3])
          }
       } // end for (int kk)
 
-      atomic_add(gxi, &field[i][0]);
-      atomic_add(gyi, &field[i][1]);
-      atomic_add(gzi, &field[i][2]);
-      atomic_add(txi, &fieldp[i][0]);
-      atomic_add(tyi, &fieldp[i][1]);
-      atomic_add(tzi, &fieldp[i][2]);
+      atomic_add(toFloatGrad<real>(gxi), &field[i][0]);
+      atomic_add(toFloatGrad<real>(gyi), &field[i][1]);
+      atomic_add(toFloatGrad<real>(gzi), &field[i][2]);
+      atomic_add(toFloatGrad<real>(txi), &fieldp[i][0]);
+      atomic_add(toFloatGrad<real>(tyi), &fieldp[i][1]);
+      atomic_add(toFloatGrad<real>(tzi), &fieldp[i][2]);
    } // end for (int i)
 
    #pragma acc parallel async\
@@ -245,6 +246,7 @@ void ufieldEwaldReal_acc(const real (*uind)[3], const real (*uinp)[3], real (*fi
                deviceptr(UFIELD_DPTRS,grp,mlst)
    #pragma acc loop gang independent
    for (int i = 0; i < n; ++i) {
+      const int gi = grp ? grp[i] : 0; // read once, not hoisted past the null check
       real xi = x[i];
       real yi = y[i];
       real zi = z[i];
@@ -256,8 +258,8 @@ void ufieldEwaldReal_acc(const real (*uind)[3], const real (*uinp)[3], real (*fi
       real uinpi2 = uinp[i][2];
       real pdi = pdamp[i];
       int jpi = jpolar[i];
-      real gxi = 0, gyi = 0, gzi = 0;
-      real txi = 0, tyi = 0, tzi = 0;
+      grad_prec gxi = 0, gyi = 0, gzi = 0;
+      grad_prec txi = 0, tyi = 0, tzi = 0;
 
       int nmlsti = mlst->nlst[i];
       int base = i * maxnlst;
@@ -269,7 +271,7 @@ void ufieldEwaldReal_acc(const real (*uind)[3], const real (*uinp)[3], real (*fi
          real zr = z[k] - zi;
 
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off2 and (not grp or grpPairLive(live, grp[i], grp[k]))) {
+         if (r2 <= off2 and (not grp or grpPairLive(live, gi, grp[k]))) {
             real3 fid = make_real3(0, 0, 0);
             real3 fip = make_real3(0, 0, 0);
             real3 fkd = make_real3(0, 0, 0);
@@ -282,12 +284,12 @@ void ufieldEwaldReal_acc(const real (*uind)[3], const real (*uinp)[3], real (*fi
                uind[k][0], uind[k][1], uind[k][2], uinp[k][0], uinp[k][1], uinp[k][2], pdamp[k], //
                aewald, fid, fip, fkd, fkp);
 
-            gxi += fid.x;
-            gyi += fid.y;
-            gzi += fid.z;
-            txi += fip.x;
-            tyi += fip.y;
-            tzi += fip.z;
+            gxi += floatTo<grad_prec>(fid.x);
+            gyi += floatTo<grad_prec>(fid.y);
+            gzi += floatTo<grad_prec>(fid.z);
+            txi += floatTo<grad_prec>(fip.x);
+            tyi += floatTo<grad_prec>(fip.y);
+            tzi += floatTo<grad_prec>(fip.z);
 
             atomic_add(fkd.x, &field[k][0]);
             atomic_add(fkd.y, &field[k][1]);
@@ -298,12 +300,12 @@ void ufieldEwaldReal_acc(const real (*uind)[3], const real (*uinp)[3], real (*fi
          }
       } // end for (int kk)
 
-      atomic_add(gxi, &field[i][0]);
-      atomic_add(gyi, &field[i][1]);
-      atomic_add(gzi, &field[i][2]);
-      atomic_add(txi, &fieldp[i][0]);
-      atomic_add(tyi, &fieldp[i][1]);
-      atomic_add(tzi, &fieldp[i][2]);
+      atomic_add(toFloatGrad<real>(gxi), &field[i][0]);
+      atomic_add(toFloatGrad<real>(gyi), &field[i][1]);
+      atomic_add(toFloatGrad<real>(gzi), &field[i][2]);
+      atomic_add(toFloatGrad<real>(txi), &fieldp[i][0]);
+      atomic_add(toFloatGrad<real>(tyi), &fieldp[i][1]);
+      atomic_add(toFloatGrad<real>(tzi), &fieldp[i][2]);
    } // end for (int i)
 
    #pragma acc parallel async\

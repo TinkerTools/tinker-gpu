@@ -331,6 +331,7 @@ void sparsePrecondApply_acc(const real (*rsd)[3], const real (*rsdp)[3], real (*
                deviceptr(APPLY_DPTRS,grp,ulst)
    #pragma acc loop gang independent
    for (int i = 0; i < n; ++i) {
+      const int gi = grp ? grp[i] : 0; // read once, not hoisted past the null check
       real xi = x[i];
       real yi = y[i];
       real zi = z[i];
@@ -346,7 +347,7 @@ void sparsePrecondApply_acc(const real (*rsd)[3], const real (*rsdp)[3], real (*
       #pragma acc loop vector independent reduction(+:gxi,gyi,gzi,txi,tyi,tzi)
       for (int kk = 0; kk < nulsti; ++kk) {
          int k = ulst->lst[base + kk];
-         if (grp and not grpPairLive(live, grp[i], grp[k]))
+         if (grp and not grpPairLive(live, gi, grp[k]))
             continue;
          real xr = x[k] - xi;
          real yr = y[k] - yi;

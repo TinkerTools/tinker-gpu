@@ -47,6 +47,7 @@ static void epolarEwaldReal_acc1(const real (*uind)[3], const real (*uinp)[3])
                deviceptr(POLAR_DPTRS,grp,mlst)
    #pragma acc loop gang independent
    for (int i = 0; i < n; ++i) {
+      const int gi = grp ? grp[i] : 0; // read once, not hoisted past the null check
       real xi = x[i];
       real yi = y[i];
       real zi = z[i];
@@ -71,9 +72,9 @@ static void epolarEwaldReal_acc1(const real (*uind)[3], const real (*uinp)[3])
          uiyp = uinp[i][1];
          uizp = uinp[i][2];
       }
-      real gxi = 0, gyi = 0, gzi = 0;
-      real txi = 0, tyi = 0, tzi = 0;
-      real du0 = 0, du1 = 0, du2 = 0, du3 = 0, du4 = 0, du5 = 0;
+      grad_prec gxi = 0, gyi = 0, gzi = 0;
+      grad_prec txi = 0, tyi = 0, tzi = 0;
+      grad_prec du0 = 0, du1 = 0, du2 = 0, du3 = 0, du4 = 0, du5 = 0;
 
       int nmlsti = mlst->nlst[i];
       int base = i * maxnlst;
@@ -87,7 +88,7 @@ static void epolarEwaldReal_acc1(const real (*uind)[3], const real (*uinp)[3])
          real zr = z[k] - zi;
 
          real r2 = image2(xr, yr, zr);
-         if (r2 <= off2 and (not grp or grpPairLive(live, grp[i], grp[k]))) {
+         if (r2 <= off2 and (not grp or grpPairLive(live, gi, grp[k]))) {
             real ck = rpole[k][MPL_PME_0];
             real dkx = rpole[k][MPL_PME_X];
             real dky = rpole[k][MPL_PME_Y];
@@ -124,26 +125,26 @@ static void epolarEwaldReal_acc1(const real (*uind)[3], const real (*uinp)[3])
                atomic_add(e, ep, offset);
 
             if CONSTEXPR (do_g) {
-               gxi += pgrad.frcx;
-               gyi += pgrad.frcy;
-               gzi += pgrad.frcz;
+               gxi += floatTo<grad_prec>(pgrad.frcx);
+               gyi += floatTo<grad_prec>(pgrad.frcy);
+               gzi += floatTo<grad_prec>(pgrad.frcz);
                atomic_add(-pgrad.frcx, depx, k);
                atomic_add(-pgrad.frcy, depy, k);
                atomic_add(-pgrad.frcz, depz, k);
 
-               txi += pgrad.ufldi[0];
-               tyi += pgrad.ufldi[1];
-               tzi += pgrad.ufldi[2];
+               txi += floatTo<grad_prec>(pgrad.ufldi[0]);
+               tyi += floatTo<grad_prec>(pgrad.ufldi[1]);
+               tzi += floatTo<grad_prec>(pgrad.ufldi[2]);
                atomic_add(pgrad.ufldk[0], &ufld[k][0]);
                atomic_add(pgrad.ufldk[1], &ufld[k][1]);
                atomic_add(pgrad.ufldk[2], &ufld[k][2]);
 
-               du0 += pgrad.dufldi[0];
-               du1 += pgrad.dufldi[1];
-               du2 += pgrad.dufldi[2];
-               du3 += pgrad.dufldi[3];
-               du4 += pgrad.dufldi[4];
-               du5 += pgrad.dufldi[5];
+               du0 += floatTo<grad_prec>(pgrad.dufldi[0]);
+               du1 += floatTo<grad_prec>(pgrad.dufldi[1]);
+               du2 += floatTo<grad_prec>(pgrad.dufldi[2]);
+               du3 += floatTo<grad_prec>(pgrad.dufldi[3]);
+               du4 += floatTo<grad_prec>(pgrad.dufldi[4]);
+               du5 += floatTo<grad_prec>(pgrad.dufldi[5]);
                atomic_add(pgrad.dufldk[0], &dufld[k][0]);
                atomic_add(pgrad.dufldk[1], &dufld[k][1]);
                atomic_add(pgrad.dufldk[2], &dufld[k][2]);
@@ -171,15 +172,15 @@ static void epolarEwaldReal_acc1(const real (*uind)[3], const real (*uinp)[3])
          atomic_add(gxi, depx, i);
          atomic_add(gyi, depy, i);
          atomic_add(gzi, depz, i);
-         atomic_add(txi, &ufld[i][0]);
-         atomic_add(tyi, &ufld[i][1]);
-         atomic_add(tzi, &ufld[i][2]);
-         atomic_add(du0, &dufld[i][0]);
-         atomic_add(du1, &dufld[i][1]);
-         atomic_add(du2, &dufld[i][2]);
-         atomic_add(du3, &dufld[i][3]);
-         atomic_add(du4, &dufld[i][4]);
-         atomic_add(du5, &dufld[i][5]);
+         atomic_add(toFloatGrad<real>(txi), &ufld[i][0]);
+         atomic_add(toFloatGrad<real>(tyi), &ufld[i][1]);
+         atomic_add(toFloatGrad<real>(tzi), &ufld[i][2]);
+         atomic_add(toFloatGrad<real>(du0), &dufld[i][0]);
+         atomic_add(toFloatGrad<real>(du1), &dufld[i][1]);
+         atomic_add(toFloatGrad<real>(du2), &dufld[i][2]);
+         atomic_add(toFloatGrad<real>(du3), &dufld[i][3]);
+         atomic_add(toFloatGrad<real>(du4), &dufld[i][4]);
+         atomic_add(toFloatGrad<real>(du5), &dufld[i][5]);
       }
    } // end for (int i)
 
