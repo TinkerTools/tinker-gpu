@@ -1,4 +1,5 @@
 #include "ff/ennintermol.h"
+#include "ff/dlmda.h"
 #include "ff/energy.h"
 #include "ff/potent.h"
 #include "math/zero.h"
@@ -11,6 +12,7 @@
 #include <tinker/detail/atomid.hh>
 #include <tinker/detail/group.hh>
 #include <tinker/detail/keys.hh>
+#include <tinker/detail/mutant.hh>
 
 namespace tinker {
 
@@ -39,18 +41,10 @@ void ennmetalData(RcOp op)
       dennmet_x = nullptr;
       dennmet_y = nullptr;
       dennmet_z = nullptr;
-      darray::deallocate(gx_tmp, gy_tmp, gz_tmp);
    }
 
    if (op & RcOp::ALLOC) {
-      grps_nnmetal_host.clear();
-      for (int i = 0; i < nnterms.size(); i++) {
-         if (nnterms[i][0] == "metal") {
-            for (int j = 1; j < nnterms[i].size(); j++) {
-               grps_nnmetal_host.push_back(std::stoi(nnterms[i][j]));
-            }
-         }
-      }
+      grps_nnmetal_host = nnGroups("metal");
       ngrps_nnmetal = grps_nnmetal_host.size();
       darray::allocate(ngrps_nnmetal, &grps_nnmetal);
 
@@ -83,7 +77,6 @@ void ennmetalData(RcOp op)
       dennmet_z = gz_nnintermol;
       if (rc_a)
          bufferAllocate(rc_flag, &ennmet, &vir_ennmet, &dennmet_x, &dennmet_y, &dennmet_z);
-      darray::allocate(n, &gx_tmp, &gy_tmp, &gz_tmp);
    }
 
    if (op & RcOp::INIT) {
@@ -99,20 +92,67 @@ void ennmetalData(RcOp op)
    }
 }
 
-void ennmetal_cu(int vers)
+// One state of the coupling of the ligand to the neural network metal term:
+// the pairs between atom groups that stay in the atomic environments, the
+// centers whose energy counts, and the weights of the state. Pairs between
+// groups both in the mask stay, as do pairs within one group unless the ligand
+// is annihilated (VDW-ANNIHILATE), which drops a ligand outside the mask
+// entirely; the two ligands of a relative run never see each other.
+static NNPass ennmetalPass(const DtPass& d, int dvers)
 {
-   // auto rc_a = rc_flag & calc::analyz;
-   auto do_e = vers & calc::energy;
-   auto do_g = vers & calc::grad;
-   for (int i = 0; i < nnps.size(); i++) {
-      if (nnps[i].type == "metal") {
-         if (do_e or do_g) {
-            nnps[i].forward(calc::energy, ngrps_nnmetal, grps_nnmetal, ennmet);
-         }
-         if (do_g)
-            nnps[i].gradient(vers, ngrps_nnmetal, grps_nnmetal, dennmet_x, dennmet_y, dennmet_z, vir_ennmet);
-      }
+   const bool annihilate = (mutant::vcouple == 1);
+   NNPass p;
+   p.mutgrp = rdt_group;
+   p.pairmask = 0;
+   p.centermask = 0;
+   for (int gi = 0; gi < 3; ++gi) {
+      if (grpLive(d.mask, gi) or not annihilate)
+         p.centermask |= 1u << gi;
+      for (int gj = 0; gj < 3; ++gj)
+         if (grpPairLive(d.mask, gi, gj) or (gi == gj and not annihilate))
+            p.pairmask |= 1u << (3 * gi + gj);
    }
+   p.w = d.wa;
+   p.w1 = d.wb;
+   p.w2 = d.wc;
+   if (dvers & calc::energy_dlmda1)
+      p.dl1 = denndl_buf;
+   if (dvers & calc::energy_dlmda2)
+      p.dl2 = d2enndl2_buf;
+   if (dvers & calc::grad_dlmda) {
+      p.dfdlx = dfdlx;
+      p.dfdly = dfdly;
+      p.dfdlz = dfdlz;
+   }
+   if (dvers & calc::virial_dlmda)
+      p.dvirdl = dvirdl_buf;
+   return p;
+}
+
+void ennmetal_cu(int vers, int dvers)
+{
+   // A system without mutated atoms takes the one plain state; otherwise the
+   // energy mixes the uncoupled and coupled states of the ligand at the neural
+   // network lambda, leaving out a state that adds nothing to this version.
+   // Each runs forward then backward before the next, since the two share the
+   // buffers of the network.
+   NNPass passes[2];
+   int npass = 0;
+   if (mutant::nmut == 0) {
+      passes[npass++] = NNPass();
+   } else {
+      DtPass d[2];
+      const int nd = nnPasses(d);
+      for (int k = 0; k < nd; ++k)
+         if (not dtPassIsIdle(dvers, d[k], false))
+            passes[npass++] = ennmetalPass(d[k], dvers);
+   }
+
+   for (int k = 0; k < npass; ++k)
+      for (auto& nnp : nnps)
+         if (nnp.type == "metal")
+            nnp.evaluate(vers, ngrps_nnmetal, grps_nnmetal, ennmet, dennmet_x, dennmet_y, dennmet_z, vir_ennmet,
+               passes[k]);
 }
 
 void ennintermol_cu(int vers)
@@ -140,9 +180,11 @@ void ennintermol_cu(int vers)
       }
    }
 
+   if (flag_nnmet)
+      lmdaChannel(LmdaTerm::NN).zero(vers);
    if (pltfm_config & Platform::CUDA) {
       if (flag_nnmet) {
-         ennmetal_cu(vers);
+         ennmetal_cu(vers, lmdaDerivVers(vers, nndlmdaActive()));
       }
    }
 
@@ -161,6 +203,8 @@ void ennintermol_cu(int vers)
          sumGradient(gx_nnintermol, gy_nnintermol, gz_nnintermol, dennmet_x, dennmet_y, dennmet_z);
       }
    }
+   if (flag_nnmet)
+      lmdaChannel(LmdaTerm::NN).flush(vers);
 }
 
 }

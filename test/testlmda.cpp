@@ -367,7 +367,7 @@ void runFixture(const Fixture& fx, bool analyz = true)
       FdTestOptions opts2 = opts;
       opts2.eps = fx.eps2;
       auto r2 = testlmdaEvaluate(opts2);
-      for (int k = 0; k < 4; ++k)
+      for (int k = 0; k < nlmdacol; ++k)
          r.nd2edl2[k] = r2.nd2edl2[k];
    }
    TestReference reffile(std::string(TINKER9_DIRSTR "/test/ref/testlmda/") + fx.name + ".txt");

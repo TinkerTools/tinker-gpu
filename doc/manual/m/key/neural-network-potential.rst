@@ -43,17 +43,48 @@ where the actual neural network parameter must be defined in the parameter file 
 
 .. index:: NN-LAMBDA
 
-Sets a global scaling factor applied to all neural network potential energy
-and gradient contributions.
-This is intended for free energy perturbation (FEP) calculations where the
-NNP interaction is alchemically annihilated.
-The real modifier gives the :math:`\lambda` value; the default is 1.0
-(fully coupled).
-An example is as follows:
+Sets the coupling of the mutated atoms (the ligand) to the neural network
+metal term, on the same footing as ELE-LAMBDA and VDW-LAMBDA. The keyword is
+read by the Fortran mutation setup, in any case, and only NNTERM METAL is
+coupled; the neural network valence term, which sees only bonded neighbors,
+does not depend on lambda. The neural network energy is the dual topology mix
+
+.. math::
+
+   U_{NN}(\lambda) = (1-\lambda_{NN})\,U_{off} + \lambda_{NN}\,U_{on}
+
+where :math:`U_{on}` is the energy with the ligand coupled and
+:math:`U_{off}` the energy with every pair between a ligand atom and the rest
+of the system removed from the atomic environments in both directions, so
+neither side sees the other. Pairs within the ligand are kept in the off state
+unless VDW-ANNIHILATE is used, which drops the ligand entirely. The real
+modifier lies between 0 (ligand uncoupled) and 1 (fully coupled, the default).
+
+With a main LAMBDA the neural network lambda follows its own map, NN-LMDA-MAP
+(QNT, EXP, INV or APM, with NN-LMDA-RANGE, NN-LMDA-EXP, NN-LMDA-INV-N and
+NN-LMDA-INV-EPS), or joins the default exponential map when no map is named,
+and LAMBDA-DERIV, OST, ABF, TI and FEP then include its lambda derivatives. On
+the staged relative schedule the REL-STAGE legs LIGNN2 and LIGNN1 remove the
+coupling of ligand 2 before the van der Waals morph and restore that of
+ligand 1 after it, before, after or overlapping the charge legs; the two
+ligands never see each other. A schedule of LIG2, VDWM and LIG1 without the
+LIGNN2 and LIGNN1 legs leaves the neural network coupling off at both end
+states, as a split protocol needs when those legs run as separate jobs; a single
+job over the full transformation must declare them. See the NN-LAMBDA entry of the Tinker keyword
+list for the full staged rules.
+
+An example that removes the coupling of a ligand along the main lambda is:
 
 .. code-block:: none
 
-   nn-lambda   0.5
+   ligand        -2 4
+   lambda        0.4
+   lambda-deriv
+   nn-lmda-map   exp
+
+Since this release the whole-system scaling of earlier versions is gone: like
+ELE-LAMBDA, NN-LAMBDA has no effect without mutated atoms of NNTERM METAL to
+couple, and the setup stops when it appears in a parameter file.
 
 
 

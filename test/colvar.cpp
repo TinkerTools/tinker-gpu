@@ -543,14 +543,6 @@ ColvarValue evalCv(int i)
    return v;
 }
 
-void requireNear(const std::vector<double>& a, const std::vector<double>& b, double eps)
-{
-   REQUIRE(a.size() == b.size());
-   for (size_t k = 0; k < a.size(); ++k) {
-      INFO(k);
-      REQUIRE(a[k] == Approx(b[k]).margin(eps));
-   }
-}
 }
 
 TEST_CASE("Colvar-lambda-keys", "[ff][colvar][L1]")
@@ -665,8 +657,8 @@ TEST_CASE("Colvar-lambda-analytic", "[ff][colvar][L1]")
       std::vector<double> g, f;
       copyGradientFlat(calc::grad, g);
       copyGradientFlat(calc::grad, f, dfdlx, dfdly, dfdlz);
-      requireNear(g, {-x.de, 0, 0, x.de, 0, 0}, eps);
-      requireNear(f, {-x.fdl, 0, 0, x.fdl, 0, 0}, eps);
+      testRequireNear(g, {-x.de, 0, 0, x.de, 0, 0}, eps);
+      testRequireNear(f, {-x.fdl, 0, 0, x.fdl, 0, 0}, eps);
       for (int k = 0; k < 9; ++k) {
          INFO(k);
          REQUIRE(vir[k] == Approx(k == 0 ? x.de * 2.2 : 0.0).margin(eps));
@@ -701,12 +693,12 @@ TEST_CASE("Colvar-lambda-fd", "[ff][colvar][L2]")
    COMPARE_REALS(r.d2edl2[0], x.d2edl2, 1.0e-3);
    COMPARE_REALS(r.nd2edl2[0], x.d2edl2, 1.0e-2);
    // nothing in the van der Waals, multipole or polarization columns
-   for (int k = 1; k < 4; ++k) {
+   for (int k = 1; k < nlmdacol; ++k) {
       REQUIRE(r.dedl[k] == 0);
       REQUIRE(r.d2edl2[k] == 0);
    }
-   requireNear(r.dfdl, slotGradient(0, x.fdl), 1.0e-4);
-   requireNear(r.ndfdl, r.dfdl, 1.0e-3);
+   testRequireNear(r.dfdl, slotGradient(0, x.fdl), 1.0e-4);
+   testRequireNear(r.ndfdl, r.dfdl, 1.0e-3);
    for (int k = 0; k < 9; ++k) {
       INFO(k);
       REQUIRE(r.dvirdl[k] == Approx(x.fdl * v.w[k]).margin(1.0e-3));
@@ -738,8 +730,8 @@ TEST_CASE("Colvar-lambda-gradvir", "[ff][colvar][L2]")
       const auto v = evalCv(0);
       const auto x = expectCouple(kW3, v.q, 0.37);
       REQUIRE(r.energy == Approx(x.e).margin(1.0e-4));
-      requireNear(r.ganlyt, slotGradient(0, x.de), 1.0e-4);
-      requireNear(r.gnumer, r.ganlyt, 1.0e-2);
+      testRequireNear(r.ganlyt, slotGradient(0, x.de), 1.0e-4);
+      testRequireNear(r.gnumer, r.ganlyt, 1.0e-2);
       session.end();
    }
    {
@@ -792,7 +784,7 @@ TEST_CASE("Colvar-lambda-versions", "[ff][colvar][L2]")
          if (vers & calc::grad) {
             std::vector<double> g;
             copyGradientFlat(calc::grad, g);
-            requireNear(g, ge, eps);
+            testRequireNear(g, ge, eps);
          }
          if (vers & calc::virial)
             for (int k = 0; k < 9; ++k)
@@ -803,7 +795,7 @@ TEST_CASE("Colvar-lambda-versions", "[ff][colvar][L2]")
             if (use_d2lmda) {
                std::vector<double> f;
                copyGradientFlat(calc::grad, f, dfdlx, dfdly, dfdlz);
-               requireNear(f, fe, eps);
+               testRequireNear(f, fe, eps);
                if (vers == calc::v1)
                   for (int k = 0; k < 9; ++k)
                      REQUIRE(dvirdl[k] == Approx(x.fdl * v.w[k]).margin(eps));
@@ -947,8 +939,8 @@ TEST_CASE("Colvar-lambda-qnt", "[ff][colvar][L2]")
    REQUIRE(r.d2edl2[0] == Approx(x.d2edl2).epsilon(1.0e-4));
    REQUIRE(r.ndedl[0] == Approx(x.dedl).epsilon(1.0e-3));
    REQUIRE(r.nd2edl2[0] == Approx(x.d2edl2).epsilon(1.0e-2));
-   requireNear(r.dfdl, slotGradient(0, x.fdl), 1.0e-3);
-   requireNear(r.ndfdl, r.dfdl, 5.0e-2);
+   testRequireNear(r.dfdl, slotGradient(0, x.fdl), 1.0e-3);
+   testRequireNear(r.ndfdl, r.dfdl, 5.0e-2);
    for (int k = 0; k < 9; ++k) {
       INFO(k);
       REQUIRE(r.dvirdl[k] == Approx(x.fdl * v.w[k]).margin(1.0e-3));
@@ -988,7 +980,7 @@ TEST_CASE("Colvar-lambda-held", "[ff][colvar][L2]")
       COMPARE_REALS(d2edl2, 0.0, eps);
       std::vector<double> gr;
       copyGradientFlat(calc::grad, gr);
-      requireNear(gr, slotGradient(0, x.de), eps);
+      testRequireNear(gr, slotGradient(0, x.de), eps);
    }
    lambda = 0.37;
    session.end();
@@ -1026,7 +1018,7 @@ TEST_CASE("Colvar-lambda-multi", "[ff][colvar][L2]")
       ge[k] += ge2[k];
    std::vector<double> g;
    copyGradientFlat(calc::grad, g);
-   requireNear(g, ge, eps);
+   testRequireNear(g, ge, eps);
    session.end();
 }
 
@@ -1269,7 +1261,7 @@ TEST_CASE("Colvar-lambda-full", "[ff][colvar][L2]")
    auto ge = slotGradient(0, x.de);
    for (size_t k = 0; k < ge.size(); ++k)
       ge[k] += g0[k];
-   requireNear(g, ge, eps);
+   testRequireNear(g, ge, eps);
    for (int k = 0; k < 9; ++k) {
       INFO(k);
       REQUIRE(vir[k] - v0[k] == Approx(x.de * v.w[k]).margin(eps));

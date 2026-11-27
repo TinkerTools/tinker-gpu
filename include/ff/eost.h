@@ -35,14 +35,25 @@ extern double bgbias, bdgdl, bdgdfl, bostlmda;
 // which an energy call of a Monte Carlo trial overwrites.
 struct LmdaStepState
 {
-   energy_prec e1[5] = {dedl, demdl, depdl, devdl, decvdl};
-   energy_prec e2[5] = {d2edl2, d2emdl2, d2epdl2, d2evdl2, d2ecvdl2};
+   energy_prec e1 = dedl, e2 = d2edl2;
+   energy_prec t1[nlmdaterm], t2[nlmdaterm];
    double bias[5] = {bgbias, bdgdl, bdgdfl, bostlmda, lmdadfdl};
+
+   LmdaStepState()
+   {
+      for (int k = 0; k < nlmdaterm; ++k) {
+         t1[k] = *lmdaTerms()[k].term1;
+         t2[k] = *lmdaTerms()[k].term2;
+      }
+   }
 
    void restore() const
    {
-      dedl = e1[0], demdl = e1[1], depdl = e1[2], devdl = e1[3], decvdl = e1[4];
-      d2edl2 = e2[0], d2emdl2 = e2[1], d2epdl2 = e2[2], d2evdl2 = e2[3], d2ecvdl2 = e2[4];
+      dedl = e1, d2edl2 = e2;
+      for (int k = 0; k < nlmdaterm; ++k) {
+         *lmdaTerms()[k].term1 = t1[k];
+         *lmdaTerms()[k].term2 = t2[k];
+      }
       bgbias = bias[0], bdgdl = bias[1], bdgdfl = bias[2], bostlmda = bias[3], lmdadfdl = bias[4];
    }
 };

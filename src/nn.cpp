@@ -5,6 +5,9 @@
 #include "tool/error.h"
 #include "tool/externfunc.h"
 #include "tool/gpucard.h"
+#include "tool/ioprint.h"
+#include <algorithm>
+#include <cctype>
 #include <iostream>
 #include <sstream>
 #include <tinker/detail/atomid.hh>
@@ -21,10 +24,28 @@ bool isFloat(const std::string& str)
    return (*ptr) == '\0';
 }
 
-void nnReadPrm(const char (*restrict prmline)[240], int nprm)
+// Reads the neural network terms and potentials from the lines of the
+// parameter file or, with keyfile set, of the key file.
+void nnReadPrm(const char (*restrict prmline)[240], int nprm, bool keyfile)
 {
-   bool new_nnp = false, new_layer = false;
+   bool new_layer = false;
    std::vector<std::string> layer_prms;
+
+   // adds the component gathered so far to the potential being built
+   auto flushLayer = [&]() {
+      if (layer_prms.size() == 0)
+         return;
+      if (layer_prms[0] == "nnp") {
+         nnps.push_back(NeuralNetworkPotential(layer_prms[1]));
+      } else if (layer_prms[0] == "aev" || layer_prms[0] == "nn" || layer_prms[0] == "linear"
+         || layer_prms[0] == "celu") {
+         std::vector<real> prms;
+         for (size_t k = 1; k < layer_prms.size(); k++)
+            prms.push_back(std::stod(layer_prms[k]));
+         nnps.back().add_component(layer_prms[0], prms);
+      }
+      layer_prms.clear();
+   };
    for (int i = 0; i < nprm; i++) {
       std::string keyline_str;
       for (int j = 0; j < 240; j++) {
@@ -34,6 +55,10 @@ void nnReadPrm(const char (*restrict prmline)[240], int nprm)
       std::string word;
       std::vector<std::string> words;
       while (split >> word) {
+         // keywords and names match in any case, as in Fortran
+         if (not isFloat(word))
+            for (auto& c : word)
+               c = std::tolower(static_cast<unsigned char>(c));
          words.push_back(word);
       }
 
@@ -49,30 +74,24 @@ void nnReadPrm(const char (*restrict prmline)[240], int nprm)
             new_layer = true;
          }
          if (words[0] == "nnterm") {
-            nnterms.push_back(std::vector<std::string>(words.begin() + 1, words.end()));
+            // the term and its groups, up to a trailing comment
+            std::vector<std::string> term;
+            for (size_t k = 1; k < words.size() and words[k][0] != '#'; ++k)
+               term.push_back(words[k]);
+            if (term.size() > 0)
+               nnterms.push_back(term);
          }
-         if (words[0] == "nn-lambda") {
-            nnlambda = std::stod(words[1]);
-            printf(" Free Energy Perturbation :          %.3f Lambda for NN Terms\n", nnlambda);
+         // NN-LAMBDA and its maps are mutation keywords, read from the key file
+         // by the Fortran setup (mutate.f)
+         if (words[0] == "nn-lambda" or words[0].compare(0, 8, "nn-lmda-") == 0) {
+            if (not keyfile)
+               TINKER_THROW(format("%s  --  NN-LAMBDA and its Maps Belong in the Key File, Not the Parameter File",
+                  words[0].c_str()));
          }
       }
 
-      if (new_layer) {
-         if (layer_prms.size() != 0) {
-            if (layer_prms[0] == "nnp") {
-               nnps.push_back(NeuralNetworkPotential(layer_prms[1]));
-            } else if (layer_prms[0] == "aev" || layer_prms[0] == "nn" || layer_prms[0] == "linear"
-               || layer_prms[0] == "celu") {
-               std::vector<real> prms;
-               for (int i = 1; i < layer_prms.size(); i++) {
-                  real prm_i = std::stod(layer_prms[i]);
-                  prms.push_back(prm_i);
-               }
-               nnps.back().add_component(layer_prms[0], prms);
-            }
-            layer_prms.clear();
-         }
-      }
+      if (new_layer)
+         flushLayer();
 
       for (int i = 0; i < words.size(); i++) {
          if (words[i][0] == '#') { // ignore comments
@@ -81,21 +100,26 @@ void nnReadPrm(const char (*restrict prmline)[240], int nprm)
          layer_prms.push_back(words[i]);
       }
    }
-   // when reach EOF, the same code for "new_layer = true" should be executed
-   if (layer_prms.size() != 0) {
-      if (layer_prms[0] == "nnp") {
-         nnps.push_back(NeuralNetworkPotential(layer_prms[1]));
-      } else if (layer_prms[0] == "aev" || layer_prms[0] == "nn" || layer_prms[0] == "linear"
-         || layer_prms[0] == "celu") {
-         std::vector<real> prms;
-         for (int i = 1; i < layer_prms.size(); i++) {
-            real prm_i = std::stod(layer_prms[i]);
-            prms.push_back(prm_i);
-         }
-         nnps.back().add_component(layer_prms[0], prms);
+   // the last component ends with the file
+   flushLayer();
+}
+
+std::vector<int> nnGroups(const std::string& type)
+{
+   std::vector<int> grps;
+   for (const auto& term : nnterms) {
+      if (term[0] != type)
+         continue;
+      for (size_t j = 1; j < term.size(); ++j) {
+         if (not isFloat(term[j]))
+            TINKER_THROW(
+               format("NNTERM  --  Group Number Expected after %s, Found %s", type.c_str(), term[j].c_str()));
+         grps.push_back(std::stoi(term[j]));
       }
-      layer_prms.clear();
    }
+   std::sort(grps.begin(), grps.end());
+   grps.erase(std::unique(grps.begin(), grps.end()), grps.end());
+   return grps;
 }
 
 void nnData(RcOp op)
@@ -108,11 +132,10 @@ void nnData(RcOp op)
       // reset term enable flags for each new mechanic/init cycle
       use_nnvalence = false;
       use_nnmetal = false;
-      // initialize nnlambda to default value 1.0
-      nnlambda = 1.0;
-      // read in the prms from prm file and key file
-      nnReadPrm(params::prmline, params::nprm);
-      nnReadPrm(keys::keyline, keys::nkey);
+      // read in the prms from prm file and key file; NN-LAMBDA and its maps
+      // are read by the Fortran mutation setup (mutate.f, dlmda_mech)
+      nnReadPrm(params::prmline, params::nprm, false);
+      nnReadPrm(keys::keyline, keys::nkey, true);
 
       // remove duplicates, the last one is kept
       for (int i = 0; i < nnps.size(); i++) {
@@ -348,8 +371,7 @@ void AtomicEnvironmentVectorLayer::initialize()
    waitFor(g::q0);
 }
 
-void AtomicEnvironmentVectorLayer::forward(int vers, const int ngrps_nn, const int* restrict grps_nn,
-   EnergyBuffer restrict enn)
+void AtomicEnvironmentVectorLayer::forward(int vers, const int ngrps_nn, const int* restrict grps_nn, const NNPass& p)
 {
    darray::zero(g::q0, laev * naev, iaev);
    darray::zero(g::q0, naev, nblist_rad_count, nblist_ang_count);
@@ -359,23 +381,26 @@ void AtomicEnvironmentVectorLayer::forward(int vers, const int ngrps_nn, const i
    TINKER_FCALL2(acc0, cu1, ref_nblist, n, x, y, z, grp.grplist, atomic, (*nnspatial_v2_unit).nakpl, (*nnspatial_v2_unit).iakpl,
       (*nnspatial_v2_unit).niak, (*nnspatial_v2_unit).iak, (*nnspatial_v2_unit).lst, (*nnspatial_v2_unit).sorted,
       TINKER_IMAGE_ARGS_CU, ngrps_nn, grps_nn, naev, max_nb, atomid_global2local, R_m_c, R_q_c, nblist_rad, nblist_ang,
-      nblist_rad_count, nblist_ang_count, topo_cutoff, topo_flags, atomic2species);
+      nblist_rad_count, nblist_ang_count, topo_cutoff, topo_flags, atomic2species, p.mutgrp, p.pairmask);
 
    TINKER_FCALL2(acc0, cu1, aev, vers, n, x, y, z, grp.grplist, atomic, (*nnspatial_v2_unit).nakpl, (*nnspatial_v2_unit).iakpl,
       (*nnspatial_v2_unit).niak, (*nnspatial_v2_unit).iak, (*nnspatial_v2_unit).lst, (*nnspatial_v2_unit).sorted,
       max_nb, TINKER_IMAGE_ARGS_CU, ngrps_nn, grps_nn, naev, iaev, laev, natomic_covered, atomic2species,
       atomid_global2local, R_m_c, R_m_d, R_m, eta_m, R_q_c, R_q_d, R_q, eta_q, theta_p_d, theta_p, zeta_p, nullptr,
-      nullptr, nullptr, nullptr, nullptr, bufferSize(), nblist_rad, nblist_ang, atomid_local2global, enn, nnlambda);
+      nullptr, nullptr, nullptr, nullptr, bufferSize(), nblist_rad, nblist_ang, atomid_local2global, p.mutgrp,
+      p.centermask, p.w, p.w1, nullptr, nullptr, nullptr, nullptr);
 }
 
 void AtomicEnvironmentVectorLayer::gradient(int vers, const int ngrps_nn, const int* restrict grps_nn,
-   grad_prec* restrict denn_x, grad_prec* restrict denn_y, grad_prec* restrict denn_z, VirialBuffer restrict vir_enn)
+   grad_prec* restrict denn_x, grad_prec* restrict denn_y, grad_prec* restrict denn_z, VirialBuffer restrict vir_enn,
+   const NNPass& p)
 {
    TINKER_FCALL2(acc0, cu1, aev, vers, n, x, y, z, grp.grplist, atomic, (*nnspatial_v2_unit).nakpl, (*nnspatial_v2_unit).iakpl,
       (*nnspatial_v2_unit).niak, (*nnspatial_v2_unit).iak, (*nnspatial_v2_unit).lst, (*nnspatial_v2_unit).sorted,
       max_nb, TINKER_IMAGE_ARGS_CU, ngrps_nn, grps_nn, naev, iaev, laev, natomic_covered, atomic2species,
       atomid_global2local, R_m_c, R_m_d, R_m, eta_m, R_q_c, R_q_d, R_q, eta_q, theta_p_d, theta_p, zeta_p, dZp, denn_x,
-      denn_y, denn_z, vir_enn, bufferSize(), nblist_rad, nblist_ang, atomid_local2global, nullptr, nnlambda);
+      denn_y, denn_z, vir_enn, bufferSize(), nblist_rad, nblist_ang, atomid_local2global, p.mutgrp, p.centermask, p.w,
+      p.w1, p.dfdlx, p.dfdly, p.dfdlz, p.dvirdl);
 }
 
 LinearLayer::LinearLayer(const std::vector<real>& prms)
@@ -633,31 +658,49 @@ void NeuralNetworkPotential::add_component(const std::string& comp_name, const s
 }
 
 void NeuralNetworkPotential::forward(int vers, const int ngrps_nn, const int* restrict grps_nn,
-   EnergyBuffer restrict enn)
+   EnergyBuffer restrict enn, const NNPass& p)
 {
-   // auto do_e = vers & calc::energy;
-   // auto do_v = vers & calc::virial;
-   // auto do_g = vers & calc::grad;
    // for each network in networks, call forward
-   aev->forward(vers, ngrps_nn, grps_nn, enn);
+   aev->forward(vers, ngrps_nn, grps_nn, p);
    for (int i = 0; i < networks.size(); i++) {
       networks[i]->forward(vers, aev->iaev);
 
-      if (vers & calc::energy) // forward is not always called for energy but also for when only gradient needed
-         TINKER_FCALL2(acc0, cu1, addToEneBuf, vers, enn, networks[i]->layers.back()->Z, networks[i]->layers.back()->in_dim0,
-            nnlambda); // any in_dim0 is ok, since all layers have the same in_dim0, which is number of atoms
+      // forward is not always called for energy but also for when only
+      // gradient needed; any in_dim0 is ok, since all layers have the same
+      // in_dim0, which is number of atoms, and the rows of a network start at
+      // its block of the atomic environment vectors
+      if ((vers & calc::energy) and networks[i]->getAOffset() >= 0) {
+         const auto& last = networks[i]->layers.back();
+         const int rowbase = networks[i]->getAOffset() / aev->laev;
+         TINKER_FCALL2(acc0, cu1, addToEneBuf, enn, p.w, p.dl1, p.w1, p.dl2, p.w2, last->Z, last->in_dim0, p.mutgrp,
+            p.centermask, aev->localToGlobal(), rowbase);
+      }
    }
 }
 
+void NeuralNetworkPotential::evaluate(int vers, const int ngrps_nn, const int* restrict grps_nn,
+   EnergyBuffer restrict enn, grad_prec* restrict denn_x, grad_prec* restrict denn_y, grad_prec* restrict denn_z,
+   VirialBuffer restrict vir_enn, const NNPass& p)
+{
+   // forward is run for the energy even when only the gradient is needed, as
+   // the gradient reads what forward leaves in the layers
+   if (not(vers & (calc::energy | calc::grad)))
+      return;
+   forward(calc::energy, ngrps_nn, grps_nn, enn, p);
+   if (vers & calc::grad)
+      gradient(vers, ngrps_nn, grps_nn, denn_x, denn_y, denn_z, vir_enn, p);
+}
+
 void NeuralNetworkPotential::gradient(int vers, const int ngrps_nn, const int* restrict grps_nn,
-   grad_prec* restrict denn_x, grad_prec* restrict denn_y, grad_prec* restrict denn_z, VirialBuffer restrict vir_enn)
+   grad_prec* restrict denn_x, grad_prec* restrict denn_y, grad_prec* restrict denn_z, VirialBuffer restrict vir_enn,
+   const NNPass& p)
 {
    // for each network in networks, call gradient
    for (int i = 0; i < networks.size(); i++) {
       networks[i]->gradient(vers);
    }
    // multiplied by the gradients of aev and added to the global gradients array at the same time
-   aev->gradient(vers, ngrps_nn, grps_nn, denn_x, denn_y, denn_z, vir_enn);
+   aev->gradient(vers, ngrps_nn, grps_nn, denn_x, denn_y, denn_z, vir_enn, p);
 }
 
 }

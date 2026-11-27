@@ -272,8 +272,6 @@ TINKER_EXTERN double scalphav;
 /// 14-7 potential.
 TINKER_EXTERN double scexpm, scexpp;
 
-/// van der Waals sub-lambda, in double on the host.
-TINKER_EXTERN double vlam;
 
 /// \ingroup vdw
 /// \brief State weighting values (lambda) of all atoms for van der Waals potentials.

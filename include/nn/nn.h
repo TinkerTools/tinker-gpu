@@ -17,6 +17,27 @@
 
 namespace tinker {
 
+/// \ingroup nn
+/// One evaluation of a neural network potential: which pairs and centers of the
+/// mutation groups take part, and the weights of its energy, gradient and
+/// lambda derivatives. The default keeps every pair and center at weight one
+/// with no lambda derivative, as for a system without mutated atoms.
+struct NNPass
+{
+   const int* mutgrp = nullptr; ///< mutation group of each atom: 0 environment, 1 or 2 ligand; null keeps everything
+   unsigned pairmask = 0777;    ///< bit 3*gi+gj keeps a center of group gi seeing a neighbor of group gj
+   unsigned centermask = 07;    ///< bit gi counts a center of group gi
+   real w = 1;                  ///< weight of the energy, gradient and virial
+   real w1 = 0;                 ///< weight of dU/dlambda and of the force and virial lambda derivatives
+   real w2 = 0;                 ///< weight of d2U/dlambda2
+   EnergyBuffer dl1 = nullptr;  ///< dU/dlambda channel, or null
+   EnergyBuffer dl2 = nullptr;  ///< d2U/dlambda2 channel, or null
+   grad_prec* dfdlx = nullptr;  ///< force lambda derivative, or null
+   grad_prec* dfdly = nullptr;
+   grad_prec* dfdlz = nullptr;
+   VirialBuffer dvirdl = nullptr; ///< virial lambda derivative, or null
+};
+
 class NeuralNetworkBaseLayer
 {
 public:
@@ -95,17 +116,22 @@ public:
    {
       return R_m_c;
    };
+   const int* localToGlobal() const
+   {
+      return atomid_local2global;
+   };
    void allocate(const std::vector<int>& nnatoms);
    void deallocate();
    void initialize();
-   void forward(int vers, const int ngrps_nn, const int* restrict grps_nn, EnergyBuffer restrict enn); //
+   void forward(int vers, const int ngrps_nn, const int* restrict grps_nn, const NNPass& p);
    void gradient(int vers,
                  const int ngrps_nn,
                  const int* restrict grps_nn,
                  grad_prec* restrict denn_x,
                  grad_prec* restrict denn_y,
                  grad_prec* restrict denn_z,
-                 VirialBuffer restrict vir_enn); //
+                 VirialBuffer restrict vir_enn,
+                 const NNPass& p);
 };
 
 class LinearLayer : public NeuralNetworkBaseLayer
@@ -185,14 +211,21 @@ public:
    void deallocate();
    void initialize();
    void add_component(const std::string& comp_name, const std::vector<real>& comp_prms);
-   void forward(int vers, const int ngrps_nn, const int* restrict grps_nn, EnergyBuffer restrict enn);
+   void forward(int vers, const int ngrps_nn, const int* restrict grps_nn, EnergyBuffer restrict enn,
+      const NNPass& p);
+   /// One pass of the potential: forward for the energy, then the gradient
+   /// when \c vers asks for it, before any other pass reuses the buffers.
+   void evaluate(int vers, const int ngrps_nn, const int* restrict grps_nn, EnergyBuffer restrict enn,
+      grad_prec* restrict denn_x, grad_prec* restrict denn_y, grad_prec* restrict denn_z, VirialBuffer restrict vir_enn,
+      const NNPass& p);
    void gradient(int vers,
                  const int ngrps_nn,
                  const int* restrict grps_nn,
                  grad_prec* restrict denn_x,
                  grad_prec* restrict denn_y,
                  grad_prec* restrict denn_z,
-                 VirialBuffer restrict vir_enn);
+                 VirialBuffer restrict vir_enn,
+                 const NNPass& p);
 };
 
 // NN data
@@ -202,13 +235,13 @@ TINKER_EXTERN std::vector<std::vector<std::string>>
    nnterms; // array of nnterms defined in the prm/key file, `nnterm` is a keyword for assigning which nnp to use for which group of atoms.
 TINKER_EXTERN bool use_nnvalence;
 TINKER_EXTERN bool use_nnmetal;
-TINKER_EXTERN real nnlambda; // lambda value for all nn terms
-// grad data arrays for temp use
-TINKER_EXTERN grad_prec* gx_tmp;
-TINKER_EXTERN grad_prec* gy_tmp;
-TINKER_EXTERN grad_prec* gz_tmp;
 
 void nnData(RcOp);
+
+/// The group numbers named by the NNTERM lines of one term type ("metal" or
+/// "valence"), each once, however many lines in the parameter and key files
+/// repeat it.
+std::vector<int> nnGroups(const std::string& type);
 // int getNGrpsNN(const std::string &potential_type);
 
 // options to forcefully use float3 or double3 from cuda runtime
@@ -232,18 +265,17 @@ using cuda_real3 = ::float3;
       int nakpl, const int *restrict iakpl, int niak, const int *restrict iak, const int *restrict lst, const Spatial::SortedAtom *restrict sorted,            \
       int max_nb, /* box info */ TINKER_IMAGE_PARAMS_CU, /* nn parameters */ int ngrps_nn, const int *restrict grps_nn, /* aev parameters */                   \
       int naev, real *restrict iaev, int laev, int natomic_covered, const int *restrict atomic2species, const int *restrict atomid_global2local, real R_m_c,   \
-      int R_m_d, const real *restrict R_m, int eta_m, real R_q_c, int R_q_d, const real *restrict R_q, int eta_q, int theta_p_d, const real *restrict theta_p, \
-      int zeta_p, /* gradient data */ const real *dZp, grad_prec *restrict denn_x, grad_prec *restrict denn_y, grad_prec *restrict denn_z,                     \
+      int R_m_d, const real *restrict R_m, real eta_m, real R_q_c, int R_q_d, const real *restrict R_q, real eta_q, int theta_p_d, const real *restrict theta_p, \
+      real zeta_p, /* gradient data */ const real *dZp, grad_prec *restrict denn_x, grad_prec *restrict denn_y, grad_prec *restrict denn_z,                     \
       VirialBuffer restrict vir_enn, size_t bufsize, const int *restrict nblist_rad, const int *restrict nblist_ang, const int *restrict atomid_local2global,  \
-      EnergyBuffer restrict ebuf, real nnlambda
-// /* gradient data */ real** dZx, real** dZy, real** dZz
+      /* pass */ const int *restrict mutgrp, unsigned centermask, real wg, real wdl, grad_prec *restrict dfdlx, grad_prec *restrict dfdly,               \
+      grad_prec *restrict dfdlz, VirialBuffer restrict dvirdl
 
 #define AEV_ARGS                                                                                                                                              \
    /* basic atom info */ n, x, y, z, grplist, atomic, /* neighbor list */ nakpl, iakpl, niak, iak, lst, sorted, max_nb, /* box info */ TINKER_IMAGE_ARGS,     \
       /* nn parameters */ ngrps_nn, grps_nn, /* aev parameters */ naev, iaev, laev, natomic_covered, atomic2species, atomid_global2local, R_m_c, R_m_d, R_m,  \
       eta_m, R_q_c, R_q_d, R_q, eta_q, theta_p_d, theta_p, zeta_p, /* gradient data */ dZp, denn_x, denn_y, denn_z, vir_enn, bufsize, nblist_rad, nblist_ang, \
-      atomid_local2global, ebuf, nnlambda
-// /* gradient data */ dZx, dZy, dZz
+      atomid_local2global, mutgrp, centermask, wg, wdl, dfdlx, dfdly, dfdlz, dvirdl
 
 void aev_cu(int vers, AEV_PARAMS);
 
@@ -253,12 +285,13 @@ void aev_cu(int vers, AEV_PARAMS);
       int nakpl, const int *restrict iakpl, int niak, const int *restrict iak, const int *restrict lst, const Spatial::SortedAtom *restrict sorted,            \
       /* box info */ TINKER_IMAGE_PARAMS_CU, /* nn parameters */ int ngrps_nn, const int *restrict grps_nn, /* aev parameters */                               \
       int naev, int max_nb, const int *restrict atomid_global2local, real R_m_c, real R_q_c, int *nblist_rad, int *nblist_ang, int *nblist_rad_count,          \
-      int *nblist_ang_count, int topo_cutoff, const int *restrict topo_flags, const int *restrict atomic2species
+      int *nblist_ang_count, int topo_cutoff, const int *restrict topo_flags, const int *restrict atomic2species,                                            \
+      const int *restrict mutgrp, unsigned pairmask
 
 #define NBLIST_ARGS                                                                                                                                          \
    /* basic atom info */ n, x, y, z, grplist, atomic, /* neighbor list */ nakpl, iakpl, niak, iak, lst, sorted, /* box info */ TINKER_IMAGE_ARGS,            \
       /* nn parameters */ ngrps_nn, grps_nn, /* aev parameters */ naev, max_nb, atomid_global2local, R_m_c, R_q_c, nblist_rad, nblist_ang, nblist_rad_count, \
-      nblist_ang_count, topo_cutoff, topo_flags, atomic2species
+      nblist_ang_count, topo_cutoff, topo_flags, atomic2species, mutgrp, pairmask
 
 void ref_nblist_cu(NBLIST_PARAMS);
 
@@ -281,6 +314,15 @@ void elem_mul_cu(ELEM_MUL_PARAMS);
 
 void elem_add_cu(ELEM_ADD_PARAMS);
 
-void addToEneBuf_cu(int vers, EnergyBuffer restrict ebuf, const real* restrict Z, int length, real nnlambda);
+#define ADDTOENEBUF_PARAMS                                                                                                                                     \
+   EnergyBuffer restrict ebuf, real w, EnergyBuffer restrict dl1, real w1, EnergyBuffer restrict dl2, real w2, const real *restrict Z, int length,            \
+      const int *restrict mutgrp, unsigned centermask, const int *restrict local2global, int rowbase
+
+#define ADDTOENEBUF_ARGS ebuf, w, dl1, w1, dl2, w2, Z, length, mutgrp, centermask, local2global, rowbase
+
+/// Adds the atomic energies Z of the centers counted by the pass, weighted by
+/// w, to the energy buffer, and weighted by w1 and w2 to the lambda derivative
+/// channels that are not null.
+void addToEneBuf_cu(ADDTOENEBUF_PARAMS);
 
 }

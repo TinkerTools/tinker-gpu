@@ -28,6 +28,7 @@
 #include <tinker/routines.h>
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstring>
 #include <vector>
@@ -47,11 +48,15 @@ void dlmdaData(RcOp op)
       gz_lmdamc = nullptr;
    }
 
-   if (!use_rel)
-      return;
-
-   if (op & RcOp::DEALLOC)
+   if ((op & RcOp::DEALLOC) and rdt_group) {
       darray::deallocate(rdt_group);
+      rdt_group = nullptr;
+   }
+
+   // the mutation groups, read by the relative schedule and the neural network
+   // coupling of the ligand
+   if (mutant::nmut == 0)
+      return;
 
    if (op & RcOp::ALLOC)
       darray::allocate(n, &rdt_group);
@@ -108,9 +113,10 @@ static RelStage relStageFrom(const char* s)
    return RelStage::VDWM;
 }
 
-// dlambda.f:grpscale. The environment is unscaled and the charging ligand
-// carries the coupling value; a staged relative leg annihilates the other
-// ligand, and the LIG2 leg charges ligand 2 instead of ligand 1.
+// dlambda.f:grpscale. The environment is unscaled and the coupled ligand
+// carries the coupling value, for the electrostatic coupling at elam and the
+// neural network coupling at nnlam; on the staged relative schedule the other
+// ligand is uncoupled, and below the morph ligand 2 is the coupled one.
 GrpScale grpScale(double lmda)
 {
    GrpScale c;
@@ -149,6 +155,11 @@ LmdaFn polarChain()
 LmdaFn vdwChain()
 {
    return activeChain(vdlmdaActive(), vlam, dvldlmda, d2vldlmda2);
+}
+
+LmdaFn nnChain()
+{
+   return activeChain(nndlmdaActive(), nnlam, dnnldlmda, d2nnldlmda2);
 }
 
 // one group pair of a scale table, live when it has a scale or a derivative
@@ -456,27 +467,38 @@ void LmdaBuffer::flush(int vers) const
    }
 }
 
-static LmdaBuffer lmda_channels[4];
+static LmdaBuffer lmda_channels[nlmdaterm];
 
 LmdaBuffer& lmdaChannel(LmdaTerm t)
 {
    return lmda_channels[static_cast<int>(t)];
 }
 
+const LmdaTermInfo* lmdaTerms()
+{
+   // built on first use, after the Fortran module references are bound
+   static const LmdaTermInfo terms[nlmdaterm] = {
+      {LmdaTerm::ELEC, +[] { return use(Potent::MPOLE) or use(Potent::CHARGE); }, &use_edlmda, &dlmda::use_edlmda,
+         edlmdaActive, &demdl_buf, &d2emdl2_buf, &demdl, &d2emdl2},
+      {LmdaTerm::POLAR, +[] { return use(Potent::POLAR) or use(Potent::CHGTRN); }, &use_pdlmda, &dlmda::use_pdlmda,
+         pdlmdaActive, &depdl_buf, &d2epdl2_buf, &depdl, &d2epdl2},
+      {LmdaTerm::VDW, +[] { return use(Potent::VDW) or use(Potent::REPULS) or use(Potent::DISP); }, &use_vdlmda,
+         &dlmda::use_vdlmda, vdlmdaActive, &devdl_buf, &d2evdl2_buf, &devdl, &d2evdl2},
+      {LmdaTerm::COLVAR, +[] { return use(Potent::COLVAR); }, &use_cvdlmda, &dlmda::use_cvdlmda, cvdlmdaActive,
+         &decvdl_buf, &d2ecvdl2_buf, &decvdl, &d2ecvdl2},
+      {LmdaTerm::NN, +[] { return use(Potent::NNMET); }, &use_nndlmda, &dlmda::use_nndlmda, nndlmdaActive,
+         &denndl_buf, &d2enndl2_buf, &denndl, &d2enndl2},
+   };
+   return terms;
+}
+
 void lmdaChannelsData(RcOp op)
 {
-   if (use(Potent::MPOLE) or use(Potent::CHARGE))
-      lmdaChannel(LmdaTerm::ELEC)
-         .manage(op, rc_flag, use_edlmda, edlmdaActive, &demdl_buf, &d2emdl2_buf, &demdl, &d2emdl2);
-   if (use(Potent::POLAR) or use(Potent::CHGTRN))
-      lmdaChannel(LmdaTerm::POLAR)
-         .manage(op, rc_flag, use_pdlmda, pdlmdaActive, &depdl_buf, &d2epdl2_buf, &depdl, &d2epdl2);
-   if (use(Potent::VDW) or use(Potent::REPULS) or use(Potent::DISP))
-      lmdaChannel(LmdaTerm::VDW)
-         .manage(op, rc_flag, use_vdlmda, vdlmdaActive, &devdl_buf, &d2evdl2_buf, &devdl, &d2evdl2);
-   if (use(Potent::COLVAR))
-      lmdaChannel(LmdaTerm::COLVAR)
-         .manage(op, rc_flag, use_cvdlmda, cvdlmdaActive, &decvdl_buf, &d2ecvdl2_buf, &decvdl, &d2ecvdl2);
+   for (int k = 0; k < nlmdaterm; ++k) {
+      const auto& t = lmdaTerms()[k];
+      if (t.present())
+         lmdaChannel(t.term).manage(op, rc_flag, *t.use, t.active, t.dl1, t.dl2, t.term1, t.term2);
+   }
 }
 
 // E = w*E1 + (1-w)*E0 with the endpoint weight w = plam^epdtexp, so
@@ -484,17 +506,27 @@ void lmdaChannelsData(RcOp op)
 // main lambda. Both terms of the second derivative chain rule are proportional
 // to E1-E0, so the whole of it collapses onto one scalar per endpoint
 // (epolar4.f:epolar4dt).
-int dtPasses(DtPass out[2])
+// The two states of a coupling mixed linearly at the weight w, with the
+// slopes of the mix: the environment alone (state 0) and the ligand on the
+// active side of the staged schedule coupled to it (state 1), the other ligand
+// of a relative run left out of both (dlambda.f:grpscale).
+static int couplingPasses(const LmdaFn& w, DtPass out[2])
 {
-   const LmdaFn w = lmdaPwrChain(polarChain(), epdtexp, true);
    bool need0, need1;
    dtNeed(w, need0, need1);
-
-   // Endpoint 0 zeroes both ligands and endpoint 1 keeps the charging one, with
-   // the other ligand of a staged relative leg annihilated (dlambda.f:grpscale).
    out[0] = {RdtMask::ENV, real(1 - w.f), real(-w.d1), real(-w.d2), need0};
    out[1] = {coupledMask(), real(w.f), real(w.d1), real(w.d2), need1};
    return 2;
+}
+
+int dtPasses(DtPass out[2])
+{
+   return couplingPasses(lmdaPwrChain(polarChain(), epdtexp, true), out);
+}
+
+int nnPasses(DtPass out[2])
+{
+   return couplingPasses(nnChain(), out);
 }
 
 void dlmda_mech()
@@ -508,10 +540,8 @@ void dlmda_mech()
    use_mainlmda = dlmda::use_mainlmda;
    use_rel = mutant::use_rel;
 
-   use_edlmda = (dlmda::use_edlmda != 0);
-   use_pdlmda = (dlmda::use_pdlmda != 0);
-   use_vdlmda = (dlmda::use_vdlmda != 0);
-   use_cvdlmda = (dlmda::use_cvdlmda != 0);
+   for (int k = 0; k < nlmdaterm; ++k)
+      *lmdaTerms()[k].use = (*lmdaTerms()[k].fortranUse != 0);
 
    use_epast = use_prst and use_pdlmda;
 
@@ -585,6 +615,8 @@ void dlmda_mech()
       dlmda::vlmdainveps, dlmda::vlmdaapmn, dlmda::vlmdaapmrho, dlmda::qntvlmda0, dlmda::qntvlmda1};
    cvlmdamap = {lmdamapFrom(dlmda::cvlmdamap), dlmda::use_cvlmdamap != 0, dlmda::cvlmdaexp, dlmda::cvlmdainvn,
       dlmda::cvlmdainveps, dlmda::cvlmdaapmn, dlmda::cvlmdaapmrho, dlmda::qntcvlmda0, dlmda::qntcvlmda1};
+   nnlmdamap = {lmdamapFrom(dlmda::nnlmdamap), dlmda::use_nnlmdamap != 0, dlmda::nnlmdaexp, dlmda::nnlmdainvn,
+      dlmda::nnlmdainveps, dlmda::nnlmdaapmn, dlmda::nnlmdaapmrho, dlmda::qntnnlmda0, dlmda::qntnnlmda1};
 
    deldlmda = dlmda::deldlmda;
    dpldlmda = dlmda::dpldlmda;
@@ -592,12 +624,19 @@ void dlmda_mech()
    d2eldlmda2 = dlmda::d2eldlmda2;
    d2pldlmda2 = dlmda::d2pldlmda2;
    d2vldlmda2 = dlmda::d2vldlmda2;
+   // every sub-lambda is read here, from the values the Fortran setup mapped
+   elam = mutant::elambda;
+   plam = mutant::plambda;
+   vlam = mutant::vlambda;
    cvlam = mutant::cvlambda;
    dcvldlmda = dlmda::dcvldlmda;
    d2cvldlmda2 = dlmda::d2cvldlmda2;
+   nnlam = mutant::nnlambda;
+   dnnldlmda = dlmda::dnnldlmda;
+   d2nnldlmda2 = dlmda::d2nnldlmda2;
 
    relstage = relStageFrom(dlmda::relstage);
-   for (int i = 0; i < 3; ++i) {
+   for (int i = 0; i < nrelleg; ++i) {
       use_relstg[i] = (dlmda::use_relstg[i] != 0);
       relstglo[i] = dlmda::relstglo[i];
       relstghi[i] = dlmda::relstghi[i];
@@ -1415,17 +1454,31 @@ static LmdaFn mapLeg(double s, LmdaMap m)
    return mapOne(s, m);
 }
 
-// Finds the declared leg of the staged relative schedule that holds the main
-// lambda and makes it the active leg, returning the local coordinate s running
-// from zero to one across that leg and its derivative ds with respect to the
-// main lambda; a main lambda outside every declared range holds the end state
-// of the adjacent leg, where the derivative is zero (dlambda.f:relstgloc).
+// The local coordinate s running from zero to one across leg k at the main
+// lambda and its derivative ds with respect to the main lambda, holding an end
+// of the leg with zero derivative outside its range (dlambda.f:relstgpos).
+static void relStgPos(int k, double lmda, double& s, double& ds)
+{
+   const double lo = relstglo[k];
+   const double hi = relstghi[k];
+   ds = 1.0 / (hi - lo);
+   s = std::min(1.0, std::max(0.0, (lmda - lo) * ds));
+   if (lmda >= hi)
+      s = 1.0;
+   if (lmda < lo or lmda > hi)
+      ds = 0.0;
+}
+
+// Finds the declared ligand leg (LIG2, VDWM or LIG1) that holds the main lambda
+// and makes it the active leg, returning the local coordinate s along it and
+// its derivative ds; a main lambda outside every declared range holds the end
+// state of the adjacent leg, where the derivative is zero (dlambda.f:relstgloc).
 static void relStgLoc(double lmda, double& s, double& ds)
 {
    // Take the last declared leg starting at or below the main lambda, or the
    // first declared leg when the main lambda lies below all.
    int k = -1;
-   for (int i = 0; i < 3; ++i)
+   for (int i = 0; i < nligleg; ++i)
       if (use_relstg[i] and (k < 0 or lmda >= relstglo[i]))
          k = i;
 
@@ -1437,64 +1490,116 @@ static void relStgLoc(double lmda, double& s, double& ds)
       return;
 
    relstage = static_cast<RelStage>(k);
-   const double lo = relstglo[k];
-   const double hi = relstghi[k];
-   ds = 1.0 / (hi - lo);
-   s = std::min(1.0, std::max(0.0, (lmda - lo) * ds));
-   if (lmda >= hi)
-      s = 1.0;
-   if (lmda < lo or lmda > hi)
-      ds = 0.0;
+   relStgPos(k, lmda, s, ds);
+}
+
+// Sets relstage to the side of the van der Waals morph holding the main lambda,
+// LIG2 below it, VDWM within it and LIG1 above it, and returns the local
+// coordinate along the active ligand leg; a run without the morph lies on the
+// side of its legs (dlambda.f:relstgside).
+static void relStgSide(double lmda, double& s, double& ds)
+{
+   const int vdwm = relLeg(RelLeg::VDWM);
+   const int lignn2 = relLeg(RelLeg::LIGNN2);
+   const int lignn1 = relLeg(RelLeg::LIGNN1);
+
+   relStgLoc(lmda, s, ds);
+
+   // A main lambda outside the range of the morph lies on one side.
+   if (relstage == RelStage::VDWM and use_relstg[vdwm]) {
+      if (lmda < relstglo[vdwm])
+         relstage = RelStage::LIG2;
+      if (lmda > relstghi[vdwm])
+         relstage = RelStage::LIG1;
+   }
+
+   // A run holding only neural network legs lies on their side; both would
+   // need the morph between them (mutate.f:mutate_check).
+   const bool liglegs = std::any_of(use_relstg, use_relstg + nligleg, [](bool b) { return b; });
+   if (not liglegs and (use_relstg[lignn2] or use_relstg[lignn1])) {
+      assert(not(use_relstg[lignn2] and use_relstg[lignn1]));
+      relstage = use_relstg[lignn2] ? RelStage::LIG2 : RelStage::LIG1;
+   }
+}
+
+// Sets the coupling w of the ligand on the active side of the morph for one
+// coupling term of the staged relative schedule, whose legs are k2 removing
+// the coupling of ligand 2 and k1 restoring that of ligand 1, with its first
+// and second derivatives with respect to the main lambda: no ligand is coupled
+// within the morph, the leg of the active side walks the map of the term with
+// ligand 2 taking its complement, a side without its leg is uncoupled when the
+// term has its other leg or the run has the morph, and otherwise the coupling
+// is held at its own value (dlambda.f:relstgcpl). The electrostatic and neural
+// network couplings both go through here.
+static void relStgCpl(double lmda, RelLeg leg2, RelLeg leg1, const LmdaMap& m, double& w, double& dw, double& d2w)
+{
+   dw = 0.0;
+   d2w = 0.0;
+   if (relstage == RelStage::VDWM) {
+      w = 0.0;
+      return;
+   }
+
+   const int k2 = relLeg(leg2);
+   const int k1 = relLeg(leg1);
+   const int k = (relstage == RelStage::LIG2) ? k2 : k1;
+   const int ko = (relstage == RelStage::LIG2) ? k1 : k2;
+
+   if (use_relstg[k]) {
+      // Walk the leg of the active side, which removes the coupling of ligand
+      // 2 and restores that of ligand 1 as the main lambda rises.
+      double s, ds;
+      relStgPos(k, lmda, s, ds);
+      LmdaFn v = mapLeg(s, m);
+      if (k == k2)
+         v = lmdaComplement(v);
+      setSub(legChain(v, ds), w, dw, d2w);
+   } else if (use_relstg[ko] or use_relstg[relLeg(RelLeg::VDWM)]) {
+      // A side without its leg is uncoupled when the coupling is changed
+      // elsewhere in the run, and is otherwise held at its own value.
+      w = 0.0;
+   }
 }
 
 // Maps the main lambda onto the sub-lambdas of the staged relative schedule,
 // where each declared leg spans its own range of the main lambda
 // (dlambda.f:maprelstage):
 //
-//    LIG2   charge ligand 2 with ligand 1 annihilated, its weight
-//             falling as the main lambda rises
-//    VDWM   both ligands electrostatically annihilated while van der
-//             Waals morphs from ligand 2 onto ligand 1
-//    LIG1   charge ligand 1 with ligand 2 annihilated, its weight
-//             rising with the main lambda
+//    LIG2    remove the electrostatic coupling of ligand 2
+//    LIGNN2  remove the neural network coupling of ligand 2
+//    VDWM    morph van der Waals from ligand 2 onto ligand 1
+//    LIG1    restore the electrostatic coupling of ligand 1
+//    LIGNN1  restore the neural network coupling of ligand 1
 //
-// The leg holding the main lambda is walked on its local coordinate, the term
-// it drives following its own map across the whole leg, and polarization
-// always carries the electrostatic weight.
+// Van der Waals is a morph between the ligands, while the electrostatic and
+// neural network terms are couplings of one ligand at a time that follow the
+// same rule in relStgCpl(); relstage records the side of the morph, which
+// selects the coupled ligand in grpScale(). Each leg walks the map of its term
+// on its own local coordinate, and polarization always carries the
+// electrostatic weight.
 static void mapRelStage(double lmda)
 {
    double s, ds;
-   relStgLoc(lmda, s, ds);
+   relStgSide(lmda, s, ds);
 
-   LmdaFn e, v;
-   if (relstage == RelStage::VDWM) {
-      // The middle leg holds both ligands uncharged, so electrostatics sits at
-      // the reference state and leaves the chain rule while van der Waals
-      // morphs across its map.
-      e = {0.0, 0.0, 0.0};
-      v = mapLeg(s, vlmdamap);
-   } else if (relstage == RelStage::LIG1) {
-      // The ligand 1 leg charges ligand 1 with ligand 2 annihilated and van
-      // der Waals already morphed onto ligand 1.
-      e = mapLeg(s, elmdamap);
-      v = {1.0, 0.0, 0.0};
-   } else {
-      // The ligand 2 leg discharges ligand 2 as the main lambda rises, so its
-      // weight is the complement of the map, with van der Waals still on it.
-      e = lmdaComplement(mapLeg(s, elmdamap));
-      v = {0.0, 0.0, 0.0};
-   }
+   // Van der Waals follows its map across the morph and sits at the end of the
+   // morph on either side of it.
+   LmdaFn v = {relstage == RelStage::LIG1 ? 1.0 : 0.0, 0.0, 0.0};
+   if (relstage == RelStage::VDWM)
+      v = legChain(mapLeg(s, vlmdamap), ds);
+   setSub(v, vlam, dvldlmda, d2vldlmda2);
 
-   // Numerical guard on the map complement.
-   e.f = std::min(1.0, std::max(0.0, e.f));
+   // The electrostatic and neural network couplings follow one rule.
+   relStgCpl(lmda, RelLeg::LIG2, RelLeg::LIG1, elmdamap, elam, deldlmda, d2eldlmda2);
+   relStgCpl(lmda, RelLeg::LIGNN2, RelLeg::LIGNN1, nnlmdamap, nnlam, dnnldlmda, d2nnldlmda2);
 
-   // Carry the chain rule from the local coordinate of the leg back to the
-   // main lambda. Polarization stages with the multipoles, same state same
-   // weight.
-   e = legChain(e, ds);
-   setSub(e, elam, deldlmda, d2eldlmda2);
-   setSub(e, plam, dpldlmda, d2pldlmda2);
-   setSub(legChain(v, ds), vlam, dvldlmda, d2vldlmda2);
+   // Numerical guard on the map complement of either coupling. Polarization
+   // stages with the multipoles, same state same weight.
+   elam = std::min(1.0, std::max(0.0, elam));
+   nnlam = std::min(1.0, std::max(0.0, nnlam));
+   plam = elam;
+   dpldlmda = deldlmda;
+   d2pldlmda2 = d2eldlmda2;
 }
 
 bool lmdaSameValue(double a, double b)
@@ -1560,6 +1665,8 @@ void mapSubLambda()
       setSub(mapOne(lambda, elmdamap), elam, deldlmda, d2eldlmda2);
    if (vlmdamap.on)
       setSub(mapOne(lambda, vlmdamap), vlam, dvldlmda, d2vldlmda2);
+   if (nnlmdamap.on)
+      setSub(mapOne(lambda, nnlmdamap), nnlam, dnnldlmda, d2nnldlmda2);
 }
 
 }

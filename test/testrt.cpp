@@ -309,16 +309,12 @@ void testResetLmdaFlags()
 {
    dlmda::use_dlmda = 0;
    dlmda::use_d2lmda = 0;
-   dlmda::use_edlmda = 0;
-   dlmda::use_pdlmda = 0;
-   dlmda::use_vdlmda = 0;
-   dlmda::use_cvdlmda = 0;
    use_dlmda = false;
    use_d2lmda = false;
-   use_edlmda = false;
-   use_pdlmda = false;
-   use_vdlmda = false;
-   use_cvdlmda = false;
+   for (int k = 0; k < nlmdaterm; ++k) {
+      *lmdaTerms()[k].fortranUse = 0;
+      *lmdaTerms()[k].use = false;
+   }
    use_emast = false;
    use_epast = false;
    use_ost = false;
@@ -341,17 +337,23 @@ std::string testBaseName(const std::string& path)
    return path.substr(path.find_last_of('/') + 1);
 }
 
+void testRequireNear(const std::vector<double>& a, const std::vector<double>& b, double eps)
+{
+   REQUIRE(a.size() == b.size());
+   for (size_t k = 0; k < a.size(); ++k) {
+      INFO(k);
+      REQUIRE(a[k] == Approx(b[k]).margin(eps));
+   }
+}
+
 void testRequireSharedLmdaBuffers()
 {
    auto shared = [](EnergyBuffer term, EnergyBuffer total) { return term == nullptr or term == total; };
-   REQUIRE(shared(demdl_buf, dedl_buf));
-   REQUIRE(shared(depdl_buf, dedl_buf));
-   REQUIRE(shared(devdl_buf, dedl_buf));
-   REQUIRE(shared(decvdl_buf, dedl_buf));
-   REQUIRE(shared(d2emdl2_buf, d2edl2_buf));
-   REQUIRE(shared(d2epdl2_buf, d2edl2_buf));
-   REQUIRE(shared(d2evdl2_buf, d2edl2_buf));
-   REQUIRE(shared(d2ecvdl2_buf, d2edl2_buf));
+   for (int k = 0; k < nlmdaterm; ++k) {
+      INFO(k);
+      REQUIRE(shared(*lmdaTerms()[k].dl1, dedl_buf));
+      REQUIRE(shared(*lmdaTerms()[k].dl2, d2edl2_buf));
+   }
 }
 
 void testRefusedFixture(

@@ -47,6 +47,7 @@ struct LambdaEnergy
    energy_prec vdw;
    energy_prec mpole;
    energy_prec polar;
+   energy_prec nn;
 };
 
 struct LambdaEvaluation
@@ -56,37 +57,36 @@ struct LambdaEvaluation
    double virial[9] = {};
 };
 
+// The columns of the lambda derivatives, as TestlmdaResult orders them.
 enum class LambdaVariable
 {
    MAIN,
    VDW,
    ELE,
-   POL
+   POL,
+   NN
 };
 
+// Switches off every lambda derivative around the energies of the numerical
+// ones, and puts the flags back after.
 struct ScopedDlmdaOff
 {
-   bool saved, saved_e, saved_p, saved_v, saved_cv;
+   bool saved;
+   bool savedTerm[nlmdaterm];
    ScopedDlmdaOff()
       : saved(use_dlmda)
-      , saved_e(use_edlmda)
-      , saved_p(use_pdlmda)
-      , saved_v(use_vdlmda)
-      , saved_cv(use_cvdlmda)
    {
       use_dlmda = false;
-      use_edlmda = false;
-      use_pdlmda = false;
-      use_vdlmda = false;
-      use_cvdlmda = false;
+      for (int k = 0; k < nlmdaterm; ++k) {
+         savedTerm[k] = *lmdaTerms()[k].use;
+         *lmdaTerms()[k].use = false;
+      }
    }
    ~ScopedDlmdaOff()
    {
       use_dlmda = saved;
-      use_edlmda = saved_e;
-      use_pdlmda = saved_p;
-      use_vdlmda = saved_v;
-      use_cvdlmda = saved_cv;
+      for (int k = 0; k < nlmdaterm; ++k)
+         *lmdaTerms()[k].use = savedTerm[k];
    }
 };
 
@@ -111,6 +111,8 @@ static LambdaEvaluation evaluateAtOffset(double lmda0, double delta)
    // Charge transfer follows the polarization lambda and counts with it
    // (testlmda.f).
    eout.energy.polar = energy_ep + (use(Potent::CHGTRN) ? energy_ect : 0);
+   // The neural network coupling of the ligand has its own column.
+   eout.energy.nn = use(Potent::NNMET) ? energy_nnintermol : 0;
    copyGradientFlat(calc::grad, eout.gradient);
    for (int k = 0; k < 9; ++k)
       eout.virial[k] = vir[k];
@@ -125,14 +127,24 @@ static double lambdaEnergy(const LambdaEvaluation& e, LambdaVariable variable)
       return e.energy.mpole;
    if (variable == LambdaVariable::POL)
       return e.energy.polar;
+   if (variable == LambdaVariable::NN)
+      return e.energy.nn;
    return e.energy.total;
 }
 
-static void printDerivRow(FILE* out, const char* title, const char* l0, const char* l1, const char* l2, const char* l3,
-   double v0, double v1, double v2, double v3)
+// One row of lambda derivatives, the total then each column; the neural
+// network column is shown only when the neural network coupling takes lambda
+// derivatives, so the rest keeps the layout of Fortran testlmda.
+static void printDerivRow(FILE* out, const char* title, const char* const* labels, const double* v)
 {
-   print(out, "\n%-36s%14s%14s%14s%14s\n", title, l0, l1, l2, l3);
-   print(out, "%36s%14.6f%14.6f%14.6f%14.6f\n", "", v0, v1, v2, v3);
+   const int ncol = use_nndlmda ? nlmdacol : nlmdacol - 1;
+   print(out, "\n%-36s", title);
+   for (int k = 0; k < ncol; ++k)
+      print(out, "%14s", labels[k]);
+   print(out, "\n%36s", "");
+   for (int k = 0; k < ncol; ++k)
+      print(out, "%14.6f", v[k]);
+   print(out, "\n");
 }
 
 int testlmdaFlags(const FdTestOptions& opts)
@@ -160,10 +172,12 @@ TestlmdaResult testlmdaEvaluate(const FdTestOptions& opts)
       r.dedl[1] = devdl;
       r.dedl[2] = demdl;
       r.dedl[3] = depdl;
+      r.dedl[4] = denndl;
       r.d2edl2[0] = d2edl2;
       r.d2edl2[1] = d2evdl2;
       r.d2edl2[2] = d2emdl2;
       r.d2edl2[3] = d2epdl2;
+      r.d2edl2[4] = d2enndl2;
       for (int k = 0; k < 9; ++k)
          r.dvirdl[k] = dvirdl[k];
 
@@ -188,9 +202,9 @@ TestlmdaResult testlmdaEvaluate(const FdTestOptions& opts)
       else
          minus = evaluateAtOffset(lmda0, -eps);
 
-      const LambdaVariable variables[] = {
-         LambdaVariable::MAIN, LambdaVariable::VDW, LambdaVariable::ELE, LambdaVariable::POL};
-      for (int k = 0; k < 4; ++k) {
+      const LambdaVariable variables[nlmdacol] = {
+         LambdaVariable::MAIN, LambdaVariable::VDW, LambdaVariable::ELE, LambdaVariable::POL, LambdaVariable::NN};
+      for (int k = 0; k < nlmdacol; ++k) {
          double ep = lambdaEnergy(plus, variables[k]);
          double ec = lambdaEnergy(center, variables[k]);
          if (atLower) {
@@ -216,7 +230,7 @@ TestlmdaResult testlmdaEvaluate(const FdTestOptions& opts)
       }
 
       if (reduced) {
-         for (int k = 0; k < 4; ++k)
+         for (int k = 0; k < nlmdacol; ++k)
             r.nd2edl2[k] = 0.0;
          std::fill(r.ndfdl.begin(), r.ndfdl.end(), 0.0);
          for (int k = 0; k < 9; ++k)
@@ -234,19 +248,16 @@ void testlmdaPrint(FILE* out, const FdTestOptions& opts, const TestlmdaResult& r
 {
    auto fmt = gradientPrintFormat(digits, "dFx/dL", "dFy/dL", "dFz/dL");
 
+   const char* const d1[nlmdacol] = {"dE/dL", "dEV/dL", "dEM/dL", "dEP/dL", "dEN/dL"};
+   const char* const d2[nlmdacol] = {"d2E/dL2", "d2EV/dL2", "d2EM/dL2", "d2EP/dL2", "d2EN/dL2"};
    if (opts.analyt)
-      printDerivRow(out, " Analytical Lambda Derivatives :", "dE/dL", "dEV/dL", "dEM/dL", "dEP/dL", r.dedl[0],
-         r.dedl[1], r.dedl[2], r.dedl[3]);
+      printDerivRow(out, " Analytical Lambda Derivatives :", d1, r.dedl);
    if (opts.numer)
-      printDerivRow(out, " Numerical Lambda Derivatives : ", "dE/dL", "dEV/dL", "dEM/dL", "dEP/dL", r.ndedl[0],
-         r.ndedl[1], r.ndedl[2], r.ndedl[3]);
-
+      printDerivRow(out, " Numerical Lambda Derivatives : ", d1, r.ndedl);
    if (opts.analyt)
-      printDerivRow(out, " Analytical 2nd Lambda Derivatives :", "d2E/dL2", "d2EV/dL2", "d2EM/dL2", "d2EP/dL2",
-         r.d2edl2[0], r.d2edl2[1], r.d2edl2[2], r.d2edl2[3]);
+      printDerivRow(out, " Analytical 2nd Lambda Derivatives :", d2, r.d2edl2);
    if (opts.numer)
-      printDerivRow(out, " Numerical 2nd Lambda Derivatives : ", "d2E/dL2", "d2EV/dL2", "d2EM/dL2", "d2EP/dL2",
-         r.nd2edl2[0], r.nd2edl2[1], r.nd2edl2[2], r.nd2edl2[3]);
+      printDerivRow(out, " Numerical 2nd Lambda Derivatives : ", d2, r.nd2edl2);
 
    // Per-atom lambda gradient breakdown. Fortran testlmda normalizes the RMS rows
    // by the number of active atoms rather than by all of them.

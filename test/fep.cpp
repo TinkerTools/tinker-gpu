@@ -386,7 +386,8 @@ const Fixture& fx(const char* tag)
 // Everything a trial energy must leave alone.
 struct State
 {
-   double lambda, elam, plam, vlam;
+   double lambda, elam, plam, vlam, nnlam;
+   RelStage relstage;
    Box box;
    std::vector<pos_prec> x, y, z;
    std::vector<grad_prec> gx, gy, gz;
@@ -399,6 +400,8 @@ struct State
       , elam(tinker::elam)
       , plam(tinker::plam)
       , vlam(tinker::vlam)
+      , nnlam(tinker::nnlam)
+      , relstage(tinker::relstage)
       , x(grab1(xpos))
       , y(grab1(ypos))
       , z(grab1(zpos))
@@ -439,6 +442,8 @@ void requireSame(const State& a, const State& b)
    REQUIRE(a.elam == b.elam);
    REQUIRE(a.plam == b.plam);
    REQUIRE(a.vlam == b.vlam);
+   REQUIRE(a.nnlam == b.nnlam);
+   REQUIRE(a.relstage == b.relstage);
    const real3 va[] = {a.box.lvec1, a.box.lvec2, a.box.lvec3, a.box.recipa, a.box.recipb, a.box.recipc};
    const real3 vb[] = {b.box.lvec1, b.box.lvec2, b.box.lvec3, b.box.recipa, b.box.recipb, b.box.recipc};
    for (int i = 0; i < 6; ++i) {

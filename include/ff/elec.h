@@ -102,10 +102,6 @@ void pchgEnsureElec();
 
 TINKER_EXTERN real electric;
 TINKER_EXTERN real dielec;
-/// Electrostatic and polarization sub-lambdas, in double on the host; kernels
-/// take them as real.
-TINKER_EXTERN double elam;
-TINKER_EXTERN double plam;
 
 /// \}
 }

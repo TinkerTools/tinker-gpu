@@ -180,15 +180,27 @@ before evaluating the angular symmetry functions.
 Linear layers are computed via GPU matrix multiplication (``genMatMul_cu``);
 CELU activation and its derivative are evaluated in dedicated CUDA kernels.
 Per-atom scalar energies from all subnetworks are accumulated into the global
-energy buffer via ``addToEneBuf_cu``, scaled by the global factor
-``nnlambda``.
+energy buffer via ``addToEneBuf_cu``, weighted by the pass (``NNPass``) being
+evaluated.
 
 **Gradient computation.**
 Forces are obtained by backpropagating from the scalar atomic-energy outputs
 through the network layers to yield :math:`\partial E / \partial \mathbf{G}`,
 then applying analytic AEV derivatives with respect to Cartesian coordinates
 in ``aev_cu``.
-The same ``nnlambda`` factor scales all force contributions.
+The same pass weight scales all force contributions.
+
+**Coupling to lambda.**
+With mutated atoms the metal term is evaluated in two passes per energy call
+(``nnPasses``, mirroring the dual topology polarization passes): the uncoupled
+state, in which the neighbor list drops every pair between a ligand atom and
+the environment (``NNPass::pairmask``), with weight :math:`1-\lambda_{NN}`,
+and the coupled state of the ligand on the active side of the staged schedule
+with weight :math:`\lambda_{NN}`. Each pass runs its forward and backward
+steps before the next, as the two share the network buffers. The lambda
+derivatives are written by the same passes with weights
+:math:`\mp\lambda_{NN}'` and :math:`\mp\lambda_{NN}''` into the ``NN``
+lambda channel and the force and virial lambda derivatives.
 
 **NN Valence (NNVAL).**
 Classical bonded terms are computed in ``evalence_cu`` for the canonical

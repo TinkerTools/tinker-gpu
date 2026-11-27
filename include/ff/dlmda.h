@@ -51,13 +51,38 @@ enum class LmdaThMap
    TRI  ///< smoothed triangle, sharpened by lmdathalpha
 };
 
-/// Leg of the staged relative schedule, in the order of rising main lambda.
+/// Side of the van der Waals morph of the staged relative schedule that holds
+/// the main lambda, which picks the coupled ligand for the electrostatic and
+/// neural network couplings (dlambda.f:relstgside, grpscale).
 enum class RelStage
 {
-   LIG2, ///< charge ligand 2 with ligand 1 annihilated
-   VDWM, ///< both ligands annihilated while van der Waals morphs 2 -> 1
-   LIG1  ///< charge ligand 1 with ligand 2 annihilated
+   LIG2, ///< below the morph: ligand 2 is the coupled ligand
+   VDWM, ///< within the morph: no ligand is coupled
+   LIG1  ///< above the morph: ligand 1 is the coupled ligand
 };
+
+/// Storage index of each leg of the staged relative schedule; LIGNN2 and
+/// LIGNN1 follow LIG2, VDWM and LIG1 so those keep the indices of RelStage
+/// (dlambda.f:relstgtab).
+enum class RelLeg
+{
+   LIG2,   ///< remove the electrostatic coupling of ligand 2
+   VDWM,   ///< morph van der Waals from ligand 2 onto ligand 1
+   LIG1,   ///< restore the electrostatic coupling of ligand 1
+   LIGNN2, ///< remove the neural network coupling of ligand 2
+   LIGNN1  ///< restore the neural network coupling of ligand 1
+};
+
+/// Number of staged legs, and of the ligand legs LIG2, VDWM and LIG1 that come
+/// first and set the charge and van der Waals state.
+constexpr int nrelleg = 5;
+constexpr int nligleg = 3;
+
+/// Storage index of a staged leg in use_relstg, relstglo and relstghi.
+constexpr int relLeg(RelLeg leg)
+{
+   return static_cast<int>(leg);
+}
 
 /// \f$ x^a \f$ with its first derivative, and its second only if \c do2
 /// (dlambda.f:lmdapwr). A derivative whose coefficient vanishes is zero, so a
@@ -143,6 +168,9 @@ LmdaFn vdwGroupLmda(int ig);
 /// (edlmdaActive and its siblings), zero derivatives otherwise, for the launchers
 /// of lambda kernels.
 LmdaFn elecChain();
+/// The neural network coupling of the ligand with its derivatives while they
+/// are active, zero derivatives otherwise, like elecChain().
+LmdaFn nnChain();
 LmdaFn polarChain();
 LmdaFn vdwChain();
 
@@ -277,6 +305,12 @@ struct DtPass
 /// (endpoint 1); there is nothing the two share. Returns how many entries were
 /// written.
 int dtPasses(DtPass out[2]);
+
+/// The two states of the neural network coupling of the ligand at the neural
+/// network lambda, like dtPasses(): the ligand uncoupled from the environment
+/// (state 0) and the coupled ligand seeing the environment (state 1), mixed as
+/// (1-w)*U(0) + w*U(1). Returns how many entries were written.
+int nnPasses(DtPass out[2]);
 
 /// Whether a pass can be skipped outright because it contributes to nothing
 /// this version computes. The derivative weights only matter when a derivative
@@ -448,6 +482,10 @@ TINKER_EXTERN bool use_vdlmda;
 /// Whether the LAMBDA-CV restraint takes its lambda derivatives: use_dlmda,
 /// CV-LMDA-MAP and the restraint on (mutate.f:setdlmdaterms).
 TINKER_EXTERN bool use_cvdlmda;
+/// Whether the neural network coupling of the ligand takes its lambda
+/// derivatives: use_dlmda, a driven neural network map, mutated atoms and
+/// NNTERM METAL (mutate.f:setdlmdaterms).
+TINKER_EXTERN bool use_nndlmda;
 
 TINKER_EXTERN bool use_epast;
 
@@ -630,6 +668,7 @@ TINKER_EXTERN LmdaMap elmdamap; ///< electrostatic sub-lambda map
 TINKER_EXTERN LmdaMap plmdamap; ///< polarization sub-lambda map
 TINKER_EXTERN LmdaMap vlmdamap; ///< van der Waals sub-lambda map
 TINKER_EXTERN LmdaMap cvlmdamap; ///< collective variable sub-lambda map (LAMBDA-CV)
+TINKER_EXTERN LmdaMap nnlmdamap; ///< neural network sub-lambda map (NN-LMDA-MAP)
 
 //====================================================================//
 //        staged relative free energy schedule                        //
@@ -640,15 +679,15 @@ TINKER_EXTERN LmdaMap cvlmdamap; ///< collective variable sub-lambda map (LAMBDA
 /// When off, the sub-lambdas move together under the ordinary maps above.
 TINKER_EXTERN bool use_rel;
 
-/// The active leg, the declared one that holds the main lambda; set by
-/// mapSubLambda() (dlambda.f:relstgloc).
+/// The side of the van der Waals morph that holds the main lambda; set by
+/// mapSubLambda() (dlambda.f:relstgside).
 TINKER_EXTERN RelStage relstage;
 
 // Whether each leg is declared by the REL-STAGE keyword, and the main lambda
-// range it spans, indexed by RelStage in the order of rising lambda.
-TINKER_EXTERN bool use_relstg[3];
-TINKER_EXTERN double relstglo[3];
-TINKER_EXTERN double relstghi[3];
+// range it spans, indexed by RelLeg.
+TINKER_EXTERN bool use_relstg[nrelleg];
+TINKER_EXTERN double relstglo[nrelleg];
+TINKER_EXTERN double relstghi[nrelleg];
 
 
 // first and second derivatives of each sub-lambda w.r.t. the main lambda.
@@ -659,11 +698,25 @@ TINKER_EXTERN double d2eldlmda2;
 TINKER_EXTERN double d2pldlmda2;
 TINKER_EXTERN double d2vldlmda2;
 
+/// The electrostatic, polarization and van der Waals sub-lambdas (mutant.f), in
+/// double on the host; kernels take them as real. Their derivatives are above.
+TINKER_EXTERN double elam;
+TINKER_EXTERN double plam;
+TINKER_EXTERN double vlam;
+
 /// The collective variable sub-lambda of the LAMBDA-CV restraint, held at
 /// CV-LAMBDA unless CV-LMDA-MAP drives it, with its derivatives.
 TINKER_EXTERN double cvlam;
 TINKER_EXTERN double dcvldlmda;
 TINKER_EXTERN double d2cvldlmda2;
+
+/// The neural network coupling of the ligand (NN-LAMBDA), held unless the main
+/// lambda drives it through NN-LMDA-MAP or the LIGNN2 and LIGNN1 legs, with its
+/// derivatives; the neural network energy mixes its uncoupled and coupled
+/// states with this weight.
+TINKER_EXTERN double nnlam;
+TINKER_EXTERN double dnnldlmda;
+TINKER_EXTERN double d2nnldlmda2;
 
 /// Whether a term whose lambda derivatives are enabled by \c use must compute
 /// them, given the first and second derivatives of its sublambda map: they are
@@ -701,6 +754,12 @@ inline bool cvdlmdaActive()
    return lmdaDrv(use_cvdlmda, dcvldlmda, d2cvldlmda2);
 }
 
+/// The neural network coupling follows its own sub-lambda like the others.
+inline bool nndlmdaActive()
+{
+   return lmdaDrv(use_nndlmda, dnnldlmda, d2nnldlmda2);
+}
+
 /// Whether the multipoles stay unscaled and each site's group scale is applied
 /// on the fly (single topology electrostatics). Set with use_edlmda, but kept
 /// for the whole run while the numerical lambda derivative switches use_edlmda
@@ -709,6 +768,8 @@ TINKER_EXTERN bool use_emast;
 
 
 TINKER_EXTERN int epdtexp;
+/// The mutation group of each atom (mutant.f:mutg: 0 environment, 1 or 2
+/// ligand), on the device whenever there are mutated atoms.
 TINKER_EXTERN int* rdt_group;
 
 TINKER_EXTERN real (*poleorig)[MPL_TOTAL];
@@ -720,24 +781,28 @@ TINKER_EXTERN EnergyBuffer demdl_buf;
 TINKER_EXTERN EnergyBuffer depdl_buf;
 TINKER_EXTERN EnergyBuffer devdl_buf;
 TINKER_EXTERN EnergyBuffer decvdl_buf;
+TINKER_EXTERN EnergyBuffer denndl_buf;
 
 TINKER_EXTERN energy_prec dedl;
 TINKER_EXTERN energy_prec demdl;
 TINKER_EXTERN energy_prec depdl;
 TINKER_EXTERN energy_prec devdl;
 TINKER_EXTERN energy_prec decvdl;
+TINKER_EXTERN energy_prec denndl;
 
 TINKER_EXTERN EnergyBuffer d2edl2_buf;
 TINKER_EXTERN EnergyBuffer d2emdl2_buf;
 TINKER_EXTERN EnergyBuffer d2epdl2_buf;
 TINKER_EXTERN EnergyBuffer d2evdl2_buf;
 TINKER_EXTERN EnergyBuffer d2ecvdl2_buf;
+TINKER_EXTERN EnergyBuffer d2enndl2_buf;
 
 TINKER_EXTERN energy_prec d2edl2;
 TINKER_EXTERN energy_prec d2emdl2;
 TINKER_EXTERN energy_prec d2epdl2;
 TINKER_EXTERN energy_prec d2evdl2;
 TINKER_EXTERN energy_prec d2ecvdl2;
+TINKER_EXTERN energy_prec d2enndl2;
 
 /// \ingroup ff
 /// The two lambda-derivative energy channels of one term, dE/dL and d2E/dL2.
@@ -782,7 +847,33 @@ enum class LmdaTerm
    VDW,   ///< devdl_buf and d2evdl2_buf: van der Waals, Pauli repulsion and damped dispersion (erepel1.f and
           ///< edisp1.f add to devdl)
    COLVAR, ///< decvdl_buf and d2ecvdl2_buf: the LAMBDA-CV restraint on a collective variable
+   NN,     ///< denndl_buf and d2enndl2_buf: the neural network coupling of the ligand
 };
+
+/// Number of LmdaTerm values.
+constexpr int nlmdaterm = 5;
+
+/// \ingroup ff
+/// One sub-lambda term with its own pair of lambda derivative channels: whether
+/// the run has it, the flag that it takes lambda derivatives and the Fortran
+/// flag (fortranUse) that flag mirrors, whether it takes them now, and its channel buffers
+/// and scalars. Everything that walks the terms reads this table, so a term is
+/// registered once.
+struct LmdaTermInfo
+{
+   LmdaTerm term;
+   bool (*present)();
+   bool* use;
+   int* fortranUse;
+   bool (*active)();
+   EnergyBuffer* dl1;
+   EnergyBuffer* dl2;
+   energy_prec* term1;
+   energy_prec* term2;
+};
+
+/// The table of the sub-lambda terms, in LmdaTerm order, nlmdaterm long.
+const LmdaTermInfo* lmdaTerms();
 
 /// \ingroup ff
 /// The channels of the terms of sub-lambda \c t. One owner allocates them

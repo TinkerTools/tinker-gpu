@@ -849,10 +849,12 @@ TEST_CASE("WaterMC-Accept-Consistent", "[ff][watermc][L4]")
       // the lambda derivatives a step would leave, which an energy call alone
       // does not find
       REQUIRE(use_dlmda);
-      REQUIRE(lref.e1[0] != 0);
-      for (int i = 0; i < 4; ++i) {
-         COMPARE_REALS(lacc.e1[i], lref.e1[i], eps);
-         COMPARE_REALS(lacc.e2[i], lref.e2[i], eps);
+      REQUIRE(lref.e1 != 0);
+      COMPARE_REALS(lacc.e1, lref.e1, eps);
+      COMPARE_REALS(lacc.e2, lref.e2, eps);
+      for (int i = 0; i < nlmdaterm; ++i) {
+         COMPARE_REALS(lacc.t1[i], lref.t1[i], eps);
+         COMPARE_REALS(lacc.t2[i], lref.t2[i], eps);
       }
 
       // the predictor starts over at the new structure
@@ -1051,11 +1053,13 @@ TEST_CASE("WaterMC-Lambda-Methods", "[ff][watermc][L4]")
       }
       COMPARE_REALS(eacc, eref, eps);
       REQUIRE(gradDiff(gacc, gref) < r.eps_g);
-      REQUIRE(lref.e1[0] != 0);
-      REQUIRE(lref.e2[0] != 0);
-      for (int i = 0; i < 4; ++i) {
-         COMPARE_REALS(lacc.e1[i], lref.e1[i], eps_l);
-         COMPARE_REALS(lacc.e2[i], lref.e2[i], eps_l);
+      REQUIRE(lref.e1 != 0);
+      REQUIRE(lref.e2 != 0);
+      COMPARE_REALS(lacc.e1, lref.e1, eps_l);
+      COMPARE_REALS(lacc.e2, lref.e2, eps_l);
+      for (int i = 0; i < nlmdaterm; ++i) {
+         COMPARE_REALS(lacc.t1[i], lref.t1[i], eps_l);
+         COMPARE_REALS(lacc.t2[i], lref.t2[i], eps_l);
       }
       for (int i = 0; i < 5; ++i)
          COMPARE_REALS(lacc.bias[i], lref.bias[i], eps_l);
@@ -1122,10 +1126,12 @@ TEST_CASE("WaterMC-Lambda-Dynamics", "[ff][watermc][L4]")
       if (not use_ost)
          COMPARE_REALS(eacc, eref, eps);
       REQUIRE(gradDiff(gacc, gref) < eps_g);
-      REQUIRE(lref.e1[0] != 0);
-      for (int i = 0; i < 4; ++i) {
-         COMPARE_REALS(lacc.e1[i], lref.e1[i], eps_l);
-         COMPARE_REALS(lacc.e2[i], lref.e2[i], eps_l);
+      REQUIRE(lref.e1 != 0);
+      COMPARE_REALS(lacc.e1, lref.e1, eps_l);
+      COMPARE_REALS(lacc.e2, lref.e2, eps_l);
+      for (int i = 0; i < nlmdaterm; ++i) {
+         COMPARE_REALS(lacc.t1[i], lref.t1[i], eps_l);
+         COMPARE_REALS(lacc.t2[i], lref.t2[i], eps_l);
       }
       for (int i = 0; i < 5; ++i)
          COMPARE_REALS(lacc.bias[i], lref.bias[i], eps_l);

@@ -71,18 +71,10 @@ void ennvalenceData(RcOp op)
       dennval_x = nullptr;
       dennval_y = nullptr;
       dennval_z = nullptr;
-      darray::deallocate(gx_tmp, gy_tmp, gz_tmp);
    }
 
    if (op & RcOp::ALLOC) {
-      grps_nnvalence_host.clear();
-      for (int i = 0; i < nnterms.size(); i++) {
-         if (nnterms[i][0] == "valence") {
-            for (int j = 1; j < nnterms[i].size(); j++) {
-               grps_nnvalence_host.push_back(std::stoi(nnterms[i][j]));
-            }
-         }
-      }
+      grps_nnvalence_host = nnGroups("valence");
       ngrps_nnvalence = grps_nnvalence_host.size();
       darray::allocate(ngrps_nnvalence, &grps_nnvalence);
 
@@ -115,7 +107,6 @@ void ennvalenceData(RcOp op)
       dennval_z = gz;
       if (rc_a)
          bufferAllocate(rc_flag, &ennval, &vir_ennval, &dennval_x, &dennval_y, &dennval_z);
-      darray::allocate(n, &gx_tmp, &gy_tmp, &gz_tmp);
    }
 
    if (op & RcOp::INIT) {

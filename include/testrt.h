@@ -192,6 +192,10 @@ std::string testBaseName(const std::string& path);
 /// derivative buffers rather than keep its own (LmdaBuffer).
 void testRequireSharedLmdaBuffers();
 
+/// Requires two vectors of the same length to agree element by element within
+/// an absolute margin.
+void testRequireNear(const std::vector<double>& a, const std::vector<double>& b, double eps);
+
 /// \brief The message of the refusal of atom group weights (groupData).
 constexpr const char* testGroupWeightsRefusal = "Atom group weights";
 

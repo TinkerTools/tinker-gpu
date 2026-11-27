@@ -121,6 +121,14 @@ void ref_nblist_cu1(NBLIST_PARAMS)
                      incl_ij = incl_ij and incl_topo;
                   }
                }
+               // a pass may hide pairs between mutation groups, such as the
+               // ligand and the environment of the uncoupled state
+               if (mutgrp != nullptr) {
+                  int mgi = mutgrp[i];
+                  int mgj = mutgrp[j];
+                  if (not((pairmask >> (3 * mgi + mgj)) & 1u))
+                     incl_ij = false;
+               }
             }
 
             if (not incl_ij) {
@@ -170,6 +178,32 @@ void ref_nblist_cu(NBLIST_PARAMS)
    ref_nblist_cu1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(NBLIST_ARGS);
 }
 
+// adds w times a force to atom i
+__device__
+inline void nnForce(real w, real dx, real dy, real dz, grad_prec* restrict gx, grad_prec* restrict gy,
+   grad_prec* restrict gz, int i)
+{
+   atomic_add(w * dx, gx, i);
+   atomic_add(w * dy, gy, i);
+   atomic_add(w * dz, gz, i);
+}
+
+// adds w times the virial of a force on the atom at displacement (xr,yr,zr)
+__device__
+inline void nnVirial(real w, real xr, real yr, real zr, real dx, real dy, real dz, VirialBuffer restrict v,
+   int offset)
+{
+   real wx = w * xr, wy = w * yr, wz = w * zr;
+   atomic_add(wx * dx, wy * dx, wz * dx, wy * dy, wz * dy, wz * dz, v, offset);
+}
+
+// whether the pass counts the center i
+__device__
+inline bool nnCounted(const int* restrict mutgrp, unsigned centermask, int i)
+{
+   return mutgrp == nullptr or ((centermask >> mutgrp[i]) & 1u);
+}
+
 template <class Ver>
 __global__
 void aev_cu1(AEV_PARAMS)
@@ -188,7 +222,7 @@ void aev_cu1(AEV_PARAMS)
       int i = atomid_local2global[ct];
       int nbj = ct * max_nb + nb / naev;
       int j = nblist_ang[nbj];
-      if (j == -1) {
+      if (j == -1 or not nnCounted(mutgrp, centermask, i)) {
          continue;
       }
       int offset = nb & (bufsize - 1);
@@ -366,47 +400,28 @@ void aev_cu1(AEV_PARAMS)
                   dyj += dGA_ijkpq_dyj;
                   dzj += dGA_ijkpq_dzj;
 
-                  dGA_ijkpq_dxk *= nnlambda;
-                  dGA_ijkpq_dyk *= nnlambda;
-                  dGA_ijkpq_dzk *= nnlambda;
-                  atomic_add(dGA_ijkpq_dxk, denn_x, k);
-                  atomic_add(dGA_ijkpq_dyk, denn_y, k);
-                  atomic_add(dGA_ijkpq_dzk, denn_z, k);
-                  if CONSTEXPR (do_v) {
-                     real vxx = xrk * dGA_ijkpq_dxk;
-                     real vyx = yrk * dGA_ijkpq_dxk;
-                     real vzx = zrk * dGA_ijkpq_dxk;
-                     real vyy = yrk * dGA_ijkpq_dyk;
-                     real vzy = zrk * dGA_ijkpq_dyk;
-                     real vzz = zrk * dGA_ijkpq_dzk;
-                     atomic_add(vxx, vyx, vzx, vyy, vzy, vzz, vir_enn, offset);
-                  }
+                  nnForce(wg, dGA_ijkpq_dxk, dGA_ijkpq_dyk, dGA_ijkpq_dzk, denn_x, denn_y, denn_z, k);
+                  if CONSTEXPR (do_v)
+                     nnVirial(wg, xrk, yrk, zrk, dGA_ijkpq_dxk, dGA_ijkpq_dyk, dGA_ijkpq_dzk, vir_enn, offset);
+                  if (dfdlx != nullptr)
+                     nnForce(wdl, dGA_ijkpq_dxk, dGA_ijkpq_dyk, dGA_ijkpq_dzk, dfdlx, dfdly, dfdlz, k);
+                  if (dvirdl != nullptr)
+                     nnVirial(wdl, xrk, yrk, zrk, dGA_ijkpq_dxk, dGA_ijkpq_dyk, dGA_ijkpq_dzk, dvirdl, offset);
                }
             }
          }
       }
       if (do_g) {
-         dxi *= nnlambda;
-         dyi *= nnlambda;
-         dzi *= nnlambda;
-         dxj *= nnlambda;
-         dyj *= nnlambda;
-         dzj *= nnlambda;
-         atomic_add(dxi, denn_x, i);
-         atomic_add(dyi, denn_y, i);
-         atomic_add(dzi, denn_z, i);
-         atomic_add(dxj, denn_x, j);
-         atomic_add(dyj, denn_y, j);
-         atomic_add(dzj, denn_z, j);
-         if CONSTEXPR (do_v) {
-            real vxx = xrj * dxj;
-            real vyx = yrj * dxj;
-            real vzx = zrj * dxj;
-            real vyy = yrj * dyj;
-            real vzy = zrj * dyj;
-            real vzz = zrj * dzj;
-            atomic_add(vxx, vyx, vzx, vyy, vzy, vzz, vir_enn, offset);
+         nnForce(wg, dxi, dyi, dzi, denn_x, denn_y, denn_z, i);
+         nnForce(wg, dxj, dyj, dzj, denn_x, denn_y, denn_z, j);
+         if CONSTEXPR (do_v)
+            nnVirial(wg, xrj, yrj, zrj, dxj, dyj, dzj, vir_enn, offset);
+         if (dfdlx != nullptr) {
+            nnForce(wdl, dxi, dyi, dzi, dfdlx, dfdly, dfdlz, i);
+            nnForce(wdl, dxj, dyj, dzj, dfdlx, dfdly, dfdlz, j);
          }
+         if (dvirdl != nullptr)
+            nnVirial(wdl, xrj, yrj, zrj, dxj, dyj, dzj, dvirdl, offset);
       }
    }
 
@@ -416,7 +431,7 @@ void aev_cu1(AEV_PARAMS)
       int i = atomid_local2global[ct];
       int nbj = ct * max_nb + nb / naev;
       int j = nblist_rad[nbj];
-      if (j == -1) {
+      if (j == -1 or not nnCounted(mutgrp, centermask, i)) {
          continue;
       }
       int offset = nb & (bufsize - 1);
@@ -472,33 +487,24 @@ void aev_cu1(AEV_PARAMS)
          }
       }
       if (do_g) {
-         dxi *= nnlambda;
-         dyi *= nnlambda;
-         dzi *= nnlambda;
-         dxj *= nnlambda;
-         dyj *= nnlambda;
-         dzj *= nnlambda;
-         atomic_add(dxi, denn_x, i);
-         atomic_add(dyi, denn_y, i);
-         atomic_add(dzi, denn_z, i);
-         atomic_add(dxj, denn_x, j);
-         atomic_add(dyj, denn_y, j);
-         atomic_add(dzj, denn_z, j);
-         if CONSTEXPR (do_v) {
-            real vxx = xrj * dxj;
-            real vyx = yrj * dxj;
-            real vzx = zrj * dxj;
-            real vyy = yrj * dyj;
-            real vzy = zrj * dyj;
-            real vzz = zrj * dzj;
-            atomic_add(vxx, vyx, vzx, vyy, vzy, vzz, vir_enn, offset);
+         nnForce(wg, dxi, dyi, dzi, denn_x, denn_y, denn_z, i);
+         nnForce(wg, dxj, dyj, dzj, denn_x, denn_y, denn_z, j);
+         if CONSTEXPR (do_v)
+            nnVirial(wg, xrj, yrj, zrj, dxj, dyj, dzj, vir_enn, offset);
+         if (dfdlx != nullptr) {
+            nnForce(wdl, dxi, dyi, dzi, dfdlx, dfdly, dfdlz, i);
+            nnForce(wdl, dxj, dyj, dzj, dfdlx, dfdly, dfdlz, j);
          }
+         if (dvirdl != nullptr)
+            nnVirial(wdl, xrj, yrj, zrj, dxj, dyj, dzj, dvirdl, offset);
       }
    }
 }
 
 void aev_cu(int vers, AEV_PARAMS)
 {
+   // the lambda derivatives ride on the pass buffers, not on the version
+   vers &= ~calc::dlmda;
    int ngrid = gpuGridSize(BLOCK_DIM);
    if (vers == calc::v0 or vers == calc::v3)
       aev_cu1<calc::V0><<<ngrid, BLOCK_DIM, 0, g::s0>>>(AEV_ARGS);
@@ -536,6 +542,7 @@ void celu_cu1(CELU_PARAMS)
 
 void celu_cu(int vers, CELU_PARAMS)
 {
+   vers &= ~calc::dlmda;
    int ngrid = gpuGridSize(BLOCK_DIM);
    if (vers == calc::v0 or vers == calc::v3)
       celu_cu1<calc::V0><<<ngrid, BLOCK_DIM, 0, g::s0>>>(CELU_ARGS);
@@ -583,19 +590,27 @@ void elem_add_cu(ELEM_ADD_PARAMS)
 }
 
 __global__
-void addToEneBuf_cu1(EnergyBuffer restrict ebuf, const real* restrict Z, int length, real nnlambda)
-{ // make it universal for ene, grad, and virial, and simplify it.
+void addToEneBuf_cu1(ADDTOENEBUF_PARAMS)
+{
    const int ithread = threadIdx.x + blockIdx.x * blockDim.x;
    const int stride = blockDim.x * gridDim.x;
    for (int i = ithread; i < length; i += stride) {
-      atomic_add(Z[i] * nnlambda, ebuf, ithread);
+      if (not nnCounted(mutgrp, centermask, local2global[rowbase + i]))
+         continue;
+      real e = Z[i];
+      if (ebuf != nullptr)
+         atomic_add(w * e, ebuf, ithread);
+      if (dl1 != nullptr)
+         atomic_add(w1 * e, dl1, ithread);
+      if (dl2 != nullptr)
+         atomic_add(w2 * e, dl2, ithread);
    }
 }
 
-void addToEneBuf_cu(int vers, EnergyBuffer restrict enn, const real* restrict Z, int length, real nnlambda)
+void addToEneBuf_cu(ADDTOENEBUF_PARAMS)
 {
    int ngrid = gpuGridSize(BLOCK_DIM);
-   addToEneBuf_cu1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(enn, Z, length, nnlambda);
+   addToEneBuf_cu1<<<ngrid, BLOCK_DIM, 0, g::s0>>>(ADDTOENEBUF_ARGS);
 }
 
 }

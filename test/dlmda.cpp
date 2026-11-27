@@ -389,11 +389,15 @@ struct StagedScope
 {
    bool rel, mainl;
    RelStage leg;
-   bool stg[3];
-   double stglo[3], stghi[3];
-   LmdaMap em, pm, vm;
+   bool stg[nrelleg];
+   double stglo[nrelleg], stghi[nrelleg];
+   LmdaMap em, pm, vm, nm;
    double mainlmda;
    int dtexp;
+   // every sub-lambda and its derivatives, which mapSubLambda() overwrites
+   double el, pl, vl, nn;
+   double del, dpl, dvl, dnn;
+   double d2el, d2pl, d2vl, d2nn;
 
    StagedScope()
       : rel(use_rel)
@@ -402,10 +406,23 @@ struct StagedScope
       , em(elmdamap)
       , pm(plmdamap)
       , vm(vlmdamap)
+      , nm(nnlmdamap)
       , mainlmda(lambda)
       , dtexp(epdtexp)
+      , el(elam)
+      , pl(plam)
+      , vl(vlam)
+      , nn(nnlam)
+      , del(deldlmda)
+      , dpl(dpldlmda)
+      , dvl(dvldlmda)
+      , dnn(dnnldlmda)
+      , d2el(d2eldlmda2)
+      , d2pl(d2pldlmda2)
+      , d2vl(d2vldlmda2)
+      , d2nn(d2nnldlmda2)
    {
-      for (int i = 0; i < 3; ++i) {
+      for (int i = 0; i < nrelleg; ++i) {
          stg[i] = use_relstg[i];
          stglo[i] = relstglo[i];
          stghi[i] = relstghi[i];
@@ -417,7 +434,7 @@ struct StagedScope
       use_rel = rel;
       use_mainlmda = mainl;
       relstage = leg;
-      for (int i = 0; i < 3; ++i) {
+      for (int i = 0; i < nrelleg; ++i) {
          use_relstg[i] = stg[i];
          relstglo[i] = stglo[i];
          relstghi[i] = stghi[i];
@@ -425,8 +442,21 @@ struct StagedScope
       elmdamap = em;
       plmdamap = pm;
       vlmdamap = vm;
+      nnlmdamap = nm;
       lambda = mainlmda;
       epdtexp = dtexp;
+      elam = el;
+      plam = pl;
+      vlam = vl;
+      nnlam = nn;
+      deldlmda = del;
+      dpldlmda = dpl;
+      dvldlmda = dvl;
+      dnnldlmda = dnn;
+      d2eldlmda2 = d2el;
+      d2pldlmda2 = d2pl;
+      d2vldlmda2 = d2vl;
+      d2nnldlmda2 = d2nn;
    }
 };
 
@@ -454,6 +484,30 @@ void setStages(double lo2, double hi2, double lov, double hiv, double lo1, doubl
       relstghi[i] = hi[i];
       use_relstg[i] = hi[i] > lo[i];
    }
+   // The neural network legs are left undeclared (test_eostmap.f).
+   for (int i = nligleg; i < nrelleg; ++i) {
+      relstglo[i] = 0.0;
+      relstghi[i] = 1.0;
+      use_relstg[i] = false;
+   }
+   nnlmdamap.on = false;
+   nnlmdamap.type = Lmdamap::QNT;
+}
+
+// Declares the LIGNN2 and LIGNN1 legs over their ranges on top of setStages,
+// where a leg given a zero width is left undeclared.
+void setNNStages(double lo2, double hi2, double lo1, double hi1)
+{
+   const int k2 = relLeg(RelLeg::LIGNN2);
+   const int k1 = relLeg(RelLeg::LIGNN1);
+   relstglo[k2] = lo2;
+   relstghi[k2] = hi2;
+   use_relstg[k2] = hi2 > lo2;
+   relstglo[k1] = lo1;
+   relstghi[k1] = hi1;
+   use_relstg[k1] = hi1 > lo1;
+   nnlmdamap.on = true;
+   nnlmdamap.type = Lmdamap::QNT;
 }
 
 // The three-simulation staged protocol: one run per leg, each declaring its
@@ -707,7 +761,8 @@ TEST_CASE("DLMDA-relstage-gap-and-ends", "[ff][dlmda][L2]")
    // the nearest one.
    use_relstg[0] = false;
    mapAt(0.1);
-   REQUIRE(relstage == RelStage::VDWM);
+   REQUIRE(relstage == RelStage::LIG2);
+   REQUIRE(elam == 0.0);
    REQUIRE(vlam == 0.0);
    REQUIRE(dvldlmda == 0.0);
 
@@ -1508,4 +1563,138 @@ TEST_CASE("DLMDA-depcriteria-matches-fortran", "[ff][dlmda][L2]")
          }
       }
    }
+}
+
+TEST_CASE("DLMDA-relstage-nn-legs", "[ff][dlmda][L2]")
+{
+   // The full schedule removes the neural network coupling of ligand 2 before
+   // its charge leg and restores that of ligand 1 after its charge leg, each
+   // walking the quintic map on its own range, while the ligand legs alone set
+   // the charge and van der Waals state (test_mutate.f:test_mutate_nnlmda).
+   StagedScope scope;
+   setStages(0.1, 0.4, 0.4, 0.7, 0.7, 0.9);
+   setNNStages(0.0, 0.1, 0.9, 1.0);
+
+   mapAt(0.05);
+   REQUIRE(relstage == RelStage::LIG2);
+   COMPARE_REALS(nnlam, 0.5, 1.0e-12);
+   COMPARE_REALS(dnnldlmda, -18.75, 1.0e-10);
+   COMPARE_REALS(d2nnldlmda2, 0.0, 1.0e-8);
+   REQUIRE(elam == 1.0);
+   REQUIRE(plam == 1.0);
+   REQUIRE(vlam == 0.0);
+   REQUIRE(deldlmda == 0.0);
+   REQUIRE(dvldlmda == 0.0);
+   GrpScale c = grpScale(nnlam);
+   REQUIRE(c.s[0] == 1.0);
+   REQUIRE(c.s[1] == 0.0);
+   COMPARE_REALS(c.s[2], 0.5, 1.0e-12);
+
+   mapAt(0.0);
+   REQUIRE(nnlam == 1.0);
+   REQUIRE(elam == 1.0);
+   mapAt(0.25);
+   REQUIRE(relstage == RelStage::LIG2);
+   REQUIRE(nnlam == 0.0);
+   REQUIRE(dnnldlmda == 0.0);
+   mapAt(0.55);
+   REQUIRE(relstage == RelStage::VDWM);
+   REQUIRE(nnlam == 0.0);
+   REQUIRE(elam == 0.0);
+   mapAt(0.95);
+   REQUIRE(relstage == RelStage::LIG1);
+   COMPARE_REALS(nnlam, 0.5, 1.0e-12);
+   COMPARE_REALS(dnnldlmda, 18.75, 1.0e-10);
+   REQUIRE(elam == 1.0);
+   REQUIRE(vlam == 1.0);
+   c = grpScale(nnlam);
+   COMPARE_REALS(c.s[1], 0.5, 1.0e-12);
+   REQUIRE(c.s[2] == 0.0);
+   mapAt(1.0);
+   REQUIRE(nnlam == 1.0);
+}
+
+TEST_CASE("DLMDA-relstage-nn-overlap", "[ff][dlmda][L2]")
+{
+   // On each side the neural network and charge legs may come in either order
+   // or overlap, each on its own map over its own range; the quintic map is
+   // 10s^3-15s^4+6s^5 with slope 30s^2(1-s)^2 (test_mutate.f).
+   StagedScope scope;
+
+   // full overlap: both at s = 1/2 of a leg of width 0.4
+   setStages(0.0, 0.4, 0.4, 0.7, 0.7, 1.0);
+   setNNStages(0.0, 0.4, 0.7, 1.0);
+   mapAt(0.2);
+   REQUIRE(relstage == RelStage::LIG2);
+   COMPARE_REALS(elam, 0.5, 1.0e-12);
+   COMPARE_REALS(deldlmda, -4.6875, 1.0e-10);
+   COMPARE_REALS(nnlam, 0.5, 1.0e-12);
+   COMPARE_REALS(dnnldlmda, -4.6875, 1.0e-10);
+
+   // partial overlap: charge at s = 1/3 and coupling at s = 2/3, width 0.3
+   setStages(0.1, 0.4, 0.0, 0.0, 0.0, 0.0);
+   setNNStages(0.0, 0.3, 0.0, 0.0);
+   mapAt(0.2);
+   COMPARE_REALS(elam, 1.0 - 51.0 / 243.0, 1.0e-12);
+   COMPARE_REALS(deldlmda, -(120.0 / 81.0) / 0.3, 1.0e-10);
+   COMPARE_REALS(nnlam, 1.0 - 192.0 / 243.0, 1.0e-12);
+   COMPARE_REALS(dnnldlmda, -(120.0 / 81.0) / 0.3, 1.0e-10);
+
+   // charge leg first, then the coupling of the discharged ligand
+   setStages(0.0, 0.3, 0.0, 0.0, 0.0, 0.0);
+   setNNStages(0.3, 0.4, 0.0, 0.0);
+   mapAt(0.35);
+   REQUIRE(relstage == RelStage::LIG2);
+   REQUIRE(elam == 0.0);
+   REQUIRE(deldlmda == 0.0);
+   COMPARE_REALS(nnlam, 0.5, 1.0e-12);
+   COMPARE_REALS(dnnldlmda, -18.75, 1.0e-8);
+}
+
+TEST_CASE("DLMDA-relstage-coupling-held", "[ff][dlmda][L2]")
+{
+   // The electrostatic and neural network couplings follow one rule: a side
+   // without the leg of a term is uncoupled when the run has the morph or the
+   // other leg of the term, and the coupling is held otherwise
+   // (dlambda.f:relstgcpl).
+   StagedScope scope;
+
+   // a run with only the LIGNN2 leg sits at the ligand 2 end state with the
+   // charge held at its own value
+   setStages(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+   setNNStages(0.0, 1.0, 0.0, 0.0);
+   for (double held : {1.0, 0.0}) {
+      CAPTURE(held);
+      elam = held;
+      mapAt(0.5);
+      REQUIRE(relstage == RelStage::LIG2);
+      REQUIRE(elam == held);
+      REQUIRE(plam == held);
+      REQUIRE(deldlmda == 0.0);
+      REQUIRE(vlam == 0.0);
+      COMPARE_REALS(nnlam, 0.5, 1.0e-12);
+      COMPARE_REALS(dnnldlmda, -1.875, 1.0e-12);
+   }
+
+   // a run with only the LIG2 leg holds the neural network coupling
+   setStages(0.0, 1.0, 0.0, 0.0, 0.0, 0.0);
+   nnlam = 0.6;
+   mapAt(0.5);
+   REQUIRE(nnlam == 0.6);
+   REQUIRE(dnnldlmda == 0.0);
+
+   // with the morph in the run, a side without its leg is uncoupled
+   setStages(0.0, 0.5, 0.5, 1.0, 0.0, 0.0);
+   nnlam = 0.6;
+   mapAt(0.2);
+   REQUIRE(relstage == RelStage::LIG2);
+   REQUIRE(nnlam == 0.0);
+
+   // and a run from LIGNN2 through LIG1 leaves ligand 1 uncoupled at its end
+   setStages(0.1, 0.4, 0.4, 0.7, 0.7, 1.0);
+   setNNStages(0.0, 0.1, 0.0, 0.0);
+   mapAt(1.0);
+   REQUIRE(relstage == RelStage::LIG1);
+   REQUIRE(nnlam == 0.0);
+   REQUIRE(elam == 1.0);
 }

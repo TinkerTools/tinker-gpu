@@ -59,7 +59,6 @@ void vdwSoftcoreData(RcOp op)
       darray::allocate(n, &mut);
 
    if (op & RcOp::INIT) {
-      vlam = mutant::vlambda;
       std::vector<int> mutvec(n);
       for (int i = 0; i < n; ++i) {
          if (mutant::mutg[i] != 0) {

@@ -260,7 +260,7 @@ static void energy_core(int vers, bool dlonly, unsigned tsflag, const TimeScaleC
 
    if (ennintermol(vers))
       if (tscfg("ennintermol", ecore_nnintermol))
-         ennintermol_cu(tvers(false));
+         ennintermol_cu(tvers(nndlmdaActive()));
 
    if (amoeba_evdw(vers))
       if (tscfg("evdw", ecore_vdw))

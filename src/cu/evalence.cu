@@ -861,18 +861,12 @@ void evalence_cu2(int vers, bool flag_bond, bool flag_angle, bool flag_strbnd, b
 
 void ennvalence_cu2(int vers)
 {
-   // auto rc_a = rc_flag & calc::analyz;
-   auto do_e = vers & calc::energy;
-   auto do_g = vers & calc::grad;
-   for (int i = 0; i < nnps.size(); i++) {
-      if (nnps[i].type == "valence") {
-         if (do_e or do_g) {
-            nnps[i].forward(calc::energy, ngrps_nnvalence, grps_nnvalence, ennval);
-         }
-         if (do_g)
-            nnps[i].gradient(vers, ngrps_nnvalence, grps_nnvalence, dennval_x, dennval_y, dennval_z, vir_ennval);
-      }
-   }
+   // the valence term sees only bonded neighbors and does not depend on
+   // lambda, so it takes the plain pass
+   for (auto& nnp : nnps)
+      if (nnp.type == "valence")
+         nnp.evaluate(vers, ngrps_nnvalence, grps_nnvalence, ennval, dennval_x, dennval_y, dennval_z, vir_ennval,
+            NNPass());
 }
 
 #undef EVALENCE_ARGS

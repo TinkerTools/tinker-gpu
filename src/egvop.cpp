@@ -11,18 +11,24 @@ void zeroEGV(int vers)
    const int dlkeep = lmdaDerivMask(rc_flag, use_dlmda) & ~dvers;
 
    if (vers & calc::energy) {
-      zeroOnHost(esum, energy_valence, energy_vdw, energy_elec);
+      // the neural network part is summed into esum whatever the terms, so
+      // a session without them must not keep the one an earlier session left
+      zeroOnHost(esum, energy_valence, energy_vdw, energy_elec, energy_nnintermol);
       zeroOnDevice3Async(bsize, eng_buf, eng_buf_vdw, eng_buf_elec);
 
-      if (useEnergyINN()) {
-         zeroOnHost(energy_nnintermol);
+      if (useEnergyINN())
          zeroOnDeviceAsync(bsize, eng_buf_nnintermol);
-      }
 
-      if (not(dlkeep & calc::energy_dlmda1))
-         zeroOnHost(dedl, demdl, depdl, devdl, decvdl);
-      if (not(dlkeep & calc::energy_dlmda2))
-         zeroOnHost(d2edl2, d2emdl2, d2epdl2, d2evdl2, d2ecvdl2);
+      if (not(dlkeep & calc::energy_dlmda1)) {
+         zeroOnHost(dedl);
+         for (int k = 0; k < nlmdaterm; ++k)
+            *lmdaTerms()[k].term1 = 0;
+      }
+      if (not(dlkeep & calc::energy_dlmda2)) {
+         zeroOnHost(d2edl2);
+         for (int k = 0; k < nlmdaterm; ++k)
+            *lmdaTerms()[k].term2 = 0;
+      }
       if (dvers & calc::energy_dlmda1)
          zeroOnDeviceAsync(bsize, dedl_buf);
       if (dvers & calc::energy_dlmda2)

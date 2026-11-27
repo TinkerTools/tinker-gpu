@@ -1000,8 +1000,6 @@ void elecData(RcOp op)
    if (op & RcOp::INIT) {
       electric = chgpot::electric;
       dielec = chgpot::dielec;
-      elam = mutant::elambda;
-      plam = mutant::plambda;
    }
    RcMan pchg42{pchgData, op};
    RcMan pole42{mpoleData, op};

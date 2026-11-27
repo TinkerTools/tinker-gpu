@@ -172,17 +172,21 @@ void testgradNumericalAtom(int i, double eps, double* g);
 /// Prints one frame of \c xtestgrad results.
 void testgradPrint(FILE* out, const FdTestOptions& opts, const TestgradResult& r, int digits);
 
-/// One frame of \c xtestlmda results. The four-element arrays are ordered
-/// total, van der Waals, multipole, polarization; \c dfdl is 3n interleaved.
+/// Columns of the lambda derivatives: the total, then van der Waals, multipole,
+/// polarization and neural network.
+constexpr int nlmdacol = 5;
+
+/// One frame of \c xtestlmda results. The column arrays follow nlmdacol;
+/// \c dfdl is 3n interleaved.
 struct TestlmdaResult
 {
-   double dedl[4] = {};
-   double d2edl2[4] = {};
+   double dedl[nlmdacol] = {};
+   double d2edl2[nlmdacol] = {};
    double dvirdl[9] = {};
    std::vector<double> dfdl;
 
-   double ndedl[4] = {};
-   double nd2edl2[4] = {};
+   double ndedl[nlmdacol] = {};
+   double nd2edl2[nlmdacol] = {};
    double ndvirdl[9] = {};
    std::vector<double> ndfdl;
 };

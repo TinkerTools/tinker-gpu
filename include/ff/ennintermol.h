@@ -6,8 +6,9 @@
 namespace tinker {
 void ennintermol_cu(int vers);
 
-/// Computes the neural network correction to metal ions
-void ennmetal_cu(int vers);
+/// Computes the neural network correction to metal ions; \c dvers carries the
+/// lambda derivatives of the coupling of the ligand.
+void ennmetal_cu(int vers, int dvers);
 
 void ennmetalData(RcOp);
 
