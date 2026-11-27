@@ -479,14 +479,18 @@ TEST_CASE("NNMET-lambda-ligand-center", "[ff][nn][ennmet][lambda][L1]")
 TEST_CASE("NNMET-lambda-prm-keyword", "[ff][nn][ennmet][lambda][L1]")
 {
    // NN-LAMBDA is a mutation keyword of the key file; in the parameter file it
-   // would be ignored, so the setup stops
+   // changes nothing, as ELE-LAMBDA there
    TestFile fx(TINKER9_DIRSTR "/test/file/nn/nn_6o.xyz", kNNXyz);
    TestFile fk(TINKER9_DIRSTR "/test/file/nn/nn_6o.key", kNNKey);
    TestFile fp(TINKER9_DIRSTR "/test/file/nn/amoeba09-cunn.prm", "nn_amoeba09-cunn.prm", "nn-lambda 0.5\n");
+   TestReference r(TINKER9_DIRSTR "/test/ref/nn_6o.txt");
    const char* argv[] = {"dummy", kNNXyz, "-k", kNNKey};
    rc_flag = kNNFlag;
    TestSession session(4, argv);
-   REQUIRE_THROWS_WITH(session.init(), Catch::Matchers::ContainsSubstring("Belong in the Key File"));
+   session.init();
+   energy(calc::v0);
+   COMPARE_REALS(esum, r.getEnergy(), testGetEps(0.0005, 0.0001));
+   session.end();
 }
 
 #endif

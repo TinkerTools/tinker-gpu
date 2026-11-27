@@ -84,7 +84,7 @@ An example that removes the coupling of a ligand along the main lambda is:
 
 Since this release the whole-system scaling of earlier versions is gone: like
 ELE-LAMBDA, NN-LAMBDA has no effect without mutated atoms of NNTERM METAL to
-couple, and the setup stops when it appears in a parameter file.
+couple, and it is read only from the key file.
 
 
 

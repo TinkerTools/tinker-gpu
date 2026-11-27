@@ -25,8 +25,9 @@ bool isFloat(const std::string& str)
 }
 
 // Reads the neural network terms and potentials from the lines of the
-// parameter file or, with keyfile set, of the key file.
-void nnReadPrm(const char (*restrict prmline)[240], int nprm, bool keyfile)
+// parameter or key file. NN-LAMBDA and its maps are mutation keywords, read
+// from the key file by the Fortran setup (mutate.f).
+void nnReadPrm(const char (*restrict prmline)[240], int nprm)
 {
    bool new_layer = false;
    std::vector<std::string> layer_prms;
@@ -81,13 +82,6 @@ void nnReadPrm(const char (*restrict prmline)[240], int nprm, bool keyfile)
             if (term.size() > 0)
                nnterms.push_back(term);
          }
-         // NN-LAMBDA and its maps are mutation keywords, read from the key file
-         // by the Fortran setup (mutate.f)
-         if (words[0] == "nn-lambda" or words[0].compare(0, 8, "nn-lmda-") == 0) {
-            if (not keyfile)
-               TINKER_THROW(format("%s  --  NN-LAMBDA and its Maps Belong in the Key File, Not the Parameter File",
-                  words[0].c_str()));
-         }
       }
 
       if (new_layer)
@@ -134,8 +128,8 @@ void nnData(RcOp op)
       use_nnmetal = false;
       // read in the prms from prm file and key file; NN-LAMBDA and its maps
       // are read by the Fortran mutation setup (mutate.f, dlmda_mech)
-      nnReadPrm(params::prmline, params::nprm, false);
-      nnReadPrm(keys::keyline, keys::nkey, true);
+      nnReadPrm(params::prmline, params::nprm);
+      nnReadPrm(keys::keyline, keys::nkey);
 
       // remove duplicates, the last one is kept
       for (int i = 0; i < nnps.size(); i++) {
