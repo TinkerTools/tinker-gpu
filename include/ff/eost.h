@@ -15,7 +15,7 @@ extern std::vector<double> osthhist, ostwlhist, ostwfhist;
 extern std::vector<double> gkernel, glkernel, gfkernel, glfkernel;
 
 // running max of gkernel over the flambda axis for each lambda bin.
-extern std::vector<double> vkernelmax;
+extern std::vector<double> gkernelmax;
 
 // metadynamics gaussian history (1-based)
 extern std::vector<double> metalhist, metahhist, metawhist;
@@ -104,7 +104,7 @@ void egkernelAt(double lmda, double dudl, int maxhist, double& egbias, double& d
 void egkernelInterpolate(double& egbias, double& dgdl, double& dgdfl);
 void gkernelHermite(double lmda, double dudl, double& egbias, double& dgdl, double& dgdfl);
 double ostGDep(int ihist);
-void addFlatSample(int ihist);
+void addSampMean(int ihist);
 void clearKernels();
 double ostVBias();
 void eMetaBias(double lmda, double& vbias, double& dvdl);

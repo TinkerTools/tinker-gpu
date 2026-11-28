@@ -114,7 +114,7 @@ void resetost(int nl, int nf, int nhist)
    clearKernels();
    // the unit cases build the kernel mean force unless they select the
    // sample one, as the Fortran resetost of test_eost.f does
-   ostflatsamp = false;
+   ostsampmean = false;
 
    use_lmdacv = false;
    lmdacvstd = 0.0;
@@ -165,10 +165,10 @@ void sethist(int ihist, double lambda, double flmda, double height, double sigl,
    ostnext[ihist] = 0;
 }
 
-// brutevkmax -- max of the g kernel over the whole flambda axis for one lambda
-// bin, computed the slow way. Seeded at 0 to match vkernelmax, whose untouched
+// brutegkmax -- max of the g kernel over the whole flambda axis for one lambda
+// bin, computed the slow way. Seeded at 0 to match gkernelmax, whose untouched
 // bins stay 0 (deposited heights are positive, so no cell is ever negative).
-double brutevkmax(int i)
+double brutegkmax(int i)
 {
    double m = 0.0;
    for (int j = 1; j <= nflmda; ++j)
@@ -527,7 +527,7 @@ TEST_CASE("EOST-fkernel", "[ff][eost][L2]")
    rt = units::gasconst * bath::kelvin;
    GK(3, 2) = std::log(2.0) * rt;
    GK(3, 4) = std::log(4.0) * rt;
-   vkernelmax[3] = std::log(4.0) * rt;
+   gkernelmax[3] = std::log(4.0) * rt;
    buildFkernel();
    expected = 1.0 / 3.0;
    COMPARE_REALS(lmdafmean[3], expected, 1.0e-12);
@@ -569,7 +569,7 @@ TEST_CASE("EOST-fkernel", "[ff][eost][L2]")
    rt = units::gasconst * bath::kelvin;
    GK(3, 2) = 500.0;
    GK(3, 4) = 499.0;
-   vkernelmax[3] = 500.0;
+   gkernelmax[3] = 500.0;
    buildFkernel();
    double wratio = std::exp((499.0 - 500.0) / rt);
    expected = (-1.0 + wratio) / (1.0 + wratio);
@@ -619,11 +619,11 @@ TEST_CASE("EOST-kernelbuilds", "[ff][eost][L2]")
       double partfunc = 0.0, fsum = 0.0;
       // the accumulators factor out the largest bias in the row, so the
       // reference has to be built with the same shift
-      double vmaxref = brutevkmax(i);
+      double gmaxref = brutegkmax(i);
       for (int j = 1; j <= nflmda; ++j) {
          if (gref[gidx(i, j)] != 0.0) {
             double flmda = (double)(j - fli0) * wflmda;
-            double weight = std::exp((gref[gidx(i, j)] - vmaxref) / rt);
+            double weight = std::exp((gref[gidx(i, j)] - gmaxref) / rt);
             fsum += flmda * weight;
             partfunc += weight;
          }
@@ -1098,10 +1098,10 @@ TEST_CASE("EOST-metadyn", "[ff][eost][L2]")
    }
 }
 
-TEST_CASE("EOST-vkernelmax", "[ff][eost][L2]")
+TEST_CASE("EOST-gkernelmax", "[ff][eost][L2]")
 {
    TestLmdaFlagGuard guard;
-   // vkernelmax must hold max_j gkernel(i,j) for every lambda bin, however the
+   // gkernelmax must hold max_j gkernel(i,j) for every lambda bin, however the
    // kernel was filled, and ostVminimax must be the minimum of it over lambda.
    bath::kelvin = 300.0;
    resetost(5, 5, 4);
@@ -1115,8 +1115,8 @@ TEST_CASE("EOST-vkernelmax", "[ff][eost][L2]")
    double vmin = 1.0e30;
    for (int i = 1; i <= nlmda; ++i) {
       CAPTURE(i);
-      COMPARE_REALS(vkernelmax[i], brutevkmax(i), 1.0e-12);
-      vmin = std::min(vmin, brutevkmax(i));
+      COMPARE_REALS(gkernelmax[i], brutegkmax(i), 1.0e-12);
+      vmin = std::min(vmin, brutegkmax(i));
    }
    COMPARE_REALS(ostVminimax(), vmin, 1.0e-12);
    REQUIRE(vmin > 0.0); // the two sources reach every lambda bin
@@ -1128,7 +1128,7 @@ TEST_CASE("EOST-vkernelmax", "[ff][eost][L2]")
    updateKernels();
    for (int i = 1; i <= nlmda; ++i) {
       CAPTURE(i);
-      COMPARE_REALS(vkernelmax[i], brutevkmax(i), 1.0e-12);
+      COMPARE_REALS(gkernelmax[i], brutegkmax(i), 1.0e-12);
    }
 
    // buildGkernel rebuilds through the same cell update without the f kernel
@@ -1142,7 +1142,7 @@ TEST_CASE("EOST-vkernelmax", "[ff][eost][L2]")
    }
    for (int i = 1; i <= nlmda; ++i) {
       CAPTURE(i);
-      COMPARE_REALS(vkernelmax[i], brutevkmax(i), 1.0e-12);
+      COMPARE_REALS(gkernelmax[i], brutegkmax(i), 1.0e-12);
    }
 }
 
@@ -1526,11 +1526,11 @@ TEST_CASE("EOST-ostlocal", "[ff][eost][L2]")
    // a deposit in the most filled bin is tempered by both factors
    int imax = 1;
    for (int i = 2; i <= nlmda; ++i) {
-      if (brutevkmax(i) > brutevkmax(imax))
+      if (brutegkmax(i) > brutegkmax(imax))
          imax = i;
    }
    double gmin = ostVminimax();
-   double gl = vkernelmax[imax];
+   double gl = gkernelmax[imax];
    REQUIRE(gmin > ostgthresh);      // the global factor is active
    REQUIRE(gl - gmin > ostlthresh); // the local factor is active
    for (int istep = 1; istep <= lmdaintv; ++istep) {
@@ -1546,7 +1546,7 @@ TEST_CASE("EOST-ostlocal", "[ff][eost][L2]")
    // a deposit in the least filled bin sees no local excess
    int imin = 1;
    for (int i = 2; i <= nlmda; ++i) {
-      if (vkernelmax[i] < vkernelmax[imin])
+      if (gkernelmax[i] < gkernelmax[imin])
          imin = i;
    }
    gmin = ostVminimax();
@@ -1563,7 +1563,7 @@ TEST_CASE("EOST-ostlocal", "[ff][eost][L2]")
    ensureFlambda(500.0);
    for (int i = 1; i <= nlmda; ++i) {
       CAPTURE(i);
-      COMPARE_REALS(vkernelmax[i], brutevkmax(i), 1.0e-12);
+      COMPARE_REALS(gkernelmax[i], brutegkmax(i), 1.0e-12);
    }
 }
 
@@ -1994,7 +1994,7 @@ int historyRecords(const std::string& file)
 // through the calls of the dynamic program (test_eost.f:test_eost_restart).
 TEST_CASE("EOST-restart", "[ff][eost][L2]")
 {
-   // the mean force OST-FLATTEN selects and the evaluation of the bias that
+   // the mean force OST-MEANFORCE selects and the evaluation of the bias that
    // weights the sample one, set alike in tinker9 and in the Fortran setup
    // whose rebuild a continued run copies
    const bool sample = GENERATE(true, false);
@@ -2008,9 +2008,9 @@ TEST_CASE("EOST-restart", "[ff][eost][L2]")
    setBiasSettings();
    setFreshParticle();
    tinker_f_mutate_ost();
-   ost::ostflatsamp = sample ? 1 : 0;
+   ost::ostsampmean = sample ? 1 : 0;
    ost::ostinterpol = interp ? 1 : 0;
-   ostflatsamp = sample;
+   ostsampmean = sample;
    ostinterpol = interp;
    fastkernel = (ost::fastkernel != 0);
    lmdaBiasOpen();
@@ -2037,8 +2037,8 @@ TEST_CASE("EOST-restart", "[ff][eost][L2]")
    if (sample)
       REQUIRE(lmdafwt[ishared] < 2.0 - 1.0e-6);
    const std::vector<double> gk0 = gkernel, gf0 = gfkernel, gl0 = glkernel, glf0 = glfkernel;
-   const std::vector<double> vk0 = vkernelmax, fm0 = lmdafmean, fs0 = lmdafsum, fw0 = lmdafwt;
-   const std::vector<double> gm0 = ostflatgmax;
+   const std::vector<double> gm0 = gkernelmax, fm0 = lmdafmean, fs0 = lmdafsum, fw0 = lmdafwt;
+   const std::vector<double> sg0 = ostsampgmax;
    const std::vector<int> head0 = osthead;
    const std::vector<int> next0(ostnext.begin(), ostnext.begin() + nhist0 + 1);
    const double dg0 = lmdadeltag;
@@ -2054,7 +2054,7 @@ TEST_CASE("EOST-restart", "[ff][eost][L2]")
    // a fresh run, set up with another flambda grid, continues the file
    setFreshParticle();
    tinker_f_mutate_ost();
-   ost::ostflatsamp = sample ? 1 : 0;
+   ost::ostsampmean = sample ? 1 : 0;
    ost::ostinterpol = interp ? 1 : 0;
    ost::nflmda = 1201;
    ost::fli0 = (1201 + 1) / 2 + (1201 - 1) / 4;
@@ -2085,11 +2085,11 @@ TEST_CASE("EOST-restart", "[ff][eost][L2]")
    REQUIRE(near(gfkernel, gf0) <= 1.0e-12);
    REQUIRE(near(glkernel, gl0) <= 1.0e-12);
    REQUIRE(near(glfkernel, glf0) <= 1.0e-12);
-   REQUIRE(near(vkernelmax, vk0) <= 1.0e-12);
+   REQUIRE(near(gkernelmax, gm0) <= 1.0e-12);
    REQUIRE(near(lmdafmean, fm0) <= 1.0e-12);
    REQUIRE(near(lmdafsum, fs0) <= 1.0e-12);
    REQUIRE(near(lmdafwt, fw0) <= 1.0e-12);
-   REQUIRE(near(ostflatgmax, gm0) <= 1.0e-12);
+   REQUIRE(near(ostsampgmax, sg0) <= 1.0e-12);
    REQUIRE(osthead == head0);
    for (int k = 1; k <= nhist0; ++k)
       COMPARE_INTS(ostnext[k], next0[k]);
@@ -2104,17 +2104,17 @@ TEST_CASE("EOST-restart", "[ff][eost][L2]")
    ostnext[knew] = osthead[g];
    osthead[g] = knew;
    nlmdahist = knew;
-   addFlatSample(knew);
+   addSampMean(knew);
    updateKernels();
    lmdadeltag = efreeTot();
-   const std::vector<double> gk1 = gkernel, fm1 = lmdafmean, fw1 = lmdafwt, gm1 = ostflatgmax;
+   const std::vector<double> gk1 = gkernel, fm1 = lmdafmean, fw1 = lmdafwt, sg1 = ostsampgmax;
    const double dg1 = lmdadeltag;
    buildOstIndex();
    buildKernels();
    REQUIRE(near(gk1, gkernel) <= 1.0e-12);
    REQUIRE(near(fm1, lmdafmean) <= 1.0e-12);
    REQUIRE(near(fw1, lmdafwt) <= 1.0e-12);
-   REQUIRE(near(gm1, ostflatgmax) <= 1.0e-12);
+   REQUIRE(near(sg1, ostsampgmax) <= 1.0e-12);
    REQUIRE(std::fabs(dg1 - efreeTot()) <= 1.0e-12);
 
    // the new gaussian is appended to the same file
@@ -2198,18 +2198,18 @@ TEST_CASE("EOST-metarestart", "[ff][eost][L2]")
    COMPARE_INTS(historyRecords(scope.histfile), 4);
 }
 
-// The cases below cover OST-FLATTEN, which selects the mean force that both
+// The cases below cover OST-MEANFORCE, which selects the mean force that both
 // the flattening bias and the free energy estimate integrate, the sample one by
-// default (test_eost.f:test_eost_flatten), and check the sample mean force
+// default (test_eost.f:test_eost_meanforce), and check the sample mean force
 // against hand and brute-force values.
 
 namespace {
-// Restores the OST state the flatten cases set beyond what TestLmdaFlagGuard
-// restores, which every flatten case also declares.
-struct OstFlattenStateGuard
+// Restores the OST state the mean force cases set beyond what TestLmdaFlagGuard
+// restores, which every mean force case also declares.
+struct OstMeanForceStateGuard
 {
    double kelvin = bath::kelvin, lmda = lambda, dudl = dedl, fwidth = wflmda, fwidth2 = wflmda2;
-   ~OstFlattenStateGuard()
+   ~OstMeanForceStateGuard()
    {
       bath::kelvin = kelvin;
       lambda = lmda;
@@ -2220,17 +2220,17 @@ struct OstFlattenStateGuard
 };
 }
 
-// OST-FLATTEN is read by the Fortran setup, which tinker9 follows: the sample
+// OST-MEANFORCE is read by the Fortran setup, which tinker9 follows: the sample
 // mean force by default, KERNEL or SAMPLE in any case, and with either way of
 // evaluating the bias.
 // Lambda dynamics needs the CUDA platform (dlmdaData2).
 #if TINKER_GPULANG_CUDA
-TEST_CASE("EOST-flatten-keys", "[ff][eost][L2]")
+TEST_CASE("EOST-meanforce-keys", "[ff][eost][L2]")
 {
    TestLmdaFlagReset lmdaReset;
    TestLmdaFlagGuard guard;
-   const char* xyz = "test_eostflat.xyz";
-   const char* key = "test_eostflat.key";
+   const char* xyz = "test_eostmean.xyz";
+   const char* key = "test_eostmean.key";
    TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
    TestFile fxy(TINKER9_DIRSTR "/test/file/nacl/nacl1.xyz", xyz);
    const char* argv[] = {"dummy", xyz};
@@ -2246,17 +2246,17 @@ TEST_CASE("EOST-flatten-keys", "[ff][eost][L2]")
       rc_flag = flags;
       session.init();
       REQUIRE(use_ost);
-      REQUIRE(ostflatsamp == (ost::ostflatsamp != 0));
-      const bool samp = ostflatsamp;
+      REQUIRE(ostsampmean == (ost::ostsampmean != 0));
+      const bool samp = ostsampmean;
       session.end();
       return samp;
    };
 
    REQUIRE(setting("") == true);
-   REQUIRE(setting("ost-flatten kernel\n") == false);
-   REQUIRE(setting("OST-FLATTEN KERNEL\n") == false);
-   REQUIRE(setting("ost-flatten sample\n") == true);
-   REQUIRE(setting("ost-interpolate none\nost-flatten sample\n") == true);
+   REQUIRE(setting("ost-meanforce kernel\n") == false);
+   REQUIRE(setting("OST-MEANFORCE KERNEL\n") == false);
+   REQUIRE(setting("ost-meanforce sample\n") == true);
+   REQUIRE(setting("ost-interpolate none\nost-meanforce sample\n") == true);
 }
 #endif
 
@@ -2266,11 +2266,11 @@ TEST_CASE("EOST-flatten-keys", "[ff][eost][L2]")
 // rebuild, the interpolated bias gives the same weights as the direct sum at
 // the nodes, the kernel and the sample mean force each take the mean force of
 // the lambda bins alone when selected, and the free energy, the bias and the
-// sampled bins read it (test_eost.f:test_eost_flatten).
-TEST_CASE("EOST-flatten-hand", "[ff][eost][L2]")
+// sampled bins read it (test_eost.f:test_eost_meanforce).
+TEST_CASE("EOST-meanforce-hand", "[ff][eost][L2]")
 {
    TestLmdaFlagGuard guard;
-   OstFlattenStateGuard state;
+   OstMeanForceStateGuard state;
    bath::kelvin = 300.0;
    resetost(9, 9, 4);
    const double rt = units::gasconst * bath::kelvin;
@@ -2291,7 +2291,7 @@ TEST_CASE("EOST-flatten-hand", "[ff][eost][L2]")
 
    // a rebuild with the direct sum of the bias fills only the bin of the
    // gaussians, where the kernel would also fill its neighbors
-   ostflatsamp = true;
+   ostsampmean = true;
    ostinterpol = false;
    fastkernel = true;
    buildKernels();
@@ -2306,7 +2306,7 @@ TEST_CASE("EOST-flatten-hand", "[ff][eost][L2]")
    clearKernels();
    for (int k = 1; k <= nhist; ++k) {
       nlmdahist = k;
-      addFlatSample(k);
+      addSampMean(k);
       updateKernels();
    }
    for (int i = 1; i <= nlmda; ++i) {
@@ -2325,7 +2325,7 @@ TEST_CASE("EOST-flatten-hand", "[ff][eost][L2]")
    // the kernel mean force takes its place when selected, matching the
    // separate kernel build with no trace of the sample, and the sample one
    // then returns unchanged
-   ostflatsamp = false;
+   ostsampmean = false;
    buildKernels();
    const std::vector<double> kmean = lmdafmean;
    REQUIRE(lmdafwt[ilmda + 1] > 0.0);
@@ -2333,7 +2333,7 @@ TEST_CASE("EOST-flatten-hand", "[ff][eost][L2]")
    buildFkernel();
    for (int i = 1; i <= nlmda; ++i)
       COMPARE_REALS(lmdafmean[i], kmean[i], 1.0e-12);
-   ostflatsamp = true;
+   ostsampmean = true;
    buildKernels();
    for (int i = 1; i <= nlmda; ++i)
       COMPARE_REALS(lmdafmean[i], meandir[i], 1.0e-12);
@@ -2356,11 +2356,11 @@ TEST_CASE("EOST-flatten-hand", "[ff][eost][L2]")
 // of the deposits in their lambda bin, so a rare high dU/dlambda counts once,
 // while the kernel mean force counts every cell the gaussians reach once and so
 // follows the outlier; the bias and the free energy estimate read whichever
-// mean force OST-FLATTEN selects.
-TEST_CASE("EOST-flatten-sparse", "[ff][eost][L2]")
+// mean force OST-MEANFORCE selects.
+TEST_CASE("EOST-meanforce-sparse", "[ff][eost][L2]")
 {
    TestLmdaFlagGuard guard;
-   OstFlattenStateGuard state;
+   OstMeanForceStateGuard state;
    bath::kelvin = 298.0;
    resetost(11, 401, 64);
    oststdev = 4.0;
@@ -2374,7 +2374,7 @@ TEST_CASE("EOST-flatten-sparse", "[ff][eost][L2]")
    buildOstIndex();
 
    // the deposits all count in the bin of lambda 0.5
-   ostflatsamp = true;
+   ostsampmean = true;
    buildKernels();
    const double expect = (40.0 * 18.0 + 130.0) / 41.0;
    COMPARE_REALS(lmdafmean[6], expect, 1.0e-6);
@@ -2406,7 +2406,7 @@ TEST_CASE("EOST-flatten-sparse", "[ff][eost][L2]")
 
    // the kernel mean force reaches every bin within the lambda cutoff and
    // follows the outlier
-   ostflatsamp = false;
+   ostsampmean = false;
    buildKernels();
    for (int i = 2; i <= 10; ++i)
       REQUIRE(lmdafwt[i] > 0.0);
@@ -2424,7 +2424,7 @@ TEST_CASE("EOST-flatten-sparse", "[ff][eost][L2]")
    double efk, efs;
    efreeBias(0.5, efk, dfdl);
    COMPARE_REALS(ostVBias(), g - efk, 1.0e-12);
-   ostflatsamp = true;
+   ostsampmean = true;
    buildKernels();
    efreeBias(0.5, efs, dfdl);
    COMPARE_REALS(ostVBias(), g - efs, 1.0e-12);
@@ -2436,16 +2436,16 @@ TEST_CASE("EOST-flatten-sparse", "[ff][eost][L2]")
 // matches a long double sum taken in one pass per bin over the deposits in that
 // bin, each weighted by the bicubic g before it was added; deposits made one at
 // a time leave the sums a rebuild from them recovers exactly.
-TEST_CASE("EOST-flatten-reference", "[ff][eost][L2]")
+TEST_CASE("EOST-meanforce-reference", "[ff][eost][L2]")
 {
    TestLmdaFlagGuard guard;
-   OstFlattenStateGuard state;
+   OstMeanForceStateGuard state;
    bath::kelvin = 298.0;
    const double rt = units::gasconst * bath::kelvin;
    const int nhist = 300;
    resetost(21, 2001, nhist);
    oststdev = 4.0;
-   ostflatsamp = true;
+   ostsampmean = true;
    // the bicubic bias weights the deposits, as the reference below takes it
    ostinterpol = true;
    fastkernel = true;
@@ -2504,7 +2504,7 @@ TEST_CASE("EOST-flatten-reference", "[ff][eost][L2]")
    const std::vector<double> mean0 = lmdafmean;
    resetost(21, 2001, nhist);
    oststdev = 4.0;
-   ostflatsamp = true;
+   ostsampmean = true;
    ostinterpol = true;
    fastkernel = true;
    hbias = 200.0;
@@ -2533,10 +2533,10 @@ TEST_CASE("EOST-flatten-reference", "[ff][eost][L2]")
 // sample mean force made one deposit at a time matches the rebuild, and a run
 // whose grid held every deposit from the start, here with a flambda width that
 // is not a whole number.
-TEST_CASE("EOST-flatten-grow", "[ff][eost][L2]")
+TEST_CASE("EOST-meanforce-grow", "[ff][eost][L2]")
 {
    TestLmdaFlagGuard guard;
-   OstFlattenStateGuard state;
+   OstMeanForceStateGuard state;
    bath::kelvin = 298.0;
    const int nhist = 200, half = nhist / 2;
 
@@ -2548,7 +2548,7 @@ TEST_CASE("EOST-flatten-grow", "[ff][eost][L2]")
       wflmda = 0.7;
       wflmda2 = 0.5 * wflmda;
       oststdev = 4.0;
-      ostflatsamp = true;
+      ostsampmean = true;
       ostinterpol = true;
       fastkernel = true;
       hbias = 200.0;

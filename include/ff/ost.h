@@ -32,7 +32,7 @@ namespace tinker {
 TINKER_EXTERN bool ostinterpol;
 TINKER_EXTERN bool fastkernel;
 
-// OST-FLATTEN selects the mean force that both the flattening bias and the
+// OST-MEANFORCE selects the mean force that both the flattening bias and the
 // free energy estimate integrate: the sample mean force by default, where each
 // deposit counts in its own lambda bin, weighted by exp(g/RT) with g the bias
 // the dynamics felt at its center before it was added, or the kernel mean
@@ -40,8 +40,8 @@ TINKER_EXTERN bool fastkernel;
 // force of the lambda bins (lmdafmean, lmdafsum, lmdafwt), so a change of the
 // selection needs clearKernels and a rebuild from the history. The sample sums
 // of a bin are kept relative to the largest g in them, so no weight exceeds one.
-TINKER_EXTERN bool ostflatsamp;                ///< use the sample mean force, not the kernel one.
-TINKER_EXTERN std::vector<double> ostflatgmax; ///< largest g of the samples of each lambda bin.
+TINKER_EXTERN bool ostsampmean;                ///< use the sample mean force, not the kernel one.
+TINKER_EXTERN std::vector<double> ostsampgmax; ///< largest g of the samples of each lambda bin.
 
 // flambda grid and metadynamics history bookkeeping.
 TINKER_EXTERN int nflmda;       ///< number of dU/dlambda bins.

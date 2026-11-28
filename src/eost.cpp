@@ -34,7 +34,7 @@ std::vector<double> osthhist, ostwlhist, ostwfhist;
 std::vector<double> gkernel, glkernel, gfkernel, glfkernel;
 
 // running max of gkernel over the flambda axis, size nlmda+1, indexed 1..nlmda
-std::vector<double> vkernelmax;
+std::vector<double> gkernelmax;
 
 // metadynamics gaussian history (1-based)
 std::vector<double> metalhist, metahhist, metawhist;
@@ -52,7 +52,7 @@ void ost_mech()
 {
    ostinterpol = (ost::ostinterpol != 0);
    fastkernel = (ost::fastkernel != 0);
-   ostflatsamp = (ost::ostflatsamp != 0);
+   ostsampmean = (ost::ostsampmean != 0);
 
    nflmda = ost::nflmda;
    fli0 = ost::fli0;
@@ -81,10 +81,10 @@ void ost_mech()
 
 double ostVminimax()
 {
-   // vkernelmax is 1-based with element 0 unused, so reduce over [1, nlmda].
-   if (nlmda < 1 || (int)vkernelmax.size() < nlmda + 1)
+   // gkernelmax is 1-based with element 0 unused, so reduce over [1, nlmda].
+   if (nlmda < 1 || (int)gkernelmax.size() < nlmda + 1)
       return 0.0;
-   return *std::min_element(vkernelmax.begin() + 1, vkernelmax.begin() + nlmda + 1);
+   return *std::min_element(gkernelmax.begin() + 1, gkernelmax.begin() + nlmda + 1);
 }
 
 double metaVminimax()
@@ -210,9 +210,9 @@ void addKernelPoint(int ilmda, int iflmda, double e, double ldelta, double fldel
    int g = gidx(ilmda, iflmda);
    double oldg = gkernel[g];
    double newg = oldg + e;
-   double vmax = vkernelmax[ilmda];
-   bool raised = (newg > vmax);
-   double vtop = std::max(vmax, newg);
+   double gmax = gkernelmax[ilmda];
+   bool raised = (newg > gmax);
+   double gtop = std::max(gmax, newg);
 
    // the accumulators carry the largest bias in the row as a common factor,
    // so they are rescaled whenever this point raises it, and the new point
@@ -220,12 +220,12 @@ void addKernelPoint(int ilmda, int iflmda, double e, double ldelta, double fldel
    // buildFkernel, so a gaussian of zero height leaves a row without data
    if (dofmean) {
       if (raised) {
-         double scale = std::exp((vmax - newg) / rt);
+         double scale = std::exp((gmax - newg) / rt);
          lmdafsum[ilmda] *= scale;
          lmdafwt[ilmda] *= scale;
       }
-      double oldweight = (oldg == 0.0) ? 0.0 : std::exp((oldg - vtop) / rt);
-      double newweight = (newg == 0.0) ? 0.0 : raised ? 1.0 : std::exp((newg - vtop) / rt);
+      double oldweight = (oldg == 0.0) ? 0.0 : std::exp((oldg - gtop) / rt);
+      double newweight = (newg == 0.0) ? 0.0 : raised ? 1.0 : std::exp((newg - gtop) / rt);
       double delweight = newweight - oldweight;
       double flmda = (double)(iflmda - fli0) * wflmda;
       lmdafsum[ilmda] += flmda * delweight;
@@ -238,7 +238,7 @@ void addKernelPoint(int ilmda, int iflmda, double e, double ldelta, double fldel
    double dgdfl = -fldelta * e / sigf2;
    double d2gdlfl = ldelta * fldelta * e / (sigl2 * sigf2);
    gkernel[g] = newg;
-   vkernelmax[ilmda] = vtop;
+   gkernelmax[ilmda] = gtop;
    gfkernel[g] += dgdfl;
    glkernel[g] += dgdl;
    glfkernel[g] += d2gdlfl;
@@ -246,13 +246,13 @@ void addKernelPoint(int ilmda, int iflmda, double e, double ldelta, double fldel
 
 // addkernelhist -- spread one saved histogram source over nearby grid bins of
 // the g kernel, its derivatives and running maxima; when dofkern is set it also
-// updates the f kernel accumulators, unless OST-FLATTEN selects the sample mean
+// updates the f kernel accumulators, unless OST-MEANFORCE selects the sample mean
 // force (eost.f:addkernelhist).
 void addKernelHist(int ihist, bool dofkern)
 {
    // the f kernel accumulators hold the kernel mean force, so they are kept
    // only when that mean force is selected
-   const bool dofmean = dofkern and not ostflatsamp;
+   const bool dofmean = dofkern and not ostsampmean;
 
    int k = osthist[ihist];
    int lsrc, fsrc;
@@ -317,7 +317,7 @@ void addKernelHist(int ihist, bool dofkern)
 // clearkernels -- empty the g kernel, its derivatives and running maxima, and
 // the mean force of every lambda bin with the reference bias of the sample mean
 // force, sized to the current grid; the mean force of the lambda bins holds the
-// kernel or the sample mean force, whichever OST-FLATTEN selects, and never
+// kernel or the sample mean force, whichever OST-MEANFORCE selects, and never
 // both, so a change of the selection must be followed by this routine and a
 // rebuild of the kernels from the history (eost.f:clearkernels).
 void clearKernels()
@@ -327,11 +327,11 @@ void clearKernels()
    gfkernel.assign(ngrid, 0.0);
    glkernel.assign(ngrid, 0.0);
    glfkernel.assign(ngrid, 0.0);
-   vkernelmax.assign(nlmda + 1, 0.0);
+   gkernelmax.assign(nlmda + 1, 0.0);
    lmdafmean.assign(nlmda + 1, 0.0);
    lmdafsum.assign(nlmda + 1, 0.0);
    lmdafwt.assign(nlmda + 1, 0.0);
-   ostflatgmax.assign(nlmda + 1, 0.0);
+   ostsampgmax.assign(nlmda + 1, 0.0);
 }
 
 // ostgdep -- the g bias at the lambda and dU/dlambda center of saved gaussian
@@ -349,17 +349,17 @@ double ostGDep(int ihist)
    return g;
 }
 
-// addflatsample -- add saved gaussian ihist to the sample mean force, held in
-// the mean force of the lambda bins, when OST-FLATTEN selects it, and otherwise
+// addsampmean -- add saved gaussian ihist to the sample mean force, held in
+// the mean force of the lambda bins, when OST-MEANFORCE selects it, and otherwise
 // do nothing; its dU/dlambda center counts in the lambda bin of its lambda
 // center with weight exp(g/RT), where g is the bias the dynamics felt there
 // before this gaussian was added, and the weights undo that bias on the atoms,
 // so they use the bath temperature. The sums of a bin are kept relative to the
 // largest g they hold and rescaled when a sample raises it, so no weight
-// exceeds one and the exponential cannot overflow (eost.f:addflatsample).
-void addFlatSample(int ihist)
+// exceeds one and the exponential cannot overflow (eost.f:addsampmean).
+void addSampMean(int ihist)
 {
-   if (not ostflatsamp)
+   if (not ostsampmean)
       return;
    const double rt = units::gasconst * bath::kelvin;
    const int ilmda = lmdaBin(lmdalhist[ihist]);
@@ -369,14 +369,14 @@ void addFlatSample(int ihist)
    // reference after the old sums are rescaled
    double w = 1.0;
    if (lmdafwt[ilmda] == 0.0) {
-      ostflatgmax[ilmda] = g;
-   } else if (g > ostflatgmax[ilmda]) {
-      double scale = std::exp((ostflatgmax[ilmda] - g) / rt);
+      ostsampgmax[ilmda] = g;
+   } else if (g > ostsampgmax[ilmda]) {
+      double scale = std::exp((ostsampgmax[ilmda] - g) / rt);
       lmdafsum[ilmda] *= scale;
       lmdafwt[ilmda] *= scale;
-      ostflatgmax[ilmda] = g;
+      ostsampgmax[ilmda] = g;
    } else {
-      w = std::exp((g - ostflatgmax[ilmda]) / rt);
+      w = std::exp((g - ostsampgmax[ilmda]) / rt);
    }
 
    // add the weighted sample and update the mean force of the bin
@@ -388,12 +388,12 @@ void addFlatSample(int ihist)
 // buildfkernel -- rebuild the mean force at every lambda bin from the g kernel,
 // and keep its weighted sum and total weight in the same scaled form as
 // addKernelPoint, so a row has data exactly when its total weight is positive;
-// it does nothing when OST-FLATTEN selects the sample mean force
+// it does nothing when OST-MEANFORCE selects the sample mean force
 // (eost.f:buildfkernel).
 void buildFkernel()
 {
    // the f kernel holds the kernel mean force alone
-   if (ostflatsamp)
+   if (ostsampmean)
       return;
 
    // the weights undo the bias on the atoms at the bath temperature
@@ -403,12 +403,12 @@ void buildFkernel()
       double pf = 0;
       // the largest bias in the row is factored out of both sums, where it
       // cancels exactly, to keep the exponential from overflowing
-      double vmax = vkernelmax[il];
+      double gmax = gkernelmax[il];
       for (int jf = 1; jf <= nflmda; ++jf) {
          double g = gkernel[gidx(il, jf)];
          if (g != 0.0) {
             double flmda = (double)(jf - fli0) * wflmda;
-            double w = std::exp((g - vmax) / rt);
+            double w = std::exp((g - gmax) / rt);
             avg += flmda * w;
             pf += w;
          }
@@ -773,26 +773,26 @@ double lmdaImgSrc(int lcenter, int img, double lsrc)
 //   TINKER_FVOID2(acc0, cu1, eostBiasGrid, /* grid ptrs, sample, outputs */);
 
 // buildgkernel -- rebuild the g kernel and its derivatives from scratch over all
-// saved sources, along with the sample mean force when OST-FLATTEN selects it,
+// saved sources, along with the sample mean force when OST-MEANFORCE selects it,
 // while buildFkernel then gives the kernel mean force (eost.f:buildgkernel).
 void buildGkernel()
 {
    clearKernels();
    for (int ihist = 1; ihist <= nlmdahist; ++ihist) {
-      addFlatSample(ihist);
+      addSampMean(ihist);
       addKernelHist(ihist, false);
    }
 }
 
 // buildkernels -- rebuild the g kernel, its derivatives and the mean force
-// OST-FLATTEN selects, kernel or sample, from scratch over all saved sources
+// OST-MEANFORCE selects, kernel or sample, from scratch over all saved sources
 // with the fused kernel updates; each source joins the sample mean force
 // before it joins the kernels (eost.f:buildkernels).
 void buildKernels()
 {
    clearKernels();
    for (int ihist = 1; ihist <= nlmdahist; ++ihist) {
-      addFlatSample(ihist);
+      addSampMean(ihist);
       addKernelHist(ihist, true);
    }
 }
@@ -812,7 +812,7 @@ void updateKernels()
 }
 
 // Copies the OST history that initostfile read back from the Fortran modules,
-// with the lookup, the kernels and the mean force OST-FLATTEN selects that its
+// with the lookup, the kernels and the mean force OST-MEANFORCE selects that its
 // rdost built from it, so the history is processed once. lmdaBiasOpen has
 // already copied the lambda particle, the step count and the flambda grid, so
 // eostData sized the kernels to that grid.
@@ -852,17 +852,17 @@ static void ostFromFortran()
    glfkernel.assign(ost::glfkernel, ost::glfkernel + ngrid);
    for (int k = 1; k <= nlmdahist; ++k)
       ostnext[k] = ost::ostnext[k - 1];
-   vkernelmax.assign(nlmda + 1, 0.0);
+   gkernelmax.assign(nlmda + 1, 0.0);
    lmdafmean.assign(nlmda + 1, 0.0);
    lmdafsum.assign(nlmda + 1, 0.0);
    lmdafwt.assign(nlmda + 1, 0.0);
-   ostflatgmax.assign(nlmda + 1, 0.0);
+   ostsampgmax.assign(nlmda + 1, 0.0);
    for (int i = 1; i <= nlmda; ++i) {
-      vkernelmax[i] = ost::vkernelmax[i - 1];
+      gkernelmax[i] = ost::gkernelmax[i - 1];
       lmdafmean[i] = dlmda::lmdafmean[i - 1];
       lmdafsum[i] = dlmda::lmdafsum[i - 1];
       lmdafwt[i] = dlmda::lmdafwt[i - 1];
-      ostflatgmax[i] = ost::ostflatgmax[i - 1];
+      ostsampgmax[i] = ost::ostsampgmax[i - 1];
    }
    lmdadeltag = dlmda::lmdadeltag;
 }
@@ -922,8 +922,8 @@ void eostData(RcOp op)
       lmdafmean.clear();
       lmdafsum.clear();
       lmdafwt.clear();
-      ostflatgmax.clear();
-      vkernelmax.clear();
+      ostsampgmax.clear();
+      gkernelmax.clear();
       metalhist.clear();
       metahhist.clear();
       metawhist.clear();
@@ -1062,7 +1062,7 @@ void ostDeposit(int istep)
    lmdaihist[nlmdahist] = istep;
    lmdalhist[nlmdahist] = lmdaavg;
    lmdafhist[nlmdahist] = dedlavg;
-   osthhist[nlmdahist] = temperedHeight(ostVminimax(), vkernelmax[ilmda]);
+   osthhist[nlmdahist] = temperedHeight(ostVminimax(), gkernelmax[ilmda]);
    ostwlhist[nlmdahist] = wlhist;
    ostwfhist[nlmdahist] = wfhist;
    ostnext[nlmdahist] = osthead[gidx(ilmda, iflmda)];
@@ -1070,7 +1070,7 @@ void ostDeposit(int istep)
 
    // add the new gaussian to the sample mean force, weighted by the bias it was
    // sampled under, before it joins the kernels
-   addFlatSample(nlmdahist);
+   addSampMean(nlmdahist);
    if (fastkernel) {
       updateKernels();
    } else {

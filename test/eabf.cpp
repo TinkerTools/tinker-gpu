@@ -81,7 +81,7 @@ void resetabf(int nl, int nhist)
    gfkernel.clear();
    glfkernel.clear();
    glkernel.clear();
-   vkernelmax.clear();
+   gkernelmax.clear();
 }
 
 // fills the first nbin bins of the sampled mean force fsamp with the bins

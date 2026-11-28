@@ -332,10 +332,10 @@ void testResetLmdaFlags()
    // the OST mean force and bias evaluation take the defaults of the Fortran
    // setup: the sample mean force, the interpolated bias and the fused kernel
    // updates
-   ost::ostflatsamp = 1;
+   ost::ostsampmean = 1;
    ost::ostinterpol = 1;
    ost::fastkernel = 1;
-   ostflatsamp = true;
+   ostsampmean = true;
    ostinterpol = true;
    fastkernel = true;
 }

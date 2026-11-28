@@ -80,14 +80,14 @@ struct TestLmdaFlagGuard
    bool ost = use_ost, meta = use_meta, abf = use_abf, cv = use_lmdacv, mc = use_lmdamc,
         fill = use_lmdafill, hold = use_lmdahold;
    double fillr = lmdafillr, lkelvin = lmdakelvin;
-   bool flatsamp = ostflatsamp, interp = ostinterpol, fast = fastkernel;
-   int fflatsamp = ost::ostflatsamp, finterp = ost::ostinterpol;
+   bool sampmean = ostsampmean, interp = ostinterpol, fast = fastkernel;
+   int fsampmean = ost::ostsampmean, finterp = ost::ostinterpol;
    ~TestLmdaFlagGuard()
    {
-      ostflatsamp = flatsamp;
+      ostsampmean = sampmean;
       ostinterpol = interp;
       fastkernel = fast;
-      ost::ostflatsamp = fflatsamp;
+      ost::ostsampmean = fsampmean;
       ost::ostinterpol = finterp;
       use_ost = ost;
       use_meta = meta;
