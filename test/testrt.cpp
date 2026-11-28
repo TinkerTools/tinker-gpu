@@ -329,7 +329,15 @@ void testResetLmdaFlags()
    use_mainlmda = false;
    mutant::use_rel = 0;
    use_rel = false;
-   ostflatten = OstFlatten::KERNEL;
+   // the OST mean force and bias evaluation take the defaults of the Fortran
+   // setup: the sample mean force, the interpolated bias and the fused kernel
+   // updates
+   ost::ostflatsamp = 1;
+   ost::ostinterpol = 1;
+   ost::fastkernel = 1;
+   ostflatsamp = true;
+   ostinterpol = true;
+   fastkernel = true;
 }
 
 std::string testBaseName(const std::string& path)

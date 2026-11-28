@@ -1336,7 +1336,8 @@ TEST_CASE("Colvar-lambda-trajectory", "[ff][colvar][L2]")
    // this code, which the exact free energy of the pair checked: a long TI,
    // ABF and OST run reproduced -kT ln int 4 pi r^2 exp(-E/kT) dr (2026-11-14).
    // The mixed and double precision builds agree to about 1e-8 in the
-   // positions and 1e-5 in dU/dL.
+   // positions and 1e-5 in dU/dL. The OST row keeps the kernel mean force it
+   // was stored with (ost-flatten kernel), which ABF ignores.
    TestFile fpr(TINKER9_DIRSTR "/test/file/commit_6fe8e913/amoeba09.prm");
    TestFile fxy(TINKER9_DIRSTR "/test/file/nacl/nacl1.xyz", "cvtraj.xyz");
    TestRemoveFileOnExit farc("cvtraj.arc"), fdyn("cvtraj.dyn"), flog("cvtraj.log");
@@ -1369,7 +1370,7 @@ TEST_CASE("Colvar-lambda-trajectory", "[ff][colvar][L2]")
       TestFile fke("", "cvtraj.key",
          naclKey("lambda-cv r 10.0 2.0 4.0\n" + kMap
             + "integrator stochastic\nfriction 10.0\nrandomseed 7\nlambda 0.3\nlambda-mode " + mode
-            + "\nlambda-dt 0.002\nlambda-interval 10\n"));
+            + "\nlambda-dt 0.002\nlambda-interval 10\nost-flatten kernel\n"));
       const std::string cmd = std::string(TINKER9_BINDIRSTR)
          + "/tinker9 dynamic cvtraj.xyz 20 2.0 0.04 2 298 > cvtraj.log 2>&1";
       const int rc = std::system(cmd.c_str());

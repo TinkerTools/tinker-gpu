@@ -622,7 +622,11 @@ TINKER_EXTERN std::vector<double> lmdafmean; ///< sampled mean force of each lam
                                              ///< without data; the bias reads a filled copy built in
                                              ///< efreeBias.
 TINKER_EXTERN std::vector<double> lmdafsum;  ///< weighted dU/dlambda sum of each lambda bin.
-TINKER_EXTERN std::vector<double> lmdafwt;   ///< total weight of each lambda bin.
+TINKER_EXTERN std::vector<double> lmdafwt;   ///< total weight of each lambda bin, a sample count for
+                                             ///< ABF; for OST both are scaled by a factor of the bin,
+                                             ///< the vkernelmax or ostflatgmax of the mean force
+                                             ///< OST-FLATTEN selects, so only their ratio and a
+                                             ///< positive weight have a meaning.
 
 //====================================================================//
 //      sequential lambda windows, shared by the window methods       //

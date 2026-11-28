@@ -6,6 +6,8 @@
 
 #include "tinker9.h"
 
+#include <tinker/detail/ost.hh>
+
 #include <array>
 #include <string>
 #include <vector>
@@ -70,18 +72,23 @@ private:
 };
 
 /// \brief Restores the lambda method flags, the interval convergence gate, the
-/// bias fill reach, the OST flattening mean force and the lambda particle
-/// temperature in its destructor, so that a failed check cannot leave them set
-/// for the cases that run after it.
+/// bias fill reach, the OST mean force and bias evaluation in tinker9 and in
+/// the Fortran setup, and the lambda particle temperature in its destructor, so
+/// that a failed check cannot leave them set for the cases that run after it.
 struct TestLmdaFlagGuard
 {
    bool ost = use_ost, meta = use_meta, abf = use_abf, cv = use_lmdacv, mc = use_lmdamc,
         fill = use_lmdafill, hold = use_lmdahold;
    double fillr = lmdafillr, lkelvin = lmdakelvin;
-   OstFlatten flatten = ostflatten;
+   bool flatsamp = ostflatsamp, interp = ostinterpol, fast = fastkernel;
+   int fflatsamp = ost::ostflatsamp, finterp = ost::ostinterpol;
    ~TestLmdaFlagGuard()
    {
-      ostflatten = flatten;
+      ostflatsamp = flatsamp;
+      ostinterpol = interp;
+      fastkernel = fast;
+      ost::ostflatsamp = fflatsamp;
+      ost::ostinterpol = finterp;
       use_ost = ost;
       use_meta = meta;
       use_abf = abf;
